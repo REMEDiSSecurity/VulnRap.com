@@ -74,7 +74,9 @@ test.describe("FLAT hand-wavy phrase panel — high-thrash remove confirmation (
         timeout: 15_000,
       });
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(0, { timeout: 15_000 });
     } finally {
       await cleanup(apiCtx, [phrase], { reviewer: `${REVIEWER}-cleanup` });
@@ -122,7 +124,9 @@ test.describe("FLAT hand-wavy phrase panel — high-thrash remove confirmation (
 
       // Phrase must still be present.
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(1);
 
       // Wait for the network to idle so any DELETE that the cancel handler
@@ -174,7 +178,9 @@ test.describe("FLAT hand-wavy phrase panel — high-thrash remove confirmation (
       await row.getByTestId("handwavy-remove").click();
 
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(0, { timeout: 15_000 });
       await observer;
       expect(

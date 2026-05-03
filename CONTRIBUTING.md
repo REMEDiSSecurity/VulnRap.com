@@ -72,6 +72,37 @@ For bugs and feature requests, open a GitHub issue with steps to reproduce.
 - Zod for runtime validation
 - Keep files focused; split large components
 
+## Linting & Formatting
+
+The repo ships a single ESLint flat config (`eslint.config.mjs`) and Prettier
+config (`.prettierrc.json`) at the root. They cover the React frontend
+(`artifacts/vulnrap`), the Node API server (`artifacts/api-server`), the
+shared libraries under `lib/`, and the helper scripts under `scripts/`.
+
+Common commands (run from the repo root):
+
+```sh
+pnpm run lint          # report ESLint errors and warnings
+pnpm run lint:fix      # auto-fix the safe ones
+pnpm run format        # rewrite files with Prettier
+pnpm run format:check  # report files that need formatting
+```
+
+A pre-commit hook installed by [lefthook](https://lefthook.dev/) runs Prettier
+`--write` and ESLint `--fix` on staged files only, plus a `tsc --noEmit` for
+the workspace package(s) that own the touched TypeScript files. The hook is
+installed automatically by `pnpm install` (via the `prepare` script). To run
+it manually: `pnpm exec lefthook run pre-commit`.
+
+To bypass the hook in an emergency, use the standard escape hatch:
+
+```sh
+git commit --no-verify
+```
+
+To skip hook installation entirely (e.g. in CI or non-git checkouts), set
+`SKIP_HOOKS_INSTALL=1` or `CI=true` before running `pnpm install`.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.

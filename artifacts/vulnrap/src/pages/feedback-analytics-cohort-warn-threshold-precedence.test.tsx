@@ -144,9 +144,7 @@ function getActiveWarnThreshold(): string {
     name: /Warn threshold for dataset-vs-fixture delta/i,
   });
   const radios = within(group).getAllByRole("radio");
-  const active = radios.find(
-    (r) => r.getAttribute("aria-checked") === "true",
-  );
+  const active = radios.find((r) => r.getAttribute("aria-checked") === "true");
   if (!active) {
     throw new Error(
       `No active warn-threshold radio found. Saw: ${radios

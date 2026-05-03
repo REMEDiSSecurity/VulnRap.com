@@ -139,7 +139,8 @@ test.describe("Bulk-removal preview production-sample staleness notice (Task #41
     const oldest = new Date(Date.now() - 60 * MS_PER_DAY).toISOString();
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await interceptBulkDryRunWithProductionTimestamp(page, {
         newestCreatedAt: newest,
@@ -206,7 +207,8 @@ test.describe("Bulk-removal preview production-sample staleness notice (Task #41
     const oldest = new Date(Date.now() - 7 * MS_PER_DAY).toISOString();
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await interceptBulkDryRunWithProductionTimestamp(page, {
         newestCreatedAt: newest,

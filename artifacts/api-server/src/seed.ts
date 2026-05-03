@@ -1,10 +1,20 @@
 import { db } from "@workspace/db";
-import { reportsTable, reportHashesTable, reportStatsTable } from "@workspace/db";
-import { computeMinHash, computeSimhash, computeContentHash, computeLSHBuckets, findSimilarReports } from "./lib/similarity";
+import {
+  reportsTable,
+  reportHashesTable,
+  reportStatsTable,
+} from "@workspace/db";
+import { sql } from "drizzle-orm";
+import {
+  computeMinHash,
+  computeSimhash,
+  computeContentHash,
+  computeLSHBuckets,
+  findSimilarReports,
+} from "./lib/similarity";
 import { analyzeSloppiness } from "./lib/sloppiness";
 import { redactReport } from "./lib/redactor";
 import { parseSections, findSectionMatches } from "./lib/section-parser";
-import { sql } from "drizzle-orm";
 
 const SEED_REPORTS = [
   {
@@ -297,10 +307,18 @@ func HandleTransfer(fromID, toID string, amount float64) error {
 async function seed() {
   console.log("Seeding VulnRap with example vulnerability reports...");
 
-  const insertedReports: Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[]; sectionHashes: Record<string, string> }> = [];
+  const insertedReports: Array<{
+    id: number;
+    minhashSignature: number[];
+    simhash: string;
+    lshBuckets: string[];
+    sectionHashes: Record<string, string>;
+  }> = [];
 
   for (const seedReport of SEED_REPORTS) {
-    const { redactedText, summary: redactionSummary } = redactReport(seedReport.content);
+    const { redactedText, summary: redactionSummary } = redactReport(
+      seedReport.content,
+    );
     const analysisText = redactedText;
 
     const contentHash = computeContentHash(analysisText);
@@ -310,7 +328,10 @@ async function seed() {
     const { sectionHashes } = parseSections(analysisText);
 
     const similarityMatches = findSimilarReports(
-      minhashSignature, simhash, lshBuckets, insertedReports,
+      minhashSignature,
+      simhash,
+      lshBuckets,
+      insertedReports,
     );
 
     const sectionMatches = findSectionMatches(sectionHashes, insertedReports);
@@ -352,7 +373,9 @@ async function seed() {
       sectionHashes,
     });
 
-    console.log(`  [${report.id}] ${seedReport.fileName} — slop: ${analysis.score} (${analysis.tier}), redactions: ${redactionSummary.totalRedactions}`);
+    console.log(
+      `  [${report.id}] ${seedReport.fileName} — slop: ${analysis.score} (${analysis.tier}), redactions: ${redactionSummary.totalRedactions}`,
+    );
   }
 
   await db

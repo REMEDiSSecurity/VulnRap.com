@@ -8,9 +8,9 @@ import http from "node:http";
 import path from "node:path";
 import os from "node:os";
 import { promises as fs } from "node:fs";
-import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { AddressInfo } from "node:net";
 
 const TOKEN = "s3cret-reviewer-token";
 
@@ -54,7 +54,11 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   delete process.env.CALIBRATION_TOKEN;
-  try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  try {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
 });
 
 beforeEach(async () => {
@@ -75,10 +79,14 @@ function request<T>(
   headers: Record<string, string> = {},
 ): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const baseHeaders: Record<string, string> = data
-      ? { "Content-Type": "application/json", "Content-Length": String(data.length) }
+      ? {
+          "Content-Type": "application/json",
+          "Content-Length": String(data.length),
+        }
       : {};
     const req = http.request(
       {
@@ -113,7 +121,10 @@ function request<T>(
 
 describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
   it("GET hand-wavy phrases without a token is rejected with 401 (Task #163 — strict read gate)", async () => {
-    const r = await request<{ error: string }>("GET", "/feedback/calibration/handwavy-phrases");
+    const r = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/handwavy-phrases",
+    );
     expect(r.status).toBe(401);
     expect(r.body.error).toMatch(/token/i);
   });
@@ -250,7 +261,11 @@ describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
   });
 
   it("POST /feedback/calibration/apply with the token is accepted", async () => {
-    const r = await request<{ message?: string; config?: { version: number }; error?: string }>(
+    const r = await request<{
+      message?: string;
+      config?: { version: number };
+      error?: string;
+    }>(
       "POST",
       "/feedback/calibration/apply",
       { changes: { prior: 12 }, description: "authorized apply with token" },
@@ -327,7 +342,9 @@ describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
       tokenPresented: boolean;
       tokenValid: boolean;
       mutationsAllowed: boolean;
-    }>("GET", "/feedback/calibration/auth-status", undefined, { "X-Calibration-Token": TOKEN });
+    }>("GET", "/feedback/calibration/auth-status", undefined, {
+      "X-Calibration-Token": TOKEN,
+    });
     expect(r.status).toBe(200);
     expect(r.body.serverRequiresToken).toBe(true);
     expect(r.body.tokenPresented).toBe(true);
@@ -340,7 +357,9 @@ describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
       tokenPresented: boolean;
       tokenValid: boolean;
       mutationsAllowed: boolean;
-    }>("GET", "/feedback/calibration/auth-status", undefined, { Authorization: `Bearer ${TOKEN}` });
+    }>("GET", "/feedback/calibration/auth-status", undefined, {
+      Authorization: `Bearer ${TOKEN}`,
+    });
     expect(r.status).toBe(200);
     expect(r.body.tokenPresented).toBe(true);
     expect(r.body.tokenValid).toBe(true);
@@ -353,7 +372,9 @@ describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
       tokenPresented: boolean;
       tokenValid: boolean;
       mutationsAllowed: boolean;
-    }>("GET", "/feedback/calibration/auth-status", undefined, { "X-Calibration-Token": "not-the-token" });
+    }>("GET", "/feedback/calibration/auth-status", undefined, {
+      "X-Calibration-Token": "not-the-token",
+    });
     expect(r.status).toBe(200);
     expect(r.body.serverRequiresToken).toBe(true);
     expect(r.body.tokenPresented).toBe(true);
@@ -407,12 +428,9 @@ describe("GET /feedback/calibration/auth-brute-force-alerts (Task #399)", () => 
       total: number;
       limit: number;
       bufferSize: number;
-    }>(
-      "GET",
-      "/feedback/calibration/auth-brute-force-alerts",
-      undefined,
-      { "X-Calibration-Token": TOKEN },
-    );
+    }>("GET", "/feedback/calibration/auth-brute-force-alerts", undefined, {
+      "X-Calibration-Token": TOKEN,
+    });
     expect(r.status).toBe(200);
     expect(Array.isArray(r.body.alerts)).toBe(true);
     expect(typeof r.body.total).toBe("number");
@@ -493,12 +511,9 @@ describe("calibration auth-status probe (CALIBRATION_TOKEN unset / open mode)", 
       tokenPresented: boolean;
       tokenValid: boolean;
       mutationsAllowed: boolean;
-    }>(
-      "GET",
-      "/feedback/calibration/auth-status",
-      undefined,
-      { "X-Calibration-Token": "anything" },
-    );
+    }>("GET", "/feedback/calibration/auth-status", undefined, {
+      "X-Calibration-Token": "anything",
+    });
     expect(r.status).toBe(200);
     expect(r.body.serverRequiresToken).toBe(false);
     expect(r.body.tokenPresented).toBe(true);

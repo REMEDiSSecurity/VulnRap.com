@@ -79,8 +79,10 @@ test.describe("ImpossibleHttpMarkers — end-to-end badges (Task #607)", () => {
         showInFeed: "true",
       },
     });
-    expect(submitRes.ok(), `POST /api/reports failed: ${submitRes.status()}`)
-      .toBeTruthy();
+    expect(
+      submitRes.ok(),
+      `POST /api/reports failed: ${submitRes.status()}`,
+    ).toBeTruthy();
     const submitted = (await submitRes.json()) as SubmitResponse;
     expect(typeof submitted.id).toBe("number");
 

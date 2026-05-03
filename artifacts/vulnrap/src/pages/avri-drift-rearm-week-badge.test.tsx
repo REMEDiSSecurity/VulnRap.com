@@ -9,8 +9,8 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { setCalibrationToken } from "@workspace/api-client-react";
-import FeedbackAnalytics from "./feedback-analytics";
 import { resetCalibrationCooldown } from "@/lib/calibration-cooldown";
+import FeedbackAnalytics from "./feedback-analytics";
 
 const SERVER_TOKEN = "server-side-reviewer-token";
 
@@ -353,8 +353,7 @@ describe("AvriDriftSection — per-week re-arm badge + audit filter", () => {
           weekStart: "2026-03-30",
           kind: "GAP_BELOW_45" as const,
           originalNotifiedAt: "2026-03-31T09:00:00.000Z",
-          originalDetail:
-            "Older entry whose dedup record was already trimmed.",
+          originalDetail: "Older entry whose dedup record was already trimmed.",
           rearmedAt: "2026-04-01T09:00:00.000Z",
         },
       ],

@@ -492,12 +492,8 @@
           "name": "report_hashes_report_id_reports_id_fk",
           "tableFrom": "report_hashes",
           "tableTo": "reports",
-          "columnsFrom": [
-            "report_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["report_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -602,12 +598,8 @@
           "name": "similarity_results_source_report_id_reports_id_fk",
           "tableFrom": "similarity_results",
           "tableTo": "reports",
-          "columnsFrom": [
-            "source_report_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_report_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -615,12 +607,8 @@
           "name": "similarity_results_matched_report_id_reports_id_fk",
           "tableFrom": "similarity_results",
           "tableTo": "reports",
-          "columnsFrom": [
-            "matched_report_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["matched_report_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -728,12 +716,8 @@
           "name": "user_feedback_report_id_reports_id_fk",
           "tableFrom": "user_feedback",
           "tableTo": "reports",
-          "columnsFrom": [
-            "report_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["report_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -840,9 +824,7 @@
         "api_cache_cache_key_unique": {
           "name": "api_cache_cache_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "cache_key"
-          ]
+          "columns": ["cache_key"]
         }
       },
       "policies": {},

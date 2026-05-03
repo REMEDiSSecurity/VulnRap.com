@@ -130,7 +130,10 @@ const CANDIDATE_PATHS = [
   // pkg-root fallback so the file resolves regardless of where the
   // process was launched from.
   path.resolve(process.cwd(), "data/avri-drift-notifications.json"),
-  path.resolve(process.cwd(), "artifacts/api-server/data/avri-drift-notifications.json"),
+  path.resolve(
+    process.cwd(),
+    "artifacts/api-server/data/avri-drift-notifications.json",
+  ),
 ];
 
 // Cap the persisted history so the file doesn't grow forever. 500 entries
@@ -313,7 +316,8 @@ function readState(): NotificationsFile {
         typeof entry === "object" &&
         typeof (entry as SchedulerStallRecord).key === "string" &&
         typeof (entry as SchedulerStallRecord).detectedAt === "string" &&
-        typeof (entry as SchedulerStallRecord).expectedNextTickAt === "string" &&
+        typeof (entry as SchedulerStallRecord).expectedNextTickAt ===
+          "string" &&
         typeof (entry as SchedulerStallRecord).overdueByMs === "number" &&
         typeof (entry as SchedulerStallRecord).intervalMs === "number"
       ) {
@@ -332,7 +336,8 @@ function readState(): NotificationsFile {
     // empty so the read keeps working without forcing a one-shot
     // migration.
     const rawHeartbeats =
-      parsed.schedulerHeartbeats && typeof parsed.schedulerHeartbeats === "object"
+      parsed.schedulerHeartbeats &&
+      typeof parsed.schedulerHeartbeats === "object"
         ? (parsed.schedulerHeartbeats as Record<string, unknown>)
         : {};
     const cleanedHeartbeats: Record<string, PersistedSchedulerHeartbeat> = {};
@@ -354,18 +359,26 @@ function readState(): NotificationsFile {
           heartbeatAt: candidate.heartbeatAt,
           schedulerStarted: candidate.schedulerStarted,
           startedAt:
-            typeof candidate.startedAt === "string" ? candidate.startedAt : null,
+            typeof candidate.startedAt === "string"
+              ? candidate.startedAt
+              : null,
           intervalMs:
-            typeof candidate.intervalMs === "number" ? candidate.intervalMs : null,
+            typeof candidate.intervalMs === "number"
+              ? candidate.intervalMs
+              : null,
           retryIntervalMs:
             typeof candidate.retryIntervalMs === "number"
               ? candidate.retryIntervalMs
               : null,
           webhookConfigured: candidate.webhookConfigured,
           lastTickAt:
-            typeof candidate.lastTickAt === "string" ? candidate.lastTickAt : null,
+            typeof candidate.lastTickAt === "string"
+              ? candidate.lastTickAt
+              : null,
           lastTickOk:
-            typeof candidate.lastTickOk === "boolean" ? candidate.lastTickOk : null,
+            typeof candidate.lastTickOk === "boolean"
+              ? candidate.lastTickOk
+              : null,
           lastTickRanCheck:
             typeof candidate.lastTickRanCheck === "boolean"
               ? candidate.lastTickRanCheck
@@ -379,7 +392,9 @@ function readState(): NotificationsFile {
               ? candidate.lastTickNewFlagCount
               : null,
           nextTickAt:
-            typeof candidate.nextTickAt === "string" ? candidate.nextTickAt : null,
+            typeof candidate.nextTickAt === "string"
+              ? candidate.nextTickAt
+              : null,
           ticksCompleted: candidate.ticksCompleted,
         };
       }
@@ -414,7 +429,9 @@ function writeState(file: NotificationsFile): void {
   // Trim oldest first so the most-recent HISTORY_LIMIT entries are kept.
   const trimmed = file.notified.slice(-HISTORY_LIMIT);
   const trimmedHistory = (file.rearmHistory ?? []).slice(-REARM_HISTORY_LIMIT);
-  const trimmedStalls = (file.schedulerStalls ?? []).slice(-STALL_HISTORY_LIMIT);
+  const trimmedStalls = (file.schedulerStalls ?? []).slice(
+    -STALL_HISTORY_LIMIT,
+  );
   // Task #397 — cap heartbeat map at SCHEDULER_HEARTBEAT_LIMIT, evicting
   // by oldest `heartbeatAt` so the most recently active replicas always
   // win. Rolling deploys churn replica IDs (each boot generates a fresh
@@ -425,8 +442,8 @@ function writeState(file: NotificationsFile): void {
   if (heartbeatEntries.length <= SCHEDULER_HEARTBEAT_LIMIT) {
     trimmedHeartbeats = heartbeatsIn;
   } else {
-    heartbeatEntries.sort(
-      (a, b) => a[1].heartbeatAt.localeCompare(b[1].heartbeatAt),
+    heartbeatEntries.sort((a, b) =>
+      a[1].heartbeatAt.localeCompare(b[1].heartbeatAt),
     );
     trimmedHeartbeats = Object.fromEntries(
       heartbeatEntries.slice(-SCHEDULER_HEARTBEAT_LIMIT),
@@ -511,7 +528,9 @@ function buildLinks(
   return {
     calibrationUrl: `${base}${CALIBRATION_PATH}`,
     runbookUrl:
-      runbookOverride.length > 0 ? runbookOverride : `${base}/${RUNBOOK_URL_PATH}`,
+      runbookOverride.length > 0
+        ? runbookOverride
+        : `${base}/${RUNBOOK_URL_PATH}`,
   };
 }
 
@@ -590,8 +609,11 @@ export async function notifyDriftFlagsIfNew(
     return baseOutcome;
   }
 
-  const webhookUrl =
-    (opts.webhookUrl ?? process.env.AVRI_DRIFT_WEBHOOK_URL ?? "").trim();
+  const webhookUrl = (
+    opts.webhookUrl ??
+    process.env.AVRI_DRIFT_WEBHOOK_URL ??
+    ""
+  ).trim();
   const now = (opts.now ?? (() => new Date()))();
 
   // Build the dispatch payload up-front so the same shape is shared by
@@ -638,7 +660,10 @@ export async function notifyDriftFlagsIfNew(
       };
     }
     logger.info(
-      { newFlagCount: partition.newFlags.length, status: dispatchResult.status },
+      {
+        newFlagCount: partition.newFlags.length,
+        status: dispatchResult.status,
+      },
       "[avri-drift-notifications] AVRI drift webhook dispatched.",
     );
   }
@@ -722,7 +747,10 @@ function parseIntervalEnv(raw: string | undefined, fallback: number): number {
 }
 
 function autoIntervalMs(): number {
-  return parseIntervalEnv(process.env.AVRI_DRIFT_NOTIFY_INTERVAL_MS, DEFAULT_INTERVAL_MS);
+  return parseIntervalEnv(
+    process.env.AVRI_DRIFT_NOTIFY_INTERVAL_MS,
+    DEFAULT_INTERVAL_MS,
+  );
 }
 
 function autoRetryIntervalMs(): number {
@@ -850,8 +878,10 @@ export interface DriftSchedulerStatus {
  * Identical to {@link DriftSchedulerStatus} but with `heartbeatAt`
  * non-nullable (we only persist after stamping a timestamp).
  */
-export interface PersistedSchedulerHeartbeat
-  extends Omit<DriftSchedulerStatus, "heartbeatAt"> {
+export interface PersistedSchedulerHeartbeat extends Omit<
+  DriftSchedulerStatus,
+  "heartbeatAt"
+> {
   heartbeatAt: string;
 }
 
@@ -1201,7 +1231,10 @@ export type SchedulerStallDispatcher = (
   payload: SchedulerStallPayload,
 ) => Promise<{ ok: boolean; status?: number; error?: string }>;
 
-const defaultStallDispatcher: SchedulerStallDispatcher = async (url, payload) => {
+const defaultStallDispatcher: SchedulerStallDispatcher = async (
+  url,
+  payload,
+) => {
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -1306,9 +1339,7 @@ export async function detectAndNotifyStalledScheduler(
   // detected by its own watchdog. Pick this replica's entry; tests
   // can still override via `opts.status` to drive specific scenarios.
   const replicaId = currentReplicaId();
-  const statuses = opts.status
-    ? [opts.status]
-    : getDriftSchedulerStatus();
+  const statuses = opts.status ? [opts.status] : getDriftSchedulerStatus();
   const status =
     statuses.find((s) => s.replicaId === replicaId) ?? statuses[0]!;
   const links = buildLinks(opts.publicUrl, opts.runbookUrl);
@@ -1345,8 +1376,11 @@ export async function detectAndNotifyStalledScheduler(
     intervalMs,
   };
 
-  const webhookUrl =
-    (opts.webhookUrl ?? process.env.AVRI_DRIFT_WEBHOOK_URL ?? "").trim();
+  const webhookUrl = (
+    opts.webhookUrl ??
+    process.env.AVRI_DRIFT_WEBHOOK_URL ??
+    ""
+  ).trim();
   let dispatched = false;
   let dispatchResult: DetectStalledSchedulerResult["dispatchResult"];
   let webhookSkipped = false;
@@ -1443,8 +1477,7 @@ function autoWatchdogIntervalMs(): number {
   );
 }
 
-export interface SchedulerWatchdogOptions
-  extends DetectStalledSchedulerOptions {
+export interface SchedulerWatchdogOptions extends DetectStalledSchedulerOptions {
   /**
    * Cadence of the watchdog poll. Defaults to env
    * AVRI_DRIFT_STALL_WATCHDOG_INTERVAL_MS, falling back to 5 minutes

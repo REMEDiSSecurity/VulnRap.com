@@ -15,16 +15,21 @@ interface AnyServer {
   // The Server instance keeps its handlers on `_requestHandlers` keyed by the
   // request method string. We type the access loosely so this stays robust
   // to minor SDK internal refactors.
-  _requestHandlers: Map<string, (req: unknown, extra: unknown) => Promise<unknown>>;
+  _requestHandlers: Map<
+    string,
+    (req: unknown, extra: unknown) => Promise<unknown>
+  >;
 }
 
 beforeEach(() => {
   process.env["VULNRAP_API_BASE_URL"] = "https://example.test";
-  vi.stubGlobal("fetch", async () =>
-    new Response(JSON.stringify({ totalReports: 7 }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }),
+  vi.stubGlobal(
+    "fetch",
+    async () =>
+      new Response(JSON.stringify({ totalReports: 7 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
   );
 });
 

@@ -1,10 +1,10 @@
+import { randomUUID } from "node:crypto";
 import {
   expect,
   request,
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
-import { randomUUID } from "node:crypto";
 
 // Shared seed/cleanup helpers for the FLAT hand-wavy phrase panel e2e specs.
 //
@@ -159,7 +159,10 @@ export function uniquePhrase(prefix: string, suffix?: string): string {
  */
 export function uniquePhrases(count: number, prefix: string): string[] {
   const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  return Array.from({ length: count }, (_, i) => `${prefix} ${id} phrase ${i + 1}`);
+  return Array.from(
+    { length: count },
+    (_, i) => `${prefix} ${id} phrase ${i + 1}`,
+  );
 }
 
 /** POST a single phrase. Asserts the response was 2xx. */
@@ -424,10 +427,13 @@ export async function cleanup(
  * Safe to call even when CALIBRATION_TOKEN is empty — it becomes a
  * no-op and the page falls back to whatever the bundle baked in.
  */
-export async function injectCalibrationTokenIntoPage(page: Page): Promise<void> {
+export async function injectCalibrationTokenIntoPage(
+  page: Page,
+): Promise<void> {
   if (!CALIBRATION_TOKEN) return;
   await page.addInitScript((token) => {
-    (window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string })
-      .__VULNRAP_CALIBRATION_TOKEN__ = token;
+    (
+      window as unknown as { __VULNRAP_CALIBRATION_TOKEN__?: string }
+    ).__VULNRAP_CALIBRATION_TOKEN__ = token;
   }, CALIBRATION_TOKEN);
 }

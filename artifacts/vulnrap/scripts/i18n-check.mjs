@@ -18,7 +18,9 @@ if (!fs.existsSync(CATALOG_PATH)) {
   process.exit(0);
 }
 const catalog = JSON.parse(fs.readFileSync(CATALOG_PATH, "utf8"));
-const catalogValues = new Set(Object.values(catalog).map((v) => String(v).trim()));
+const catalogValues = new Set(
+  Object.values(catalog).map((v) => String(v).trim()),
+);
 
 // Files we currently consider "in scope" for i18n: layout + the four
 // most-visible pages from the scaffolding task. Expand this list as more
@@ -87,12 +89,16 @@ function scanFile(file) {
 }
 
 console.log("[i18n:check] Scanning in-scope files for unkeyed strings...");
-console.log(`[i18n:check] Catalog: ${path.relative(ROOT, CATALOG_PATH)} (${Object.keys(catalog).length} keys)`);
+console.log(
+  `[i18n:check] Catalog: ${path.relative(ROOT, CATALOG_PATH)} (${Object.keys(catalog).length} keys)`,
+);
 console.log("");
 for (const file of IN_SCOPE) {
   if (!fs.existsSync(file)) continue;
   scanFile(file);
 }
 console.log("");
-console.log(`[i18n:check] ${warnings} potential unkeyed string(s). Warn-only — exit 0.`);
+console.log(
+  `[i18n:check] ${warnings} potential unkeyed string(s). Warn-only — exit 0.`,
+);
 process.exit(0);

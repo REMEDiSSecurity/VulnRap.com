@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeText, sanitizeFileName, detectBinaryContent } from "./sanitize.js";
+import {
+  sanitizeText,
+  sanitizeFileName,
+  detectBinaryContent,
+} from "./sanitize.js";
 
 describe("sanitizeText", () => {
   it("removes script tags", () => {
@@ -96,7 +100,9 @@ describe("detectBinaryContent", () => {
   });
 
   it("returns false for text content", () => {
-    const text = Buffer.from("This is a normal text report about a vulnerability.");
+    const text = Buffer.from(
+      "This is a normal text report about a vulnerability.",
+    );
     expect(detectBinaryContent(text)).toBe(false);
   });
 

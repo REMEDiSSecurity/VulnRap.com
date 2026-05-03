@@ -26,7 +26,7 @@ The ten levers documented below are the knobs that determine the final number af
 
 - **Source:** `artifacts/api-server/src/lib/engines/avri/engine2-avri.ts`, line ~139.
 - **What it does:** Normalises the sum of matched gold-signal points by `Math.max(1, round(totalPossible * 0.55))` rather than `totalPossible`. A complete report only needs to hit ~55% of the family's possible signal weight to saturate the rubric.
-- **Why this value:** Earlier sprints normalised against `totalPossible`, which meant only "the perfect synthetic report" reached 100. Real well-evidenced fixtures (e.g. the canonical SQL-injection PoC, the use-after-free with stack trace + ASAN output) consistently topped out around 70 because no real report contains *every* optional gold signal. Lowering to 55% lets these reach the upper band without rescuing slop, which still hits 0–2 signals.
+- **Why this value:** Earlier sprints normalised against `totalPossible`, which meant only "the perfect synthetic report" reached 100. Real well-evidenced fixtures (e.g. the canonical SQL-injection PoC, the use-after-free with stack trace + ASAN output) consistently topped out around 70 because no real report contains _every_ optional gold signal. Lowering to 55% lets these reach the upper band without rescuing slop, which still hits 0–2 signals.
 - **Fixtures that motivated the value:** Real-world memory-corruption with ASAN + crash dump + minimised reproducer; INJECTION reports with payload + sink + DB error message but no proxy capture.
 
 ### Lever 2 — `baseScore` ceiling of 84
@@ -58,7 +58,7 @@ The ten levers documented below are the knobs that determine the final number af
 
 - **Source:** `engine2-avri.ts` lines ~181–183 (used inside the adaptive-blend gate).
 - **What it does:** When deciding whether to enable the legacy-anchor rescue (Lever 4), checks for contradiction phrases anywhere in the raw text — including inside fenced code blocks and unified-diff hunks. Engine 2's main contradiction count uses prose-only (via `stripCodeAndDiffs`), but the rescue gate uses raw text.
-- **Why this matters:** Type-swap slop sometimes carries *real* INJECTION evidence (working SQLi payload, DB error from the sink) while citing CWE-79 and including `alert(1)` somewhere in the text. Without the slip-through guard, the high legacy substance score would rescue them via Lever 4 even though the cited family is wrong. Counting contradictions anywhere — including code — disqualifies these from the rescue path.
+- **Why this matters:** Type-swap slop sometimes carries _real_ INJECTION evidence (working SQLi payload, DB error from the sink) while citing CWE-79 and including `alert(1)` somewhere in the text. Without the slip-through guard, the high legacy substance score would rescue them via Lever 4 even though the cited family is wrong. Counting contradictions anywhere — including code — disqualifies these from the rescue path.
 - **Fixtures that motivated the value:** "Working SQLi disguised as XSS" cross-class slop discovered after Sprint 11 Part 4. Note the asymmetry with the main contradiction count, which strips code; this is intentional and is the only place we look at code blocks for contradictions.
 
 ### Lever 6 — FLAT hand-wavy haircut (`flat_handwavy_haircut`)
@@ -77,14 +77,14 @@ Engine 3 selects exactly one **base rule** from the matrix below, then applies a
 ### Lever 7 — `SAME_FAMILY_FLOOR = 75`
 
 - **Source:** `engine3-avri.ts` lines ~110–134.
-- **What it does:** When the rubric family selected for scoring matches the family inferred from the report's *evidence* (vuln-type signals + keyword fallback), and the report has at least one **concrete** gold signal (anything other than `cwe_correct_class`), the Engine 3 base score is locked to 75.
+- **What it does:** When the rubric family selected for scoring matches the family inferred from the report's _evidence_ (vuln-type signals + keyword fallback), and the report has at least one **concrete** gold signal (anything other than `cwe_correct_class`), the Engine 3 base score is locked to 75.
 - **Why this value:** 75 sits just above the 65 GREEN threshold so a coherent, cited-correctly report doesn't fall below "REASONABLE" for stylistic reasons. The floor protects against over-aggressive coherence penalties accumulating into a low score for a fundamentally correct report.
 - **Fixtures that motivated the value:** Memory-corruption reports with crash dump + CWE-787 cited that were scoring in the 50s due to a single coherence nit before the floor was added.
 
 ### Lever 8 — `SAME_FAMILY_NO_CONCRETE_EVIDENCE = 32`
 
 - **Source:** `engine3-avri.ts` lines ~123–130 (the `concreteGoldHitCount === 0` branch of `sameFamily`).
-- **What it does:** Same-family detection requires a *concrete* gold-signal hit before granting the 75 floor. If the only gold signal that matched is `cwe_correct_class` (the report mentions a CWE id mapped to the family but nothing else), the base drops to 32 — well inside RED territory.
+- **What it does:** Same-family detection requires a _concrete_ gold-signal hit before granting the 75 floor. If the only gold signal that matched is `cwe_correct_class` (the report mentions a CWE id mapped to the family but nothing else), the base drops to 32 — well inside RED territory.
 - **Why this value:** T3 slop reports learned to copy the right CWE label without producing any real artefact (no payload, sink, code reference, or stack trace). With the original `sameFamily` floor they inherited 75 just by saying "CWE-89". The concrete-hit requirement closes that loophole. 32 is low enough to keep them in RED but not so low it's indistinguishable from `OFF_FAMILY_CEILING`.
 - **Fixtures that motivated the value:** "Cite the right CWE, prove nothing" T3 slop campaign discovered after Sprint 11 Part 4.
 
@@ -92,7 +92,7 @@ Engine 3 selects exactly one **base rule** from the matrix below, then applies a
 
 - **Source:** `engine3-avri.ts` lines ~119–146.
 - **What they do:** These are the other branches of the base-rule matrix:
-  - **`OFF_FAMILY_CEILING` (25)** — Cited CWE family disagrees with the evidence family, *and* the evidence family was identified with at least MEDIUM confidence. This is the "type-swap" signal: high-confidence evidence points one way, the cited CWE points another.
+  - **`OFF_FAMILY_CEILING` (25)** — Cited CWE family disagrees with the evidence family, _and_ the evidence family was identified with at least MEDIUM confidence. This is the "type-swap" signal: high-confidence evidence points one way, the cited CWE points another.
   - **`CITED_NO_EVIDENCE` (60)** — A CWE is cited and maps to a family, but no corroborating evidence-family fingerprint matched. We trust the report cautiously: well above the 42 fallback, well below the 75 floor.
   - **`FAMILY_DETECTED_NO_CWE` (38)** — Evidence points at a family but the report doesn't cite any CWE.
   - **`FALLBACK` (42)** — None of the above.
@@ -168,17 +168,17 @@ START: pull the report's signalBreakdown (engine.signalBreakdown.avri exists for
 
 ## Lever index (quick reference)
 
-| # | Lever | File | Default |
-|---|-------|------|---------|
-| 1 | `calibratedMax` | `engine2-avri.ts` | `round(totalPossible * 0.55)` |
-| 2 | `baseScore` cap | `engine2-avri.ts` | 84 |
-| 3 | `ABSENCE_PENALTY_CAP` | `engine2-avri.ts` | 12 |
-| 4 | Adaptive blend weight | `engine2-avri.ts` | 0.5 (drops to 0.25 under guard) |
-| 5 | `contradictionsAnywhere` guard | `engine2-avri.ts` | always-on |
-| 6 | `flat_handwavy_haircut` | `engine2-avri.ts` | -6 per marker, cap -24 |
-| 7 | `SAME_FAMILY_FLOOR` | `engine3-avri.ts` | 75 |
-| 8 | `SAME_FAMILY_NO_CONCRETE_EVIDENCE` | `engine3-avri.ts` | 32 |
-| 9 | `OFF_FAMILY_CEILING` / `CITED_NO_EVIDENCE` | `engine3-avri.ts` | 25 / 60 |
-| 10 | `AVRI_FLAT_SLOP_HAIRCUT` | `composite.ts` | -8 |
+| #   | Lever                                      | File              | Default                         |
+| --- | ------------------------------------------ | ----------------- | ------------------------------- |
+| 1   | `calibratedMax`                            | `engine2-avri.ts` | `round(totalPossible * 0.55)`   |
+| 2   | `baseScore` cap                            | `engine2-avri.ts` | 84                              |
+| 3   | `ABSENCE_PENALTY_CAP`                      | `engine2-avri.ts` | 12                              |
+| 4   | Adaptive blend weight                      | `engine2-avri.ts` | 0.5 (drops to 0.25 under guard) |
+| 5   | `contradictionsAnywhere` guard             | `engine2-avri.ts` | always-on                       |
+| 6   | `flat_handwavy_haircut`                    | `engine2-avri.ts` | -6 per marker, cap -24          |
+| 7   | `SAME_FAMILY_FLOOR`                        | `engine3-avri.ts` | 75                              |
+| 8   | `SAME_FAMILY_NO_CONCRETE_EVIDENCE`         | `engine3-avri.ts` | 32                              |
+| 9   | `OFF_FAMILY_CEILING` / `CITED_NO_EVIDENCE` | `engine3-avri.ts` | 25 / 60                         |
+| 10  | `AVRI_FLAT_SLOP_HAIRCUT`                   | `composite.ts`    | -8                              |
 
-Whenever you change one of these, update both the inline comment in the source file *and* the corresponding section here so the rationale and the value never drift apart.
+Whenever you change one of these, update both the inline comment in the source file _and_ the corresponding section here so the rationale and the value never drift apart.

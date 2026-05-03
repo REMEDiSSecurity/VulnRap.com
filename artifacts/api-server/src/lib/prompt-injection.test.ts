@@ -245,22 +245,34 @@ function assertNoGateAnomaly(
 ): void {
   // Reason must be one of the documented values — anything else means the
   // gate fell off a code path or was extended without updating callers.
-  expect(KNOWN_GATE_REASONS.has(decision.reason), `${ctx} reason=${decision.reason}`).toBe(true);
+  expect(
+    KNOWN_GATE_REASONS.has(decision.reason),
+    `${ctx} reason=${decision.reason}`,
+  ).toBe(true);
 
   // Heuristic + composite scores must stay finite and bounded. An injection
   // that pushed an internal counter to NaN / Infinity / out-of-band would
   // count as an anomaly the cost-guard is supposed to never produce.
-  expect(Number.isFinite(decision.heuristicScore), `${ctx} heuristic non-finite`).toBe(true);
+  expect(
+    Number.isFinite(decision.heuristicScore),
+    `${ctx} heuristic non-finite`,
+  ).toBe(true);
   expect(decision.heuristicScore).toBeGreaterThanOrEqual(0);
   expect(decision.heuristicScore).toBeLessThanOrEqual(100);
   if (decision.compositeScore !== null) {
-    expect(Number.isFinite(decision.compositeScore), `${ctx} composite non-finite`).toBe(true);
+    expect(
+      Number.isFinite(decision.compositeScore),
+      `${ctx} composite non-finite`,
+    ).toBe(true);
     expect(decision.compositeScore).toBeGreaterThanOrEqual(0);
     expect(decision.compositeScore).toBeLessThanOrEqual(100);
   }
 
   // Confidence must be a real number in [0,1].
-  expect(Number.isFinite(decision.confidence), `${ctx} confidence non-finite`).toBe(true);
+  expect(
+    Number.isFinite(decision.confidence),
+    `${ctx} confidence non-finite`,
+  ).toBe(true);
   expect(decision.confidence).toBeGreaterThanOrEqual(0);
   expect(decision.confidence).toBeLessThanOrEqual(1);
 
@@ -312,14 +324,18 @@ describe("prompt-injection fixtures (Task #642)", () => {
           // bound: the engines may still penalize the report for other
           // reasons (presence of formal-letter scaffolding, etc.) and that
           // is unrelated to injection handling.
-          expect(composite.overallScore, `${ctx} (legit_with_injection should not collapse)`)
-            .toBeGreaterThan(20);
+          expect(
+            composite.overallScore,
+            `${ctx} (legit_with_injection should not collapse)`,
+          ).toBeGreaterThan(20);
         } else {
           // Pure-injection fixtures have effectively no technical substance.
           // The engines should rate them no better than NEEDS REVIEW (≤ 50)
           // — i.e. the injection text itself is not mistaken for substance.
-          expect(composite.overallScore, `${ctx} (pure_injection should not score above NEEDS REVIEW)`)
-            .toBeLessThanOrEqual(50);
+          expect(
+            composite.overallScore,
+            `${ctx} (pure_injection should not score above NEEDS REVIEW)`,
+          ).toBeLessThanOrEqual(50);
         }
       });
 
@@ -348,7 +364,9 @@ describe("prompt-injection fixtures (Task #642)", () => {
         ).toBe(true);
         expect(linguistic.promptInjectionMatches.length).toBeGreaterThan(0);
         expect(
-          linguistic.evidence.some((e) => e.type === "prompt_injection_attempted"),
+          linguistic.evidence.some(
+            (e) => e.type === "prompt_injection_attempted",
+          ),
           `${fixture.name} evidence should include prompt_injection_attempted entry`,
         ).toBe(true);
       });
@@ -377,6 +395,8 @@ describe("prompt-injection fixtures (Task #642)", () => {
     // of points purely from adding the injection sentence (the sentence
     // is short and contains no AI-phrase / template / statistical
     // contributions of its own).
-    expect(Math.abs(withInjection.score - baseline.score)).toBeLessThanOrEqual(5);
+    expect(Math.abs(withInjection.score - baseline.score)).toBeLessThanOrEqual(
+      5,
+    );
   });
 });

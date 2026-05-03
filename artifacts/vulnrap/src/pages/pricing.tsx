@@ -1,9 +1,23 @@
 import { Link } from "react-router-dom";
 import {
-  Tag, Check, Sparkles, Mail, Clock, Building2, ShieldCheck,
-  Zap, ArrowRight, HelpCircle,
+  Tag,
+  Check,
+  Sparkles,
+  Mail,
+  Clock,
+  Building2,
+  ShieldCheck,
+  Zap,
+  ArrowRight,
+  HelpCircle,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 const IP_DAILY_LIMIT = 30;
@@ -27,7 +41,7 @@ function enterpriseMailto() {
       "Contact name & role:",
       "",
       "Thanks!",
-    ].join("\n")
+    ].join("\n"),
   );
   return `mailto:${ENTERPRISE_EMAIL}?subject=${subject}&body=${body}`;
 }
@@ -72,7 +86,9 @@ export default function Pricing() {
           Pricing
         </h1>
         <p className="text-muted-foreground max-w-3xl leading-relaxed">
-          VulnRap is free during the public beta. We're publishing pricing intent here so enterprise prospects know there's a clear plan for what comes next — no surprise meter starting on a quiet Tuesday.
+          VulnRap is free during the public beta. We're publishing pricing
+          intent here so enterprise prospects know there's a clear plan for what
+          comes next — no surprise meter starting on a quiet Tuesday.
         </p>
       </header>
 
@@ -86,7 +102,10 @@ export default function Pricing() {
                 <Sparkles className="w-3 h-3 mr-1" />
                 Public beta
               </Badge>
-              <Badge variant="outline" className="text-[10px] uppercase tracking-wider border-emerald-500/40 text-emerald-300/90">
+              <Badge
+                variant="outline"
+                className="text-[10px] uppercase tracking-wider border-emerald-500/40 text-emerald-300/90"
+              >
                 No credit card
               </Badge>
             </div>
@@ -94,36 +113,60 @@ export default function Pricing() {
               Free during beta
             </CardTitle>
             <CardDescription className="text-base leading-relaxed pt-1">
-              Score reports, run batches, query the API, embed badges. Anonymous and account-backed usage are both free for the duration of the beta.
+              Score reports, run batches, query the API, embed badges. Anonymous
+              and account-backed usage are both free for the duration of the
+              beta.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid sm:grid-cols-3 gap-3">
               <div className="rounded-lg border border-border/60 bg-background/40 p-4 space-y-1">
-                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">Per IP / day</div>
-                <div className="text-2xl font-bold text-primary font-mono">{IP_DAILY_LIMIT}</div>
-                <div className="text-[11px] text-muted-foreground leading-snug">Anonymous report submissions, rolling 24h window.</div>
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
+                  Per IP / day
+                </div>
+                <div className="text-2xl font-bold text-primary font-mono">
+                  {IP_DAILY_LIMIT}
+                </div>
+                <div className="text-[11px] text-muted-foreground leading-snug">
+                  Anonymous report submissions, rolling 24h window.
+                </div>
               </div>
               <div className="rounded-lg border border-border/60 bg-background/40 p-4 space-y-1">
-                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">Per account / month</div>
-                <div className="text-2xl font-bold text-primary font-mono">{ACCOUNT_MONTHLY_LIMIT}</div>
-                <div className="text-[11px] text-muted-foreground leading-snug">Signed-in submissions across web, API, and batch.</div>
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
+                  Per account / month
+                </div>
+                <div className="text-2xl font-bold text-primary font-mono">
+                  {ACCOUNT_MONTHLY_LIMIT}
+                </div>
+                <div className="text-[11px] text-muted-foreground leading-snug">
+                  Signed-in submissions across web, API, and batch.
+                </div>
               </div>
               <div className="rounded-lg border border-border/60 bg-background/40 p-4 space-y-1">
-                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">Batch size</div>
-                <div className="text-2xl font-bold text-primary font-mono">{BATCH_MAX_REPORTS}</div>
-                <div className="text-[11px] text-muted-foreground leading-snug">Reports per batch upload, scored in parallel.</div>
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
+                  Batch size
+                </div>
+                <div className="text-2xl font-bold text-primary font-mono">
+                  {BATCH_MAX_REPORTS}
+                </div>
+                <div className="text-[11px] text-muted-foreground leading-snug">
+                  Reports per batch upload, scored in parallel.
+                </div>
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-              Hit a limit and need more? See the enterprise section below — we approve almost every reasonable request during the beta.
+              Hit a limit and need more? See the enterprise section below — we
+              approve almost every reasonable request during the beta.
             </p>
           </CardContent>
         </Card>
       </section>
 
       {/* What's free / what's coming */}
-      <section className="grid md:grid-cols-2 gap-4" data-testid="section-included">
+      <section
+        className="grid md:grid-cols-2 gap-4"
+        data-testid="section-included"
+      >
         <Card className="bg-card/40 backdrop-blur border-border/60">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -136,14 +179,50 @@ export default function Pricing() {
           </CardHeader>
           <CardContent>
             <ul className="space-y-2.5">
-              <FeatureRow>Unlimited <Link to="/check" className="text-primary hover:underline">report lookups</Link> by ID</FeatureRow>
-              <FeatureRow>Single-report scoring with full signal breakdown</FeatureRow>
-              <FeatureRow><Link to="/batch" className="text-primary hover:underline">Batch uploads</Link> up to {BATCH_MAX_REPORTS} reports per submission</FeatureRow>
-              <FeatureRow><Link to="/compare" className="text-primary hover:underline">Side-by-side comparison</Link> of two reports</FeatureRow>
-              <FeatureRow>Public <Link to="/developers" className="text-primary hover:underline">REST API</Link> with the same scoring engine the UI uses</FeatureRow>
-              <FeatureRow>Embeddable result badges and signed verify URLs</FeatureRow>
-              <FeatureRow><Link to="/transparency" className="text-primary hover:underline">Transparency metrics</Link>, corpus stats, and signal reference</FeatureRow>
-              <FeatureRow>Reviewer feedback channel — every disagreement helps calibration</FeatureRow>
+              <FeatureRow>
+                Unlimited{" "}
+                <Link to="/check" className="text-primary hover:underline">
+                  report lookups
+                </Link>{" "}
+                by ID
+              </FeatureRow>
+              <FeatureRow>
+                Single-report scoring with full signal breakdown
+              </FeatureRow>
+              <FeatureRow>
+                <Link to="/batch" className="text-primary hover:underline">
+                  Batch uploads
+                </Link>{" "}
+                up to {BATCH_MAX_REPORTS} reports per submission
+              </FeatureRow>
+              <FeatureRow>
+                <Link to="/compare" className="text-primary hover:underline">
+                  Side-by-side comparison
+                </Link>{" "}
+                of two reports
+              </FeatureRow>
+              <FeatureRow>
+                Public{" "}
+                <Link to="/developers" className="text-primary hover:underline">
+                  REST API
+                </Link>{" "}
+                with the same scoring engine the UI uses
+              </FeatureRow>
+              <FeatureRow>
+                Embeddable result badges and signed verify URLs
+              </FeatureRow>
+              <FeatureRow>
+                <Link
+                  to="/transparency"
+                  className="text-primary hover:underline"
+                >
+                  Transparency metrics
+                </Link>
+                , corpus stats, and signal reference
+              </FeatureRow>
+              <FeatureRow>
+                Reviewer feedback channel — every disagreement helps calibration
+              </FeatureRow>
             </ul>
           </CardContent>
         </Card>
@@ -155,19 +234,36 @@ export default function Pricing() {
               What's coming (paid plans)
             </CardTitle>
             <CardDescription className="text-xs leading-relaxed">
-              Once the beta ends, the platform stays free at low volumes. Higher tiers will unlock the items below.
+              Once the beta ends, the platform stays free at low volumes. Higher
+              tiers will unlock the items below.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2.5">
-              <ComingSoonRow>Higher monthly quotas (10k+ scored reports / month)</ComingSoonRow>
-              <ComingSoonRow>SSO (SAML / OIDC) and team accounts with role-based access</ComingSoonRow>
-              <ComingSoonRow>Webhook delivery for score events and feedback resolution</ComingSoonRow>
-              <ComingSoonRow>Private fixtures and per-tenant calibration baselines</ComingSoonRow>
-              <ComingSoonRow>Audit log export with retention beyond the public window</ComingSoonRow>
-              <ComingSoonRow>Bring-your-own-CWE families and tenant-scoped detection signals</ComingSoonRow>
-              <ComingSoonRow>SLA-backed uptime, dedicated rate limits, priority support</ComingSoonRow>
-              <ComingSoonRow>On-prem / VPC deployment for regulated PSIRTs</ComingSoonRow>
+              <ComingSoonRow>
+                Higher monthly quotas (10k+ scored reports / month)
+              </ComingSoonRow>
+              <ComingSoonRow>
+                SSO (SAML / OIDC) and team accounts with role-based access
+              </ComingSoonRow>
+              <ComingSoonRow>
+                Webhook delivery for score events and feedback resolution
+              </ComingSoonRow>
+              <ComingSoonRow>
+                Private fixtures and per-tenant calibration baselines
+              </ComingSoonRow>
+              <ComingSoonRow>
+                Audit log export with retention beyond the public window
+              </ComingSoonRow>
+              <ComingSoonRow>
+                Bring-your-own-CWE families and tenant-scoped detection signals
+              </ComingSoonRow>
+              <ComingSoonRow>
+                SLA-backed uptime, dedicated rate limits, priority support
+              </ComingSoonRow>
+              <ComingSoonRow>
+                On-prem / VPC deployment for regulated PSIRTs
+              </ComingSoonRow>
             </ul>
           </CardContent>
         </Card>
@@ -182,21 +278,35 @@ export default function Pricing() {
               Need more than the beta limits?
             </CardTitle>
             <CardDescription className="text-sm leading-relaxed">
-              If you're triaging hundreds of reports a week, running a bounty program, or evaluating VulnRap for procurement, we'll lift your quota for the duration of the beta. No contract required — we just want to know who's using it heavily so we can size the calibration corpus accordingly.
+              If you're triaging hundreds of reports a week, running a bounty
+              program, or evaluating VulnRap for procurement, we'll lift your
+              quota for the duration of the beta. No contract required — we just
+              want to know who's using it heavily so we can size the calibration
+              corpus accordingly.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid sm:grid-cols-3 gap-3">
               <div className="rounded-lg border border-border/60 bg-background/40 p-3">
-                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1">Typical turnaround</div>
-                <div className="text-sm font-semibold text-foreground">Same business day</div>
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1">
+                  Typical turnaround
+                </div>
+                <div className="text-sm font-semibold text-foreground">
+                  Same business day
+                </div>
               </div>
               <div className="rounded-lg border border-border/60 bg-background/40 p-3">
-                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1">What we'll ask</div>
-                <div className="text-sm font-semibold text-foreground">Org, volume, use case</div>
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1">
+                  What we'll ask
+                </div>
+                <div className="text-sm font-semibold text-foreground">
+                  Org, volume, use case
+                </div>
               </div>
               <div className="rounded-lg border border-border/60 bg-background/40 p-3">
-                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1">Cost during beta</div>
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1">
+                  Cost during beta
+                </div>
                 <div className="text-sm font-semibold text-emerald-300">$0</div>
               </div>
             </div>
@@ -210,7 +320,15 @@ export default function Pricing() {
               <ArrowRight className="w-4 h-4" />
             </a>
             <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-              Opens your mail client with a pre-filled draft to <span className="font-mono text-foreground/80">{ENTERPRISE_EMAIL}</span>. Prefer a different channel? Ping us via <Link to="/community" className="text-primary hover:underline">community</Link>.
+              Opens your mail client with a pre-filled draft to{" "}
+              <span className="font-mono text-foreground/80">
+                {ENTERPRISE_EMAIL}
+              </span>
+              . Prefer a different channel? Ping us via{" "}
+              <Link to="/community" className="text-primary hover:underline">
+                community
+              </Link>
+              .
             </p>
           </CardContent>
         </Card>
@@ -238,7 +356,16 @@ export default function Pricing() {
             />
             <FaqItem
               q="Do you sell the data we submit?"
-              a={<>No. See the <Link to="/privacy" className="text-primary hover:underline">privacy page</Link> — submissions are stored to support scoring, calibration, and abuse prevention only.</>}
+              a={
+                <>
+                  No. See the{" "}
+                  <Link to="/privacy" className="text-primary hover:underline">
+                    privacy page
+                  </Link>{" "}
+                  — submissions are stored to support scoring, calibration, and
+                  abuse prevention only.
+                </>
+              }
             />
             <FaqItem
               q="Can I self-host?"
@@ -255,7 +382,12 @@ export default function Pricing() {
       {/* Footer note */}
       <p className="text-center text-[11px] text-muted-foreground/60 max-w-2xl mx-auto leading-relaxed">
         Questions about pricing, procurement, or security review? Email{" "}
-        <a href={`mailto:${ENTERPRISE_EMAIL}`} className="text-primary/80 hover:text-primary underline-offset-2 hover:underline">{ENTERPRISE_EMAIL}</a>{" "}
+        <a
+          href={`mailto:${ENTERPRISE_EMAIL}`}
+          className="text-primary/80 hover:text-primary underline-offset-2 hover:underline"
+        >
+          {ENTERPRISE_EMAIL}
+        </a>{" "}
         and we'll route it to the right person.
       </p>
     </div>

@@ -25,9 +25,11 @@ interface EngineResultsBlob {
 export function deriveFabricatedEvidenceFlags(
   vulnrapEngineResults: unknown,
 ): FabricatedEvidenceFlags {
-  const engines = ((vulnrapEngineResults ?? {}) as EngineResultsBlob).engines ?? [];
-  const e2Avri = engines.find((e) => /Technical Substance/i.test(e?.engine ?? ""))
-    ?.signalBreakdown?.avri;
+  const engines =
+    ((vulnrapEngineResults ?? {}) as EngineResultsBlob).engines ?? [];
+  const e2Avri = engines.find((e) =>
+    /Technical Substance/i.test(e?.engine ?? ""),
+  )?.signalBreakdown?.avri;
   return {
     fakeRawHttp: e2Avri?.rawHttp?.isFake === true,
     strippedCrashTrace: e2Avri?.crashTrace?.isStripped === true,

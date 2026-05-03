@@ -24,7 +24,10 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
-const OUT = path.join(ROOT, "artifacts/api-server/docs/2026-05-02-state-of-platform.md");
+const OUT = path.join(
+  ROOT,
+  "artifacts/api-server/docs/2026-05-02-state-of-platform.md",
+);
 
 const args = new Set(process.argv.slice(2));
 const CHECK_ONLY = args.has("--check");
@@ -44,13 +47,13 @@ function extractEndpoints() {
   let currentPath = null;
   let cur = null;
   for (const line of lines) {
-    const pathMatch = line.match(/^  (\/[^\s:]+):\s*$/);
+    const pathMatch = line.match(/^ {2}(\/[^\s:]+):\s*$/);
     if (pathMatch) {
       currentPath = pathMatch[1];
       cur = null;
       continue;
     }
-    const methodMatch = line.match(/^    (get|post|put|delete|patch):\s*$/);
+    const methodMatch = line.match(/^ {4}(get|post|put|delete|patch):\s*$/);
     if (methodMatch && currentPath) {
       cur = {
         path: currentPath,
@@ -63,11 +66,11 @@ function extractEndpoints() {
       continue;
     }
     if (cur) {
-      const opMatch = line.match(/^      operationId:\s*(\S+)/);
+      const opMatch = line.match(/^ {6}operationId:\s*(\S+)/);
       if (opMatch) cur.opId = opMatch[1];
-      const sumMatch = line.match(/^      summary:\s*(.+)$/);
+      const sumMatch = line.match(/^ {6}summary:\s*(.+)$/);
       if (sumMatch) cur.summary = sumMatch[1].trim();
-      const tagInline = line.match(/^      tags:\s*\[([^\]]+)\]/);
+      const tagInline = line.match(/^ {6}tags:\s*\[([^\]]+)\]/);
       if (tagInline) cur.tag = tagInline[1].trim();
     }
   }
@@ -209,7 +212,9 @@ function renderEndpointsTable(endpoints) {
   const out = [];
   for (const tag of orderedTags) {
     const rows = byTag.get(tag);
-    out.push(`\n#### Tag: \`${tag}\` (${rows.length} operation${rows.length === 1 ? "" : "s"})\n`);
+    out.push(
+      `\n#### Tag: \`${tag}\` (${rows.length} operation${rows.length === 1 ? "" : "s"})\n`,
+    );
     out.push("| Method | Path | operationId | Summary |");
     out.push("| ------ | ---- | ----------- | ------- |");
     for (const e of rows) {
@@ -224,8 +229,12 @@ function renderEndpointsTable(endpoints) {
 
 function renderFamiliesTable(families) {
   const out = [];
-  out.push("| Family id | Display name | Verification mode | Gold signals | Absence penalties |");
-  out.push("| --------- | ------------ | ----------------- | -----------: | ----------------: |");
+  out.push(
+    "| Family id | Display name | Verification mode | Gold signals | Absence penalties |",
+  );
+  out.push(
+    "| --------- | ------------ | ----------------- | -----------: | ----------------: |",
+  );
   for (const f of families) {
     out.push(
       `| \`${f.id}\` | ${f.displayName.replace(/\|/g, "\\|")} | \`${f.verificationMode}\` | ${f.goldSignalCount} | ${f.absencePenaltyCount} |`,
@@ -238,7 +247,9 @@ function renderFamiliesReproductionList(families) {
   const out = [];
   for (const f of families) {
     if (!f.reproductionExpectation) continue;
-    out.push(`- **\`${f.id}\` — ${f.displayName}**: ${f.reproductionExpectation}`);
+    out.push(
+      `- **\`${f.id}\` — ${f.displayName}**: ${f.reproductionExpectation}`,
+    );
   }
   return out.join("\n");
 }
@@ -271,7 +282,9 @@ function renderSignalCatalog(families) {
       out.push("");
     }
     if (f.goldSignals.length === 0 && f.absencePenalties.length === 0) {
-      out.push(`*(No per-family rubric entries; family is the catch-all and relies entirely on cross-family slop signals and other engines.)*\n`);
+      out.push(
+        `*(No per-family rubric entries; family is the catch-all and relies entirely on cross-family slop signals and other engines.)*\n`,
+      );
     }
   }
   return out.join("\n");
@@ -831,7 +844,9 @@ function main() {
     try {
       current = fs.readFileSync(OUT, "utf8");
     } catch {
-      console.error(`[--check] ${OUT} does not exist; regenerate to create it.`);
+      console.error(
+        `[--check] ${OUT} does not exist; regenerate to create it.`,
+      );
       process.exit(2);
     }
     if (stripGeneratedDate(current) !== stripGeneratedDate(next)) {
@@ -845,7 +860,9 @@ function main() {
   }
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, next);
-  console.log(`Wrote ${OUT} (${next.length} bytes, ${next.split(/\s+/).length} words approx).`);
+  console.log(
+    `Wrote ${OUT} (${next.length} bytes, ${next.split(/\s+/).length} words approx).`,
+  );
 }
 
 main();

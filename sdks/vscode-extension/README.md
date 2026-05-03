@@ -34,10 +34,10 @@ glance.
 
 ## Settings
 
-| Setting              | Default                    | Description                                                                                |
-| -------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
-| `vulnrap.apiBaseUrl` | `https://vulnrap.com/api`  | Base URL of the VulnRap API. Override this when self-hosting or pointing at staging.       |
-| `vulnrap.skipLlm`    | `false`                    | If `true`, scores using only local heuristic / statistical engines (no external LLM call). |
+| Setting              | Default                   | Description                                                                                |
+| -------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
+| `vulnrap.apiBaseUrl` | `https://vulnrap.com/api` | Base URL of the VulnRap API. Override this when self-hosting or pointing at staging.       |
+| `vulnrap.skipLlm`    | `false`                   | If `true`, scores using only local heuristic / statistical engines (no external LLM call). |
 
 Open the settings UI (`Ctrl+,` / `Cmd+,`) and search for "VulnRap" to edit
 either of these.

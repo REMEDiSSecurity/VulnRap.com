@@ -11,10 +11,20 @@ export interface CodeBlock {
 // multiplier reflecting how hard it is to fabricate, derived from the
 // expert-vs-slop discriminator ratios in our 460K-report dataset.
 export type EvidenceType =
-  | "FILE_PATH" | "LINE_NUMBER" | "FUNCTION_NAME" | "ENDPOINT_URL"
-  | "CRASH_OUTPUT" | "CODE_DIFF" | "SHELL_COMMAND" | "HTTP_REQUEST"
-  | "MEMORY_ADDRESS" | "CVSS_VECTOR" | "CVE_REFERENCE" | "VERSION_PIN"
-  | "ENVIRONMENT_DETAIL" | "STACK_TRACE";
+  | "FILE_PATH"
+  | "LINE_NUMBER"
+  | "FUNCTION_NAME"
+  | "ENDPOINT_URL"
+  | "CRASH_OUTPUT"
+  | "CODE_DIFF"
+  | "SHELL_COMMAND"
+  | "HTTP_REQUEST"
+  | "MEMORY_ADDRESS"
+  | "CVSS_VECTOR"
+  | "CVE_REFERENCE"
+  | "VERSION_PIN"
+  | "ENVIRONMENT_DETAIL"
+  | "STACK_TRACE";
 
 export interface EvidenceSignal {
   type: EvidenceType;
@@ -67,132 +77,161 @@ export const STRENGTH_MULTIPLIERS: Record<EvidenceType, number> = {
 // /i flag which case-folds them in modern V8.
 const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
   XSS: [
-    /cross.?site.?script/i, /\bXSS\b/i, /<script>/i, /document\.cookie/i,
-    /secuencias?\s+de\s+comandos\s+en\s+sitios?\s+cruzados?/i,                   // ES
-    /scripts?\s+entre\s+sites/i,                                                 // PT
-    /scripts?\s+inter[\s-]?sites?/i,                                             // FR
-    /межсайтов[а-яА-Я]+\s+скриптинг/i,                                           // RU
-    /クロスサイトスクリプティング/,                                               // JA
+    /cross.?site.?script/i,
+    /\bXSS\b/i,
+    /<script>/i,
+    /document\.cookie/i,
+    /secuencias?\s+de\s+comandos\s+en\s+sitios?\s+cruzados?/i, // ES
+    /scripts?\s+entre\s+sites/i, // PT
+    /scripts?\s+inter[\s-]?sites?/i, // FR
+    /межсайтов[а-яА-Я]+\s+скриптинг/i, // RU
+    /クロスサイトスクリプティング/, // JA
   ],
   SQLi: [
-    /sql.?inject/i, /\bSQLi\b/i, /UNION\s+SELECT/i, /OR\s+1\s*=\s*1/i,
-    /iny[eé]cci[oó]n\s+(?:de\s+)?SQL/i,                                          // ES
-    /inje[çc][aã]o\s+(?:de\s+)?SQL/i,                                            // PT
-    /injection\s+(?:de\s+)?SQL/i,                                                // FR
-    /SQL[-\s]?инъекци[а-яА-Я]*/i,                                                // RU
-    /SQLインジェクション/,                                                        // JA
+    /sql.?inject/i,
+    /\bSQLi\b/i,
+    /UNION\s+SELECT/i,
+    /OR\s+1\s*=\s*1/i,
+    /iny[eé]cci[oó]n\s+(?:de\s+)?SQL/i, // ES
+    /inje[çc][aã]o\s+(?:de\s+)?SQL/i, // PT
+    /injection\s+(?:de\s+)?SQL/i, // FR
+    /SQL[-\s]?инъекци[а-яА-Я]*/i, // RU
+    /SQLインジェクション/, // JA
   ],
   SSRF: [
-    /server.?side.?request/i, /\bSSRF\b/i, /169\.254\.169\.254/,
-    /falsificaci[oó]n\s+de\s+solicitud(?:es)?\s+del\s+lado\s+del\s+servidor/i,   // ES
+    /server.?side.?request/i,
+    /\bSSRF\b/i,
+    /169\.254\.169\.254/,
+    /falsificaci[oó]n\s+de\s+solicitud(?:es)?\s+del\s+lado\s+del\s+servidor/i, // ES
     /falsifica[çc][aã]o\s+de\s+(?:requisi[çc][aã]o|solicita[çc][aã]o)\s+do\s+lado\s+do\s+servidor/i, // PT
-    /falsification\s+de\s+requ[eê]te\s+c[oô]t[eé]\s+serveur/i,                   // FR
+    /falsification\s+de\s+requ[eê]te\s+c[oô]t[eé]\s+serveur/i, // FR
     /подделк[а-яА-Я]+\s+запрос[а-яА-Я]+\s+на\s+сторон[а-яА-Я]+\s+сервер[а-яА-Я]*/i, // RU
-    /サーバーサイドリクエストフォージェリ/,                                        // JA
+    /サーバーサイドリクエストフォージェリ/, // JA
   ],
   XXE: [
-    /xml.?external.?entit/i, /\bXXE\b/i,
-    /entidad\s+externa\s+XML/i,                                                  // ES
-    /entidade\s+externa\s+XML/i,                                                 // PT
-    /entit[eé]\s+externe\s+XML/i,                                                // FR
-    /внешн[а-яА-Я]+\s+сущност[а-яА-Я]+\s+XML/i,                                  // RU
-    /XML外部(?:実体|エンティティ)/,                                                // JA
+    /xml.?external.?entit/i,
+    /\bXXE\b/i,
+    /entidad\s+externa\s+XML/i, // ES
+    /entidade\s+externa\s+XML/i, // PT
+    /entit[eé]\s+externe\s+XML/i, // FR
+    /внешн[а-яА-Я]+\s+сущност[а-яА-Я]+\s+XML/i, // RU
+    /XML外部(?:実体|エンティティ)/, // JA
   ],
   "Buffer Overflow": [
-    /buffer.?overflow/i, /heap.?overflow/i, /stack.?overflow/i, /out.?of.?bounds/i,
-    /desbordamiento\s+(?:de\s+)?b[uú]fer/i,                                      // ES
-    /(?:estouro|transbordamento)\s+(?:de\s+)?buffer/i,                           // PT
-    /(?:d[eé]bordement|d[eé]passement)\s+(?:de\s+)?tampon/i,                     // FR
-    /переполнени[а-яА-Я]+\s+буфер[а-яА-Я]*/i,                                    // RU
-    /バッファオーバーフロー/,                                                      // JA
+    /buffer.?overflow/i,
+    /heap.?overflow/i,
+    /stack.?overflow/i,
+    /out.?of.?bounds/i,
+    /desbordamiento\s+(?:de\s+)?b[uú]fer/i, // ES
+    /(?:estouro|transbordamento)\s+(?:de\s+)?buffer/i, // PT
+    /(?:d[eé]bordement|d[eé]passement)\s+(?:de\s+)?tampon/i, // FR
+    /переполнени[а-яА-Я]+\s+буфер[а-яА-Я]*/i, // RU
+    /バッファオーバーフロー/, // JA
   ],
   "Use After Free": [
-    /use.?after.?free/i, /\bUAF\b/i, /CWE-416/i,
-    /uso\s+despu[eé]s\s+de\s+(?:liberar|liberaci[oó]n)/i,                        // ES
-    /uso\s+(?:ap[oó]s|depois\s+de)\s+(?:libera[çc][aã]o|liberar)/i,              // PT
-    /utilisation\s+apr[eè]s\s+lib[eé]ration/i,                                   // FR
-    /использовани[а-яА-Я]+\s+после\s+освобожден[а-яА-Я]+/i,                      // RU
-    /解放後使用/,                                                                  // JA
+    /use.?after.?free/i,
+    /\bUAF\b/i,
+    /CWE-416/i,
+    /uso\s+despu[eé]s\s+de\s+(?:liberar|liberaci[oó]n)/i, // ES
+    /uso\s+(?:ap[oó]s|depois\s+de)\s+(?:libera[çc][aã]o|liberar)/i, // PT
+    /utilisation\s+apr[eè]s\s+lib[eé]ration/i, // FR
+    /использовани[а-яА-Я]+\s+после\s+освобожден[а-яА-Я]+/i, // RU
+    /解放後使用/, // JA
   ],
   "Path Traversal": [
-    /path.?traversal/i, /directory.?traversal/i, /\.\.\//,
-    /(?:salto|recorrido|traves[ií]a)\s+(?:de\s+)?(?:directorio|ruta)/i,          // ES
-    /travessia\s+(?:de\s+)?(?:diret[oó]rio|caminho)/i,                           // PT
-    /travers[eé]e\s+(?:de\s+)?(?:r[eé]pertoire|chemin)/i,                        // FR
-    /обход\s+(?:каталог[а-яА-Я]*|директор[а-яА-Я]+)/i,                           // RU
-    /(?:ディレクトリ|パス)トラバーサル/,                                            // JA
+    /path.?traversal/i,
+    /directory.?traversal/i,
+    /\.\.\//,
+    /(?:salto|recorrido|traves[ií]a)\s+(?:de\s+)?(?:directorio|ruta)/i, // ES
+    /travessia\s+(?:de\s+)?(?:diret[oó]rio|caminho)/i, // PT
+    /travers[eé]e\s+(?:de\s+)?(?:r[eé]pertoire|chemin)/i, // FR
+    /обход\s+(?:каталог[а-яА-Я]*|директор[а-яА-Я]+)/i, // RU
+    /(?:ディレクトリ|パス)トラバーサル/, // JA
   ],
   LFI: [
-    /local.?file.?inclusion/i, /\bLFI\b/i,
-    /inclusi[oó]n\s+(?:local\s+)?de\s+archivos?(?:\s+locales?)?/i,               // ES
-    /inclus[aã]o\s+(?:local\s+)?de\s+arquivos?(?:\s+locais?)?/i,                 // PT
+    /local.?file.?inclusion/i,
+    /\bLFI\b/i,
+    /inclusi[oó]n\s+(?:local\s+)?de\s+archivos?(?:\s+locales?)?/i, // ES
+    /inclus[aã]o\s+(?:local\s+)?de\s+arquivos?(?:\s+locais?)?/i, // PT
     /inclusion\s+(?:locale\s+)?de\s+fichiers?(?:\s+(?:locale|local|locaux)e?s?)?/i, // FR
-    /локальн[а-яА-Я]+\s+включени[а-яА-Я]+\s+файл[а-яА-Я]*/i,                     // RU
-    /ローカルファイルインクル[ーー]ジョン/,                                         // JA
+    /локальн[а-яА-Я]+\s+включени[а-яА-Я]+\s+файл[а-яА-Я]*/i, // RU
+    /ローカルファイルインクル[ーー]ジョン/, // JA
   ],
   "Auth Bypass": [
-    /auth(?:entication|orization).?bypass/i, /\bIDOR\b/i, /broken.?access/i,
-    /(?:bypass|elusi[oó]n)\s+de\s+(?:la\s+)?autenticaci[oó]n/i,                  // ES
-    /(?:bypass|elus[aã]o)\s+(?:da\s+|de\s+)autentica[çc][aã]o/i,                 // PT
-    /contournement\s+d[\u2019']?\s*authentification/i,                           // FR
-    /обход\s+(?:аутентификации|авторизации)/i,                                   // RU
-    /認証(?:バイパス|回避)/,                                                       // JA
+    /auth(?:entication|orization).?bypass/i,
+    /\bIDOR\b/i,
+    /broken.?access/i,
+    /(?:bypass|elusi[oó]n)\s+de\s+(?:la\s+)?autenticaci[oó]n/i, // ES
+    /(?:bypass|elus[aã]o)\s+(?:da\s+|de\s+)autentica[çc][aã]o/i, // PT
+    /contournement\s+d[\u2019']?\s*authentification/i, // FR
+    /обход\s+(?:аутентификации|авторизации)/i, // RU
+    /認証(?:バイパス|回避)/, // JA
   ],
   CSRF: [
-    /cross.?site.?request.?forgery/i, /\bCSRF\b/i,
-    /falsificaci[oó]n\s+de\s+solicitud(?:es)?\s+entre\s+sitios?/i,               // ES
+    /cross.?site.?request.?forgery/i,
+    /\bCSRF\b/i,
+    /falsificaci[oó]n\s+de\s+solicitud(?:es)?\s+entre\s+sitios?/i, // ES
     /falsifica[çc][aã]o\s+de\s+(?:solicita[çc][aã]o|requisi[çc][aã]o)\s+entre\s+sites/i, // PT
-    /falsification\s+de\s+requ[eê]te\s+inter[\s-]?sites?/i,                      // FR
-    /межсайтов[а-яА-Я]+\s+подделк[а-яА-Я]+\s+запрос[а-яА-Я]*/i,                  // RU
-    /クロスサイトリクエストフォージェリ/,                                          // JA
+    /falsification\s+de\s+requ[eê]te\s+inter[\s-]?sites?/i, // FR
+    /межсайтов[а-яА-Я]+\s+подделк[а-яА-Я]+\s+запрос[а-яА-Я]*/i, // RU
+    /クロスサイトリクエストフォージェリ/, // JA
   ],
   "Open Redirect": [
-    /open.?redirect/i, /unvalidated.?redirect/i,
-    /redirecci[oó]n\s+abierta/i,                                                 // ES
-    /redirecionamento\s+aberto/i,                                                // PT
-    /redirection\s+(?:ouverte|non\s+valid[eé]e)/i,                               // FR
-    /открыт[а-яА-Я]+\s+(?:перенаправлени[а-яА-Я]+|редирект[а-яА-Я]*)/i,          // RU
-    /オープンリダイレクト/,                                                        // JA
+    /open.?redirect/i,
+    /unvalidated.?redirect/i,
+    /redirecci[oó]n\s+abierta/i, // ES
+    /redirecionamento\s+aberto/i, // PT
+    /redirection\s+(?:ouverte|non\s+valid[eé]e)/i, // FR
+    /открыт[а-яА-Я]+\s+(?:перенаправлени[а-яА-Я]+|редирект[а-яА-Я]*)/i, // RU
+    /オープンリダイレクト/, // JA
   ],
   "Insecure Deserialization": [
-    /insecure.?deseriali[sz]/i, /unsafe.?deseriali[sz]/i, /\bdeseriali[sz]ation\b/i,
-    /deserializaci[oó]n\s+insegura/i,                                            // ES
-    /desserializa[çc][aã]o\s+insegura/i,                                         // PT
+    /insecure.?deseriali[sz]/i,
+    /unsafe.?deseriali[sz]/i,
+    /\bdeseriali[sz]ation\b/i,
+    /deserializaci[oó]n\s+insegura/i, // ES
+    /desserializa[çc][aã]o\s+insegura/i, // PT
     /d[eé]s[eé]rialisation\s+(?:non\s+s[eé]curis[eé]e|non\s+s[uû]re|ins[eé]curis[eé]e)/i, // FR
-    /небезопасн[а-яА-Я]+\s+десериализаци[а-яА-Я]+/i,                             // RU
-    /(?:安全でない|安全ではない)デシリアライ[ゼズ]ーション/,                          // JA
+    /небезопасн[а-яА-Я]+\s+десериализаци[а-яА-Я]+/i, // RU
+    /(?:安全でない|安全ではない)デシリアライ[ゼズ]ーション/, // JA
   ],
   "Prototype Pollution": [
-    /prototype.?pollution/i, /__proto__\s*\[/,
-    /contaminaci[oó]n\s+(?:del?\s+)?prototipo/i,                                 // ES
-    /polui[çc][aã]o\s+(?:de|do)\s+prot[oó]tipo/i,                                // PT
-    /pollution\s+de\s+prototype/i,                                               // FR
-    /загрязнени[а-яА-Я]+\s+прототип[а-яА-Я]*/i,                                  // RU
-    /プロトタイプ汚染/,                                                            // JA
+    /prototype.?pollution/i,
+    /__proto__\s*\[/,
+    /contaminaci[oó]n\s+(?:del?\s+)?prototipo/i, // ES
+    /polui[çc][aã]o\s+(?:de|do)\s+prot[oó]tipo/i, // PT
+    /pollution\s+de\s+prototype/i, // FR
+    /загрязнени[а-яА-Я]+\s+прототип[а-яА-Я]*/i, // RU
+    /プロトタイプ汚染/, // JA
   ],
   "Command Injection": [
-    /command.?inject/i, /\bCMDi\b/i, /shell.?inject/i,
-    /iny[eé]cci[oó]n\s+de\s+(?:comandos?|[oó]rdenes)/i,                          // ES
-    /inje[çc][aã]o\s+de\s+comandos?/i,                                           // PT
-    /injection\s+de\s+commandes?/i,                                              // FR
-    /(?:внедрени[а-яА-Я]+|инъекци[а-яА-Я]+)\s+команд[а-яА-Я]*/i,                 // RU
-    /コマンドインジェクション/,                                                    // JA
+    /command.?inject/i,
+    /\bCMDi\b/i,
+    /shell.?inject/i,
+    /iny[eé]cci[oó]n\s+de\s+(?:comandos?|[oó]rdenes)/i, // ES
+    /inje[çc][aã]o\s+de\s+comandos?/i, // PT
+    /injection\s+de\s+commandes?/i, // FR
+    /(?:внедрени[а-яА-Я]+|инъекци[а-яА-Я]+)\s+команд[а-яА-Я]*/i, // RU
+    /コマンドインジェクション/, // JA
   ],
   RCE: [
-    /remote.?code.?execution/i, /\bRCE\b/i,
-    /ejecuci[oó]n\s+(?:remota\s+de\s+c[oó]digo|de\s+c[oó]digo\s+remoto)/i,       // ES
-    /execu[çc][aã]o\s+(?:remota\s+de\s+c[oó]digo|de\s+c[oó]digo\s+remoto)/i,     // PT
-    /ex[eé]cution\s+(?:de\s+code\s+[aà]\s+distance|distante\s+de\s+code)/i,      // FR
-    /удал[её]нн[а-яА-Я]+\s+выполнени[а-яА-Я]+\s+код[а-яА-Я]*/i,                  // RU
-    /リモートコード実行/,                                                          // JA
+    /remote.?code.?execution/i,
+    /\bRCE\b/i,
+    /ejecuci[oó]n\s+(?:remota\s+de\s+c[oó]digo|de\s+c[oó]digo\s+remoto)/i, // ES
+    /execu[çc][aã]o\s+(?:remota\s+de\s+c[oó]digo|de\s+c[oó]digo\s+remoto)/i, // PT
+    /ex[eé]cution\s+(?:de\s+code\s+[aà]\s+distance|distante\s+de\s+code)/i, // FR
+    /удал[её]нн[а-яА-Я]+\s+выполнени[а-яА-Я]+\s+код[а-яА-Я]*/i, // RU
+    /リモートコード実行/, // JA
   ],
   "Info Disclosure": [
-    /information.?disclosure/i, /sensitive.?data.?expos/i, /info.?leak/i,
-    /(?:divulgaci[oó]n|exposici[oó]n)\s+de\s+informaci[oó]n/i,                   // ES
-    /(?:divulga[çc][aã]o|exposi[çc][aã]o)\s+de\s+(?:informa[çc][aã]o|dados)/i,   // PT
-    /divulgation\s+d[\u2019']?\s*informations?/i,                                // FR
-    /(?:раскрыти[а-яА-Я]+|утечк[а-яА-Я]+)\s+информаци[а-яА-Я]+/i,                // RU
-    /情報漏(?:洩|えい)/,                                                          // JA
+    /information.?disclosure/i,
+    /sensitive.?data.?expos/i,
+    /info.?leak/i,
+    /(?:divulgaci[oó]n|exposici[oó]n)\s+de\s+informaci[oó]n/i, // ES
+    /(?:divulga[çc][aã]o|exposi[çc][aã]o)\s+de\s+(?:informa[çc][aã]o|dados)/i, // PT
+    /divulgation\s+d[\u2019']?\s*informations?/i, // FR
+    /(?:раскрыти[а-яА-Я]+|утечк[а-яА-Я]+)\s+информаци[а-яА-Я]+/i, // RU
+    /情報漏(?:洩|えい)/, // JA
   ],
 };
 
@@ -272,7 +311,9 @@ export function detectSoftCitation(text: string): SoftCitation | null {
 // suspicious. Mirrors the same change in `hallucination-detector.ts`.
 const KNOWN_ALLOCATOR_ADDRS = new Set<string>([]);
 
-export function classifyMemoryAddress(addr: string): "likely_real" | "suspicious" {
+export function classifyMemoryAddress(
+  addr: string,
+): "likely_real" | "suspicious" {
   const lower = addr.toLowerCase();
   if (KNOWN_ALLOCATOR_ADDRS.has(lower)) return "likely_real";
   const hex = lower.replace(/^0x/, "");
@@ -371,10 +412,14 @@ const SHELL_FLAG_PATTERNS = [
   /```(?:bash|sh|shell|console)\b[\s\S]+?```/,
 ];
 
-const HTTP_REQUEST_RE = /(?:GET|POST|PUT|DELETE|PATCH|HEAD)\s+\/\S*\s+HTTP\/[12]\.[01]/;
-const HTTP_HEADERS_RE = /^(?:Host|User-Agent|Authorization|Cookie|Content-Type|Accept|Content-Length):/m;
-const STACK_FRAME_RE = /(?:#\d+\s+0x[0-9a-fA-F]+\s+in\s+\S+|\bat\s+\S+\s*\([^)]+:\d+\))/g;
-const CVSS_VECTOR_RE = /CVSS:3\.[01]\/AV:[NALP]\/AC:[LH]\/PR:[NLH]\/UI:[NR]\/S:[UC]\/C:[NLH]\/I:[NLH]\/A:[NLH]/;
+const HTTP_REQUEST_RE =
+  /(?:GET|POST|PUT|DELETE|PATCH|HEAD)\s+\/\S*\s+HTTP\/[12]\.[01]/;
+const HTTP_HEADERS_RE =
+  /^(?:Host|User-Agent|Authorization|Cookie|Content-Type|Accept|Content-Length):/m;
+const STACK_FRAME_RE =
+  /(?:#\d+\s+0x[0-9a-fA-F]+\s+in\s+\S+|\bat\s+\S+\s*\([^)]+:\d+\))/g;
+const CVSS_VECTOR_RE =
+  /CVSS:3\.[01]\/AV:[NALP]\/AC:[LH]\/PR:[NLH]\/UI:[NR]\/S:[UC]\/C:[NLH]\/I:[NLH]\/A:[NLH]/;
 
 function buildEvidenceSignals(
   text: string,
@@ -391,32 +436,57 @@ function buildEvidenceSignals(
   const M = STRENGTH_MULTIPLIERS;
 
   // CRASH_OUTPUT
-  const crashHits = CRASH_PATTERNS.filter(p => p.test(text)).length;
+  const crashHits = CRASH_PATTERNS.filter((p) => p.test(text)).length;
   if (crashHits > 0) {
-    signals.push({ type: "CRASH_OUTPUT", raw: `${crashHits} pattern(s)`, baseWeight: 6, strengthMultiplier: M.CRASH_OUTPUT });
+    signals.push({
+      type: "CRASH_OUTPUT",
+      raw: `${crashHits} pattern(s)`,
+      baseWeight: 6,
+      strengthMultiplier: M.CRASH_OUTPUT,
+    });
   }
 
   // CODE_DIFF — require at least 2 patterns
-  const diffHits = DIFF_PATTERNS.filter(p => p.test(text)).length;
+  const diffHits = DIFF_PATTERNS.filter((p) => p.test(text)).length;
   if (diffHits >= 2) {
-    signals.push({ type: "CODE_DIFF", raw: "unified diff", baseWeight: 6, strengthMultiplier: M.CODE_DIFF });
+    signals.push({
+      type: "CODE_DIFF",
+      raw: "unified diff",
+      baseWeight: 6,
+      strengthMultiplier: M.CODE_DIFF,
+    });
   }
 
   // STACK_TRACE — multi-frame
   const frames = (text.match(STACK_FRAME_RE) || []).length;
   if (frames >= 3) {
-    signals.push({ type: "STACK_TRACE", raw: `${frames} frames`, baseWeight: 5, strengthMultiplier: M.STACK_TRACE });
+    signals.push({
+      type: "STACK_TRACE",
+      raw: `${frames} frames`,
+      baseWeight: 5,
+      strengthMultiplier: M.STACK_TRACE,
+    });
   }
 
   // SHELL_COMMAND with flags
-  const shellHits = SHELL_FLAG_PATTERNS.filter(p => p.test(text)).length;
+  const shellHits = SHELL_FLAG_PATTERNS.filter((p) => p.test(text)).length;
   if (shellHits > 0) {
-    signals.push({ type: "SHELL_COMMAND", raw: "shell command with flags", baseWeight: 4, strengthMultiplier: M.SHELL_COMMAND });
+    signals.push({
+      type: "SHELL_COMMAND",
+      raw: "shell command with flags",
+      baseWeight: 4,
+      strengthMultiplier: M.SHELL_COMMAND,
+    });
   }
 
   // HTTP_REQUEST — full request line + headers
   if (HTTP_REQUEST_RE.test(text) && HTTP_HEADERS_RE.test(text)) {
-    signals.push({ type: "HTTP_REQUEST", raw: "full HTTP request", baseWeight: 4, strengthMultiplier: M.HTTP_REQUEST });
+    signals.push({
+      type: "HTTP_REQUEST",
+      raw: "full HTTP request",
+      baseWeight: 4,
+      strengthMultiplier: M.HTTP_REQUEST,
+    });
   }
 
   // MEMORY_ADDRESS — classify and count suspicious vs real
@@ -427,99 +497,199 @@ function buildEvidenceSignals(
     else realAddressCount++;
   }
   if (realAddressCount > 0) {
-    signals.push({ type: "MEMORY_ADDRESS", raw: `${realAddressCount} likely-real address(es)`, baseWeight: 3, strengthMultiplier: M.MEMORY_ADDRESS });
+    signals.push({
+      type: "MEMORY_ADDRESS",
+      raw: `${realAddressCount} likely-real address(es)`,
+      baseWeight: 3,
+      strengthMultiplier: M.MEMORY_ADDRESS,
+    });
   }
   if (suspiciousAddressCount > 0 && realAddressCount === 0) {
     // §6: negative multiplier when only suspicious addresses are present
-    signals.push({ type: "MEMORY_ADDRESS", raw: `${suspiciousAddressCount} suspicious round address(es)`, baseWeight: -5, strengthMultiplier: 0.5 });
+    signals.push({
+      type: "MEMORY_ADDRESS",
+      raw: `${suspiciousAddressCount} suspicious round address(es)`,
+      baseWeight: -5,
+      strengthMultiplier: 0.5,
+    });
   }
 
   // CVSS_VECTOR
   if (CVSS_VECTOR_RE.test(text)) {
-    signals.push({ type: "CVSS_VECTOR", raw: "CVSS 3.x vector", baseWeight: 3, strengthMultiplier: M.CVSS_VECTOR });
+    signals.push({
+      type: "CVSS_VECTOR",
+      raw: "CVSS 3.x vector",
+      baseWeight: 3,
+      strengthMultiplier: M.CVSS_VECTOR,
+    });
   }
 
   // CVE_REFERENCE
   if (cveCount > 0) {
-    signals.push({ type: "CVE_REFERENCE", raw: `${cveCount} CVE(s)`, baseWeight: 2, strengthMultiplier: M.CVE_REFERENCE });
+    signals.push({
+      type: "CVE_REFERENCE",
+      raw: `${cveCount} CVE(s)`,
+      baseWeight: 2,
+      strengthMultiplier: M.CVE_REFERENCE,
+    });
   }
 
   // VERSION_PIN
   if (versionMentionCount > 0) {
-    signals.push({ type: "VERSION_PIN", raw: `${versionMentionCount} version pin(s)`, baseWeight: 2, strengthMultiplier: M.VERSION_PIN });
+    signals.push({
+      type: "VERSION_PIN",
+      raw: `${versionMentionCount} version pin(s)`,
+      baseWeight: 2,
+      strengthMultiplier: M.VERSION_PIN,
+    });
   }
 
   // FILE_PATH / LINE_NUMBER / FUNCTION_NAME / ENDPOINT_URL / ENVIRONMENT_DETAIL
   const uniqueFilePaths = new Set(filePathMatches).size;
   if (uniqueFilePaths > 0) {
-    signals.push({ type: "FILE_PATH", raw: `${uniqueFilePaths} file path(s)`, baseWeight: Math.min(8, uniqueFilePaths * 1.5), strengthMultiplier: M.FILE_PATH });
+    signals.push({
+      type: "FILE_PATH",
+      raw: `${uniqueFilePaths} file path(s)`,
+      baseWeight: Math.min(8, uniqueFilePaths * 1.5),
+      strengthMultiplier: M.FILE_PATH,
+    });
   }
   if (lineNumberCount > 0) {
-    signals.push({ type: "LINE_NUMBER", raw: `${lineNumberCount} line ref(s)`, baseWeight: Math.min(6, lineNumberCount * 0.8), strengthMultiplier: M.LINE_NUMBER });
+    signals.push({
+      type: "LINE_NUMBER",
+      raw: `${lineNumberCount} line ref(s)`,
+      baseWeight: Math.min(6, lineNumberCount * 0.8),
+      strengthMultiplier: M.LINE_NUMBER,
+    });
   }
   if (functionCallCount > 0) {
-    signals.push({ type: "FUNCTION_NAME", raw: `${functionCallCount} function ref(s)`, baseWeight: Math.min(6, functionCallCount * 0.5), strengthMultiplier: M.FUNCTION_NAME });
+    signals.push({
+      type: "FUNCTION_NAME",
+      raw: `${functionCallCount} function ref(s)`,
+      baseWeight: Math.min(6, functionCallCount * 0.5),
+      strengthMultiplier: M.FUNCTION_NAME,
+    });
   }
   if (endpointCount > 0) {
-    signals.push({ type: "ENDPOINT_URL", raw: `${endpointCount} endpoint(s)`, baseWeight: Math.min(6, endpointCount * 1.5), strengthMultiplier: M.ENDPOINT_URL });
+    signals.push({
+      type: "ENDPOINT_URL",
+      raw: `${endpointCount} endpoint(s)`,
+      baseWeight: Math.min(6, endpointCount * 1.5),
+      strengthMultiplier: M.ENDPOINT_URL,
+    });
   }
   if (hasEnvSpec) {
-    signals.push({ type: "ENVIRONMENT_DETAIL", raw: "environment spec", baseWeight: 3, strengthMultiplier: M.ENVIRONMENT_DETAIL });
+    signals.push({
+      type: "ENVIRONMENT_DETAIL",
+      raw: "environment spec",
+      baseWeight: 3,
+      strengthMultiplier: M.ENVIRONMENT_DETAIL,
+    });
   }
 
   return { signals, suspiciousAddressCount };
 }
 
 const PLACEHOLDER_DOMAINS = new Set([
-  "example.com", "example.org", "example.net",
-  "target.com", "vulnerable-server.com", "vulnerable-app.com",
-  "victim.com", "attacker.com", "evil.com", "malicious.com",
-  "test.com", "testsite.com", "yoursite.com", "yourapp.com",
-  "yourdomain.com", "company.com", "acme.com", "foo.com",
-  "bar.com", "webapp.com", "myapp.com", "site.com", "placeholder.com",
+  "example.com",
+  "example.org",
+  "example.net",
+  "target.com",
+  "vulnerable-server.com",
+  "vulnerable-app.com",
+  "victim.com",
+  "attacker.com",
+  "evil.com",
+  "malicious.com",
+  "test.com",
+  "testsite.com",
+  "yoursite.com",
+  "yourapp.com",
+  "yourdomain.com",
+  "company.com",
+  "acme.com",
+  "foo.com",
+  "bar.com",
+  "webapp.com",
+  "myapp.com",
+  "site.com",
+  "placeholder.com",
 ]);
 
 const HEDGING_PHRASES = [
-  "may", "might", "could potentially", "it is possible that",
-  "this could lead to", "potentially allowing", "may allow an attacker",
-  "appears to", "seems to",
+  "may",
+  "might",
+  "could potentially",
+  "it is possible that",
+  "this could lead to",
+  "potentially allowing",
+  "may allow an attacker",
+  "appears to",
+  "seems to",
 ];
 
 const FILLER_PHRASES = [
-  "it is important to note that", "please note that", "importantly",
-  "it should be noted", "it is worth mentioning", "as we can see",
-  "this is a critical", "this vulnerability could potentially allow",
+  "it is important to note that",
+  "please note that",
+  "importantly",
+  "it should be noted",
+  "it is worth mentioning",
+  "as we can see",
+  "this is a critical",
+  "this vulnerability could potentially allow",
 ];
 
 const GENERIC_REMEDIATION = [
-  "use strong passwords", "update regularly", "install patches",
-  "enable authentication", "use encryption", "apply security updates",
-  "validate input", "sanitize data", "implement firewalls",
-  "follow best practices", "implement proper", "ensure proper",
-  "regularly update", "keep software up to date",
+  "use strong passwords",
+  "update regularly",
+  "install patches",
+  "enable authentication",
+  "use encryption",
+  "apply security updates",
+  "validate input",
+  "sanitize data",
+  "implement firewalls",
+  "follow best practices",
+  "implement proper",
+  "ensure proper",
+  "regularly update",
+  "keep software up to date",
 ];
 
 const OVER_CLAIM = [
-  "will lead to", "can potentially cause", "would allow attackers to",
-  "this enables full", "complete compromise", "catastrophic",
-  "massive data breach", "total system takeover",
+  "will lead to",
+  "can potentially cause",
+  "would allow attackers to",
+  "this enables full",
+  "complete compromise",
+  "catastrophic",
+  "massive data breach",
+  "total system takeover",
 ];
 
-const SECTION_HEADER_RE = /^\s{0,3}(?:#{1,6}\s+\S|[A-Z][A-Za-z0-9 \-/]{2,40}:?\s*$)/m;
-const HEADER_LINE_RE = /^\s{0,3}(#{1,6}\s+\S.*|[A-Z][A-Za-z0-9 \-/]{2,40}:\s*$|\*\*[^*]{2,40}\*\*\s*:?$)/gm;
+const SECTION_HEADER_RE =
+  /^\s{0,3}(?:#{1,6}\s+\S|[A-Z][A-Za-z0-9 \-/]{2,40}:?\s*$)/m;
+const HEADER_LINE_RE =
+  /^\s{0,3}(#{1,6}\s+\S.*|[A-Z][A-Za-z0-9 \-/]{2,40}:\s*$|\*\*[^*]{2,40}\*\*\s*:?$)/gm;
 const NUMBERED_STEP_RE = /^\s*(?:\d+[.)]|step\s+\d+)\s+\S/gim;
 
-const EXECUTIVE_SUMMARY_RE = /^\s*(?:#{1,6}\s+)?(?:executive\s+summary|tl;dr|abstract|overview)\s*:?\s*$/im;
-const SALUTATION_RE = /^\s*(?:dear\s+(?:security|sir|team|maintainers?|developers?)|hello\s+team|hi\s+(?:team|all))[\s,]/im;
+const EXECUTIVE_SUMMARY_RE =
+  /^\s*(?:#{1,6}\s+)?(?:executive\s+summary|tl;dr|abstract|overview)\s*:?\s*$/im;
+const SALUTATION_RE =
+  /^\s*(?:dear\s+(?:security|sir|team|maintainers?|developers?)|hello\s+team|hi\s+(?:team|all))[\s,]/im;
 
 const URL_RE = /https?:\/\/[^\s<>)\]"']+/gi;
 // File path: looks like /path/to/file.ext or src/foo/bar.cpp:123 or relative
-const FILE_PATH_RE = /(?:^|[\s(`'"])((?:[a-zA-Z]:|\.{1,2})?\/?(?:[A-Za-z0-9_.\-]+\/){1,}[A-Za-z0-9_.\-]+\.[a-zA-Z]{1,6})(?=[\s)`'":,]|$)/gm;
+const FILE_PATH_RE =
+  /(?:^|[\s(`'"])((?:[a-zA-Z]:|\.{1,2})?\/?(?:[A-Za-z0-9_.\-]+\/){1,}[A-Za-z0-9_.\-]+\.[a-zA-Z]{1,6})(?=[\s)`'":,]|$)/gm;
 const LINE_NUMBER_RE = /(?::|line\s+|L)(\d{1,5})\b/gi;
 // Specific endpoint: route-like strings with at least 2 path segments and method or curl/POST/GET context
-const ENDPOINT_RE = /(?:GET|POST|PUT|DELETE|PATCH|HEAD)\s+\/[A-Za-z0-9_/\-{}.:?=&]+/g;
-const ENDPOINT_RE2 = /\/(?:api|v\d+|rest|graphql|admin|users?|auth|login|logout|callback|oauth|webhook|search)\/[A-Za-z0-9_/\-{}.:?=&]+/g;
-const FUNCTION_CALL_RE = /\b([A-Za-z_][A-Za-z0-9_]{2,}(?:::[A-Za-z_][A-Za-z0-9_]*)*)\s*\(/g;
+const ENDPOINT_RE =
+  /(?:GET|POST|PUT|DELETE|PATCH|HEAD)\s+\/[A-Za-z0-9_/\-{}.:?=&]+/g;
+const ENDPOINT_RE2 =
+  /\/(?:api|v\d+|rest|graphql|admin|users?|auth|login|logout|callback|oauth|webhook|search)\/[A-Za-z0-9_/\-{}.:?=&]+/g;
+const FUNCTION_CALL_RE =
+  /\b([A-Za-z_][A-Za-z0-9_]{2,}(?:::[A-Za-z_][A-Za-z0-9_]*)*)\s*\(/g;
 const MEMORY_ADDR_RE = /0x[0-9a-fA-F]{6,16}/g;
 const CVE_RE = /\bCVE-\d{4}-\d{4,7}\b/gi;
 const CWE_RE = /\bCWE-\d{1,4}\b/gi;
@@ -527,15 +697,23 @@ const VERSION_RE = /\b\d+\.\d+(?:\.\d+){0,2}(?:-[A-Za-z0-9]+)?\b/g;
 const CODE_BLOCK_RE = /```([A-Za-z0-9_+\-]*)\n([\s\S]*?)```/g;
 const INLINE_CODE_RE = /`[^`\n]{2,80}`/g;
 const SHELL_PROMPT_RE = /(?:^|\n)\s*(?:\$\s|#\s|>\s|>>>\s|PS\s*[A-Z]:[^>]*>\s)/;
-const COMMAND_OUTPUT_INDICATORS = /(?:Connection refused|Permission denied|Segmentation fault|Killed|Aborted|undefined reference|HTTP\/[12]\.[01]\s+\d{3}|TypeError|SyntaxError|exit code|exit status)/i;
+const COMMAND_OUTPUT_INDICATORS =
+  /(?:Connection refused|Permission denied|Segmentation fault|Killed|Aborted|undefined reference|HTTP\/[12]\.[01]\s+\d{3}|TypeError|SyntaxError|exit code|exit status)/i;
 const REAL_ERROR_RE = /(?:Error|Exception|Fatal|Panic):\s+\S{4,}/;
-const SCREENSHOT_RE = /(?:!\[[^\]]*\]\([^)]+\)|screenshot|attached image|see image|see attached|figure\s*\d+)/i;
-const STEPS_RE = /(?:steps?\s+to\s+reproduce|reproduction\s+steps|to\s+reproduce|how\s+to\s+reproduce|repro\s+steps?)/i;
-const ENV_RE = /(?:environment|os:|operating system|kernel|version:|browser:|node\.?js|python\s+3|ruby|java\s+\d|gcc|clang|ubuntu|debian|alpine|macos|windows|linux)/i;
-const POC_RE = /(?:proof\s+of\s+concept|\bpoc\b|exploit\s+code|reproducer|test\s+case|##\s*reproduction|^\s*reproduction\s*$|how\s+to\s+reproduce|repro(?:duction)?\s+steps?)/im;
-const CLAIM_RE = /\b(?:this\s+(?:allows|enables|causes|leads\s+to|results\s+in)|allows?\s+an?\s+attacker\s+to|enables?\s+an?\s+attacker\s+to|can\s+(?:lead|result|cause|allow|enable)|will\s+(?:lead|result|cause|allow|enable)|results\s+in\s+(?:a\s+)?(?:critical|complete|full|total))\b/gi;
-const GENERIC_VAR_RE = /\b(?:user_input|target_url|attacker_payload|malicious_payload|payload\d*|target_host|victim_url|exploit_payload)\b/g;
-const DEPTH_INDICATOR_RE = /(?:offset\s+0x|sizeof\(|strlen\(|memcpy\(|free\(|malloc\(|kmalloc\(|jmp\s+0x|mov\s+%|push\s+%|sysctl|ASAN|MSAN|UBSAN|valgrind|gdb|lldb|stack\s+trace|backtrace|register\s+r[a-z]+|rip\s*=|rsp\s*=)/i;
+const SCREENSHOT_RE =
+  /(?:!\[[^\]]*\]\([^)]+\)|screenshot|attached image|see image|see attached|figure\s*\d+)/i;
+const STEPS_RE =
+  /(?:steps?\s+to\s+reproduce|reproduction\s+steps|to\s+reproduce|how\s+to\s+reproduce|repro\s+steps?)/i;
+const ENV_RE =
+  /(?:environment|os:|operating system|kernel|version:|browser:|node\.?js|python\s+3|ruby|java\s+\d|gcc|clang|ubuntu|debian|alpine|macos|windows|linux)/i;
+const POC_RE =
+  /(?:proof\s+of\s+concept|\bpoc\b|exploit\s+code|reproducer|test\s+case|##\s*reproduction|^\s*reproduction\s*$|how\s+to\s+reproduce|repro(?:duction)?\s+steps?)/im;
+const CLAIM_RE =
+  /\b(?:this\s+(?:allows|enables|causes|leads\s+to|results\s+in)|allows?\s+an?\s+attacker\s+to|enables?\s+an?\s+attacker\s+to|can\s+(?:lead|result|cause|allow|enable)|will\s+(?:lead|result|cause|allow|enable)|results\s+in\s+(?:a\s+)?(?:critical|complete|full|total))\b/gi;
+const GENERIC_VAR_RE =
+  /\b(?:user_input|target_url|attacker_payload|malicious_payload|payload\d*|target_host|victim_url|exploit_payload)\b/g;
+const DEPTH_INDICATOR_RE =
+  /(?:offset\s+0x|sizeof\(|strlen\(|memcpy\(|free\(|malloc\(|kmalloc\(|jmp\s+0x|mov\s+%|push\s+%|sysctl|ASAN|MSAN|UBSAN|valgrind|gdb|lldb|stack\s+trace|backtrace|register\s+r[a-z]+|rip\s*=|rsp\s*=)/i;
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -559,27 +737,48 @@ function getMatches(text: string, re: RegExp): RegExpExecArray[] {
   return out;
 }
 
-export function extractSignals(rawText: string, claimedCwesArg?: string[]): ExtractedSignals {
+export function extractSignals(
+  rawText: string,
+  claimedCwesArg?: string[],
+): ExtractedSignals {
   const text = rawText || "";
   const lower = text.toLowerCase();
 
   // Sentences (split on terminal punctuation; keep non-empty)
-  const sentences = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 0);
-  const sentenceLengths = sentences.map(s => s.split(/\s+/).filter(Boolean).length).filter(n => n > 0);
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const sentenceLengths = sentences
+    .map((s) => s.split(/\s+/).filter(Boolean).length)
+    .filter((n) => n > 0);
   const wordCount = (text.match(/\b\w+\b/g) || []).length;
 
-  const sentMean = sentenceLengths.length > 0
-    ? sentenceLengths.reduce((a, b) => a + b, 0) / sentenceLengths.length : 0;
-  const sentVar = sentenceLengths.length > 1
-    ? sentenceLengths.reduce((a, b) => a + (b - sentMean) ** 2, 0) / sentenceLengths.length : 0;
+  const sentMean =
+    sentenceLengths.length > 0
+      ? sentenceLengths.reduce((a, b) => a + b, 0) / sentenceLengths.length
+      : 0;
+  const sentVar =
+    sentenceLengths.length > 1
+      ? sentenceLengths.reduce((a, b) => a + (b - sentMean) ** 2, 0) /
+        sentenceLengths.length
+      : 0;
   const sentSd = Math.sqrt(sentVar);
   const sentenceLengthCV = sentMean > 0 ? sentSd / sentMean : 0.5;
 
-  const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
-  const paraLens = paragraphs.map(p => p.length);
-  const paraMean = paraLens.length > 0 ? paraLens.reduce((a, b) => a + b, 0) / paraLens.length : 0;
-  const paraVar = paraLens.length > 1
-    ? paraLens.reduce((a, b) => a + (b - paraMean) ** 2, 0) / paraLens.length : 0;
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  const paraLens = paragraphs.map((p) => p.length);
+  const paraMean =
+    paraLens.length > 0
+      ? paraLens.reduce((a, b) => a + b, 0) / paraLens.length
+      : 0;
+  const paraVar =
+    paraLens.length > 1
+      ? paraLens.reduce((a, b) => a + (b - paraMean) ** 2, 0) / paraLens.length
+      : 0;
   const paragraphLengthCV = paraMean > 0 ? Math.sqrt(paraVar) / paraMean : 0.5;
 
   // Structural signals
@@ -589,13 +788,18 @@ export function extractSignals(rawText: string, claimedCwesArg?: string[]): Extr
   const hasFormalSalutation = SALUTATION_RE.test(text);
 
   // Placeholder URLs
-  const urls = getMatches(text, URL_RE).map(m => m[0]);
+  const urls = getMatches(text, URL_RE).map((m) => m[0]);
   let placeholderUrlCount = 0;
   let realUrlCount = 0;
   for (const url of urls) {
     try {
       const host = new URL(url).hostname.toLowerCase();
-      if (PLACEHOLDER_DOMAINS.has(host) || /^(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|localhost$)/.test(host)) {
+      if (
+        PLACEHOLDER_DOMAINS.has(host) ||
+        /^(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|localhost$)/.test(
+          host,
+        )
+      ) {
         placeholderUrlCount++;
       } else {
         realUrlCount++;
@@ -613,13 +817,16 @@ export function extractSignals(rawText: string, claimedCwesArg?: string[]): Extr
     codeBlocks.push({ lang: cbMatch[1] || null, body: cbMatch[2] });
   }
   const codeBlockCount = codeBlocks.length;
-  const langSpecificCount = codeBlocks.filter(b => b.lang && b.lang.length > 0 && b.lang !== "text").length;
-  const codeBlockLanguageSpecificRatio = codeBlockCount > 0 ? langSpecificCount / codeBlockCount : 0;
+  const langSpecificCount = codeBlocks.filter(
+    (b) => b.lang && b.lang.length > 0 && b.lang !== "text",
+  ).length;
+  const codeBlockLanguageSpecificRatio =
+    codeBlockCount > 0 ? langSpecificCount / codeBlockCount : 0;
   const inlineCodeReferenceCount = countMatches(text, INLINE_CODE_RE);
 
   // Functions, file paths, line numbers, endpoints
   const functionCallReferences = countMatches(text, FUNCTION_CALL_RE);
-  const filePathMatches = getMatches(text, FILE_PATH_RE).map(m => m[1]);
+  const filePathMatches = getMatches(text, FILE_PATH_RE).map((m) => m[1]);
   const filePathCount = new Set(filePathMatches).size;
   const lineNumberCount = countMatches(text, LINE_NUMBER_RE);
   const ep1 = countMatches(text, ENDPOINT_RE);
@@ -629,13 +836,17 @@ export function extractSignals(rawText: string, claimedCwesArg?: string[]): Extr
 
   // Versions, CVEs
   const versionMentionCount = countMatches(text, VERSION_RE);
-  const cveMatches = (text.match(CVE_RE) || []);
-  const externalCveReferences = new Set(cveMatches.map(s => s.toUpperCase())).size;
+  const cveMatches = text.match(CVE_RE) || [];
+  const externalCveReferences = new Set(cveMatches.map((s) => s.toUpperCase()))
+    .size;
 
   // Lexical
   let hedgingPhraseCount = 0;
   for (const p of HEDGING_PHRASES) {
-    hedgingPhraseCount += countMatches(text, new RegExp("\\b" + escapeRe(p) + "\\b", "gi"));
+    hedgingPhraseCount += countMatches(
+      text,
+      new RegExp("\\b" + escapeRe(p) + "\\b", "gi"),
+    );
   }
   let fillerPhraseCount = 0;
   for (const p of FILLER_PHRASES) {
@@ -643,7 +854,10 @@ export function extractSignals(rawText: string, claimedCwesArg?: string[]): Extr
   }
   let genericRemediationCount = 0;
   for (const p of GENERIC_REMEDIATION) {
-    genericRemediationCount += countMatches(text, new RegExp(escapeRe(p), "gi"));
+    genericRemediationCount += countMatches(
+      text,
+      new RegExp(escapeRe(p), "gi"),
+    );
   }
   let overClaimCount = 0;
   for (const p of OVER_CLAIM) {
@@ -651,12 +865,23 @@ export function extractSignals(rawText: string, claimedCwesArg?: string[]): Extr
   }
 
   // Vocabulary richness (TTR over capped sample)
-  const tokens = (text.toLowerCase().match(/\b[a-z][a-z0-9_]*\b/g) || []).slice(0, 4000);
+  const tokens = (text.toLowerCase().match(/\b[a-z][a-z0-9_]*\b/g) || []).slice(
+    0,
+    4000,
+  );
   const uniqueTokens = new Set(tokens);
-  const vocabularyRichness = tokens.length > 0 ? uniqueTokens.size / tokens.length : 0;
+  const vocabularyRichness =
+    tokens.length > 0 ? uniqueTokens.size / tokens.length : 0;
 
   // Burstiness: stdev of intervals between technical terms
-  const techRegexes = [/\bCVE-\d/gi, /\bCWE-\d/gi, /\bRCE\b/g, /\bSQL/gi, /\bXSS\b/gi, /\boverflow\b/gi];
+  const techRegexes = [
+    /\bCVE-\d/gi,
+    /\bCWE-\d/gi,
+    /\bRCE\b/g,
+    /\bSQL/gi,
+    /\bXSS\b/gi,
+    /\boverflow\b/gi,
+  ];
   const positions: number[] = [];
   for (const r of techRegexes) {
     r.lastIndex = 0;
@@ -667,9 +892,12 @@ export function extractSignals(rawText: string, claimedCwesArg?: string[]): Extr
   let burstinessScore = 0;
   if (positions.length >= 3) {
     const intervals: number[] = [];
-    for (let i = 1; i < positions.length; i++) intervals.push(positions[i] - positions[i - 1]);
+    for (let i = 1; i < positions.length; i++)
+      intervals.push(positions[i] - positions[i - 1]);
     const intMean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    const intSd = Math.sqrt(intervals.reduce((a, b) => a + (b - intMean) ** 2, 0) / intervals.length);
+    const intSd = Math.sqrt(
+      intervals.reduce((a, b) => a + (b - intMean) ** 2, 0) / intervals.length,
+    );
     burstinessScore = intMean > 0 ? Math.min(100, (intSd / intMean) * 50) : 0;
   }
 
@@ -678,41 +906,84 @@ export function extractSignals(rawText: string, claimedCwesArg?: string[]): Extr
   const hasShellPromptIndicators = SHELL_PROMPT_RE.test(text);
   const hasActualCommandOutput = COMMAND_OUTPUT_INDICATORS.test(text);
   const hasRealErrorMessages = REAL_ERROR_RE.test(text);
-  const hasSpecificMemoryAddresses = memoryAddressCount > 0
-    && /0x[0-9a-fA-F]*[a-fA-F1-9][0-9a-fA-F]*/.test(text);
+  const hasSpecificMemoryAddresses =
+    memoryAddressCount > 0 &&
+    /0x[0-9a-fA-F]*[a-fA-F1-9][0-9a-fA-F]*/.test(text);
   const variableNamesAreGeneric = countMatches(text, GENERIC_VAR_RE) >= 2;
 
   // Reproducibility
   const hasStepsToReproduce = STEPS_RE.test(text) || numberedStepSequences >= 2;
   const hasEnvironmentSpec = ENV_RE.test(text);
   const hasScreenshotReference = SCREENSHOT_RE.test(text);
-  const specificVulnerableCodeContext = filePathCount >= 1 && lineNumberCount >= 1;
-  const reproSignals = [hasStepsToReproduce, hasEnvironmentSpec, codeBlockCount > 0, specificVulnerableCodeContext, realUrlCount > 0];
-  const vulnerabilityReproducibilityScore = reproSignals.filter(Boolean).length / reproSignals.length;
+  const specificVulnerableCodeContext =
+    filePathCount >= 1 && lineNumberCount >= 1;
+  const reproSignals = [
+    hasStepsToReproduce,
+    hasEnvironmentSpec,
+    codeBlockCount > 0,
+    specificVulnerableCodeContext,
+    realUrlCount > 0,
+  ];
+  const vulnerabilityReproducibilityScore =
+    reproSignals.filter(Boolean).length / reproSignals.length;
 
   // Claims & evidence
   const claimCount = countMatches(text, CLAIM_RE);
-  const evidenceCount = codeBlockCount + filePathCount + Math.min(lineNumberCount, 20) + realUrlCount + specificEndpointCount + (hasScreenshotReference ? 1 : 0);
+  const evidenceCount =
+    codeBlockCount +
+    filePathCount +
+    Math.min(lineNumberCount, 20) +
+    realUrlCount +
+    specificEndpointCount +
+    (hasScreenshotReference ? 1 : 0);
   const claimEvidenceRatio = claimCount / (evidenceCount + 1);
 
   // Completeness (0-6): title-ish, summary, impact, PoC, remediation, references
-  const hasTitleish = /^\s*#\s+\S/.test(text) || (sentences[0] && sentences[0].length < 200) ? true : false;
-  const hasSummary = /(?:^|\n)\s*(?:#{1,6}\s+)?(?:summary|description|overview|introduction)\b/i.test(text);
-  const hasImpact = /(?:^|\n)\s*(?:#{1,6}\s+)?(?:impact|severity|consequence)\b/i.test(text);
-  const hasPocSection = /(?:^|\n)\s*(?:#{1,6}\s+)?(?:poc|proof\s+of\s+concept|exploit|reproduction)\b/i.test(text);
-  const hasRemediation = /(?:^|\n)\s*(?:#{1,6}\s+)?(?:remediation|mitigation|fix|recommendation)\b/i.test(text);
-  const hasReferences = /(?:^|\n)\s*(?:#{1,6}\s+)?(?:references?|see\s+also|links?)\b/i.test(text);
-  const completenessScore = [hasTitleish, hasSummary, hasImpact, hasPocSection, hasRemediation, hasReferences].filter(Boolean).length;
+  const hasTitleish =
+    /^\s*#\s+\S/.test(text) || (sentences[0] && sentences[0].length < 200)
+      ? true
+      : false;
+  const hasSummary =
+    /(?:^|\n)\s*(?:#{1,6}\s+)?(?:summary|description|overview|introduction)\b/i.test(
+      text,
+    );
+  const hasImpact =
+    /(?:^|\n)\s*(?:#{1,6}\s+)?(?:impact|severity|consequence)\b/i.test(text);
+  const hasPocSection =
+    /(?:^|\n)\s*(?:#{1,6}\s+)?(?:poc|proof\s+of\s+concept|exploit|reproduction)\b/i.test(
+      text,
+    );
+  const hasRemediation =
+    /(?:^|\n)\s*(?:#{1,6}\s+)?(?:remediation|mitigation|fix|recommendation)\b/i.test(
+      text,
+    );
+  const hasReferences =
+    /(?:^|\n)\s*(?:#{1,6}\s+)?(?:references?|see\s+also|links?)\b/i.test(text);
+  const completenessScore = [
+    hasTitleish,
+    hasSummary,
+    hasImpact,
+    hasPocSection,
+    hasRemediation,
+    hasReferences,
+  ].filter(Boolean).length;
   const hasDepthIndicators = DEPTH_INDICATOR_RE.test(text);
 
-  const technicalTermDensity = wordCount > 0
-    ? (cveMatches.length + countMatches(text, CWE_RE) + functionCallReferences) / wordCount * 100 : 0;
+  const technicalTermDensity =
+    wordCount > 0
+      ? ((cveMatches.length +
+          countMatches(text, CWE_RE) +
+          functionCallReferences) /
+          wordCount) *
+        100
+      : 0;
 
   // CWE extraction
-  const cweRaw = (text.match(CWE_RE) || []).map(s => s.toUpperCase());
-  const claimedCwes = claimedCwesArg && claimedCwesArg.length > 0
-    ? claimedCwesArg.map(s => s.toUpperCase())
-    : Array.from(new Set(cweRaw)).slice(0, 5);
+  const cweRaw = (text.match(CWE_RE) || []).map((s) => s.toUpperCase());
+  const claimedCwes =
+    claimedCwesArg && claimedCwesArg.length > 0
+      ? claimedCwesArg.map((s) => s.toUpperCase())
+      : Array.from(new Set(cweRaw)).slice(0, 5);
 
   // v3.6.0 §1: Build typed evidence signals with strength multipliers.
   const memoryAddrs = text.match(MEMORY_ADDR_RE) || [];

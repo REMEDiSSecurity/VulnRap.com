@@ -2,15 +2,35 @@ import {
   useGetPublicStatus,
   getGetPublicStatusQueryKey,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Activity,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  HelpCircle,
+  Timer,
+  Gauge,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Activity, CheckCircle2, AlertTriangle, XCircle, HelpCircle, Timer, Gauge } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_META: Record<
   "operational" | "degraded" | "down" | "unknown",
-  { label: string; color: string; bg: string; ring: string; icon: React.ReactNode }
+  {
+    label: string;
+    color: string;
+    bg: string;
+    ring: string;
+    icon: React.ReactNode;
+  }
 > = {
   operational: {
     label: "Operational",
@@ -78,7 +98,8 @@ function formatRelative(iso: string | null): string {
   const diff = Date.now() - then;
   if (diff < 60_000) return "just now";
   if (diff < 60 * 60_000) return `${Math.round(diff / 60_000)}m ago`;
-  if (diff < 24 * 60 * 60_000) return `${Math.round(diff / (60 * 60_000))}h ago`;
+  if (diff < 24 * 60 * 60_000)
+    return `${Math.round(diff / (60 * 60_000))}h ago`;
   return `${Math.round(diff / (24 * 60 * 60_000))}d ago`;
 }
 
@@ -100,9 +121,9 @@ export default function Status() {
           System Status
         </h1>
         <p className="text-muted-foreground mt-2 max-w-3xl leading-relaxed">
-          Live snapshot of API uptime, scoring latency, and the health of each scoring engine.
-          Refreshed every 60 seconds. Numbers are computed from the platform's own analysis
-          telemetry — no third-party uptime monitor.
+          Live snapshot of API uptime, scoring latency, and the health of each
+          scoring engine. Refreshed every 60 seconds. Numbers are computed from
+          the platform's own analysis telemetry — no third-party uptime monitor.
         </p>
       </div>
 
@@ -120,13 +141,20 @@ export default function Status() {
           <div
             className={cn(
               "w-3 h-3 rounded-full shrink-0",
-              data.overallStatus === "operational" && "bg-emerald-400 animate-pulse",
-              data.overallStatus === "degraded" && "bg-yellow-400 animate-pulse",
+              data.overallStatus === "operational" &&
+                "bg-emerald-400 animate-pulse",
+              data.overallStatus === "degraded" &&
+                "bg-yellow-400 animate-pulse",
               data.overallStatus === "down" && "bg-red-400 animate-pulse",
             )}
           />
           <div className="flex-1">
-            <div className={cn("text-lg font-bold uppercase tracking-wide", banner?.color)}>
+            <div
+              className={cn(
+                "text-lg font-bold uppercase tracking-wide",
+                banner?.color,
+              )}
+            >
               {banner?.headline}
             </div>
             <div className="text-xs text-muted-foreground font-mono mt-0.5">
@@ -154,7 +182,8 @@ export default function Status() {
             )}
             {data && (
               <div className="text-xs text-muted-foreground mt-2">
-                {data.uptime.daysWithTraffic} of {data.uptime.windowDays} days with traffic
+                {data.uptime.daysWithTraffic} of {data.uptime.windowDays} days
+                with traffic
               </div>
             )}
           </CardContent>
@@ -177,7 +206,8 @@ export default function Status() {
             )}
             {data && (
               <div className="text-xs text-muted-foreground mt-2">
-                {data.latency.sampleCount} sample{data.latency.sampleCount === 1 ? "" : "s"}
+                {data.latency.sampleCount} sample
+                {data.latency.sampleCount === 1 ? "" : "s"}
               </div>
             )}
           </CardContent>
@@ -209,9 +239,12 @@ export default function Status() {
 
       <Card className="glass-card rounded-xl">
         <CardHeader>
-          <CardTitle className="text-base uppercase tracking-wide">Engine Subsystems</CardTitle>
+          <CardTitle className="text-base uppercase tracking-wide">
+            Engine Subsystems
+          </CardTitle>
           <CardDescription>
-            Health of each scoring engine, derived from the most recent successful pipeline traces.
+            Health of each scoring engine, derived from the most recent
+            successful pipeline traces.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -241,7 +274,8 @@ export default function Status() {
                     <div className="min-w-0">
                       <div className="font-medium text-sm">{eng.label}</div>
                       <div className="text-[11px] text-muted-foreground font-mono">
-                        {eng.recentSampleCount} runs in last hour · last seen {formatRelative(eng.lastSeenAt)}
+                        {eng.recentSampleCount} runs in last hour · last seen{" "}
+                        {formatRelative(eng.lastSeenAt)}
                       </div>
                     </div>
                   </div>
@@ -263,10 +297,12 @@ export default function Status() {
       </Card>
 
       <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-        Status is derived from the platform's own scoring telemetry. An engine is "operational"
-        if its pipeline stage was seen in the last hour, "degraded" if seen in the last six hours
-        but not the last hour, "down" if older than six hours but seen in the last 30 days, and
-        "no data" if never observed. Incident history is intentionally out of scope for this page.
+        Status is derived from the platform's own scoring telemetry. An engine
+        is "operational" if its pipeline stage was seen in the last hour,
+        "degraded" if seen in the last six hours but not the last hour, "down"
+        if older than six hours but seen in the last 30 days, and "no data" if
+        never observed. Incident history is intentionally out of scope for this
+        page.
       </p>
     </div>
   );

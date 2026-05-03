@@ -36,9 +36,10 @@ beforeEach(() => {
       url: new URL(typeof input === "string" ? input : input.toString()),
       init,
     });
-    const text = typeof nextResponse.body === "string"
-      ? nextResponse.body
-      : JSON.stringify(nextResponse.body);
+    const text =
+      typeof nextResponse.body === "string"
+        ? nextResponse.body
+        : JSON.stringify(nextResponse.body);
     return new Response(text, {
       status: nextResponse.status,
       headers: { "content-type": "application/json" },
@@ -147,7 +148,12 @@ describe("query_stats", () => {
 describe("query_gallery", () => {
   it("forwards limit/offset/sort/tier to /api/reports/feed", async () => {
     nextResponse = { status: 200, body: { reports: [] } };
-    await queryGallery({ limit: 5, offset: 10, sort: "score_desc", tier: "AUTO_CLOSE" });
+    await queryGallery({
+      limit: 5,
+      offset: 10,
+      sort: "score_desc",
+      tier: "AUTO_CLOSE",
+    });
     const u = calls[0].url;
     expect(u.pathname).toBe("/api/reports/feed");
     expect(u.searchParams.get("limit")).toBe("5");
@@ -160,7 +166,9 @@ describe("query_gallery", () => {
 describe("get_cohort_baseline", () => {
   it("validates score range", () => {
     expect(GetCohortBaselineInput.safeParse({ score: -1 }).success).toBe(false);
-    expect(GetCohortBaselineInput.safeParse({ score: 101 }).success).toBe(false);
+    expect(GetCohortBaselineInput.safeParse({ score: 101 }).success).toBe(
+      false,
+    );
     expect(GetCohortBaselineInput.safeParse({ score: 50 }).success).toBe(true);
     expect(GetCohortBaselineInput.safeParse({}).success).toBe(true);
   });
@@ -178,7 +186,10 @@ describe("get_cohort_baseline", () => {
       { min: 80, max: 90, count: 10 },
       { min: 90, max: 100, count: 10 },
     ];
-    nextResponse = { status: 200, body: { bins, totalReports: 100, median: 50 } };
+    nextResponse = {
+      status: 200,
+      body: { bins, totalReports: 100, median: 50 },
+    };
     const out = (await getCohortBaseline({ score: 75 })) as {
       percentileRank: number;
       queriedScore: number;
@@ -190,7 +201,10 @@ describe("get_cohort_baseline", () => {
   });
 
   it("returns the raw payload unchanged when no score is supplied", async () => {
-    nextResponse = { status: 200, body: { bins: [], totalReports: 0, median: null } };
+    nextResponse = {
+      status: 200,
+      body: { bins: [], totalReports: 0, median: null },
+    };
     const out = await getCohortBaseline({});
     expect(out).toEqual({ bins: [], totalReports: 0, median: null });
   });

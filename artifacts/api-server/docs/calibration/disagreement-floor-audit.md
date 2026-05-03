@@ -31,10 +31,10 @@ The route exposes:
 
 ## Findings (April 2026 sweep, 72 fixtures, two runs)
 
-| Run | Floor-fires | Heur-higher | LLM-higher | Mean Δ |
-|-----|-------------|-------------|------------|--------|
-| 1   | 2 / 72 (3%) | 0           | 2          | 45     |
-| 2   | 7 / 72 (10%)| 1           | 6          | 41.1   |
+| Run | Floor-fires  | Heur-higher | LLM-higher | Mean Δ |
+| --- | ------------ | ----------- | ---------- | ------ |
+| 1   | 2 / 72 (3%)  | 0           | 2          | 45     |
+| 2   | 7 / 72 (10%) | 1           | 6          | 41.1   |
 
 Run-to-run variance is `gpt-5-nano` non-determinism on borderline rows
 plus silent LLM-call timeouts on the cold cache. Tracked separately as
@@ -111,5 +111,5 @@ within its expected composite range.
   heuristic when the LLM's own claim extraction confirms the report
   is evidence-free. Post-fix `auditTelemetry.validityFusion`:
   `llmHigherByTier.T3_SLOP = 1`, `evidenceFreeCapAppliedByTier =
-  { T3_SLOP: 3 }`, T1_LEGIT cap fires 0 times. Details in
+{ T3_SLOP: 3 }`, T1_LEGIT cap fires 0 times. Details in
   [`substance-prompt-audit.md`](./substance-prompt-audit.md).

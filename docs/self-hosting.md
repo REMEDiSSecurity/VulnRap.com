@@ -48,17 +48,17 @@ Edit `.env`. The defaults are a good starting point for a single-host
 deployment behind a reverse proxy on `localhost:8080`. The variables that
 matter most:
 
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `PORT` | `8080` | Port the api-server (and the bundled SPA) listens on. |
-| `DATABASE_URL` | host-dev only | The value in `.env.example` is a `localhost`-flavoured URL aimed at host-side `pnpm dev`. **Under `docker compose up` it is intentionally ignored** — the compose file wires the `app` service at the bundled `db` service so the container never accidentally targets itself. To use an external Postgres, see [Using an external Postgres](#using-an-external-postgres). |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `vulnrap` / `vulnrap` / `vulnrap` | Bundled Postgres credentials. Used by both the `db` service and the in-container `DATABASE_URL` the compose file builds, so changing `POSTGRES_PASSWORD` here keeps both sides in sync. **Change `POSTGRES_PASSWORD` before exposing the host to the public internet.** |
-| `POSTGRES_PORT` | `5432` | Host port the bundled Postgres binds. Change if 5432 is already in use on the host. |
-| `PUBLIC_URL` | `http://localhost:8080` | Used to build canonical URLs (sitemap, security.txt, OG tags, share links). Set to `https://your-domain.example` once you put a TLS terminator in front. |
-| `ALLOWED_ORIGINS` | `http://localhost:8080` | Comma-separated CORS allow-list. Add the public origin you serve under. |
-| `OPENAI_API_KEY` | empty | Optional. Enables the LLM semantic-analysis axis. Heuristic-only scoring works without it. |
-| `OPENAI_BASE_URL` | empty | Optional. Point at any OpenAI-compatible endpoint (Ollama, vLLM, Azure OpenAI, …). |
-| `OPENAI_MODEL` | empty | Optional. Defaults to `gpt-5-nano` inside the api-server. |
+| Variable                                              | Default                           | Notes                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                                | `8080`                            | Port the api-server (and the bundled SPA) listens on.                                                                                                                                                                                                                                                                                                                      |
+| `DATABASE_URL`                                        | host-dev only                     | The value in `.env.example` is a `localhost`-flavoured URL aimed at host-side `pnpm dev`. **Under `docker compose up` it is intentionally ignored** — the compose file wires the `app` service at the bundled `db` service so the container never accidentally targets itself. To use an external Postgres, see [Using an external Postgres](#using-an-external-postgres). |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `vulnrap` / `vulnrap` / `vulnrap` | Bundled Postgres credentials. Used by both the `db` service and the in-container `DATABASE_URL` the compose file builds, so changing `POSTGRES_PASSWORD` here keeps both sides in sync. **Change `POSTGRES_PASSWORD` before exposing the host to the public internet.**                                                                                                    |
+| `POSTGRES_PORT`                                       | `5432`                            | Host port the bundled Postgres binds. Change if 5432 is already in use on the host.                                                                                                                                                                                                                                                                                        |
+| `PUBLIC_URL`                                          | `http://localhost:8080`           | Used to build canonical URLs (sitemap, security.txt, OG tags, share links). Set to `https://your-domain.example` once you put a TLS terminator in front.                                                                                                                                                                                                                   |
+| `ALLOWED_ORIGINS`                                     | `http://localhost:8080`           | Comma-separated CORS allow-list. Add the public origin you serve under.                                                                                                                                                                                                                                                                                                    |
+| `OPENAI_API_KEY`                                      | empty                             | Optional. Enables the LLM semantic-analysis axis. Heuristic-only scoring works without it.                                                                                                                                                                                                                                                                                 |
+| `OPENAI_BASE_URL`                                     | empty                             | Optional. Point at any OpenAI-compatible endpoint (Ollama, vLLM, Azure OpenAI, …).                                                                                                                                                                                                                                                                                         |
+| `OPENAI_MODEL`                                        | empty                             | Optional. Defaults to `gpt-5-nano` inside the api-server.                                                                                                                                                                                                                                                                                                                  |
 
 ---
 
@@ -88,7 +88,7 @@ Then open <http://localhost:8080>.
 > Need just Postgres for host-side dev work? Use the legacy db-only
 > profile: `docker compose --profile db-only up -d`. The `app` service
 > stays out of the picture so you can `pnpm --filter @workspace/api-server
-> run dev` against the same database from your host.
+run dev` against the same database from your host.
 
 ---
 
@@ -119,12 +119,12 @@ docker compose up -d --build
 
 ## 5. Logs & volumes
 
-| What | Where |
-|------|-------|
-| api-server logs | `docker compose logs app` (or `docker logs <container>`) |
-| Postgres logs | `docker compose logs db` |
-| Postgres data | named volume `vulnrap_pgdata` (managed by Docker; see `docker volume inspect vulnrap_pgdata`) |
-| Healthcheck endpoint | `GET /api/healthz` — returns 200 with `{"status":"ok"}` once boot finishes |
+| What                 | Where                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| api-server logs      | `docker compose logs app` (or `docker logs <container>`)                                      |
+| Postgres logs        | `docker compose logs db`                                                                      |
+| Postgres data        | named volume `vulnrap_pgdata` (managed by Docker; see `docker volume inspect vulnrap_pgdata`) |
+| Healthcheck endpoint | `GET /api/healthz` — returns 200 with `{"status":"ok"}` once boot finishes                    |
 
 The api-server logs are pino JSON by default. Pipe them through
 `pino-pretty` on the host if you want a colourised view:
@@ -295,9 +295,9 @@ The override (a) replaces the in-cluster `DATABASE_URL`, (b) drops the
 `db` healthcheck dependency, and (c) parks the bundled Postgres behind
 an unused profile so `docker compose up` no longer starts it.
 
-> The reason `.env`'s `DATABASE_URL` is *not* threaded through to the
+> The reason `.env`'s `DATABASE_URL` is _not_ threaded through to the
 > `app` container is that the same file is also used for host-side `pnpm
-> dev`, where `localhost` is the right target. Threading it through
+dev`, where `localhost` is the right target. Threading it through
 > would silently break the in-container default. The override file
 > pattern keeps both flows correct.
 
@@ -329,13 +329,13 @@ behaviours are NOT in the image. None of them are required for a
 functional self-hosted instance, but if you're coming from the hosted
 deployment it's useful to know what the equivalents are:
 
-| Replit-only | Self-hosted equivalent |
-|-------------|------------------------|
-| `.replit` workflows (`Project`, `artifacts/api-server: API Server`, `artifacts/vulnrap: web`) | `docker compose up` runs the same processes — there is one container instead of two workflows because the api-server serves the SPA static assets directly in production. |
-| Replit-managed secrets | Plain `.env` file consumed by `docker compose`. |
-| Replit Object Storage | Not used by VulnRap today — the codebase persists everything in Postgres. If you fork to add file storage, swap in S3 / MinIO / a host volume. |
-| Replit Deploy autoscale | Run multiple `app` replicas behind your proxy of choice and point them at the same Postgres. |
-| Playwright-driven SPA prerender | The container builds the SPA with `build:no-prerender` to keep the image small (no chromium binary). The SPA is fully functional client-side; prerendering is a hosted-only SEO optimisation. |
+| Replit-only                                                                                   | Self-hosted equivalent                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.replit` workflows (`Project`, `artifacts/api-server: API Server`, `artifacts/vulnrap: web`) | `docker compose up` runs the same processes — there is one container instead of two workflows because the api-server serves the SPA static assets directly in production.                     |
+| Replit-managed secrets                                                                        | Plain `.env` file consumed by `docker compose`.                                                                                                                                               |
+| Replit Object Storage                                                                         | Not used by VulnRap today — the codebase persists everything in Postgres. If you fork to add file storage, swap in S3 / MinIO / a host volume.                                                |
+| Replit Deploy autoscale                                                                       | Run multiple `app` replicas behind your proxy of choice and point them at the same Postgres.                                                                                                  |
+| Playwright-driven SPA prerender                                                               | The container builds the SPA with `build:no-prerender` to keep the image small (no chromium binary). The SPA is fully functional client-side; prerendering is a hosted-only SEO optimisation. |
 
 ---
 

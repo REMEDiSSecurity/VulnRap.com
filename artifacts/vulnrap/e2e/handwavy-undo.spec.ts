@@ -77,7 +77,9 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       // After the undo round-trip the active list should no longer
       // contain our phrase…
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
         "phrase should disappear from the active list after undo",
       ).toHaveCount(0, { timeout: 15_000 });
 
@@ -98,7 +100,9 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
         .filter({ hasText: phrase });
       await expect(historyRow).toHaveCount(1, { timeout: 15_000 });
       await expect(historyRow).toHaveAttribute("data-history-kind", "undone");
-      await expect(historyRow.getByTestId("handwavy-history-undone")).toBeVisible();
+      await expect(
+        historyRow.getByTestId("handwavy-history-undone"),
+      ).toBeVisible();
     } finally {
       await cleanup(apiCtx, phrase, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
@@ -154,11 +158,15 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       // one stays put (and keeps its own Undo button — its window
       // hasn't elapsed either).
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: olderPhrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: olderPhrase }),
         "older phrase should disappear from the active list after undo",
       ).toHaveCount(0, { timeout: 15_000 });
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: newerPhrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: newerPhrase }),
         "newer phrase should still be present after undoing the older one",
       ).toHaveCount(1);
       await expect(
@@ -184,7 +192,9 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
         .filter({ hasText: olderPhrase });
       await expect(historyRow).toHaveCount(1, { timeout: 15_000 });
       await expect(historyRow).toHaveAttribute("data-history-kind", "undone");
-      await expect(historyRow.getByTestId("handwavy-history-undone")).toBeVisible();
+      await expect(
+        historyRow.getByTestId("handwavy-history-undone"),
+      ).toBeVisible();
     } finally {
       await cleanup(apiCtx, [olderPhrase, newerPhrase], {
         reviewer: "e2e-task141-cleanup",
@@ -379,7 +389,9 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       await expect(dialog).not.toBeVisible();
       expect(new URL(page.url()).pathname).toBe("/feedback-analytics");
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(1);
       await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
 
@@ -471,7 +483,9 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       await expect(dialog).not.toBeVisible();
       expect(new URL(page.url()).pathname).toBe("/feedback-analytics");
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(1);
       await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
 
@@ -575,7 +589,9 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       await expect(dialog).not.toBeVisible();
       expect(new URL(page.url()).pathname).toBe("/feedback-analytics");
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(1);
       await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
 
@@ -685,7 +701,9 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
         .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
         .toBe("/");
     } finally {
-      await cleanup(apiCtx, phrase, { reviewer: "e2e-task444-replace-cleanup" });
+      await cleanup(apiCtx, phrase, {
+        reviewer: "e2e-task444-replace-cleanup",
+      });
       await apiCtx.dispose();
     }
   });
@@ -724,7 +742,9 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       // undo round-trip happened) AND the leave-confirm dialog must
       // never have surfaced during it.
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(0, { timeout: 15_000 });
       await expect(
         page.getByTestId("handwavy-undo-leave-confirm"),
@@ -816,7 +836,9 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       await expect(dialog).not.toBeVisible();
       expect(new URL(page.url()).pathname).toBe("/feedback-analytics");
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(1);
       await expect(newRow.getByTestId("handwavy-undo")).toBeVisible();
 
@@ -891,7 +913,9 @@ test.describe("FLAT hand-wavy phrase panel — add + undo flow", () => {
       // hasActiveUndo is false and the popstate listener has been torn
       // down by the effect cleanup.
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(0, { timeout: 15_000 });
 
       // Now hit Back. The sentinel pushed when the candidate first

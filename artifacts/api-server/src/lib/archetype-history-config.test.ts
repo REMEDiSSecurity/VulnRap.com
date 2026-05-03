@@ -30,9 +30,11 @@ describe("archetype-history-config", () => {
   });
 
   afterEach(async () => {
-    if (prevCfgPath === undefined) delete process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
+    if (prevCfgPath === undefined)
+      delete process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
     else process.env.ARCHETYPE_HISTORY_CONFIG_PATH = prevCfgPath;
-    if (prevEnvDays === undefined) delete process.env.ARCHETYPE_HISTORY_COMPACT_DAYS;
+    if (prevEnvDays === undefined)
+      delete process.env.ARCHETYPE_HISTORY_COMPACT_DAYS;
     else process.env.ARCHETYPE_HISTORY_COMPACT_DAYS = prevEnvDays;
     await fs.rm(tmpDir, { recursive: true, force: true });
     __testing.resetCache();

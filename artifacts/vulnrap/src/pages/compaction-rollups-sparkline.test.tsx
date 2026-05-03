@@ -18,7 +18,9 @@ function getBars(container: HTMLElement): SVGRectElement[] {
 
 describe("CompactionRollupsSparkline (Task #405)", () => {
   it("returns nothing when fewer than two runs are available", () => {
-    const { container: empty } = render(<CompactionRollupsSparkline runs={[]} />);
+    const { container: empty } = render(
+      <CompactionRollupsSparkline runs={[]} />,
+    );
     expect(empty.querySelector("svg")).toBeNull();
 
     const { container: single } = render(
@@ -40,7 +42,10 @@ describe("CompactionRollupsSparkline (Task #405)", () => {
   });
 
   it("scales bar height proportionally — bigger `removed` ⇒ taller bar", () => {
-    const runs = [run("2026-04-20T00:00:00Z", 1), run("2026-04-21T00:00:00Z", 10)];
+    const runs = [
+      run("2026-04-20T00:00:00Z", 1),
+      run("2026-04-21T00:00:00Z", 10),
+    ];
     const { container } = render(<CompactionRollupsSparkline runs={runs} />);
     const [a, b] = getBars(container);
     expect(a).toBeDefined();
@@ -77,10 +82,14 @@ describe("CompactionRollupsSparkline (Task #405)", () => {
     ];
     const { container } = render(<CompactionRollupsSparkline runs={runs} />);
     const svg = container.querySelector("svg")!;
-    const vb = (svg.getAttribute("viewBox") ?? "0 0 0 0").split(" ").map(Number);
+    const vb = (svg.getAttribute("viewBox") ?? "0 0 0 0")
+      .split(" ")
+      .map(Number);
     const vbHeight = vb[3] ?? 0;
     const tallest = Math.max(
-      ...getBars(container).map(r => parseFloat(r.getAttribute("height") ?? "0")),
+      ...getBars(container).map((r) =>
+        parseFloat(r.getAttribute("height") ?? "0"),
+      ),
     );
     expect(tallest).toBeGreaterThan(0);
     expect(tallest).toBeLessThanOrEqual(vbHeight);

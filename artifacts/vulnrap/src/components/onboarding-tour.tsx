@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { X, ArrowLeft, ArrowRight, CheckCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -86,20 +93,32 @@ interface OnboardingTourProps {
   prefillSample?: (text: string) => void;
 }
 
-export function OnboardingTour({ steps = DEFAULT_STEPS, onClose, prefillSample }: OnboardingTourProps) {
+export function OnboardingTour({
+  steps = DEFAULT_STEPS,
+  onClose,
+  prefillSample,
+}: OnboardingTourProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
-  const [tooltipSize, setTooltipSize] = useState<{ w: number; h: number }>({ w: 320, h: 180 });
+  const [tooltipSize, setTooltipSize] = useState<{ w: number; h: number }>({
+    w: 320,
+    h: 180,
+  });
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const step = steps[stepIndex];
 
-  const dismiss = useCallback((permanent: boolean) => {
-    if (permanent) {
-      try { localStorage.setItem(STORAGE_KEY, "1"); } catch {}
-    }
-    onClose();
-  }, [onClose]);
+  const dismiss = useCallback(
+    (permanent: boolean) => {
+      if (permanent) {
+        try {
+          localStorage.setItem(STORAGE_KEY, "1");
+        } catch {}
+      }
+      onClose();
+    },
+    [onClose],
+  );
 
   // Compute target rect with scroll & resize re-measurement.
   useLayoutEffect(() => {
@@ -142,9 +161,9 @@ export function OnboardingTour({ steps = DEFAULT_STEPS, onClose, prefillSample }
         e.preventDefault();
         dismiss(true);
       } else if (e.key === "ArrowRight") {
-        setStepIndex(i => Math.min(i + 1, steps.length - 1));
+        setStepIndex((i) => Math.min(i + 1, steps.length - 1));
       } else if (e.key === "ArrowLeft") {
-        setStepIndex(i => Math.max(i - 1, 0));
+        setStepIndex((i) => Math.max(i - 1, 0));
       }
     }
     document.addEventListener("keydown", onKey);
@@ -173,7 +192,8 @@ export function OnboardingTour({ steps = DEFAULT_STEPS, onClose, prefillSample }
     }
     const margin = 14;
     const preferTop = step?.placement === "top";
-    const spaceBelow = window.innerHeight - (targetRect.top + targetRect.height);
+    const spaceBelow =
+      window.innerHeight - (targetRect.top + targetRect.height);
     const spaceAbove = targetRect.top;
     const placeBelow = preferTop
       ? spaceAbove < tooltipSize.h + margin + 16
@@ -184,7 +204,11 @@ export function OnboardingTour({ steps = DEFAULT_STEPS, onClose, prefillSample }
     let left = targetRect.left + targetRect.width / 2 - tooltipSize.w / 2;
     left = Math.max(12, Math.min(left, window.innerWidth - tooltipSize.w - 12));
     top = Math.max(12, Math.min(top, window.innerHeight - tooltipSize.h - 12));
-    return { top, left, arrow: placeBelow ? ("up" as const) : ("down" as const) };
+    return {
+      top,
+      left,
+      arrow: placeBelow ? ("up" as const) : ("down" as const),
+    };
   }, [targetRect, tooltipSize, step]);
 
   if (!step) return null;
@@ -205,13 +229,49 @@ export function OnboardingTour({ steps = DEFAULT_STEPS, onClose, prefillSample }
       {targetRect ? (
         <>
           {/* top */}
-          <div className="absolute bg-black/70 transition-all" style={{ top: 0, left: 0, right: 0, height: Math.max(0, targetRect.top - 6) }} onClick={() => dismiss(true)} />
+          <div
+            className="absolute bg-black/70 transition-all"
+            style={{
+              top: 0,
+              left: 0,
+              right: 0,
+              height: Math.max(0, targetRect.top - 6),
+            }}
+            onClick={() => dismiss(true)}
+          />
           {/* bottom */}
-          <div className="absolute bg-black/70 transition-all" style={{ top: targetRect.top + targetRect.height + 6, left: 0, right: 0, bottom: 0 }} onClick={() => dismiss(true)} />
+          <div
+            className="absolute bg-black/70 transition-all"
+            style={{
+              top: targetRect.top + targetRect.height + 6,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+            onClick={() => dismiss(true)}
+          />
           {/* left */}
-          <div className="absolute bg-black/70 transition-all" style={{ top: Math.max(0, targetRect.top - 6), left: 0, width: Math.max(0, targetRect.left - 6), height: targetRect.height + 12 }} onClick={() => dismiss(true)} />
+          <div
+            className="absolute bg-black/70 transition-all"
+            style={{
+              top: Math.max(0, targetRect.top - 6),
+              left: 0,
+              width: Math.max(0, targetRect.left - 6),
+              height: targetRect.height + 12,
+            }}
+            onClick={() => dismiss(true)}
+          />
           {/* right */}
-          <div className="absolute bg-black/70 transition-all" style={{ top: Math.max(0, targetRect.top - 6), left: targetRect.left + targetRect.width + 6, right: 0, height: targetRect.height + 12 }} onClick={() => dismiss(true)} />
+          <div
+            className="absolute bg-black/70 transition-all"
+            style={{
+              top: Math.max(0, targetRect.top - 6),
+              left: targetRect.left + targetRect.width + 6,
+              right: 0,
+              height: targetRect.height + 12,
+            }}
+            onClick={() => dismiss(true)}
+          />
           {/* spotlight ring */}
           <div
             className="absolute rounded-lg pointer-events-none transition-all"
@@ -220,12 +280,16 @@ export function OnboardingTour({ steps = DEFAULT_STEPS, onClose, prefillSample }
               left: targetRect.left - 6,
               width: targetRect.width + 12,
               height: targetRect.height + 12,
-              boxShadow: "0 0 0 2px hsl(var(--primary)), 0 0 0 6px hsl(var(--primary) / 0.25), 0 0 24px hsl(var(--primary) / 0.4)",
+              boxShadow:
+                "0 0 0 2px hsl(var(--primary)), 0 0 0 6px hsl(var(--primary) / 0.25), 0 0 24px hsl(var(--primary) / 0.4)",
             }}
           />
         </>
       ) : (
-        <div className="absolute inset-0 bg-black/70" onClick={() => dismiss(true)} />
+        <div
+          className="absolute inset-0 bg-black/70"
+          onClick={() => dismiss(true)}
+        />
       )}
 
       {/* Tooltip */}
@@ -246,7 +310,10 @@ export function OnboardingTour({ steps = DEFAULT_STEPS, onClose, prefillSample }
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-primary/15 text-primary shrink-0">
               <Sparkles className="w-3.5 h-3.5" />
             </span>
-            <h3 id="onboarding-tour-title" className="font-semibold text-sm text-foreground truncate">
+            <h3
+              id="onboarding-tour-title"
+              className="font-semibold text-sm text-foreground truncate"
+            >
               {step.title}
             </h3>
           </div>
@@ -261,7 +328,9 @@ export function OnboardingTour({ steps = DEFAULT_STEPS, onClose, prefillSample }
             <X className="w-4 h-4" />
           </button>
         </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">{step.body}</p>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {step.body}
+        </p>
 
         {/* Step dots */}
         <div className="flex items-center gap-1.5" aria-hidden="true">
@@ -270,7 +339,9 @@ export function OnboardingTour({ steps = DEFAULT_STEPS, onClose, prefillSample }
               key={i}
               className={cn(
                 "h-1.5 rounded-full transition-all",
-                i === stepIndex ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30"
+                i === stepIndex
+                  ? "w-5 bg-primary"
+                  : "w-1.5 bg-muted-foreground/30",
               )}
             />
           ))}
@@ -292,7 +363,7 @@ export function OnboardingTour({ steps = DEFAULT_STEPS, onClose, prefillSample }
             {!isFirst && (
               <button
                 type="button"
-                onClick={() => setStepIndex(i => Math.max(0, i - 1))}
+                onClick={() => setStepIndex((i) => Math.max(0, i - 1))}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
                 data-testid="onboarding-tour-back"
               >
@@ -303,7 +374,9 @@ export function OnboardingTour({ steps = DEFAULT_STEPS, onClose, prefillSample }
             {!isLast ? (
               <button
                 type="button"
-                onClick={() => setStepIndex(i => Math.min(steps.length - 1, i + 1))}
+                onClick={() =>
+                  setStepIndex((i) => Math.min(steps.length - 1, i + 1))
+                }
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors glow-button"
                 data-testid="onboarding-tour-next"
               >

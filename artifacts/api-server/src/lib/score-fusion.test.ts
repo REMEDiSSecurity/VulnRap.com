@@ -4,7 +4,9 @@ import type { LinguisticResult } from "./linguistic-analysis.js";
 import type { FactualResult } from "./factual-verification.js";
 import type { LLMSlopResult } from "./llm-slop.js";
 
-function makeLinguistic(overrides: Partial<LinguisticResult> = {}): LinguisticResult {
+function makeLinguistic(
+  overrides: Partial<LinguisticResult> = {},
+): LinguisticResult {
   return {
     score: 10,
     lexicalScore: 10,
@@ -131,14 +133,24 @@ describe("fuseScores", () => {
 
   it("produces higher slop score when all axes are elevated", () => {
     const low = fuseScores(
-      makeLinguistic({ score: 10, lexicalScore: 5, statisticalScore: 5, templateScore: 5 }),
+      makeLinguistic({
+        score: 10,
+        lexicalScore: 5,
+        statisticalScore: 5,
+        templateScore: 5,
+      }),
       makeFactual({ score: 5 }),
       null,
       90,
       "Clean report.",
     );
     const high = fuseScores(
-      makeLinguistic({ score: 80, lexicalScore: 70, statisticalScore: 60, templateScore: 50 }),
+      makeLinguistic({
+        score: 80,
+        lexicalScore: 70,
+        statisticalScore: 60,
+        templateScore: 50,
+      }),
       makeFactual({ score: 60 }),
       null,
       30,
@@ -159,7 +171,13 @@ describe("fuseScores", () => {
       makeLinguistic({ score: 30 }),
       makeFactual({
         score: 30,
-        evidence: [{ type: "fabricated_cve", description: "CVE-2099-99999 does not exist", weight: 15 }],
+        evidence: [
+          {
+            type: "fabricated_cve",
+            description: "CVE-2099-99999 does not exist",
+            weight: 15,
+          },
+        ],
       }),
       null,
       70,
@@ -170,11 +188,20 @@ describe("fuseScores", () => {
 
   it("substance axis with LLM pushes well-written fabricated report past 60 detection threshold", () => {
     const result = fuseScores(
-      makeLinguistic({ score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0 }),
+      makeLinguistic({
+        score: 0,
+        lexicalScore: 0,
+        statisticalScore: 0,
+        templateScore: 0,
+      }),
       makeFactual({
         score: 40,
         evidence: [
-          { type: "hallucinated_function", description: "References nonexistent function ws_frame_handshake()", weight: 25 },
+          {
+            type: "hallucinated_function",
+            description: "References nonexistent function ws_frame_handshake()",
+            weight: 25,
+          },
         ],
       }),
       makeFabricatedLlm(),
@@ -187,12 +214,25 @@ describe("fuseScores", () => {
 
   it("heuristic-only: multiple fabrication signals push past 60 detection threshold", () => {
     const result = fuseScores(
-      makeLinguistic({ score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0 }),
+      makeLinguistic({
+        score: 0,
+        lexicalScore: 0,
+        statisticalScore: 0,
+        templateScore: 0,
+      }),
       makeFactual({
         score: 50,
         evidence: [
-          { type: "hallucinated_function", description: "References nonexistent function", weight: 25 },
-          { type: "fabricated_cve", description: "CVE does not exist", weight: 15 },
+          {
+            type: "hallucinated_function",
+            description: "References nonexistent function",
+            weight: 25,
+          },
+          {
+            type: "fabricated_cve",
+            description: "CVE does not exist",
+            weight: 15,
+          },
         ],
       }),
       null,
@@ -264,7 +304,12 @@ describe("fuseScores", () => {
 
     it("caps llmRaw at heuristic when the LLM's own claim extraction confirms evidence-free report", () => {
       const result = fuseScores(
-        makeLinguistic({ score: 20, lexicalScore: 15, statisticalScore: 15, templateScore: 10 }),
+        makeLinguistic({
+          score: 20,
+          lexicalScore: 15,
+          statisticalScore: 15,
+          templateScore: 10,
+        }),
         makeFactual({ score: 15, evidence: [] }),
         makeEvidenceFreeSlopLlm(),
         70,
@@ -274,7 +319,9 @@ describe("fuseScores", () => {
       expect(result.validityFusion.evidenceFreeCapApplied).toBe(true);
       // The cap forces llmRaw down to the heuristic, so blended validity
       // cannot sit above the heuristic on these evidence-free reports.
-      expect(result.validityFusion.llmRaw).toBe(result.validityFusion.heuristic);
+      expect(result.validityFusion.llmRaw).toBe(
+        result.validityFusion.heuristic,
+      );
       expect(result.validityFusion.higherSide).toBe("tied");
       expect(result.validityScore).toBe(result.validityFusion.heuristic);
     });
@@ -304,12 +351,19 @@ describe("fuseScores", () => {
       // LLM is below heuristic, so the cap is a no-op (cap only triggers
       // when llmRaw > heuristic).
       expect(result.validityFusion.evidenceFreeCapApplied).toBe(false);
-      expect(result.validityFusion.llmRaw).toBeLessThanOrEqual(result.validityFusion.heuristic);
+      expect(result.validityFusion.llmRaw).toBeLessThanOrEqual(
+        result.validityFusion.heuristic,
+      );
     });
 
     it("does NOT cap legitimate reports that present concrete evidence", () => {
       const result = fuseScores(
-        makeLinguistic({ score: 5, lexicalScore: 3, statisticalScore: 3, templateScore: 2 }),
+        makeLinguistic({
+          score: 5,
+          lexicalScore: 3,
+          statisticalScore: 3,
+          templateScore: 2,
+        }),
         makeFactual({ score: 5, evidence: [] }),
         makeLegitLlm(),
         90,
@@ -371,7 +425,12 @@ describe("fuseScores", () => {
         },
       };
       const result = fuseScores(
-        makeLinguistic({ score: 20, lexicalScore: 15, statisticalScore: 15, templateScore: 10 }),
+        makeLinguistic({
+          score: 20,
+          lexicalScore: 15,
+          statisticalScore: 15,
+          templateScore: 10,
+        }),
         makeFactual({ score: 15, evidence: [] }),
         minimalistLegitLlm,
         70,
@@ -381,13 +440,20 @@ describe("fuseScores", () => {
       // claimedFiles/Functions/CVEs/LineNumbers are all empty.
       expect(result.validityFusion.evidenceFreeCapApplied).toBe(false);
       // And the LLM signal must still be allowed to pull validity UP.
-      expect(result.validityFusion.llmRaw).toBeGreaterThan(result.validityFusion.heuristic);
+      expect(result.validityFusion.llmRaw).toBeGreaterThan(
+        result.validityFusion.heuristic,
+      );
     });
   });
 
   it("legitimate report with valid LLM substance scores low — no false positives", () => {
     const result = fuseScores(
-      makeLinguistic({ score: 5, lexicalScore: 3, statisticalScore: 3, templateScore: 2 }),
+      makeLinguistic({
+        score: 5,
+        lexicalScore: 3,
+        statisticalScore: 3,
+        templateScore: 2,
+      }),
       makeFactual({ score: 5, evidence: [] }),
       makeLegitLlm(),
       90,
@@ -399,7 +465,12 @@ describe("fuseScores", () => {
 
   it("legitimate report without LLM still scores low", () => {
     const result = fuseScores(
-      makeLinguistic({ score: 5, lexicalScore: 3, statisticalScore: 3, templateScore: 2 }),
+      makeLinguistic({
+        score: 5,
+        lexicalScore: 3,
+        statisticalScore: 3,
+        templateScore: 2,
+      }),
       makeFactual({ score: 5, evidence: [] }),
       null,
       90,
@@ -410,8 +481,10 @@ describe("fuseScores", () => {
   });
 
   it("applies human indicator reduction", () => {
-    const humanText = "I don't think this is right tbh. Found in commit a1b2c3d. Won't work without the race condition. Can't reproduce on v3. It's a really subtle issue that doesn't show up in testing.";
-    const aiText = "It is important to note that this vulnerability represents a significant security concern in the realm of cybersecurity. A comprehensive analysis reveals multifaceted implications.";
+    const humanText =
+      "I don't think this is right tbh. Found in commit a1b2c3d. Won't work without the race condition. Can't reproduce on v3. It's a really subtle issue that doesn't show up in testing.";
+    const aiText =
+      "It is important to note that this vulnerability represents a significant security concern in the realm of cybersecurity. A comprehensive analysis reveals multifaceted implications.";
 
     const humanResult = fuseScores(
       makeLinguistic({ score: 30 }),
@@ -431,14 +504,9 @@ describe("fuseScores", () => {
   });
 
   it("includes human indicators in the result", () => {
-    const text = "Found this bug tbh. Commit abc1234 introduced it. It won't trigger unless you hit the endpoint repeatedly. The server can't handle the concurrent requests.";
-    const result = fuseScores(
-      makeLinguistic(),
-      makeFactual(),
-      null,
-      80,
-      text,
-    );
+    const text =
+      "Found this bug tbh. Commit abc1234 introduced it. It won't trigger unless you hit the endpoint repeatedly. The server can't handle the concurrent requests.";
+    const result = fuseScores(makeLinguistic(), makeFactual(), null, 80, text);
     expect(result.humanIndicators).toBeDefined();
   });
 
@@ -517,7 +585,10 @@ READ of size 8 at 0x60200000a000 by thread T0
     const fab = result.evidence.find(
       (e) => e.type === "hallucination_structural_fabrication",
     );
-    expect(fab, "structural_fabrication evidence row should be present").toBeDefined();
+    expect(
+      fab,
+      "structural_fabrication evidence row should be present",
+    ).toBeDefined();
     expect(fab!.context).toBeDefined();
     expect(fab!.context!.markers).toBeDefined();
     expect(Array.isArray(fab!.context!.markers)).toBe(true);
@@ -539,13 +610,7 @@ READ of size 8 at 0x60200000a000 by thread T0
     // empty/undefined context objects on every hallucination evidence row.
     const VAGUE = `As an AI, I have discovered a critical vulnerability in process 999999999.
 Run the included exploit.py to reproduce. CVSS: 10.0`;
-    const result = fuseScores(
-      makeLinguistic(),
-      makeFactual(),
-      null,
-      50,
-      VAGUE,
-    );
+    const result = fuseScores(makeLinguistic(), makeFactual(), null, 50, VAGUE);
     const hallucinationRows = result.evidence.filter((e) =>
       e.type.startsWith("hallucination_"),
     );

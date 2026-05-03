@@ -44,13 +44,13 @@ npm install
 
 Environment variables:
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `DISCORD_TOKEN` | yes | Bot token from the Discord developer portal. |
-| `DISCORD_CLIENT_ID` | yes | Application id from the developer portal. |
-| `DISCORD_GUILD_ID` | no | If set, the slash command is registered to that single guild (instant). Otherwise it registers globally. |
-| `VULNRAP_API_BASE` | no | Defaults to `https://vulnrap.com/api`. Override for self-hosting. |
-| `VULNRAP_PUBLIC_URL` | no | Defaults to `https://vulnrap.com`. Used to build "Open report" links if the API doesn't return one. |
+| Variable             | Required | Description                                                                                              |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `DISCORD_TOKEN`      | yes      | Bot token from the Discord developer portal.                                                             |
+| `DISCORD_CLIENT_ID`  | yes      | Application id from the developer portal.                                                                |
+| `DISCORD_GUILD_ID`   | no       | If set, the slash command is registered to that single guild (instant). Otherwise it registers globally. |
+| `VULNRAP_API_BASE`   | no       | Defaults to `https://vulnrap.com/api`. Override for self-hosting.                                        |
+| `VULNRAP_PUBLIC_URL` | no       | Defaults to `https://vulnrap.com`. Used to build "Open report" links if the API doesn't return one.      |
 
 ## 4. Register the slash command and run
 

@@ -10,7 +10,9 @@
     "vscode": "^1.80.0",
     "node": ">=18.17.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [
     "onCommand:vulnrap.scoreSelection",
     "onCommand:vulnrap.scoreFile"

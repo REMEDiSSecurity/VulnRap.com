@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import { ScrollProgress } from "./scroll-progress";
 
-function setScrollMetrics(scrollTop: number, scrollHeight: number, clientHeight: number) {
+function setScrollMetrics(
+  scrollTop: number,
+  scrollHeight: number,
+  clientHeight: number,
+) {
   Object.defineProperty(document.documentElement, "scrollHeight", {
     configurable: true,
     value: scrollHeight,

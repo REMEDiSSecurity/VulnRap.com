@@ -194,8 +194,8 @@ describe("DatasetCohortSampleTable render (Task #372 — drill-down on cohort ti
     //   report-near composite 52 → |Δ|=2
     // The first <td> per row holds the report id, so reading the id
     // column gives a stable check on the order.
-    const ids = bodyRows.map(
-      (row) => within(row).getAllByRole("cell")[0].textContent?.trim(),
+    const ids = bodyRows.map((row) =>
+      within(row).getAllByRole("cell")[0].textContent?.trim(),
     );
     expect(ids).toEqual(["report-far", "report-mid", "report-near"]);
 

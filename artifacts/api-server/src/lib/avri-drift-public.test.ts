@@ -54,11 +54,21 @@ describe("toPublicDriftSummary", () => {
       week("2026-04-20", 48, true),
     ]);
 
-    const summary = toPublicDriftSummary(report, new Date("2026-04-22T00:00:00Z"));
+    const summary = toPublicDriftSummary(
+      report,
+      new Date("2026-04-22T00:00:00Z"),
+    );
 
     // Whitelist of public-safe top-level keys; anything else is a leak.
     expect(Object.keys(summary).sort()).toEqual(
-      ["currentSpread", "delta", "generatedAt", "hasCurrentWeek", "previousSpread", "weeks"].sort(),
+      [
+        "currentSpread",
+        "delta",
+        "generatedAt",
+        "hasCurrentWeek",
+        "previousSpread",
+        "weeks",
+      ].sort(),
     );
 
     // Per-week keys must only carry weekStart + spread.
@@ -91,7 +101,10 @@ describe("toPublicDriftSummary", () => {
       week("2026-04-27", 50, true),
     ]);
 
-    const summary = toPublicDriftSummary(report, new Date("2026-04-30T00:00:00Z"));
+    const summary = toPublicDriftSummary(
+      report,
+      new Date("2026-04-30T00:00:00Z"),
+    );
 
     expect(summary.weeks.map((w) => w.weekStart)).toEqual([
       "2026-04-06",
@@ -111,7 +124,10 @@ describe("toPublicDriftSummary", () => {
       week("2026-04-20", 30, false),
     ]);
 
-    const summary = toPublicDriftSummary(report, new Date("2026-04-22T00:00:00Z"));
+    const summary = toPublicDriftSummary(
+      report,
+      new Date("2026-04-22T00:00:00Z"),
+    );
 
     expect(summary.weeks).toEqual([]);
     expect(summary.currentSpread).toBeNull();
@@ -127,7 +143,10 @@ describe("toPublicDriftSummary", () => {
       const d = new Date(Date.UTC(2026, 0, 5 + i * 7));
       weeks.push(week(d.toISOString().slice(0, 10), 50 + i, true));
     }
-    const summary = toPublicDriftSummary(buildReport(weeks), new Date("2026-04-30T00:00:00Z"));
+    const summary = toPublicDriftSummary(
+      buildReport(weeks),
+      new Date("2026-04-30T00:00:00Z"),
+    );
     expect(summary.weeks).toHaveLength(12);
     // Newest 12 retained, oldest 4 dropped.
     expect(summary.weeks[0].weekStart).toBe("2026-02-02");

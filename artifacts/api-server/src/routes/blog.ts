@@ -7,9 +7,9 @@
 // Mounted at the application root (not under `/api`) because feed readers
 // and the auto-discovery <link> in blog.tsx point at `/blog/feed.xml`
 // directly, matching the path convention the task spec calls out.
-import { Router, type IRouter, type Request } from "express";
 import { existsSync, readFileSync } from "fs";
 import path from "path";
+import { Router, type IRouter, type Request } from "express";
 import { buildPublicUrl } from "../lib/public-url";
 
 const BLOG_POSTS_CANDIDATES = [
@@ -41,7 +41,9 @@ function resolveBlogPostsPath(): string {
 }
 
 function loadBlogPosts(): BlogPostsFile {
-  const raw = JSON.parse(readFileSync(resolveBlogPostsPath(), "utf8")) as BlogPostsFile;
+  const raw = JSON.parse(
+    readFileSync(resolveBlogPostsPath(), "utf8"),
+  ) as BlogPostsFile;
   if (!raw || !Array.isArray(raw.posts)) {
     throw new Error("[blog] blog-posts.json is missing a `posts` array");
   }
@@ -76,14 +78,23 @@ function toIsoDate(date: string): string {
   return parsed.toISOString();
 }
 
-export function buildBlogAtomFeed(req: Request | null, posts: BlogPost[] = BLOG_POSTS.posts): string {
+export function buildBlogAtomFeed(
+  req: Request | null,
+  posts: BlogPost[] = BLOG_POSTS.posts,
+): string {
   const baseUrl = buildPublicUrl({ req: req ?? undefined });
-  const feedUrl = buildPublicUrl({ req: req ?? undefined, path: "/blog/feed.xml" });
+  const feedUrl = buildPublicUrl({
+    req: req ?? undefined,
+    path: "/blog/feed.xml",
+  });
   const blogUrl = buildPublicUrl({ req: req ?? undefined, path: "/blog" });
 
   // Sort newest first, mirroring the on-page order.
-  const sorted = [...posts].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
-  const updated = sorted.length > 0 ? toIsoDate(sorted[0].date) : new Date().toISOString();
+  const sorted = [...posts].sort(
+    (a, b) => Date.parse(b.date) - Date.parse(a.date),
+  );
+  const updated =
+    sorted.length > 0 ? toIsoDate(sorted[0].date) : new Date().toISOString();
 
   const entries = sorted
     .map((post) => {

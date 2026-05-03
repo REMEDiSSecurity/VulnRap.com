@@ -11,18 +11,42 @@ export interface HumanIndicatorResult {
 }
 
 const INFORMAL_ABBREVIATIONS = [
-  "btw", "fwiw", "iirc", "afaik", "imo", "imho", "tbh", "fyi",
-  "tldr", "tl;dr", "ymmv", "afaict", "idk", "ngl", "iiuc",
-  "wrt", "w/", "w/o", "gonna", "wanna", "gotta", "kinda", "sorta",
+  "btw",
+  "fwiw",
+  "iirc",
+  "afaik",
+  "imo",
+  "imho",
+  "tbh",
+  "fyi",
+  "tldr",
+  "tl;dr",
+  "ymmv",
+  "afaict",
+  "idk",
+  "ngl",
+  "iiuc",
+  "wrt",
+  "w/",
+  "w/o",
+  "gonna",
+  "wanna",
+  "gotta",
+  "kinda",
+  "sorta",
 ];
 
-const CONTRACTION_PATTERN = /\b(?:don't|won't|can't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|doesn't|didn't|couldn't|wouldn't|shouldn't|it's|i'm|i've|i'll|we're|we've|they're|they've|that's|there's|here's|what's|who's|let's|ain't|y'all|he's|she's|you're|you've|you'll|we'll|they'll|might've|should've|would've|could've|must've|who've|who'll|that'll)\b/gi;
+const CONTRACTION_PATTERN =
+  /\b(?:don't|won't|can't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|doesn't|didn't|couldn't|wouldn't|shouldn't|it's|i'm|i've|i'll|we're|we've|they're|they've|that's|there's|here's|what's|who's|let's|ain't|y'all|he's|she's|you're|you've|you'll|we'll|they'll|might've|should've|would've|could've|must've|who've|who'll|that'll)\b/gi;
 
-const COMMIT_PR_PATTERN = /(?:commit\s+[0-9a-f]{7,40}|(?:pull\s+request|pr|merge\s+request|mr)\s*#?\d+|[0-9a-f]{7,40}(?:\s*\.{2,3}\s*[0-9a-f]{7,40})?|github\.com\/[\w\-]+\/[\w\-.]+\/(?:commit|pull|issues)\/[\w\d]+)/gi;
+const COMMIT_PR_PATTERN =
+  /(?:commit\s+[0-9a-f]{7,40}|(?:pull\s+request|pr|merge\s+request|mr)\s*#?\d+|[0-9a-f]{7,40}(?:\s*\.{2,3}\s*[0-9a-f]{7,40})?|github\.com\/[\w\-]+\/[\w\-.]+\/(?:commit|pull|issues)\/[\w\d]+)/gi;
 
-const PATCHED_VERSION_PATTERN = /(?:(?:fixed|patched|resolved|backported)\s+(?:in|by|as\s+of|starting\s+from)\s+(?:v(?:ersion)?\s*)?\d+\.\d+|(?:v(?:ersion)?\s*)?\d+\.\d+(?:\.\d+)?\s+(?:fixes|patches|resolves|addresses)\s+this)/gi;
+const PATCHED_VERSION_PATTERN =
+  /(?:(?:fixed|patched|resolved|backported)\s+(?:in|by|as\s+of|starting\s+from)\s+(?:v(?:ersion)?\s*)?\d+\.\d+|(?:v(?:ersion)?\s*)?\d+\.\d+(?:\.\d+)?\s+(?:fixes|patches|resolves|addresses)\s+this)/gi;
 
-const NAMED_RESEARCHER_PATTERN = /\b(?:reported\s+by|discovered\s+by|found\s+by|credited?\s+to|researcher[:\s]+|author[:\s]+)\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/g;
+const NAMED_RESEARCHER_PATTERN =
+  /\b(?:reported\s+by|discovered\s+by|found\s+by|credited?\s+to|researcher[:\s]+|author[:\s]+)\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/g;
 
 const AI_PLEASANTRIES = [
   /dear\s+(?:security\s+team|sir\/madam|team|vulnerability\s+team|security\s+researcher)/i,
@@ -49,9 +73,11 @@ export function detectHumanIndicators(text: string): HumanIndicatorResult {
     });
   }
 
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 5);
+  const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 5);
   if (sentences.length >= 3) {
-    const avgSentenceLength = sentences.reduce((sum, s) => sum + s.trim().split(/\s+/).length, 0) / sentences.length;
+    const avgSentenceLength =
+      sentences.reduce((sum, s) => sum + s.trim().split(/\s+/).length, 0) /
+      sentences.length;
     if (avgSentenceLength <= 15 && wordCount >= 50) {
       indicators.push({
         type: "human_terse_style",
@@ -63,7 +89,10 @@ export function detectHumanIndicators(text: string): HumanIndicatorResult {
 
   const foundAbbreviations: string[] = [];
   for (const abbr of INFORMAL_ABBREVIATIONS) {
-    const abbrPattern = new RegExp(`\\b${abbr.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    const abbrPattern = new RegExp(
+      `\\b${abbr.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+      "i",
+    );
     if (abbrPattern.test(lowerText)) {
       foundAbbreviations.push(abbr);
     }
@@ -107,7 +136,11 @@ export function detectHumanIndicators(text: string): HumanIndicatorResult {
     });
   }
 
-  const preRedactedCount = (text.match(/\[REDACTED\]|\[REMOVED\]|\[CENSORED\]|\[MASKED\]|\[HIDDEN\]/gi) || []).length;
+  const preRedactedCount = (
+    text.match(
+      /\[REDACTED\]|\[REMOVED\]|\[CENSORED\]|\[MASKED\]|\[HIDDEN\]/gi,
+    ) || []
+  ).length;
   if (preRedactedCount > 0) {
     indicators.push({
       type: "human_pre_redaction",
@@ -127,7 +160,8 @@ export function detectHumanIndicators(text: string): HumanIndicatorResult {
   if (!hasPleasantries && wordCount >= 100) {
     indicators.push({
       type: "human_no_pleasantries",
-      description: "No AI-style pleasantries or formulaic openers/closers — advisory-format writing",
+      description:
+        "No AI-style pleasantries or formulaic openers/closers — advisory-format writing",
       weight: -3,
     });
   }
@@ -135,9 +169,10 @@ export function detectHumanIndicators(text: string): HumanIndicatorResult {
   const baseReduction = indicators.reduce((sum, ind) => sum + ind.weight, 0);
 
   const compoundMultipliers = [1.0, 1.0, 1.3, 1.7, 2.2, 2.5, 2.8];
-  const multiplier = indicators.length < compoundMultipliers.length
-    ? compoundMultipliers[indicators.length]
-    : 3.0;
+  const multiplier =
+    indicators.length < compoundMultipliers.length
+      ? compoundMultipliers[indicators.length]
+      : 3.0;
 
   const totalReduction = Math.round(baseReduction * multiplier);
 

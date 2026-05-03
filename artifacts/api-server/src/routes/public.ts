@@ -24,7 +24,10 @@ router.get("/public/drift-summary", async (req, res) => {
 router.get("/public/cwe-catalog", async (req, res) => {
   try {
     const catalog = await buildCweCatalog();
-    res.set("Cache-Control", "public, max-age=600, stale-while-revalidate=1200");
+    res.set(
+      "Cache-Control",
+      "public, max-age=600, stale-while-revalidate=1200",
+    );
     res.json(catalog);
   } catch (err) {
     req.log?.error(err, "Failed to build CWE catalog");

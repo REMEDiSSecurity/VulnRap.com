@@ -34,8 +34,14 @@ function check(label, cond, detail = "") {
   check("null reason mentions git diff", /git diff unavailable/.test(d.reason));
 }
 {
-  const d = decideFromSelectorResult({ mode: "all", reason: "shared file changed: X" });
-  check("mode=all -> register/all", d.action === "register" && d.mode === "all");
+  const d = decideFromSelectorResult({
+    mode: "all",
+    reason: "shared file changed: X",
+  });
+  check(
+    "mode=all -> register/all",
+    d.action === "register" && d.mode === "all",
+  );
   check("mode=all reason carried", /shared file changed: X/.test(d.reason));
 }
 {
@@ -43,20 +49,37 @@ function check(label, cond, detail = "") {
     mode: "subset",
     specs: ["handwavy-undo.spec.ts", "handwavy-remove-confirm.spec.ts"],
   });
-  check("mode=subset -> register/subset", d.action === "register" && d.mode === "subset");
-  check("mode=subset specs carried", Array.isArray(d.specs) && d.specs.length === 2);
-  check("mode=subset reason names a spec", /handwavy-undo\.spec\.ts/.test(d.reason));
+  check(
+    "mode=subset -> register/subset",
+    d.action === "register" && d.mode === "subset",
+  );
+  check(
+    "mode=subset specs carried",
+    Array.isArray(d.specs) && d.specs.length === 2,
+  );
+  check(
+    "mode=subset reason names a spec",
+    /handwavy-undo\.spec\.ts/.test(d.reason),
+  );
 }
 {
-  const d = decideFromSelectorResult({ mode: "none", reason: "no surface area" });
+  const d = decideFromSelectorResult({
+    mode: "none",
+    reason: "no surface area",
+  });
   check("mode=none -> clear/none", d.action === "clear" && d.mode === "none");
   check("mode=none reason carried", /no surface area/.test(d.reason));
 }
 
 // decideRegistration: selectorResult test seam bypasses git.
 {
-  const d = decideRegistration({ selectorResult: { mode: "none", reason: "stub" } });
-  check("decideRegistration({selectorResult:none}) -> clear", d.action === "clear");
+  const d = decideRegistration({
+    selectorResult: { mode: "none", reason: "stub" },
+  });
+  check(
+    "decideRegistration({selectorResult:none}) -> clear",
+    d.action === "clear",
+  );
 }
 
 // Constants surfaced for callers.
@@ -154,7 +177,10 @@ check(
 
 // CLI: stdout is exactly REGISTER|CLEAR; stderr carries the breadcrumb.
 {
-  const res = spawnSync("node", [SCRIPT], { encoding: "utf8", env: process.env });
+  const res = spawnSync("node", [SCRIPT], {
+    encoding: "utf8",
+    env: process.env,
+  });
   const out = (res.stdout ?? "").trim();
   check(
     "CLI: stdout is REGISTER|CLEAR",

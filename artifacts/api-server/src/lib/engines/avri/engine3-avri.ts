@@ -4,13 +4,13 @@
 // family, (c) do the semantic-coherence checks pass. The legacy Engine 3 score
 // is still surfaced as `legacyScore` in signalBreakdown for diagnostics.
 
-import type { ExtractedSignals } from "../extractors";
 import { detectSoftCitation } from "../extractors";
-import type { EngineResult, TriggeredIndicator, Verdict } from "../engines";
 import { runEngine3 as runEngine3Legacy } from "../engines";
+import { checkCoherence, type CoherenceIssue } from "./coherence";
+import type { ExtractedSignals } from "../extractors";
+import type { EngineResult, TriggeredIndicator, Verdict } from "../engines";
 import type { FamilyRubric } from "./families";
 import type { ClassificationResult } from "./classify";
-import { checkCoherence, type CoherenceIssue } from "./coherence";
 
 function clamp(n: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, n));
@@ -98,19 +98,25 @@ export function runEngine3Avri(
   const selectedFamily = family.id;
   // Evidence confidence MEDIUM/HIGH gate (see prior comment for rationale).
   const evidenceConfidentEnough =
-    classification.evidenceConfidence === "HIGH" || classification.evidenceConfidence === "MEDIUM";
+    classification.evidenceConfidence === "HIGH" ||
+    classification.evidenceConfidence === "MEDIUM";
   const isCweCited = !!classification.cweId;
   // Off-family ceiling still uses cited-vs-evidence: only a *cited* CWE that
   // disagrees with strong evidence evidence is a genuine type-swap signal.
   const offFamilyHighConf =
-    isCweCited && citedFamily !== null && evidenceFamily !== null && citedFamily !== evidenceFamily && evidenceConfidentEnough;
+    isCweCited &&
+    citedFamily !== null &&
+    evidenceFamily !== null &&
+    citedFamily !== evidenceFamily &&
+    evidenceConfidentEnough;
   // SAME_FAMILY now compares the *selected* rubric family to the evidence
   // family, so reports whose CWE doesn't map to any rubric (e.g. CWE-190 for
   // an integer overflow → MEMORY_CORRUPTION via keyword fallback) still earn
   // the same-family floor when content agrees with the chosen family. The
   // FLAT family is handled by the early return above, so by this point
   // selectedFamily is always one of the concrete rubric families.
-  const sameFamily = evidenceFamily !== null && evidenceFamily === selectedFamily;
+  const sameFamily =
+    evidenceFamily !== null && evidenceFamily === selectedFamily;
   // Sprint 13C (Task #205) — soft citation lookup. When the report names a
   // recognised vulnerability class (XSS, SQLi, SSRF, …) but doesn't include
   // an explicit CWE-XX token, AVRI's "no CWE cited" path lifts from 38 to 60
@@ -173,14 +179,20 @@ export function runEngine3Avri(
 
   // Part 4 behavioural coherence bonus/penalty (small adjustments around the floor/ceiling).
   const behaviouralBonus = Math.min(6, Math.round(goldHitCount * 1.5));
-  const adjusted = baseScore + behaviouralBonus - contradictionPenalty - coherencePenalty;
+  const adjusted =
+    baseScore + behaviouralBonus - contradictionPenalty - coherencePenalty;
   const blendedScore = clamp(Math.round(adjusted));
 
   const indicators: TriggeredIndicator[] = [];
   indicators.push({
     signal: "FAMILY_CLASSIFIED",
     value: family.id,
-    strength: classification.confidence === "HIGH" ? "HIGH" : classification.confidence === "MEDIUM" ? "MEDIUM" : "LOW",
+    strength:
+      classification.confidence === "HIGH"
+        ? "HIGH"
+        : classification.confidence === "MEDIUM"
+          ? "MEDIUM"
+          : "LOW",
     explanation: classification.reason,
   });
   if (goldHitCount === 0 && family.goldSignals.length > 0) {
@@ -219,9 +231,7 @@ export function runEngine3Avri(
   }
 
   const verdict: Verdict =
-    blendedScore >= 65 ? "GREEN" :
-    blendedScore >= 40 ? "YELLOW" :
-    "RED";
+    blendedScore >= 65 ? "GREEN" : blendedScore >= 40 ? "YELLOW" : "RED";
 
   const engine: EngineResult = {
     engine: "CWE Coherence Checker",
@@ -242,15 +252,20 @@ export function runEngine3Avri(
         coherencePenalty: -coherencePenalty,
         legacyScore: legacy.score,
         blendedScore,
-        coherenceIssues: coherenceIssues.map((i) => ({ id: i.id, penalty: -i.penalty })),
-        softCitation: softCite && baseRule === "SOFT_CITATION"
-          ? { name: softCite.name, inferredCwe: `CWE-${softCite.cweId}` }
-          : null,
+        coherenceIssues: coherenceIssues.map((i) => ({
+          id: i.id,
+          penalty: -i.penalty,
+        })),
+        softCitation:
+          softCite && baseRule === "SOFT_CITATION"
+            ? { name: softCite.name, inferredCwe: `CWE-${softCite.cweId}` }
+            : null,
       },
     },
-    note: softCite && baseRule === "SOFT_CITATION"
-      ? `AVRI ${family.displayName} (${classification.confidence}): soft citation ${softCite.name} → CWE-${softCite.cweId}, ${goldHitCount}/${family.goldSignals.length} gold, ${contradictions.length} contradictions, ${coherenceIssues.length} coherence issue(s). Blended: ${blendedScore}.`
-      : `AVRI ${family.displayName} (${classification.confidence}): ${goldHitCount}/${family.goldSignals.length} gold, ${contradictions.length} contradictions, ${coherenceIssues.length} coherence issue(s). Blended: ${blendedScore}.`,
+    note:
+      softCite && baseRule === "SOFT_CITATION"
+        ? `AVRI ${family.displayName} (${classification.confidence}): soft citation ${softCite.name} → CWE-${softCite.cweId}, ${goldHitCount}/${family.goldSignals.length} gold, ${contradictions.length} contradictions, ${coherenceIssues.length} coherence issue(s). Blended: ${blendedScore}.`
+        : `AVRI ${family.displayName} (${classification.confidence}): ${goldHitCount}/${family.goldSignals.length} gold, ${contradictions.length} contradictions, ${coherenceIssues.length} coherence issue(s). Blended: ${blendedScore}.`,
   };
 
   return {

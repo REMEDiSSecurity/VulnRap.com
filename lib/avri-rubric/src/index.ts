@@ -216,12 +216,10 @@ export const GOLD_SIGNAL_LABELS: Readonly<Record<string, string>> = {
   command_injection_payload:
     "Command/JNDI injection payload (;cat /etc/passwd, $(...), ${jndi:…})",
   xss_payload: "Concrete XSS payload with active sink (alert/cookie/fetch)",
-  ssrf_metadata_target:
-    "SSRF target: cloud-metadata URL with concrete path",
+  ssrf_metadata_target: "SSRF target: cloud-metadata URL with concrete path",
   path_traversal_payload:
     "Path traversal reaching a sensitive file (e.g. ../../etc/passwd)",
-  xxe_external_entity:
-    "XML external entity declaration with concrete URI",
+  xxe_external_entity: "XML external entity declaration with concrete URI",
   deserialization_gadget:
     "Concrete deserialization gadget chain or unsafe-load sink",
   auth_token: "Authentication footprint: real JWT/Bearer/session value",
@@ -330,7 +328,10 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
       (a) => a.flatHandwavyCategory == null,
     );
     if (categorized.length > 0) {
-      const groups = new Map<AvriHandwavyCategory, AvriEngine2AbsencePenalty[]>();
+      const groups = new Map<
+        AvriHandwavyCategory,
+        AvriEngine2AbsencePenalty[]
+      >();
       for (const a of categorized) {
         const key = a.flatHandwavyCategory as AvriHandwavyCategory;
         const arr = groups.get(key) ?? [];
@@ -392,9 +393,7 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
   ) {
     const penalty = ct.structuralFabricationPenalty ?? 0;
     const penaltyNote =
-      penalty < 0
-        ? `penalty ${penalty}`
-        : "penalty subsumed by stripped-trace";
+      penalty < 0 ? `penalty ${penalty}` : "penalty subsumed by stripped-trace";
     lines.push(
       `- **Structural fabrication in ${traceKindLabel}** (${penaltyNote}): ${ct.structuralMarkers.length} marker${ct.structuralMarkers.length === 1 ? "" : "s"} fired`,
     );
@@ -526,7 +525,9 @@ export function buildAvriRubricMarkdown(input: AvriRubricInput): string[] {
       templatePenalty < 0 &&
       !matchingOverrides.some((o) => o.token === "AVRI_TEMPLATE_CAMPAIGN")
     ) {
-      lines.push(`  - Template-fingerprint penalty applied: ${templatePenalty}`);
+      lines.push(
+        `  - Template-fingerprint penalty applied: ${templatePenalty}`,
+      );
     }
   }
   if (

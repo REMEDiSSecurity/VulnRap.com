@@ -44,11 +44,31 @@ export interface CalibrationReport {
 }
 
 const BUCKETS = [
-  { bucket: "Clean (0-20)", range: [0, 20] as [number, number], expectedRating: 4.5 },
-  { bucket: "Likely Human (21-40)", range: [21, 40] as [number, number], expectedRating: 4.0 },
-  { bucket: "Questionable (41-60)", range: [41, 60] as [number, number], expectedRating: 3.0 },
-  { bucket: "Likely Slop (61-80)", range: [61, 80] as [number, number], expectedRating: 3.5 },
-  { bucket: "Slop (81-100)", range: [81, 100] as [number, number], expectedRating: 4.0 },
+  {
+    bucket: "Clean (0-20)",
+    range: [0, 20] as [number, number],
+    expectedRating: 4.5,
+  },
+  {
+    bucket: "Likely Human (21-40)",
+    range: [21, 40] as [number, number],
+    expectedRating: 4.0,
+  },
+  {
+    bucket: "Questionable (41-60)",
+    range: [41, 60] as [number, number],
+    expectedRating: 3.0,
+  },
+  {
+    bucket: "Likely Slop (61-80)",
+    range: [61, 80] as [number, number],
+    expectedRating: 3.5,
+  },
+  {
+    bucket: "Slop (81-100)",
+    range: [81, 100] as [number, number],
+    expectedRating: 4.0,
+  },
 ];
 
 export async function generateCalibrationReport(): Promise<CalibrationReport> {
@@ -62,15 +82,20 @@ export async function generateCalibrationReport(): Promise<CalibrationReport> {
     })
     .from(userFeedbackTable)
     .innerJoin(reportsTable, eq(userFeedbackTable.reportId, reportsTable.id))
-    .where(and(
-      isNotNull(reportsTable.slopScore),
-      // Task #640 — exclude the locked 20% holdout split.
-      eq(userFeedbackTable.isHoldout, false),
-    ));
+    .where(
+      and(
+        isNotNull(reportsTable.slopScore),
+        // Task #640 — exclude the locked 20% holdout split.
+        eq(userFeedbackTable.isHoldout, false),
+      ),
+    );
 
   const totalFeedbackAnalyzed = bucketResults.length;
 
-  const bucketData = new Map<string, { ratings: number[]; helpfulCount: number; total: number }>();
+  const bucketData = new Map<
+    string,
+    { ratings: number[]; helpfulCount: number; total: number }
+  >();
   for (const b of BUCKETS) {
     bucketData.set(b.bucket, { ratings: [], helpfulCount: 0, total: 0 });
   }
@@ -91,12 +116,16 @@ export async function generateCalibrationReport(): Promise<CalibrationReport> {
   const bucketAnalysis: BucketAnalysis[] = BUCKETS.map((b) => {
     const data = bucketData.get(b.bucket)!;
     const meetsThreshold = data.total >= MIN_FEEDBACK_PER_BUCKET;
-    const avgRating = data.total > 0
-      ? Math.round((data.ratings.reduce((s, r) => s + r, 0) / data.total) * 100) / 100
-      : 0;
-    const helpfulPct = data.total > 0
-      ? Math.round((data.helpfulCount / data.total) * 1000) / 10
-      : 0;
+    const avgRating =
+      data.total > 0
+        ? Math.round(
+            (data.ratings.reduce((s, r) => s + r, 0) / data.total) * 100,
+          ) / 100
+        : 0;
+    const helpfulPct =
+      data.total > 0
+        ? Math.round((data.helpfulCount / data.total) * 1000) / 10
+        : 0;
 
     const ratingDeviation = avgRating - b.expectedRating;
 
@@ -106,15 +135,15 @@ export async function generateCalibrationReport(): Promise<CalibrationReport> {
     } else if (Math.abs(ratingDeviation) <= 0.5) {
       signal = "accurate";
     } else if (
-      (b.bucket.includes("Clean") || b.bucket.includes("Human")) && ratingDeviation < -0.5
+      (b.bucket.includes("Clean") || b.bucket.includes("Human")) &&
+      ratingDeviation < -0.5
     ) {
       signal = "under-scoring";
-    } else if (
-      (b.bucket.includes("Slop")) && ratingDeviation < -0.5
-    ) {
+    } else if (b.bucket.includes("Slop") && ratingDeviation < -0.5) {
       signal = "over-scoring";
     } else if (
-      (b.bucket.includes("Clean") || b.bucket.includes("Human")) && ratingDeviation > 0.5
+      (b.bucket.includes("Clean") || b.bucket.includes("Human")) &&
+      ratingDeviation > 0.5
     ) {
       signal = "accurate";
     } else {
@@ -136,7 +165,9 @@ export async function generateCalibrationReport(): Promise<CalibrationReport> {
   const suggestions = generateSuggestions(bucketAnalysis, config);
 
   const problematicBuckets = bucketAnalysis.filter(
-    b => b.meetsThreshold && (b.signal === "over-scoring" || b.signal === "under-scoring")
+    (b) =>
+      b.meetsThreshold &&
+      (b.signal === "over-scoring" || b.signal === "under-scoring"),
   );
   const overallHealth: CalibrationReport["overallHealth"] =
     problematicBuckets.length === 0
@@ -161,12 +192,16 @@ export async function generateCalibrationReport(): Promise<CalibrationReport> {
 
 function generateSuggestions(
   analysis: BucketAnalysis[],
-  config: ScoringConfig
+  config: ScoringConfig,
 ): CalibrationSuggestion[] {
   const suggestions: CalibrationSuggestion[] = [];
 
-  const cleanBucket = analysis.find(b => b.bucket.includes("Clean"));
-  if (cleanBucket && cleanBucket.meetsThreshold && cleanBucket.signal === "under-scoring") {
+  const cleanBucket = analysis.find((b) => b.bucket.includes("Clean"));
+  if (
+    cleanBucket &&
+    cleanBucket.meetsThreshold &&
+    cleanBucket.signal === "under-scoring"
+  ) {
     const newLow = Math.max(5, config.tierThresholds.low - 5);
     suggestions.push({
       parameter: "tierThresholds.low",
@@ -178,8 +213,12 @@ function generateSuggestions(
     });
   }
 
-  const slopBucket = analysis.find(b => b.bucket === "Slop (81-100)");
-  if (slopBucket && slopBucket.meetsThreshold && slopBucket.signal === "over-scoring") {
+  const slopBucket = analysis.find((b) => b.bucket === "Slop (81-100)");
+  if (
+    slopBucket &&
+    slopBucket.meetsThreshold &&
+    slopBucket.signal === "over-scoring"
+  ) {
     const newHigh = Math.min(95, config.tierThresholds.high + 5);
     suggestions.push({
       parameter: "tierThresholds.high",
@@ -191,9 +230,14 @@ function generateSuggestions(
     });
   }
 
-  const questionableBucket = analysis.find(b => b.bucket.includes("Questionable"));
+  const questionableBucket = analysis.find((b) =>
+    b.bucket.includes("Questionable"),
+  );
   if (questionableBucket && questionableBucket.meetsThreshold) {
-    if (questionableBucket.helpfulPct < 50 && questionableBucket.avgRating < 2.5) {
+    if (
+      questionableBucket.helpfulPct < 50 &&
+      questionableBucket.avgRating < 2.5
+    ) {
       suggestions.push({
         parameter: "prior",
         currentValue: config.prior,
@@ -205,8 +249,14 @@ function generateSuggestions(
     }
   }
 
-  const likelyHumanBucket = analysis.find(b => b.bucket.includes("Likely Human"));
-  if (likelyHumanBucket && likelyHumanBucket.meetsThreshold && likelyHumanBucket.signal === "under-scoring") {
+  const likelyHumanBucket = analysis.find((b) =>
+    b.bucket.includes("Likely Human"),
+  );
+  if (
+    likelyHumanBucket &&
+    likelyHumanBucket.meetsThreshold &&
+    likelyHumanBucket.signal === "under-scoring"
+  ) {
     suggestions.push({
       parameter: "axisThresholds.linguistic",
       currentValue: config.axisThresholds.linguistic,

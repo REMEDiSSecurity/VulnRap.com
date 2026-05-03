@@ -98,15 +98,40 @@ function PipelineSvg() {
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>
-        <marker id="arrow-fwd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <marker
+          id="arrow-fwd"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto-start-reverse"
+        >
           <path d="M0,0 L10,5 L0,10 z" fill="#64748b" />
         </marker>
-        <marker id="arrow-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <marker
+          id="arrow-loop"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto-start-reverse"
+        >
           <path d="M0,0 L10,5 L0,10 z" fill="#60a5fa" />
         </marker>
       </defs>
 
-      <text x={VBW / 2} y={28} textAnchor="middle" fontSize={11} fontWeight={700} fill="#94a3b8" letterSpacing={2} fontFamily="ui-sans-serif, system-ui">
+      <text
+        x={VBW / 2}
+        y={28}
+        textAnchor="middle"
+        fontSize={11}
+        fontWeight={700}
+        fill="#94a3b8"
+        letterSpacing={2}
+        fontFamily="ui-sans-serif, system-ui"
+      >
         DATA FLOW · LEFT TO RIGHT
       </text>
 
@@ -146,8 +171,24 @@ function PipelineSvg() {
               strokeDasharray="4 4"
               markerEnd="url(#arrow-loop)"
             />
-            <rect x={(startX + endX) / 2 - 78} y={dipY - 11} width={156} height={22} rx={4} fill="rgba(96,165,250,0.10)" stroke="rgba(96,165,250,0.45)" />
-            <text x={(startX + endX) / 2} y={dipY + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#60a5fa" fontFamily="ui-monospace, SFMono-Regular">
+            <rect
+              x={(startX + endX) / 2 - 78}
+              y={dipY - 11}
+              width={156}
+              height={22}
+              rx={4}
+              fill="rgba(96,165,250,0.10)"
+              stroke="rgba(96,165,250,0.45)"
+            />
+            <text
+              x={(startX + endX) / 2}
+              y={dipY + 4}
+              textAnchor="middle"
+              fontSize={11}
+              fontWeight={700}
+              fill="#60a5fa"
+              fontFamily="ui-monospace, SFMono-Regular"
+            >
               feedback re-tunes weights
             </text>
           </g>
@@ -172,14 +213,46 @@ function PipelineSvg() {
               }
             }}
           >
-            <rect x={x} y={ROW_Y} width={NODE_W} height={NODE_H} rx={10} fill={n.fill} stroke={n.stroke} strokeWidth={1.5} />
-            <text x={x + NODE_W / 2} y={ROW_Y + 32} textAnchor="middle" fontSize={14} fontWeight={800} fill={n.text} fontFamily="ui-sans-serif, system-ui" letterSpacing={0.5}>
+            <rect
+              x={x}
+              y={ROW_Y}
+              width={NODE_W}
+              height={NODE_H}
+              rx={10}
+              fill={n.fill}
+              stroke={n.stroke}
+              strokeWidth={1.5}
+            />
+            <text
+              x={x + NODE_W / 2}
+              y={ROW_Y + 32}
+              textAnchor="middle"
+              fontSize={14}
+              fontWeight={800}
+              fill={n.text}
+              fontFamily="ui-sans-serif, system-ui"
+              letterSpacing={0.5}
+            >
               {n.label.toUpperCase()}
             </text>
-            <text x={x + NODE_W / 2} y={ROW_Y + 52} textAnchor="middle" fontSize={11} fill="#cbd5e1" fontFamily="ui-monospace, SFMono-Regular">
+            <text
+              x={x + NODE_W / 2}
+              y={ROW_Y + 52}
+              textAnchor="middle"
+              fontSize={11}
+              fill="#cbd5e1"
+              fontFamily="ui-monospace, SFMono-Regular"
+            >
               {n.sub}
             </text>
-            <text x={x + NODE_W / 2} y={ROW_Y + 70} textAnchor="middle" fontSize={9.5} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui">
+            <text
+              x={x + NODE_W / 2}
+              y={ROW_Y + 70}
+              textAnchor="middle"
+              fontSize={9.5}
+              fill="#94a3b8"
+              fontFamily="ui-sans-serif, system-ui"
+            >
               click to explore →
             </text>
           </g>
@@ -209,7 +282,9 @@ function PipelineSvg() {
 const SEQ_VBW = 720;
 const SEQ_VBH = 360;
 const SEQ_LANES = ["Client", "API", "Redactor", "Engines", "Store"];
-const SEQ_LANE_X = SEQ_LANES.map((_, i) => 70 + i * ((SEQ_VBW - 140) / (SEQ_LANES.length - 1)));
+const SEQ_LANE_X = SEQ_LANES.map(
+  (_, i) => 70 + i * ((SEQ_VBW - 140) / (SEQ_LANES.length - 1)),
+);
 
 interface SeqMessage {
   from: number;
@@ -227,7 +302,13 @@ const SEQ_MESSAGES: SeqMessage[] = [
   { from: 3, to: 1, y: 220, label: "{ engines[], composite }", reply: true },
   { from: 1, to: 4, y: 250, label: "upsert(hash, score)" },
   { from: 4, to: 1, y: 280, label: "{ id, dupes[] }", reply: true },
-  { from: 1, to: 0, y: 310, label: "{ id, score, triage, dupes }", reply: true },
+  {
+    from: 1,
+    to: 0,
+    y: 310,
+    label: "{ id, score, triage, dupes }",
+    reply: true,
+  },
 ];
 
 function SequenceSvg() {
@@ -240,10 +321,26 @@ function SequenceSvg() {
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>
-        <marker id="seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <marker
+          id="seq-arrow"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto-start-reverse"
+        >
           <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8" />
         </marker>
-        <marker id="seq-arrow-reply" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <marker
+          id="seq-arrow-reply"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto-start-reverse"
+        >
           <path d="M0,0 L10,5 L0,10 z" fill="#34d399" />
         </marker>
       </defs>
@@ -251,12 +348,35 @@ function SequenceSvg() {
       {/* Lane headers */}
       {SEQ_LANES.map((name, i) => (
         <g key={name}>
-          <rect x={SEQ_LANE_X[i] - 50} y={26} width={100} height={28} rx={6} fill="rgba(15,23,42,0.65)" stroke="rgba(148,163,184,0.35)" />
-          <text x={SEQ_LANE_X[i]} y={45} textAnchor="middle" fontSize={12} fontWeight={700} fill="#e2e8f0" fontFamily="ui-sans-serif, system-ui">
+          <rect
+            x={SEQ_LANE_X[i] - 50}
+            y={26}
+            width={100}
+            height={28}
+            rx={6}
+            fill="rgba(15,23,42,0.65)"
+            stroke="rgba(148,163,184,0.35)"
+          />
+          <text
+            x={SEQ_LANE_X[i]}
+            y={45}
+            textAnchor="middle"
+            fontSize={12}
+            fontWeight={700}
+            fill="#e2e8f0"
+            fontFamily="ui-sans-serif, system-ui"
+          >
             {name}
           </text>
           {/* Lifeline */}
-          <line x1={SEQ_LANE_X[i]} y1={56} x2={SEQ_LANE_X[i]} y2={SEQ_VBH - 20} stroke="rgba(148,163,184,0.25)" strokeDasharray="3 4" />
+          <line
+            x1={SEQ_LANE_X[i]}
+            y1={56}
+            x2={SEQ_LANE_X[i]}
+            y2={SEQ_VBH - 20}
+            stroke="rgba(148,163,184,0.25)"
+            strokeDasharray="3 4"
+          />
         </g>
       ))}
 
@@ -305,15 +425,18 @@ export default function Architecture() {
           Architecture
         </h1>
         <p className="text-muted-foreground mt-2 max-w-3xl leading-relaxed">
-          One picture of the whole pipeline so integrators know exactly where they hook in. Click any node in the
-          diagram to jump to the deep dive for that stage.
+          One picture of the whole pipeline so integrators know exactly where
+          they hook in. Click any node in the diagram to jump to the deep dive
+          for that stage.
         </p>
       </div>
 
       <section className="space-y-4">
         <div className="flex items-end justify-between gap-3 flex-wrap">
           <div>
-            <h2 className="text-xl font-bold tracking-tight">Pipeline overview</h2>
+            <h2 className="text-xl font-bold tracking-tight">
+              Pipeline overview
+            </h2>
             <p className="text-sm text-muted-foreground mt-1">
               Intake → Redact → Score fusion → Triage → Store → Feedback loop.
             </p>
@@ -326,8 +449,10 @@ export default function Architecture() {
         <div
           className="relative rounded-xl border border-cyan-500/15 p-3 sm:p-5 overflow-hidden"
           style={{
-            background: "linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.35) 100%)",
-            boxShadow: "0 0 0 1px rgba(0,255,255,0.04) inset, 0 8px 32px rgba(0,0,0,0.35)",
+            background:
+              "linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.35) 100%)",
+            boxShadow:
+              "0 0 0 1px rgba(0,255,255,0.04) inset, 0 8px 32px rgba(0,0,0,0.35)",
           }}
         >
           <div className="overflow-x-auto">
@@ -347,7 +472,9 @@ export default function Architecture() {
                 style={{ borderLeftColor: n.text, borderLeftWidth: 3 }}
               >
                 <span className="flex flex-col">
-                  <span className="font-semibold text-foreground">{n.label}</span>
+                  <span className="font-semibold text-foreground">
+                    {n.label}
+                  </span>
                   <span className="text-muted-foreground">{n.linkLabel}</span>
                 </span>
                 <ArrowRight className="w-3.5 h-3.5 shrink-0 opacity-60" />
@@ -361,16 +488,21 @@ export default function Architecture() {
         <div>
           <h2 className="text-xl font-bold tracking-tight">Request flow</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            What happens between a single <code className="font-mono text-xs text-primary">POST /api/reports/check</code> and the
-            response your integration receives.
+            What happens between a single{" "}
+            <code className="font-mono text-xs text-primary">
+              POST /api/reports/check
+            </code>{" "}
+            and the response your integration receives.
           </p>
         </div>
 
         <div
           className="relative rounded-xl border border-emerald-500/15 p-3 sm:p-5 overflow-hidden"
           style={{
-            background: "linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.35) 100%)",
-            boxShadow: "0 0 0 1px rgba(16,185,129,0.04) inset, 0 8px 32px rgba(0,0,0,0.35)",
+            background:
+              "linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.35) 100%)",
+            boxShadow:
+              "0 0 0 1px rgba(16,185,129,0.04) inset, 0 8px 32px rgba(0,0,0,0.35)",
           }}
         >
           <div className="overflow-x-auto">
@@ -381,20 +513,32 @@ export default function Architecture() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Reply arrows are dashed and green. Nothing is persisted until the store step — the redactor and engines
-          operate on in-memory text, and the original payload is discarded after the response is built.
+          Reply arrows are dashed and green. Nothing is persisted until the
+          store step — the redactor and engines operate on in-memory text, and
+          the original payload is discarded after the response is built.
         </p>
       </section>
 
       <section className="text-xs text-muted-foreground/70 pb-4">
         See also:{" "}
-        <Link to="/developers" className="text-primary/80 hover:text-primary">API reference</Link>
+        <Link to="/developers" className="text-primary/80 hover:text-primary">
+          API reference
+        </Link>
         {" · "}
-        <Link to="/transparency" className="text-primary/80 hover:text-primary">Engine transparency</Link>
+        <Link to="/transparency" className="text-primary/80 hover:text-primary">
+          Engine transparency
+        </Link>
         {" · "}
-        <Link to="/privacy" className="text-primary/80 hover:text-primary">Privacy &amp; redaction</Link>
+        <Link to="/privacy" className="text-primary/80 hover:text-primary">
+          Privacy &amp; redaction
+        </Link>
         {" · "}
-        <Link to="/feedback-analytics" className="text-primary/80 hover:text-primary">Feedback analytics</Link>
+        <Link
+          to="/feedback-analytics"
+          className="text-primary/80 hover:text-primary"
+        >
+          Feedback analytics
+        </Link>
       </section>
     </div>
   );

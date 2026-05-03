@@ -35,11 +35,37 @@ function buildDatasetHistoryResponse(args: {
   gapsByRunInChronologicalOrder: [number, number, number];
 }): unknown {
   const [g1, g2, g3] = args.gapsByRunInChronologicalOrder;
-  function runRows(timestamp: string, gap: number, t1Mean: number, t3Mean: number) {
+  function runRows(
+    timestamp: string,
+    gap: number,
+    t1Mean: number,
+    t3Mean: number,
+  ) {
     return [
-      { timestamp, tier: "T1_LEGIT", label: "Legit", count: 25, compositeMean: t1Mean, gap },
-      { timestamp, tier: "T2_BORDERLINE", label: "Borderline", count: 25, compositeMean: 50, gap },
-      { timestamp, tier: "T3_SLOP", label: "Slop", count: 25, compositeMean: t3Mean, gap },
+      {
+        timestamp,
+        tier: "T1_LEGIT",
+        label: "Legit",
+        count: 25,
+        compositeMean: t1Mean,
+        gap,
+      },
+      {
+        timestamp,
+        tier: "T2_BORDERLINE",
+        label: "Borderline",
+        count: 25,
+        compositeMean: 50,
+        gap,
+      },
+      {
+        timestamp,
+        tier: "T3_SLOP",
+        label: "Slop",
+        count: 25,
+        compositeMean: t3Mean,
+        gap,
+      },
     ];
   }
   const rowsByTier = new Map<string, ReturnType<typeof runRows>[number][]>([
@@ -50,7 +76,11 @@ function buildDatasetHistoryResponse(args: {
   // T1/T3 means are picked so (t1 − t3) === gap, matching how /api/test/run
   // would persist things in real life (keeps the data internally consistent
   // even though the gap sparkline only reads the gap field).
-  for (const [ts, gap] of [[T1, g1], [T2, g2], [T3, g3]] as const) {
+  for (const [ts, gap] of [
+    [T1, g1],
+    [T2, g2],
+    [T3, g3],
+  ] as const) {
     for (const row of runRows(ts, gap, 60, 60 - gap)) {
       rowsByTier.get(row.tier)!.push(row);
     }

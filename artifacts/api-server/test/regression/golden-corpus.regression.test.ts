@@ -29,10 +29,10 @@
 // reports, and auto-applying snapshot updates in CI (manual confirmation
 // required, gated by UPDATE_SNAPSHOTS=1).
 
-import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { describe, it, expect } from "vitest";
 import { TEST_FIXTURE_COHORTS } from "../../src/routes/test-fixtures";
 import { analyzeWithEnginesTraced } from "../../src/lib/engines";
 
@@ -197,39 +197,35 @@ describe("Task #638: scoring regression golden corpus", () => {
   });
 
   for (const entry of corpus) {
-    it(
-      `${entry.id}: tier + score band + expected signals hold`,
-      () => {
-        const { composite, firedSignals } = runPipeline(
-          entry.text,
-          entry.claimedCwes,
-        );
-        const tier = compositeToCorpusTier(composite);
+    it(`${entry.id}: tier + score band + expected signals hold`, () => {
+      const { composite, firedSignals } = runPipeline(
+        entry.text,
+        entry.claimedCwes,
+      );
+      const tier = compositeToCorpusTier(composite);
 
-        // (a) tier matches exactly — the headline regression guard.
-        expect(
-          tier,
-          `tier flip on ${entry.id}: expected ${entry.expectedTier}, got ${tier} (composite=${composite})`,
-        ).toBe(entry.expectedTier);
+      // (a) tier matches exactly — the headline regression guard.
+      expect(
+        tier,
+        `tier flip on ${entry.id}: expected ${entry.expectedTier}, got ${tier} (composite=${composite})`,
+      ).toBe(entry.expectedTier);
 
-        // (b) composite stays inside the recorded ±3 band.
-        expect(
-          composite,
-          `score drift on ${entry.id}: composite=${composite}, band=[${entry.expectedScoreRange[0]}, ${entry.expectedScoreRange[1]}]`,
-        ).toBeGreaterThanOrEqual(entry.expectedScoreRange[0]);
-        expect(composite).toBeLessThanOrEqual(entry.expectedScoreRange[1]);
+      // (b) composite stays inside the recorded ±3 band.
+      expect(
+        composite,
+        `score drift on ${entry.id}: composite=${composite}, band=[${entry.expectedScoreRange[0]}, ${entry.expectedScoreRange[1]}]`,
+      ).toBeGreaterThanOrEqual(entry.expectedScoreRange[0]);
+      expect(composite).toBeLessThanOrEqual(entry.expectedScoreRange[1]);
 
-        // (c) every expected signal subset still fires.
-        const missing = entry.expectedSignals.filter(
-          (s) => !firedSignals.includes(s),
-        );
-        expect(
-          missing,
-          `${entry.id} stopped firing expected signals: ${missing.join(", ")}`,
-        ).toEqual([]);
-      },
-      20_000,
-    );
+      // (c) every expected signal subset still fires.
+      const missing = entry.expectedSignals.filter(
+        (s) => !firedSignals.includes(s),
+      );
+      expect(
+        missing,
+        `${entry.id} stopped firing expected signals: ${missing.join(", ")}`,
+      ).toEqual([]);
+    }, 20_000);
   }
 
   // Soft drift indicator: snapshot divergence inside the band is logged
@@ -245,8 +241,9 @@ describe("Task #638: scoring regression golden corpus", () => {
       missingFromSnap,
       "corpus entries missing from snapshot (run UPDATE_SNAPSHOTS=1)",
     ).toEqual([]);
-    expect(orphanInSnap, "orphan snapshot entries (run UPDATE_SNAPSHOTS=1)").toEqual(
-      [],
-    );
+    expect(
+      orphanInSnap,
+      "orphan snapshot entries (run UPDATE_SNAPSHOTS=1)",
+    ).toEqual([]);
   });
 });

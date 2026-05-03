@@ -1,6 +1,10 @@
 import { createHash } from "crypto";
 import { registerCvePublicationDate } from "./triage-recommendation";
-import { persistentCacheGet, persistentCacheSet, type TtlCategory } from "./cache-service";
+import {
+  persistentCacheGet,
+  persistentCacheSet,
+  type TtlCategory,
+} from "./cache-service";
 import type { VerificationMode } from "./engines/avri/families";
 
 export interface ActiveVerificationOptions {
@@ -67,7 +71,9 @@ function resetCacheTracker(): void {
 }
 
 function contentCacheKey(prefix: string, text: string): string {
-  return prefix + ":" + createHash("sha256").update(text).digest("hex").slice(0, 16);
+  return (
+    prefix + ":" + createHash("sha256").update(text).digest("hex").slice(0, 16)
+  );
 }
 
 const KNOWN_PROJECTS: Record<string, string> = {
@@ -113,10 +119,14 @@ const KNOWN_PROJECTS: Record<string, string> = {
   bootstrap: "twbs/bootstrap",
 };
 
-const GITHUB_URL_RE = /(?:https?:\/\/)?github\.com\/([a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+)/g;
-const GITLAB_URL_RE = /(?:https?:\/\/)?gitlab\.com\/([a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+)/g;
-const NPM_PACKAGE_RE = /(?:npm\s+(?:install|i)\s+|require\s*\(\s*['"]|from\s+['"])(@?[a-zA-Z0-9][\w./-]*)/g;
-const PYPI_PACKAGE_RE = /(?:pip\s+install\s+|import\s+|from\s+)([a-zA-Z0-9][\w.-]*)/g;
+const GITHUB_URL_RE =
+  /(?:https?:\/\/)?github\.com\/([a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+)/g;
+const GITLAB_URL_RE =
+  /(?:https?:\/\/)?gitlab\.com\/([a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+)/g;
+const NPM_PACKAGE_RE =
+  /(?:npm\s+(?:install|i)\s+|require\s*\(\s*['"]|from\s+['"])(@?[a-zA-Z0-9][\w./-]*)/g;
+const PYPI_PACKAGE_RE =
+  /(?:pip\s+install\s+|import\s+|from\s+)([a-zA-Z0-9][\w.-]*)/g;
 
 export function detectProjects(text: string): DetectedProject[] {
   const projects: DetectedProject[] = [];
@@ -129,7 +139,11 @@ export function detectProjects(text: string): DetectedProject[] {
     const slug = m[1].replace(/\.git$/, "").replace(/\/+$/, "");
     if (!seen.has(slug)) {
       seen.add(slug);
-      projects.push({ name: slug.split("/")[1], repoSlug: slug, source: "github_url" });
+      projects.push({
+        name: slug.split("/")[1],
+        repoSlug: slug,
+        source: "github_url",
+      });
     }
   }
 
@@ -138,7 +152,11 @@ export function detectProjects(text: string): DetectedProject[] {
     const slug = m[1].replace(/\.git$/, "").replace(/\/+$/, "");
     if (!seen.has(slug)) {
       seen.add(slug);
-      projects.push({ name: slug.split("/")[1], repoSlug: slug, source: "gitlab_url" });
+      projects.push({
+        name: slug.split("/")[1],
+        repoSlug: slug,
+        source: "gitlab_url",
+      });
     }
   }
 
@@ -148,7 +166,8 @@ export function detectProjects(text: string): DetectedProject[] {
   // package's repo and tag the project as github_url so downstream
   // verification counts it under referenced_in_report (not search_fallback).
   // Bare package mentions without a version stay as known_project (fallback).
-  const VERSION_NEAR = /(?:v?\d+\.\d+(?:\.\d+)?(?:[-_a-zA-Z0-9]+)?|version\s+\d+|==\s*\d+\.\d+|\d+\.\d+\s*[–-]\s*\d+\.\d+)/i;
+  const VERSION_NEAR =
+    /(?:v?\d+\.\d+(?:\.\d+)?(?:[-_a-zA-Z0-9]+)?|version\s+\d+|==\s*\d+\.\d+|\d+\.\d+\s*[–-]\s*\d+\.\d+)/i;
   const lower = text.toLowerCase();
   for (const [name, slug] of Object.entries(KNOWN_PROJECTS)) {
     if (seen.has(slug)) continue;
@@ -183,8 +202,60 @@ export function detectProjects(text: string): DetectedProject[] {
   const pypiRe = new RegExp(PYPI_PACKAGE_RE.source, "g");
   while ((m = pypiRe.exec(text)) !== null) {
     const pkg = m[1].trim();
-    const PYTHON_STDLIB = new Set(["os", "sys", "re", "json", "time", "datetime", "math", "random", "io", "typing", "collections", "itertools", "functools", "pathlib", "subprocess", "socket", "http", "urllib", "hashlib", "base64", "struct", "copy", "enum", "abc", "logging", "unittest", "argparse", "csv", "xml", "html", "string", "textwrap", "shutil", "glob", "tempfile", "threading", "multiprocessing", "asyncio", "contextlib", "dataclasses", "inspect", "traceback", "warnings", "signal", "ctypes"]);
-    if (pkg && !seen.has(`pypi:${pkg}`) && pkg.length > 1 && pkg.length <= 100 && !PYTHON_STDLIB.has(pkg.toLowerCase())) {
+    const PYTHON_STDLIB = new Set([
+      "os",
+      "sys",
+      "re",
+      "json",
+      "time",
+      "datetime",
+      "math",
+      "random",
+      "io",
+      "typing",
+      "collections",
+      "itertools",
+      "functools",
+      "pathlib",
+      "subprocess",
+      "socket",
+      "http",
+      "urllib",
+      "hashlib",
+      "base64",
+      "struct",
+      "copy",
+      "enum",
+      "abc",
+      "logging",
+      "unittest",
+      "argparse",
+      "csv",
+      "xml",
+      "html",
+      "string",
+      "textwrap",
+      "shutil",
+      "glob",
+      "tempfile",
+      "threading",
+      "multiprocessing",
+      "asyncio",
+      "contextlib",
+      "dataclasses",
+      "inspect",
+      "traceback",
+      "warnings",
+      "signal",
+      "ctypes",
+    ]);
+    if (
+      pkg &&
+      !seen.has(`pypi:${pkg}`) &&
+      pkg.length > 1 &&
+      pkg.length <= 100 &&
+      !PYTHON_STDLIB.has(pkg.toLowerCase())
+    ) {
       seen.add(`pypi:${pkg}`);
       projects.push({ name: pkg, repoSlug: pkg, source: "pypi_package" });
     }
@@ -194,16 +265,63 @@ export function detectProjects(text: string): DetectedProject[] {
 }
 
 const COMMON_STDLIB = new Set([
-  "main", "init", "setup", "test", "run", "start", "stop", "open", "close",
-  "read", "write", "print", "println", "printf", "sprintf", "log", "error",
-  "exit", "return", "break", "continue", "if", "else", "for", "while",
-  "switch", "case", "try", "catch", "throw", "new", "delete", "sizeof",
-  "typeof", "instanceof", "import", "export", "require", "include",
-  "malloc", "free", "realloc", "calloc", "memcpy", "memset", "strlen",
-  "strcmp", "strcpy", "strcat", "atoi", "atof",
+  "main",
+  "init",
+  "setup",
+  "test",
+  "run",
+  "start",
+  "stop",
+  "open",
+  "close",
+  "read",
+  "write",
+  "print",
+  "println",
+  "printf",
+  "sprintf",
+  "log",
+  "error",
+  "exit",
+  "return",
+  "break",
+  "continue",
+  "if",
+  "else",
+  "for",
+  "while",
+  "switch",
+  "case",
+  "try",
+  "catch",
+  "throw",
+  "new",
+  "delete",
+  "sizeof",
+  "typeof",
+  "instanceof",
+  "import",
+  "export",
+  "require",
+  "include",
+  "malloc",
+  "free",
+  "realloc",
+  "calloc",
+  "memcpy",
+  "memset",
+  "strlen",
+  "strcmp",
+  "strcpy",
+  "strcat",
+  "atoi",
+  "atof",
 ]);
 
-function extractCodeReferences(text: string): { functions: string[]; filePaths: string[] } {
+function extractCodeReferences(text: string): {
+  functions: string[];
+  filePaths: string[];
+} {
   const functions: string[] = [];
   const filePaths: string[] = [];
   const seenFns = new Set<string>();
@@ -220,14 +338,19 @@ function extractCodeReferences(text: string): { functions: string[]; filePaths: 
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
       const fn = m[1];
-      if (!COMMON_STDLIB.has(fn.toLowerCase()) && !seenFns.has(fn) && fn.length <= 80) {
+      if (
+        !COMMON_STDLIB.has(fn.toLowerCase()) &&
+        !seenFns.has(fn) &&
+        fn.length <= 80
+      ) {
         seenFns.add(fn);
         functions.push(fn);
       }
     }
   }
 
-  const filePathRe = /(?:^|\s|`|'|"|\/)((?:[a-zA-Z0-9_.-]+\/){1,8}[a-zA-Z0-9_.-]+\.[a-zA-Z]{1,6})(?:\s|`|'|"|:|$|,|\))/gm;
+  const filePathRe =
+    /(?:^|\s|`|'|"|\/)((?:[a-zA-Z0-9_.-]+\/){1,8}[a-zA-Z0-9_.-]+\.[a-zA-Z]{1,6})(?:\s|`|'|"|:|$|,|\))/gm;
   let pm: RegExpExecArray | null;
   while ((pm = filePathRe.exec(text)) !== null) {
     const fp = pm[1];
@@ -237,7 +360,10 @@ function extractCodeReferences(text: string): { functions: string[]; filePaths: 
     }
   }
 
-  return { functions: functions.slice(0, 20), filePaths: filePaths.slice(0, 20) };
+  return {
+    functions: functions.slice(0, 20),
+    filePaths: filePaths.slice(0, 20),
+  };
 }
 
 type GhResult = { ok: boolean; status: number; data?: unknown };
@@ -250,7 +376,9 @@ function classifyGithubTtl(url: string): TtlCategory {
   return "mutable";
 }
 
-async function githubFetch(url: string): Promise<GhResult & { cacheSource?: "l1" | "db" | "fresh" }> {
+async function githubFetch(
+  url: string,
+): Promise<GhResult & { cacheSource?: "l1" | "db" | "fresh" }> {
   const cacheKey = "gh:" + url;
   const cached = await persistentCacheGet<GhResult>(cacheKey);
   if (cached) {
@@ -432,11 +560,18 @@ interface NvdVulnerability {
   };
 }
 
-type NvdResult = { found: boolean; description?: string; published?: string; error?: boolean; cacheSource?: "l1" | "db" | "fresh" };
+type NvdResult = {
+  found: boolean;
+  description?: string;
+  published?: string;
+  error?: boolean;
+  cacheSource?: "l1" | "db" | "fresh";
+};
 
 async function nvdFetch(cveId: string): Promise<NvdResult> {
   const cacheKey = "nvd:" + cveId;
-  const cached = await persistentCacheGet<Omit<NvdResult, "cacheSource">>(cacheKey);
+  const cached =
+    await persistentCacheGet<Omit<NvdResult, "cacheSource">>(cacheKey);
   if (cached) {
     cacheTracker[cached.source]++;
     return { ...cached.value, cacheSource: cached.source };
@@ -463,7 +598,9 @@ async function nvdFetch(cveId: string): Promise<NvdResult> {
       return { found: false, error: true, cacheSource: "fresh" };
     }
 
-    const data = (await resp.json()) as { vulnerabilities?: NvdVulnerability[] };
+    const data = (await resp.json()) as {
+      vulnerabilities?: NvdVulnerability[];
+    };
     const vulns = data.vulnerabilities ?? [];
     if (vulns.length === 0) {
       const result = { found: false };
@@ -472,7 +609,8 @@ async function nvdFetch(cveId: string): Promise<NvdResult> {
       return { ...result, cacheSource: "fresh" };
     }
 
-    const desc = vulns[0]?.cve?.descriptions?.find((d) => d.lang === "en")?.value ?? "";
+    const desc =
+      vulns[0]?.cve?.descriptions?.find((d) => d.lang === "en")?.value ?? "";
     const published = vulns[0]?.cve?.published ?? undefined;
     const result = { found: true, description: desc, published };
     await persistentCacheSet(cacheKey, result, "nvd");
@@ -484,10 +622,17 @@ async function nvdFetch(cveId: string): Promise<NvdResult> {
   }
 }
 
-function computePhraseSimilarity(reportText: string, nvdDescription: string): number {
+function computePhraseSimilarity(
+  reportText: string,
+  nvdDescription: string,
+): number {
   if (!nvdDescription || nvdDescription.length < 20) return 0;
 
-  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .trim();
   const reportNorm = normalize(reportText);
   const nvdNorm = normalize(nvdDescription);
 
@@ -585,7 +730,9 @@ async function verifyCveReferences(text: string): Promise<VerificationCheck[]> {
       if (nvdResult.published) {
         registerCvePublicationDate(cveId, nvdResult.published);
       }
-      const similarity = nvdResult.description ? computePhraseSimilarity(text, nvdResult.description) : 0;
+      const similarity = nvdResult.description
+        ? computePhraseSimilarity(text, nvdResult.description)
+        : 0;
 
       if (similarity > 30) {
         checks.push({
@@ -623,22 +770,41 @@ const TEXTBOOK_PAYLOADS = [
 ];
 
 const PLACEHOLDER_DOMAINS_SET = new Set([
-  "example.com", "example.org", "example.net", "target.com",
-  "vulnerable-server.com", "vulnerable-app.com", "victim.com",
-  "attacker.com", "evil.com", "malicious.com", "test.com",
-  "testsite.com", "yoursite.com", "yourapp.com", "yourdomain.com",
-  "company.com", "acme.com", "foo.com", "bar.com", "webapp.com",
-  "myapp.com", "site.com",
+  "example.com",
+  "example.org",
+  "example.net",
+  "target.com",
+  "vulnerable-server.com",
+  "vulnerable-app.com",
+  "victim.com",
+  "attacker.com",
+  "evil.com",
+  "malicious.com",
+  "test.com",
+  "testsite.com",
+  "yoursite.com",
+  "yourapp.com",
+  "yourdomain.com",
+  "company.com",
+  "acme.com",
+  "foo.com",
+  "bar.com",
+  "webapp.com",
+  "myapp.com",
+  "site.com",
 ]);
 
 function checkPocPlausibility(text: string): VerificationCheck[] {
   const checks: VerificationCheck[] = [];
 
-  const curlWgetBlocks = text.match(/(?:curl|wget|python|ruby|perl)\s+[^\n]{10,}/gi) ?? [];
+  const curlWgetBlocks =
+    text.match(/(?:curl|wget|python|ruby|perl)\s+[^\n]{10,}/gi) ?? [];
 
   for (const cmd of curlWgetBlocks.slice(0, 10)) {
     const cmdLower = cmd.toLowerCase();
-    const hasPlaceholderDomain = [...PLACEHOLDER_DOMAINS_SET].some((d) => cmdLower.includes(d));
+    const hasPlaceholderDomain = [...PLACEHOLDER_DOMAINS_SET].some((d) =>
+      cmdLower.includes(d),
+    );
     const hasTextbookPayload = TEXTBOOK_PAYLOADS.some((p) => p.test(cmd));
 
     if (hasPlaceholderDomain && hasTextbookPayload) {
@@ -646,13 +812,15 @@ function checkPocPlausibility(text: string): VerificationCheck[] {
         type: "poc_placeholder_textbook",
         target: cmd.slice(0, 100),
         result: "warning",
-        detail: "PoC combines a placeholder domain with a textbook payload — likely templated, not from real testing",
+        detail:
+          "PoC combines a placeholder domain with a textbook payload — likely templated, not from real testing",
         weight: 12,
       });
     }
   }
 
-  const httpResponseBlocks = text.match(/HTTP\/[\d.]+\s+\d{3}[\s\S]*?(?:\n\n|\r\n\r\n|$)/g) ?? [];
+  const httpResponseBlocks =
+    text.match(/HTTP\/[\d.]+\s+\d{3}[\s\S]*?(?:\n\n|\r\n\r\n|$)/g) ?? [];
 
   for (const block of httpResponseBlocks.slice(0, 5)) {
     const hasDate = /^date:\s/im.test(block);
@@ -665,7 +833,8 @@ function checkPocPlausibility(text: string): VerificationCheck[] {
         type: "poc_fabricated_response",
         target: block.slice(0, 80),
         result: "warning",
-        detail: "HTTP response lacks realistic headers (Date, Server, Content-Length) — possibly fabricated",
+        detail:
+          "HTTP response lacks realistic headers (Date, Server, Content-Length) — possibly fabricated",
         weight: 10,
       });
     }
@@ -700,7 +869,10 @@ function computeVerificationScore(checks: VerificationCheck[]): number {
   return score;
 }
 
-function buildTriageNotes(checks: VerificationCheck[], projects: DetectedProject[]): string[] {
+function buildTriageNotes(
+  checks: VerificationCheck[],
+  projects: DetectedProject[],
+): string[] {
   const notes: string[] = [];
 
   const verified = checks.filter((c) => c.result === "verified");
@@ -709,36 +881,38 @@ function buildTriageNotes(checks: VerificationCheck[], projects: DetectedProject
 
   if (verified.length > 0) {
     notes.push(
-      `${verified.length} reference(s) verified against external sources — indicates real research.`
+      `${verified.length} reference(s) verified against external sources — indicates real research.`,
     );
   }
 
   if (notFound.length > 0) {
     const targets = notFound.map((c) => c.target).join(", ");
     notes.push(
-      `${notFound.length} reference(s) could not be verified: ${targets}. Consider asking the reporter for clarification.`
+      `${notFound.length} reference(s) could not be verified: ${targets}. Consider asking the reporter for clarification.`,
     );
   }
 
   const nvdPlag = warnings.filter((c) => c.type === "nvd_plagiarism");
   if (nvdPlag.length > 0) {
     notes.push(
-      "Report text closely matches NVD description(s) — may be a copy-paste rather than original analysis."
+      "Report text closely matches NVD description(s) — may be a copy-paste rather than original analysis.",
     );
   }
 
   const pocIssues = warnings.filter(
-    (c) => c.type === "poc_placeholder_textbook" || c.type === "poc_fabricated_response"
+    (c) =>
+      c.type === "poc_placeholder_textbook" ||
+      c.type === "poc_fabricated_response",
   );
   if (pocIssues.length > 0) {
     notes.push(
-      "PoC evidence appears templated or fabricated. Request the reporter to demonstrate against the actual target."
+      "PoC evidence appears templated or fabricated. Request the reporter to demonstrate against the actual target.",
     );
   }
 
   if (projects.length > 0 && verified.length === 0 && notFound.length === 0) {
     notes.push(
-      `Report references ${projects.map((p) => p.name).join(", ")} but no specific code references could be automatically verified.`
+      `Report references ${projects.map((p) => p.name).join(", ")} but no specific code references could be automatically verified.`,
     );
   }
 
@@ -764,7 +938,9 @@ export async function performActiveVerification(
   // by name — without this, two MANUAL_ONLY families on identical text would
   // see each other's hint copy.
   const cacheKey = contentCacheKey(
-    mode === "MANUAL_ONLY" ? `verify:${mode}:${opts.familyName ?? ""}` : `verify:${mode}`,
+    mode === "MANUAL_ONLY"
+      ? `verify:${mode}:${opts.familyName ?? ""}`
+      : `verify:${mode}`,
     text,
   );
   const cached = await persistentCacheGet<VerificationResult>(cacheKey);
@@ -776,7 +952,13 @@ export async function performActiveVerification(
       ...cached.value,
       mode: cached.value.mode ?? mode,
       familyName: cached.value.familyName ?? opts.familyName,
-      cacheMetadata: { hits: { l1: cached.source === "l1" ? 1 : 0, db: cached.source === "db" ? 1 : 0, fresh: 0 } },
+      cacheMetadata: {
+        hits: {
+          l1: cached.source === "l1" ? 1 : 0,
+          db: cached.source === "db" ? 1 : 0,
+          fresh: 0,
+        },
+      },
     };
   }
 
@@ -790,7 +972,9 @@ export async function performActiveVerification(
   // says to flag and skip automated probes. Surface a single triage hint and
   // a CVE pass — CVE existence is independent of the family and still cheap.
   if (mode === "MANUAL_ONLY") {
-    const familyLabel = opts.familyName ? `the ${opts.familyName} family` : "this CWE family";
+    const familyLabel = opts.familyName
+      ? `the ${opts.familyName} family`
+      : "this CWE family";
     allChecks.push({
       type: "manual_review_required",
       target: opts.familyName ?? "MANUAL_ONLY",
@@ -801,7 +985,9 @@ export async function performActiveVerification(
     const cveOnly = await verifyCveReferences(text);
     allChecks.push(...cveOnly);
 
-    const inScopeChecks = allChecks.filter((c) => c.source !== "search_fallback");
+    const inScopeChecks = allChecks.filter(
+      (c) => c.source !== "search_fallback",
+    );
     const score = computeVerificationScore(inScopeChecks);
     const triageNotes = [
       `Active verification skipped — ${familyLabel.replace(/^the /, "")} requires manual reproduction.`,
@@ -843,14 +1029,20 @@ export async function performActiveVerification(
   const fallbackGithubRepos = detectedProjects.filter(
     (p) => p.source === "known_project",
   );
-  const githubProjects = referencedGithubRepos.length > 0
-    ? referencedGithubRepos
-    : fallbackGithubRepos;
+  const githubProjects =
+    referencedGithubRepos.length > 0
+      ? referencedGithubRepos
+      : fallbackGithubRepos;
   const githubSourceTag: "referenced_in_report" | "search_fallback" =
-    referencedGithubRepos.length > 0 ? "referenced_in_report" : "search_fallback";
+    referencedGithubRepos.length > 0
+      ? "referenced_in_report"
+      : "search_fallback";
 
   const nonGithubProjects = detectedProjects.filter(
-    (p) => p.source === "gitlab_url" || p.source === "npm_package" || p.source === "pypi_package"
+    (p) =>
+      p.source === "gitlab_url" ||
+      p.source === "npm_package" ||
+      p.source === "pypi_package",
   );
 
   for (const project of nonGithubProjects) {
@@ -860,7 +1052,10 @@ export async function performActiveVerification(
       result: "skipped",
       detail: `Detected ${project.source.replace("_", " ")} "${project.name}" — GitHub verification not applicable`,
       weight: 0,
-      source: project.source === "gitlab_url" ? "referenced_in_report" : "search_fallback",
+      source:
+        project.source === "gitlab_url"
+          ? "referenced_in_report"
+          : "search_fallback",
     });
   }
 
@@ -868,7 +1063,11 @@ export async function performActiveVerification(
   // symbol references the report cites. Skipped for ENDPOINT-mode families
   // (XSS, IDOR, SQLi, …) where source-path verification is not the right
   // signal — those reports live or die by the URL+payload, not a file tree.
-  if (runSourceCodeChecks && githubProjects.length > 0 && (codeRefs.functions.length > 0 || codeRefs.filePaths.length > 0)) {
+  if (
+    runSourceCodeChecks &&
+    githubProjects.length > 0 &&
+    (codeRefs.functions.length > 0 || codeRefs.filePaths.length > 0)
+  ) {
     let totalGhChecks = 0;
     const MAX_TOTAL_GH_CHECKS = 5;
     for (const project of githubProjects) {
@@ -876,15 +1075,27 @@ export async function performActiveVerification(
       const remainingBudget = MAX_TOTAL_GH_CHECKS - totalGhChecks;
       const limitedRefs = {
         filePaths: codeRefs.filePaths.slice(0, remainingBudget),
-        functions: codeRefs.functions.slice(0, Math.max(0, remainingBudget - codeRefs.filePaths.length)),
+        functions: codeRefs.functions.slice(
+          0,
+          Math.max(0, remainingBudget - codeRefs.filePaths.length),
+        ),
       };
-      const ghChecks = await verifyGitHubReferences(project.repoSlug, limitedRefs, githubSourceTag);
+      const ghChecks = await verifyGitHubReferences(
+        project.repoSlug,
+        limitedRefs,
+        githubSourceTag,
+      );
       // v3.6.0 §2: Down-weight checks performed against guessed/search-fallback
       // repos: 50% of original weight. They still inform the diagnostics panel
       // but no longer drive a "report fabricated" conclusion.
-      const adjusted = githubSourceTag === "search_fallback"
-        ? ghChecks.map(c => ({ ...c, source: githubSourceTag, weight: Math.round(c.weight * 0.5) }))
-        : ghChecks.map(c => ({ ...c, source: githubSourceTag }));
+      const adjusted =
+        githubSourceTag === "search_fallback"
+          ? ghChecks.map((c) => ({
+              ...c,
+              source: githubSourceTag,
+              weight: Math.round(c.weight * 0.5),
+            }))
+          : ghChecks.map((c) => ({ ...c, source: githubSourceTag }));
       allChecks.push(...adjusted);
       totalGhChecks += ghChecks.length;
     }

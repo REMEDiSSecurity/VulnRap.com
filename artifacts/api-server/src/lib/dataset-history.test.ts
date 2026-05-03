@@ -41,12 +41,18 @@ beforeEach(async () => {
   // so the cached reviewer setting from one test (or a stray real file
   // in the repo's data dir) cannot leak into another and shift the
   // effective compaction window.
-  process.env.DATASET_HISTORY_CONFIG_PATH = path.join(tmpDir, "dataset-history-config.json");
+  process.env.DATASET_HISTORY_CONFIG_PATH = path.join(
+    tmpDir,
+    "dataset-history-config.json",
+  );
   configTesting.resetCache();
   // Task #379 — pin the stats sibling file to the same tmpdir so each
   // spec gets a clean slate (and the in-memory cache from a previous
   // spec is invalidated by the new path keying).
-  process.env.DATASET_HISTORY_STATS_PATH = path.join(tmpDir, "dataset-history-stats.json");
+  process.env.DATASET_HISTORY_STATS_PATH = path.join(
+    tmpDir,
+    "dataset-history-stats.json",
+  );
   statsTesting.resetCache();
 });
 
@@ -55,10 +61,12 @@ afterEach(async () => {
   else process.env.DATASET_HISTORY_PATH = prevPath;
   if (prevDays === undefined) delete process.env.DATASET_HISTORY_COMPACT_DAYS;
   else process.env.DATASET_HISTORY_COMPACT_DAYS = prevDays;
-  if (prevConfigPath === undefined) delete process.env.DATASET_HISTORY_CONFIG_PATH;
+  if (prevConfigPath === undefined)
+    delete process.env.DATASET_HISTORY_CONFIG_PATH;
   else process.env.DATASET_HISTORY_CONFIG_PATH = prevConfigPath;
   configTesting.resetCache();
-  if (prevStatsPath === undefined) delete process.env.DATASET_HISTORY_STATS_PATH;
+  if (prevStatsPath === undefined)
+    delete process.env.DATASET_HISTORY_STATS_PATH;
   else process.env.DATASET_HISTORY_STATS_PATH = prevStatsPath;
   statsTesting.resetCache();
   await fs.rm(tmpDir, { recursive: true, force: true });
@@ -75,9 +83,30 @@ describe("appendDatasetCohortSnapshots", () => {
     const ts1 = "2026-04-22T12:00:00.000Z";
     await appendDatasetCohortSnapshots(
       [
-        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72.4, gap: 18.2, sampleDateKey: "2026-04-22" },
-        { tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 58.1, gap: 18.2, sampleDateKey: "2026-04-22" },
-        { tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 54.2, gap: 18.2, sampleDateKey: "2026-04-22" },
+        {
+          tier: "T1_LEGIT",
+          label: "human_authentic",
+          count: 25,
+          compositeMean: 72.4,
+          gap: 18.2,
+          sampleDateKey: "2026-04-22",
+        },
+        {
+          tier: "T2_BORDERLINE",
+          label: "borderline",
+          count: 25,
+          compositeMean: 58.1,
+          gap: 18.2,
+          sampleDateKey: "2026-04-22",
+        },
+        {
+          tier: "T3_SLOP",
+          label: "ai_slop",
+          count: 25,
+          compositeMean: 54.2,
+          gap: 18.2,
+          sampleDateKey: "2026-04-22",
+        },
       ],
       ts1,
     );
@@ -85,9 +114,30 @@ describe("appendDatasetCohortSnapshots", () => {
     const ts2 = "2026-04-29T12:00:00.000Z";
     await appendDatasetCohortSnapshots(
       [
-        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70.0, gap: 14.5, sampleDateKey: "2026-04-29" },
-        { tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 56.0, gap: 14.5, sampleDateKey: "2026-04-29" },
-        { tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 55.5, gap: 14.5, sampleDateKey: "2026-04-29" },
+        {
+          tier: "T1_LEGIT",
+          label: "human_authentic",
+          count: 25,
+          compositeMean: 70.0,
+          gap: 14.5,
+          sampleDateKey: "2026-04-29",
+        },
+        {
+          tier: "T2_BORDERLINE",
+          label: "borderline",
+          count: 25,
+          compositeMean: 56.0,
+          gap: 14.5,
+          sampleDateKey: "2026-04-29",
+        },
+        {
+          tier: "T3_SLOP",
+          label: "ai_slop",
+          count: 25,
+          compositeMean: 55.5,
+          gap: 14.5,
+          sampleDateKey: "2026-04-29",
+        },
       ],
       ts2,
     );
@@ -96,15 +146,18 @@ describe("appendDatasetCohortSnapshots", () => {
     expect(file.snapshots.length).toBe(6);
     // Each row carries the run's timestamp, so the dashboard can chart
     // either the per-cohort mean or the gap directly.
-    const t1 = file.snapshots.filter(s => s.tier === "T1_LEGIT");
-    expect(t1.map(s => s.timestamp)).toEqual([ts1, ts2]);
-    expect(t1.map(s => s.compositeMean)).toEqual([72.4, 70.0]);
+    const t1 = file.snapshots.filter((s) => s.tier === "T1_LEGIT");
+    expect(t1.map((s) => s.timestamp)).toEqual([ts1, ts2]);
+    expect(t1.map((s) => s.compositeMean)).toEqual([72.4, 70.0]);
     // Task #358 — every persisted row carries the run's slice key so
     // the dashboard can mark daily-slice rotations on the trend.
-    expect(t1.map(s => s.sampleDateKey)).toEqual(["2026-04-22", "2026-04-29"]);
+    expect(t1.map((s) => s.sampleDateKey)).toEqual([
+      "2026-04-22",
+      "2026-04-29",
+    ]);
     // The gap is repeated across cohort rows of the same run so the
     // dashboard never has to join rows to render it.
-    for (const s of file.snapshots.filter(s => s.timestamp === ts2)) {
+    for (const s of file.snapshots.filter((s) => s.timestamp === ts2)) {
       expect(s.gap).toBe(14.5);
       expect(s.sampleDateKey).toBe("2026-04-29");
     }
@@ -123,22 +176,35 @@ describe("appendDatasetCohortSnapshots", () => {
     const tsOld = "2026-04-15T12:00:00.000Z";
     await appendDatasetCohortSnapshots(
       [
-        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+        {
+          tier: "T1_LEGIT",
+          label: "human_authentic",
+          count: 25,
+          compositeMean: 70,
+          gap: 18,
+        },
       ],
       tsOld,
     );
     const tsNew = "2026-04-22T12:00:00.000Z";
     await appendDatasetCohortSnapshots(
       [
-        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 19, sampleDateKey: "2026-04-22" },
+        {
+          tier: "T1_LEGIT",
+          label: "human_authentic",
+          count: 25,
+          compositeMean: 71,
+          gap: 19,
+          sampleDateKey: "2026-04-22",
+        },
       ],
       tsNew,
     );
 
     const file = await readDatasetHistory();
     expect(file.snapshots.length).toBe(2);
-    const oldRow = file.snapshots.find(s => s.timestamp === tsOld)!;
-    const newRow = file.snapshots.find(s => s.timestamp === tsNew)!;
+    const oldRow = file.snapshots.find((s) => s.timestamp === tsOld)!;
+    const newRow = file.snapshots.find((s) => s.timestamp === tsNew)!;
     expect(oldRow.sampleDateKey).toBeUndefined();
     expect(newRow.sampleDateKey).toBe("2026-04-22");
   });
@@ -150,15 +216,36 @@ describe("appendDatasetCohortSnapshots", () => {
     const ts = "2026-04-22T12:00:00.000Z";
     await appendDatasetCohortSnapshots(
       [
-        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 78.3, fixtureMean: 82.1, gap: 24.1 },
-        { tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 58.0, fixtureMean: 61.5, gap: 24.1 },
-        { tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 54.2, fixtureMean: 50.4, gap: 24.1 },
+        {
+          tier: "T1_LEGIT",
+          label: "human_authentic",
+          count: 25,
+          compositeMean: 78.3,
+          fixtureMean: 82.1,
+          gap: 24.1,
+        },
+        {
+          tier: "T2_BORDERLINE",
+          label: "borderline",
+          count: 25,
+          compositeMean: 58.0,
+          fixtureMean: 61.5,
+          gap: 24.1,
+        },
+        {
+          tier: "T3_SLOP",
+          label: "ai_slop",
+          count: 25,
+          compositeMean: 54.2,
+          fixtureMean: 50.4,
+          gap: 24.1,
+        },
       ],
       ts,
     );
 
     const file = await readDatasetHistory();
-    const byTier = new Map(file.snapshots.map(s => [s.tier, s] as const));
+    const byTier = new Map(file.snapshots.map((s) => [s.tier, s] as const));
     expect(byTier.get("T1_LEGIT")!.fixtureMean).toBe(82.1);
     expect(byTier.get("T2_BORDERLINE")!.fixtureMean).toBe(61.5);
     expect(byTier.get("T3_SLOP")!.fixtureMean).toBe(50.4);
@@ -173,7 +260,14 @@ describe("appendDatasetCohortSnapshots", () => {
     const ts = "2026-04-22T12:00:00.000Z";
     await appendDatasetCohortSnapshots(
       [
-        { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 78, fixtureMean: null, gap: 18 },
+        {
+          tier: "T1_LEGIT",
+          label: "human_authentic",
+          count: 25,
+          compositeMean: 78,
+          fixtureMean: null,
+          gap: 18,
+        },
       ],
       ts,
     );
@@ -198,8 +292,10 @@ describe("appendDatasetCohortSnapshots", () => {
     );
 
     const file = await readDatasetHistory();
-    const t1 = file.snapshots.find(s => s.tier === "T1_LEGIT" && s.timestamp === ts)!;
-    const legacy = file.snapshots.find(s => s.tier === "T2_BORDERLINE")!;
+    const t1 = file.snapshots.find(
+      (s) => s.tier === "T1_LEGIT" && s.timestamp === ts,
+    )!;
+    const legacy = file.snapshots.find((s) => s.tier === "T2_BORDERLINE")!;
     expect(t1.fixtureMean).toBeNull();
     expect(legacy.fixtureMean).toBeUndefined();
   });
@@ -227,7 +323,15 @@ describe("appendDatasetCohortSnapshots", () => {
     );
 
     await appendDatasetCohortSnapshots(
-      [{ tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 99, gap: 20 }],
+      [
+        {
+          tier: "T1_LEGIT",
+          label: "human_authentic",
+          count: 25,
+          compositeMean: 99,
+          gap: 20,
+        },
+      ],
       "2099-01-01T00:00:00.000Z",
     );
 
@@ -246,46 +350,144 @@ describe("compactSnapshots", () => {
     const recent = new Date(now.getTime() - 1 * DAY_MS);
 
     const oldDay1Iso = (h: number) =>
-      new Date(Date.UTC(
-        oldDay1.getUTCFullYear(), oldDay1.getUTCMonth(), oldDay1.getUTCDate(), h,
-      )).toISOString();
+      new Date(
+        Date.UTC(
+          oldDay1.getUTCFullYear(),
+          oldDay1.getUTCMonth(),
+          oldDay1.getUTCDate(),
+          h,
+        ),
+      ).toISOString();
     const oldDay2Iso = (h: number) =>
-      new Date(Date.UTC(
-        oldDay2.getUTCFullYear(), oldDay2.getUTCMonth(), oldDay2.getUTCDate(), h,
-      )).toISOString();
+      new Date(
+        Date.UTC(
+          oldDay2.getUTCFullYear(),
+          oldDay2.getUTCMonth(),
+          oldDay2.getUTCDate(),
+          h,
+        ),
+      ).toISOString();
 
     // Two runs on oldDay1 → 6 rows (3 cohorts × 2 runs).
     // One run on oldDay2 → 3 rows.
     // One recent run → 3 raw rows that must survive unchanged.
     const snaps: DatasetCohortSnapshot[] = [
       // oldDay1, run A (gap = 20)
-      { timestamp: oldDay1Iso(2),  tier: "T1_LEGIT",     label: "human_authentic", count: 25, compositeMean: 70, gap: 20 },
-      { timestamp: oldDay1Iso(2),  tier: "T2_BORDERLINE", label: "borderline",     count: 25, compositeMean: 58, gap: 20 },
-      { timestamp: oldDay1Iso(2),  tier: "T3_SLOP",       label: "ai_slop",        count: 25, compositeMean: 50, gap: 20 },
+      {
+        timestamp: oldDay1Iso(2),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 70,
+        gap: 20,
+      },
+      {
+        timestamp: oldDay1Iso(2),
+        tier: "T2_BORDERLINE",
+        label: "borderline",
+        count: 25,
+        compositeMean: 58,
+        gap: 20,
+      },
+      {
+        timestamp: oldDay1Iso(2),
+        tier: "T3_SLOP",
+        label: "ai_slop",
+        count: 25,
+        compositeMean: 50,
+        gap: 20,
+      },
       // oldDay1, run B (gap = 16)
-      { timestamp: oldDay1Iso(20), tier: "T1_LEGIT",     label: "human_authentic", count: 25, compositeMean: 74, gap: 16 },
-      { timestamp: oldDay1Iso(20), tier: "T2_BORDERLINE", label: "borderline",     count: 25, compositeMean: 60, gap: 16 },
-      { timestamp: oldDay1Iso(20), tier: "T3_SLOP",       label: "ai_slop",        count: 25, compositeMean: 58, gap: 16 },
+      {
+        timestamp: oldDay1Iso(20),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 74,
+        gap: 16,
+      },
+      {
+        timestamp: oldDay1Iso(20),
+        tier: "T2_BORDERLINE",
+        label: "borderline",
+        count: 25,
+        compositeMean: 60,
+        gap: 16,
+      },
+      {
+        timestamp: oldDay1Iso(20),
+        tier: "T3_SLOP",
+        label: "ai_slop",
+        count: 25,
+        compositeMean: 58,
+        gap: 16,
+      },
       // oldDay2, single run
-      { timestamp: oldDay2Iso(8),  tier: "T1_LEGIT",     label: "human_authentic", count: 25, compositeMean: 71, gap: 17 },
-      { timestamp: oldDay2Iso(8),  tier: "T2_BORDERLINE", label: "borderline",     count: 25, compositeMean: 59, gap: 17 },
-      { timestamp: oldDay2Iso(8),  tier: "T3_SLOP",       label: "ai_slop",        count: 25, compositeMean: 54, gap: 17 },
+      {
+        timestamp: oldDay2Iso(8),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 71,
+        gap: 17,
+      },
+      {
+        timestamp: oldDay2Iso(8),
+        tier: "T2_BORDERLINE",
+        label: "borderline",
+        count: 25,
+        compositeMean: 59,
+        gap: 17,
+      },
+      {
+        timestamp: oldDay2Iso(8),
+        tier: "T3_SLOP",
+        label: "ai_slop",
+        count: 25,
+        compositeMean: 54,
+        gap: 17,
+      },
       // Recent run
-      { timestamp: recent.toISOString(), tier: "T1_LEGIT",     label: "human_authentic", count: 25, compositeMean: 73, gap: 19 },
-      { timestamp: recent.toISOString(), tier: "T2_BORDERLINE", label: "borderline",     count: 25, compositeMean: 57, gap: 19 },
-      { timestamp: recent.toISOString(), tier: "T3_SLOP",       label: "ai_slop",        count: 25, compositeMean: 54, gap: 19 },
+      {
+        timestamp: recent.toISOString(),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 73,
+        gap: 19,
+      },
+      {
+        timestamp: recent.toISOString(),
+        tier: "T2_BORDERLINE",
+        label: "borderline",
+        count: 25,
+        compositeMean: 57,
+        gap: 19,
+      },
+      {
+        timestamp: recent.toISOString(),
+        tier: "T3_SLOP",
+        label: "ai_slop",
+        count: 25,
+        compositeMean: 54,
+        gap: 19,
+      },
     ];
 
     const out = compactSnapshots(snaps, now, 30);
     // 3 aggregated rows (1 per tier) for oldDay1 + 3 for oldDay2 + 3 raw recent = 9.
     expect(out.length).toBe(9);
-    const agg = out.filter(s => s.aggregated === true);
-    const raw = out.filter(s => s.aggregated !== true);
+    const agg = out.filter((s) => s.aggregated === true);
+    const raw = out.filter((s) => s.aggregated !== true);
     expect(agg.length).toBe(6);
     expect(raw.length).toBe(3);
 
     // oldDay1, T1_LEGIT bucket: weighted mean (counts equal) of 70 and 74 = 72.
-    const day1T1 = agg.find(s => s.tier === "T1_LEGIT" && s.timestamp.startsWith(oldDay1.toISOString().slice(0, 10)))!;
+    const day1T1 = agg.find(
+      (s) =>
+        s.tier === "T1_LEGIT" &&
+        s.timestamp.startsWith(oldDay1.toISOString().slice(0, 10)),
+    )!;
     expect(day1T1.timestamp.endsWith("T00:00:00.000Z")).toBe(true);
     expect(day1T1.label).toBe("human_authentic");
     expect(day1T1.compositeMean).toBeCloseTo(72, 5);
@@ -295,7 +497,11 @@ describe("compactSnapshots", () => {
     expect(day1T1.count).toBe(50);
 
     // oldDay2 single-run bucket should preserve its values exactly.
-    const day2T3 = agg.find(s => s.tier === "T3_SLOP" && s.timestamp.startsWith(oldDay2.toISOString().slice(0, 10)))!;
+    const day2T3 = agg.find(
+      (s) =>
+        s.tier === "T3_SLOP" &&
+        s.timestamp.startsWith(oldDay2.toISOString().slice(0, 10)),
+    )!;
     expect(day2T3.compositeMean).toBeCloseTo(54, 5);
     expect(day2T3.gap).toBeCloseTo(17, 5);
     expect(day2T3.count).toBe(25);
@@ -307,7 +513,7 @@ describe("compactSnapshots", () => {
     }
 
     // Output is chronologically ordered (aggregated days first, then recent).
-    const ts = out.map(s => Date.parse(s.timestamp));
+    const ts = out.map((s) => Date.parse(s.timestamp));
     expect(ts).toEqual([...ts].sort((a, b) => a - b));
   });
 
@@ -318,25 +524,60 @@ describe("compactSnapshots", () => {
     const now = new Date("2026-04-22T12:00:00.000Z");
     const oldDay = new Date(now.getTime() - 60 * DAY_MS);
     const oldIso = (h: number) =>
-      new Date(Date.UTC(
-        oldDay.getUTCFullYear(), oldDay.getUTCMonth(), oldDay.getUTCDate(), h,
-      )).toISOString();
+      new Date(
+        Date.UTC(
+          oldDay.getUTCFullYear(),
+          oldDay.getUTCMonth(),
+          oldDay.getUTCDate(),
+          h,
+        ),
+      ).toISOString();
 
     const snaps: DatasetCohortSnapshot[] = [
       // Two T1 runs on the same UTC day with different fixture means but
       // equal sample counts — straight unweighted mean of the fixture
       // means.
-      { timestamp: oldIso(2),  tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, fixtureMean: 80, gap: 18 },
-      { timestamp: oldIso(20), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 74, fixtureMean: 84, gap: 18 },
+      {
+        timestamp: oldIso(2),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 70,
+        fixtureMean: 80,
+        gap: 18,
+      },
+      {
+        timestamp: oldIso(20),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 74,
+        fixtureMean: 84,
+        gap: 18,
+      },
       // Two T2 runs that lack fixtureMean entirely — stays null on the
       // rolled-up row instead of being silently turned into 0.
-      { timestamp: oldIso(2),  tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 58, gap: 18 },
-      { timestamp: oldIso(20), tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 60, gap: 18 },
+      {
+        timestamp: oldIso(2),
+        tier: "T2_BORDERLINE",
+        label: "borderline",
+        count: 25,
+        compositeMean: 58,
+        gap: 18,
+      },
+      {
+        timestamp: oldIso(20),
+        tier: "T2_BORDERLINE",
+        label: "borderline",
+        count: 25,
+        compositeMean: 60,
+        gap: 18,
+      },
     ];
 
     const out = compactSnapshots(snaps, now, 30);
-    const t1 = out.find(s => s.tier === "T1_LEGIT")!;
-    const t2 = out.find(s => s.tier === "T2_BORDERLINE")!;
+    const t1 = out.find((s) => s.tier === "T1_LEGIT")!;
+    const t2 = out.find((s) => s.tier === "T2_BORDERLINE")!;
     expect(t1.fixtureMean).toBeCloseTo(82, 5);
     expect(t2.fixtureMean).toBeNull();
   });
@@ -345,13 +586,32 @@ describe("compactSnapshots", () => {
     const now = new Date("2026-04-22T12:00:00.000Z");
     const oldDay = new Date(now.getTime() - 60 * DAY_MS);
     const oldIso = (h: number) =>
-      new Date(Date.UTC(
-        oldDay.getUTCFullYear(), oldDay.getUTCMonth(), oldDay.getUTCDate(), h,
-      )).toISOString();
+      new Date(
+        Date.UTC(
+          oldDay.getUTCFullYear(),
+          oldDay.getUTCMonth(),
+          oldDay.getUTCDate(),
+          h,
+        ),
+      ).toISOString();
 
     const snaps: DatasetCohortSnapshot[] = [
-      { timestamp: oldIso(1), tier: "T1_LEGIT", label: "human_authentic", count: 0, compositeMean: null, gap: null },
-      { timestamp: oldIso(5), tier: "T1_LEGIT", label: "human_authentic", count: 0, compositeMean: null, gap: null },
+      {
+        timestamp: oldIso(1),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 0,
+        compositeMean: null,
+        gap: null,
+      },
+      {
+        timestamp: oldIso(5),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 0,
+        compositeMean: null,
+        gap: null,
+      },
     ];
     const out = compactSnapshots(snaps, now, 30);
     expect(out.length).toBe(1);
@@ -386,17 +646,46 @@ describe("compactSnapshots", () => {
     const now = new Date("2026-04-22T12:00:00.000Z");
     const oldDay = new Date(now.getTime() - 60 * DAY_MS);
     const oldIso = (h: number) =>
-      new Date(Date.UTC(
-        oldDay.getUTCFullYear(), oldDay.getUTCMonth(), oldDay.getUTCDate(), h,
-      )).toISOString();
+      new Date(
+        Date.UTC(
+          oldDay.getUTCFullYear(),
+          oldDay.getUTCMonth(),
+          oldDay.getUTCDate(),
+          h,
+        ),
+      ).toISOString();
     const oldDayKey = oldDay.toISOString().slice(0, 10);
 
     const snaps: DatasetCohortSnapshot[] = [
       // First run that day landed before the slice rotated to the same UTC day.
-      { timestamp: oldIso(1), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18, sampleDateKey: "2026-02-20" },
+      {
+        timestamp: oldIso(1),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 70,
+        gap: 18,
+        sampleDateKey: "2026-02-20",
+      },
       // Later runs that day saw the rotated slice.
-      { timestamp: oldIso(10), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 18, sampleDateKey: oldDayKey },
-      { timestamp: oldIso(20), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 74, gap: 18, sampleDateKey: oldDayKey },
+      {
+        timestamp: oldIso(10),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 72,
+        gap: 18,
+        sampleDateKey: oldDayKey,
+      },
+      {
+        timestamp: oldIso(20),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 74,
+        gap: 18,
+        sampleDateKey: oldDayKey,
+      },
     ];
     const out = compactSnapshots(snaps, now, 30);
     expect(out.length).toBe(1);
@@ -412,13 +701,32 @@ describe("compactSnapshots", () => {
     const now = new Date("2026-04-22T12:00:00.000Z");
     const oldDay = new Date(now.getTime() - 60 * DAY_MS);
     const oldIso = (h: number) =>
-      new Date(Date.UTC(
-        oldDay.getUTCFullYear(), oldDay.getUTCMonth(), oldDay.getUTCDate(), h,
-      )).toISOString();
+      new Date(
+        Date.UTC(
+          oldDay.getUTCFullYear(),
+          oldDay.getUTCMonth(),
+          oldDay.getUTCDate(),
+          h,
+        ),
+      ).toISOString();
 
     const snaps: DatasetCohortSnapshot[] = [
-      { timestamp: oldIso(1), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
-      { timestamp: oldIso(5), tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 18 },
+      {
+        timestamp: oldIso(1),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 70,
+        gap: 18,
+      },
+      {
+        timestamp: oldIso(5),
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 72,
+        gap: 18,
+      },
     ];
     const out = compactSnapshots(snaps, now, 30);
     expect(out.length).toBe(1);
@@ -465,9 +773,30 @@ describe("appendDatasetCohortSnapshots — compaction integration", () => {
       for (let run = 0; run < 4; run++) {
         const ts = new Date(base + run * 60 * 60 * 1000).toISOString();
         seed.push(
-          { timestamp: ts, tier: "T1_LEGIT",     label: "human_authentic", count: 25, compositeMean: 70 + run, gap: 18 },
-          { timestamp: ts, tier: "T2_BORDERLINE", label: "borderline",     count: 25, compositeMean: 58 + run, gap: 18 },
-          { timestamp: ts, tier: "T3_SLOP",       label: "ai_slop",        count: 25, compositeMean: 52 + run, gap: 18 },
+          {
+            timestamp: ts,
+            tier: "T1_LEGIT",
+            label: "human_authentic",
+            count: 25,
+            compositeMean: 70 + run,
+            gap: 18,
+          },
+          {
+            timestamp: ts,
+            tier: "T2_BORDERLINE",
+            label: "borderline",
+            count: 25,
+            compositeMean: 58 + run,
+            gap: 18,
+          },
+          {
+            timestamp: ts,
+            tier: "T3_SLOP",
+            label: "ai_slop",
+            count: 25,
+            compositeMean: 52 + run,
+            gap: 18,
+          },
         );
       }
     }
@@ -479,14 +808,32 @@ describe("appendDatasetCohortSnapshots — compaction integration", () => {
 
     // Fresh "today" append — triggers compaction.
     await appendDatasetCohortSnapshots([
-      { tier: "T1_LEGIT",     label: "human_authentic", count: 25, compositeMean: 71, gap: 17 },
-      { tier: "T2_BORDERLINE", label: "borderline",     count: 25, compositeMean: 59, gap: 17 },
-      { tier: "T3_SLOP",       label: "ai_slop",        count: 25, compositeMean: 54, gap: 17 },
+      {
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 71,
+        gap: 17,
+      },
+      {
+        tier: "T2_BORDERLINE",
+        label: "borderline",
+        count: 25,
+        compositeMean: 59,
+        gap: 17,
+      },
+      {
+        tier: "T3_SLOP",
+        label: "ai_slop",
+        count: 25,
+        compositeMean: 54,
+        gap: 17,
+      },
     ]);
 
     const file = await readDatasetHistory();
-    const aggregated = file.snapshots.filter(s => s.aggregated === true);
-    const raw = file.snapshots.filter(s => s.aggregated !== true);
+    const aggregated = file.snapshots.filter((s) => s.aggregated === true);
+    const raw = file.snapshots.filter((s) => s.aggregated !== true);
 
     // 10 distinct old days × 3 tiers = 30 daily aggregates after compaction
     // (well below the original 10 × 4 × 3 = 120 raw rows).
@@ -500,14 +847,15 @@ describe("appendDatasetCohortSnapshots — compaction integration", () => {
     for (const a of aggregated) {
       expect(a.count).toBe(100);
       // Equal counts → unweighted mean of run values 0..3 added to the tier base.
-      const base = a.tier === "T1_LEGIT" ? 70 : a.tier === "T2_BORDERLINE" ? 58 : 52;
+      const base =
+        a.tier === "T1_LEGIT" ? 70 : a.tier === "T2_BORDERLINE" ? 58 : 52;
       expect(a.compositeMean).toBeCloseTo(base + 1.5, 5);
       expect(a.gap).toBeCloseTo(18, 5);
       expect(a.timestamp.endsWith("T00:00:00.000Z")).toBe(true);
     }
 
     // Aggregated rows come before the raw recent rows chronologically.
-    const ts = file.snapshots.map(s => Date.parse(s.timestamp));
+    const ts = file.snapshots.map((s) => Date.parse(s.timestamp));
     expect(ts).toEqual([...ts].sort((a, b) => a - b));
   });
 });
@@ -521,7 +869,13 @@ describe("appendDatasetCohortSnapshots — compaction stats (Task #379)", () => 
     expect(readDatasetCompactionStats()).toBeNull();
     const before = Date.now();
     await appendDatasetCohortSnapshots([
-      { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+      {
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 70,
+        gap: 18,
+      },
     ]);
     const after = Date.now();
     const stats = readDatasetCompactionStats();
@@ -551,9 +905,30 @@ describe("appendDatasetCohortSnapshots — compaction stats (Task #379)", () => 
       for (let run = 0; run < 4; run++) {
         const ts = new Date(base + run * 60 * 60 * 1000).toISOString();
         seed.push(
-          { timestamp: ts, tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
-          { timestamp: ts, tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 58, gap: 18 },
-          { timestamp: ts, tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 52, gap: 18 },
+          {
+            timestamp: ts,
+            tier: "T1_LEGIT",
+            label: "human_authentic",
+            count: 25,
+            compositeMean: 70,
+            gap: 18,
+          },
+          {
+            timestamp: ts,
+            tier: "T2_BORDERLINE",
+            label: "borderline",
+            count: 25,
+            compositeMean: 58,
+            gap: 18,
+          },
+          {
+            timestamp: ts,
+            tier: "T3_SLOP",
+            label: "ai_slop",
+            count: 25,
+            compositeMean: 52,
+            gap: 18,
+          },
         );
       }
     }
@@ -564,7 +939,13 @@ describe("appendDatasetCohortSnapshots — compaction stats (Task #379)", () => 
     );
 
     await appendDatasetCohortSnapshots([
-      { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 17 },
+      {
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 71,
+        gap: 17,
+      },
     ]);
 
     const stats = readDatasetCompactionStats();
@@ -576,27 +957,46 @@ describe("appendDatasetCohortSnapshots — compaction stats (Task #379)", () => 
 
   it("overwrites the previous outcome on each successive append so the dashboard always sees the freshest pass", async () => {
     await appendDatasetCohortSnapshots([
-      { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+      {
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 70,
+        gap: 18,
+      },
     ]);
     const first = readDatasetCompactionStats();
     expect(first).not.toBeNull();
     // Second append on a quiet runner — still a 0-row pass, but the
     // timestamp must move forward so reviewers can tell the routine is
     // ticking rather than stuck on a stale value.
-    await new Promise(r => setTimeout(r, 5));
+    await new Promise((r) => setTimeout(r, 5));
     await appendDatasetCohortSnapshots([
-      { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 17 },
+      {
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 71,
+        gap: 17,
+      },
     ]);
     const second = readDatasetCompactionStats();
     expect(second).not.toBeNull();
     expect(second!.lastRemovedCount).toBe(0);
-    expect(Date.parse(second!.lastCompactedAt))
-      .toBeGreaterThanOrEqual(Date.parse(first!.lastCompactedAt));
+    expect(Date.parse(second!.lastCompactedAt)).toBeGreaterThanOrEqual(
+      Date.parse(first!.lastCompactedAt),
+    );
   });
 
   it("persists the stats to the sibling file (not the dataset-history JSON) so concurrent writers can't race each other", async () => {
     await appendDatasetCohortSnapshots([
-      { tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+      {
+        tier: "T1_LEGIT",
+        label: "human_authentic",
+        count: 25,
+        compositeMean: 70,
+        gap: 18,
+      },
     ]);
     const statsFile = process.env.DATASET_HISTORY_STATS_PATH!;
     const raw = await fs.readFile(statsFile, "utf-8");
@@ -610,7 +1010,10 @@ describe("appendDatasetCohortSnapshots — compaction stats (Task #379)", () => 
     expect(Number.isFinite(Date.parse(parsed.lastCompactedAt))).toBe(true);
     // The dataset-history JSON itself must not have grown a
     // compaction-stats key (the two writers are deliberately split).
-    const historyRaw = await fs.readFile(process.env.DATASET_HISTORY_PATH!, "utf-8");
+    const historyRaw = await fs.readFile(
+      process.env.DATASET_HISTORY_PATH!,
+      "utf-8",
+    );
     expect(historyRaw).not.toMatch(/lastCompactedAt/);
   });
 });
@@ -618,11 +1021,17 @@ describe("appendDatasetCohortSnapshots — compaction stats (Task #379)", () => 
 describe("compactAfterDays env override", () => {
   it("falls back to the built-in default when the env var is missing or invalid", () => {
     delete process.env.DATASET_HISTORY_COMPACT_DAYS;
-    expect(__testing.compactAfterDays()).toBe(__testing.DEFAULT_COMPACT_AFTER_DAYS);
+    expect(__testing.compactAfterDays()).toBe(
+      __testing.DEFAULT_COMPACT_AFTER_DAYS,
+    );
     process.env.DATASET_HISTORY_COMPACT_DAYS = "not-a-number";
-    expect(__testing.compactAfterDays()).toBe(__testing.DEFAULT_COMPACT_AFTER_DAYS);
+    expect(__testing.compactAfterDays()).toBe(
+      __testing.DEFAULT_COMPACT_AFTER_DAYS,
+    );
     process.env.DATASET_HISTORY_COMPACT_DAYS = "0";
-    expect(__testing.compactAfterDays()).toBe(__testing.DEFAULT_COMPACT_AFTER_DAYS);
+    expect(__testing.compactAfterDays()).toBe(
+      __testing.DEFAULT_COMPACT_AFTER_DAYS,
+    );
   });
 
   it("honors a positive override", () => {

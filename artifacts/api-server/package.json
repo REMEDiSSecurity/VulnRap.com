@@ -8,6 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "pnpm -w run typecheck:libs && tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "seed": "node --enable-source-maps ./dist/seed.mjs",
     "backfill:vulnrap": "node --enable-source-maps ./dist/backfill-vulnrap.mjs",
     "backfill:avri-family": "node --enable-source-maps ./dist/backfill-avri-family.mjs",

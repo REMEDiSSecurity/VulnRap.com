@@ -11,7 +11,9 @@ import { buildEvidenceCsv } from "./results";
 
 describe("buildEvidenceCsv", () => {
   it("emits the documented type,description,weight,matched,markers header row even with no evidence", () => {
-    expect(buildEvidenceCsv([])).toBe("type,description,weight,matched,markers");
+    expect(buildEvidenceCsv([])).toBe(
+      "type,description,weight,matched,markers",
+    );
   });
 
   it("serialises an impossible_http_response row with both the joined description sentence AND the structured marker IDs", () => {
@@ -50,9 +52,9 @@ describe("buildEvidenceCsv", () => {
     );
     // Full row, in column order: type, description, weight, matched, markers.
     expect(lines[1]).toBe(
-      'impossible_http_response,' +
+      "impossible_http_response," +
         '"HTTP excerpt is internally inconsistent — content_length_zero_but_body_present, status_204_must_have_no_body",' +
-        '16,,' +
+        "16,," +
         '"content_length_zero_but_body_present, status_204_must_have_no_body"',
     );
   });
@@ -66,7 +68,8 @@ describe("buildEvidenceCsv", () => {
     const csv = buildEvidenceCsv([
       {
         type: "hallucination_structural_fabrication",
-        description: "Crash trace has 2 structural fabrication markers — round_function_offset, sequential_frame_addresses",
+        description:
+          "Crash trace has 2 structural fabrication markers — round_function_offset, sequential_frame_addresses",
         weight: 16,
         matched: null,
         context: {
@@ -108,15 +111,15 @@ describe("buildEvidenceCsv", () => {
         type: "fabricated_evidence",
         description: 'has, comma and "quoted" word\nplus newline',
         weight: 10,
-        matched: 'with, comma',
+        matched: "with, comma",
         markers: ["marker_a", "marker_b"],
       },
     ]);
     const lines = csv.split("\r\n");
     expect(lines[1]).toBe(
-      'fabricated_evidence,' +
+      "fabricated_evidence," +
         '"has, comma and ""quoted"" word\nplus newline",' +
-        '10,' +
+        "10," +
         '"with, comma",' +
         '"marker_a, marker_b"',
     );

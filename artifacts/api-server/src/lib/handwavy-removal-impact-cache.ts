@@ -93,7 +93,10 @@ export function createRemovalImpactCache(): RemovalImpactCache {
 export function computeHandwavyActiveListVersion(
   phrases: ReadonlyArray<{ phrase: string }>,
 ): string {
-  const sorted = phrases.map((p) => p.phrase).slice().sort();
+  const sorted = phrases
+    .map((p) => p.phrase)
+    .slice()
+    .sort();
   return JSON.stringify(sorted);
 }
 

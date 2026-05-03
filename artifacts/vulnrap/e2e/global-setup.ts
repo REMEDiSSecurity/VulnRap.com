@@ -22,8 +22,8 @@
 // DB). The healthz wait still runs so fast-fail behavior on a missing
 // api-server is unchanged.
 
-import type { FullConfig } from "@playwright/test";
 import { seedE2eLabeledCorpus } from "../../api-server/src/seed-e2e-labeled-corpus";
+import type { FullConfig } from "@playwright/test";
 
 const API_PORT = Number(process.env.E2E_API_PORT || 8080);
 const HEALTHZ_URL = `http://127.0.0.1:${API_PORT}/api/healthz`;
@@ -59,12 +59,10 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
     return;
   }
 
-  // eslint-disable-next-line no-console
   console.log(`[e2e global-setup] waiting for ${HEALTHZ_URL} ...`);
   await waitForHealthz();
 
   if (process.env.E2E_SKIP_LABELED_CORPUS_SEED === "1") {
-    // eslint-disable-next-line no-console
     console.log(
       "[e2e global-setup] E2E_SKIP_LABELED_CORPUS_SEED=1 — skipping labeled corpus seed.",
     );
@@ -73,7 +71,7 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
 
   const start = Date.now();
   const result = await seedE2eLabeledCorpus();
-  // eslint-disable-next-line no-console
+
   console.log(
     `[e2e global-setup] labeled corpus ready: existing=${result.existing} inserted=${result.inserted} total=${result.total} (${Date.now() - start}ms)`,
   );

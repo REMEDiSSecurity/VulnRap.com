@@ -25,7 +25,8 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
     const [, transientPhrase] = phrases;
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -51,10 +52,7 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
             await route.fallback();
             return;
           }
-          if (
-            !transientFailUsed &&
-            body?.phrase === transientPhrase
-          ) {
+          if (!transientFailUsed && body?.phrase === transientPhrase) {
             transientFailUsed = true;
             await route.fulfill({
               status: 500,
@@ -115,7 +113,9 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
         ),
       ).toHaveCount(1);
       // No retryable failures left → Retry failed disappears.
-      await expect(banner.getByTestId("handwavy-bulk-retry-failed")).toHaveCount(0);
+      await expect(
+        banner.getByTestId("handwavy-bulk-retry-failed"),
+      ).toHaveCount(0);
 
       // Both phrases are now off the active list.
       for (const p of phrases) {
@@ -136,7 +136,8 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
     const phrases = uniquePhrases(2, "task238 retry all-success");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -162,7 +163,9 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
           `[data-testid="handwavy-bulk-result-row"][data-status="removed"]`,
         ),
       ).toHaveCount(phrases.length);
-      await expect(banner.getByTestId("handwavy-bulk-retry-failed")).toHaveCount(0);
+      await expect(
+        banner.getByTestId("handwavy-bulk-retry-failed"),
+      ).toHaveCount(0);
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
@@ -178,7 +181,8 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
     const COOLDOWN_SECONDS = 5;
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -217,10 +221,7 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
             await route.fallback();
             return;
           }
-          if (
-            !transientFailUsed &&
-            body?.phrase === transientPhrase
-          ) {
+          if (!transientFailUsed && body?.phrase === transientPhrase) {
             transientFailUsed = true;
             await route.fulfill({
               status: 500,
@@ -320,7 +321,8 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
     const [, transientPhrase] = phrases;
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -356,13 +358,8 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
         "**/api/feedback/calibration/handwavy-phrases/reinstate",
         async (route) => {
           const req = route.request();
-          const body = req.postDataJSON() as
-            | { phrase?: string }
-            | undefined;
-          if (
-            !transientReinstateFailUsed &&
-            body?.phrase === transientPhrase
-          ) {
+          const body = req.postDataJSON() as { phrase?: string } | undefined;
+          if (!transientReinstateFailUsed && body?.phrase === transientPhrase) {
             transientReinstateFailUsed = true;
             await route.fulfill({
               status: 500,
@@ -419,7 +416,9 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
         ).toHaveCount(1, { timeout: 15_000 });
       }
       // No more retryable failures.
-      await expect(banner.getByTestId("handwavy-bulk-retry-failed")).toHaveCount(0);
+      await expect(
+        banner.getByTestId("handwavy-bulk-retry-failed"),
+      ).toHaveCount(0);
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();

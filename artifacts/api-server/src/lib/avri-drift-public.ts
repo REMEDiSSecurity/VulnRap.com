@@ -36,7 +36,9 @@ const PUBLIC_WEEK_LIMIT = 12;
 
 /** UTC Monday of the week that contains `d`, formatted YYYY-MM-DD. */
 function utcMondayOf(d: Date): string {
-  const u = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const u = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
   const dow = u.getUTCDay();
   const offset = dow === 0 ? -6 : 1 - dow;
   u.setUTCDate(u.getUTCDate() + offset);

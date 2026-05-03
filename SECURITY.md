@@ -22,10 +22,10 @@ GitHub issue or pull request that describes the vulnerability.
 If you would like to encrypt the report, request our public key in your first
 email and we will respond with the current key over the same channel.
 
-- **PGP key fingerprint:** `TBD — request via email` *(placeholder until a
+- **PGP key fingerprint:** `TBD — request via email` _(placeholder until a
   long-lived signing key is published; once published the fingerprint will
   appear here verbatim and the key will be served from
-  `/.well-known/pgp-key.txt`)*
+  `/.well-known/pgp-key.txt`)_
 
 ### What to include
 
@@ -96,19 +96,19 @@ To stay within safe harbor:
   identifier (e.g. a row count, a redacted excerpt) is sufficient.
 
 If in doubt about whether your testing is consistent with this policy, contact
-us *before* proceeding.
+us _before_ proceeding.
 
 ## Response SLA
 
 We aim to respond on the following timeline. These are targets; complex
 issues may take longer, and we will keep you informed if they do.
 
-| Stage          | Target                            |
-| -------------- | --------------------------------- |
-| Acknowledgment | Within **48 hours** of report     |
-| Triage         | Within **1 week** of report       |
+| Stage          | Target                                                              |
+| -------------- | ------------------------------------------------------------------- |
+| Acknowledgment | Within **48 hours** of report                                       |
+| Triage         | Within **1 week** of report                                         |
 | Fix            | Severity-dependent; critical issues are patched as fast as possible |
-| Disclosure     | Coordinated with the reporter, after the fix is deployed |
+| Disclosure     | Coordinated with the reporter, after the fix is deployed            |
 
 ## Disclosure
 

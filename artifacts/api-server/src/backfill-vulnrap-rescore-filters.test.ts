@@ -78,9 +78,7 @@ beforeAll(async () => {
   await client.query(`CREATE SCHEMA "${testSchema}"`);
   // search_path puts the test schema first so drizzle's bare `reports`
   // identifier resolves to our table, not the production one in public.
-  await client.query(
-    `SET search_path TO "${testSchema}", public`,
-  );
+  await client.query(`SET search_path TO "${testSchema}", public`);
 
   // Minimal `reports` table — only the columns the SELECT under test
   // reads (id, vulnrap_composite_score, evidence) plus the NOT-NULL
@@ -147,11 +145,7 @@ beforeAll(async () => {
     null,
     [{ type: "low_quality_marker", weight: 5 }],
   );
-  ids.scoredNullEvidence = await insertRow(
-    "scored-null-evidence",
-    50,
-    null,
-  );
+  ids.scoredNullEvidence = await insertRow("scored-null-evidence", 50, null);
   ids.scoredHallucinationEvidence = await insertRow(
     "scored-hallucination",
     40,
@@ -305,7 +299,11 @@ describe("buildRescoreCandidateFilters — real-Postgres integration", () => {
     // drizzle's PgDialect renders `sql` template fragments to a
     // `{ sql, params }` shape; we go through testDb's dialect to keep
     // identifier quoting consistent with the live query path.
-    const stmt = testDb.select().from(reportsTable).where(and(...filters)).toSQL();
+    const stmt = testDb
+      .select()
+      .from(reportsTable)
+      .where(and(...filters))
+      .toSQL();
     expect(stmt.sql.toLowerCase()).toContain("coalesce");
     expect(stmt.sql).toContain("'hallucination_%'");
     expect(stmt.sql.toLowerCase()).toContain("jsonb_array_elements");

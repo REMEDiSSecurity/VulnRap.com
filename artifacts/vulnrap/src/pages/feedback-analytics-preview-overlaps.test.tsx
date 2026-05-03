@@ -1,14 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
-import type {
-  HandwavyPhraseDryRunOverlaps,
-  HandwavyPhraseDryRunOverlapsMatchesItem,
-} from "@workspace/api-client-react";
 import {
   PreviewOverlapsBlock,
   describeOverlapRelation,
   PREVIEW_OVERLAP_BUCKET_COLLAPSE_THRESHOLD,
 } from "./feedback-analytics";
+import type {
+  HandwavyPhraseDryRunOverlaps,
+  HandwavyPhraseDryRunOverlapsMatchesItem,
+} from "@workspace/api-client-react";
 
 // Task #228 — focused component coverage for the curated-overlap preview
 // callout that Task #128 added. The backend response shape is exercised in
@@ -42,7 +42,10 @@ describe("PreviewOverlapsBlock (Task #228)", () => {
     ]);
 
     render(
-      <PreviewOverlapsBlock overlaps={overlaps} candidate="do not have a reproducer" />,
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="do not have a reproducer"
+      />,
     );
 
     expect(screen.getByTestId("handwavy-preview-overlaps")).toBeInTheDocument();
@@ -57,7 +60,9 @@ describe("PreviewOverlapsBlock (Task #228)", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/\u201Cdo not have a reproducer\u201D matches phrases already on the active list/i),
+      screen.getByText(
+        /\u201Cdo not have a reproducer\u201D matches phrases already on the active list/i,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -70,7 +75,10 @@ describe("PreviewOverlapsBlock (Task #228)", () => {
     ]);
 
     render(
-      <PreviewOverlapsBlock overlaps={overlaps} candidate="no reproducer at all" />,
+      <PreviewOverlapsBlock
+        overlaps={overlaps}
+        candidate="no reproducer at all"
+      />,
     );
 
     const rows = screen.getAllByTestId("handwavy-preview-overlap-row");
@@ -131,7 +139,9 @@ describe("PreviewOverlapsBlock (Task #228)", () => {
     );
 
     expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByTestId("handwavy-preview-overlaps")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("handwavy-preview-overlaps"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders nothing when matches array is empty", () => {
@@ -143,7 +153,9 @@ describe("PreviewOverlapsBlock (Task #228)", () => {
     );
 
     expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByTestId("handwavy-preview-overlaps")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("handwavy-preview-overlaps"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -208,14 +220,12 @@ describe("PreviewOverlapsBlock collapsible buckets (Task #308)", () => {
       "false",
     );
     expect(
-      within(bucket).queryByTestId(
-        "handwavy-preview-overlap-bucket-show-all",
-      ),
+      within(bucket).queryByTestId("handwavy-preview-overlap-bucket-show-all"),
     ).not.toBeInTheDocument();
     // All rows are present and discoverable by the existing row testid.
-    expect(
-      screen.getAllByTestId("handwavy-preview-overlap-row"),
-    ).toHaveLength(PREVIEW_OVERLAP_BUCKET_COLLAPSE_THRESHOLD);
+    expect(screen.getAllByTestId("handwavy-preview-overlap-row")).toHaveLength(
+      PREVIEW_OVERLAP_BUCKET_COLLAPSE_THRESHOLD,
+    );
   });
 
   it("expands a collapsed bucket when the toggle is clicked, revealing every row", () => {
@@ -246,14 +256,12 @@ describe("PreviewOverlapsBlock collapsible buckets (Task #308)", () => {
       within(bucket).getByTestId("handwavy-preview-overlap-bucket-header"),
     ).toHaveTextContent(`${overflowingCount} already covered`);
     expect(
-      within(bucket).queryByTestId(
-        "handwavy-preview-overlap-bucket-show-all",
-      ),
+      within(bucket).queryByTestId("handwavy-preview-overlap-bucket-show-all"),
     ).not.toBeInTheDocument();
     // Every row is now rendered with its preserved testid.
-    expect(
-      screen.getAllByTestId("handwavy-preview-overlap-row"),
-    ).toHaveLength(overflowingCount);
+    expect(screen.getAllByTestId("handwavy-preview-overlap-row")).toHaveLength(
+      overflowingCount,
+    );
   });
 
   it("re-collapses an expanded bucket when the toggle is clicked again", () => {
@@ -299,8 +307,7 @@ describe("PreviewOverlapsBlock collapsible buckets (Task #308)", () => {
       (b) => b.getAttribute("data-relation") === "equal",
     );
     const coveredBucket = buckets.find(
-      (b) =>
-        b.getAttribute("data-relation") === "existing-contains-candidate",
+      (b) => b.getAttribute("data-relation") === "existing-contains-candidate",
     );
     expect(equalBucket).toBeDefined();
     expect(coveredBucket).toBeDefined();
@@ -317,9 +324,7 @@ describe("PreviewOverlapsBlock collapsible buckets (Task #308)", () => {
       within(equalBucket!).getAllByTestId("handwavy-preview-overlap-row"),
     ).toHaveLength(smallCount);
     expect(
-      within(coveredBucket!).queryAllByTestId(
-        "handwavy-preview-overlap-row",
-      ),
+      within(coveredBucket!).queryAllByTestId("handwavy-preview-overlap-row"),
     ).toHaveLength(0);
   });
 });
@@ -346,20 +351,22 @@ describe("PreviewOverlapsBlock collapse persistence (Task #440)", () => {
       ),
     );
     const { rerender } = render(
-      <PreviewOverlapsBlock overlaps={initialOverlaps} candidate="the system" />,
+      <PreviewOverlapsBlock
+        overlaps={initialOverlaps}
+        candidate="the system"
+      />,
     );
 
     // Reviewer expands the auto-collapsed bucket.
     fireEvent.click(
       screen.getByTestId("handwavy-preview-overlap-bucket-toggle"),
     );
-    expect(screen.getByTestId("handwavy-preview-overlap-bucket")).toHaveAttribute(
-      "data-handwavy-overlap-bucket-collapsed",
-      "false",
-    );
     expect(
-      screen.getAllByTestId("handwavy-preview-overlap-row"),
-    ).toHaveLength(overflowingCount);
+      screen.getByTestId("handwavy-preview-overlap-bucket"),
+    ).toHaveAttribute("data-handwavy-overlap-bucket-collapsed", "false");
+    expect(screen.getAllByTestId("handwavy-preview-overlap-row")).toHaveLength(
+      overflowingCount,
+    );
 
     // Simulate the dry-run refresh that fires on every keystroke: same
     // relation, same bucket size (still over the threshold), but a
@@ -380,10 +387,9 @@ describe("PreviewOverlapsBlock collapse persistence (Task #440)", () => {
       />,
     );
 
-    expect(screen.getByTestId("handwavy-preview-overlap-bucket")).toHaveAttribute(
-      "data-handwavy-overlap-bucket-collapsed",
-      "false",
-    );
+    expect(
+      screen.getByTestId("handwavy-preview-overlap-bucket"),
+    ).toHaveAttribute("data-handwavy-overlap-bucket-collapsed", "false");
     // All rows still rendered — and they're the new ones from the
     // refreshed snapshot, not the original ones.
     const rowsAfter = screen.getAllByTestId("handwavy-preview-overlap-row");
@@ -404,16 +410,18 @@ describe("PreviewOverlapsBlock collapse persistence (Task #440)", () => {
       makeBucketOfRelation("existing-contains-candidate", overflowingCount),
     );
     const { rerender } = render(
-      <PreviewOverlapsBlock overlaps={initialOverlaps} candidate="the system" />,
+      <PreviewOverlapsBlock
+        overlaps={initialOverlaps}
+        candidate="the system"
+      />,
     );
 
     fireEvent.click(
       screen.getByTestId("handwavy-preview-overlap-bucket-toggle"),
     );
-    expect(screen.getByTestId("handwavy-preview-overlap-bucket")).toHaveAttribute(
-      "data-handwavy-overlap-bucket-collapsed",
-      "false",
-    );
+    expect(
+      screen.getByTestId("handwavy-preview-overlap-bucket"),
+    ).toHaveAttribute("data-handwavy-overlap-bucket-collapsed", "false");
 
     // Refresh: the existing-contains-candidate bucket has zero matches now,
     // so it's filtered out and the only bucket is `equal`.
@@ -447,14 +455,17 @@ describe("PreviewOverlapsBlock collapse persistence (Task #440)", () => {
       />,
     );
     const restored = screen.getByTestId("handwavy-preview-overlap-bucket");
-    expect(restored).toHaveAttribute("data-relation", "existing-contains-candidate");
+    expect(restored).toHaveAttribute(
+      "data-relation",
+      "existing-contains-candidate",
+    );
     expect(restored).toHaveAttribute(
       "data-handwavy-overlap-bucket-collapsed",
       "false",
     );
-    expect(
-      screen.getAllByTestId("handwavy-preview-overlap-row"),
-    ).toHaveLength(overflowingCount);
+    expect(screen.getAllByTestId("handwavy-preview-overlap-row")).toHaveLength(
+      overflowingCount,
+    );
   });
 
   it("preserves a manually-collapsed small bucket across rerenders, even though the auto-collapse default would expand it", () => {
@@ -469,17 +480,15 @@ describe("PreviewOverlapsBlock collapse persistence (Task #440)", () => {
       />,
     );
 
-    expect(screen.getByTestId("handwavy-preview-overlap-bucket")).toHaveAttribute(
-      "data-handwavy-overlap-bucket-collapsed",
-      "false",
-    );
+    expect(
+      screen.getByTestId("handwavy-preview-overlap-bucket"),
+    ).toHaveAttribute("data-handwavy-overlap-bucket-collapsed", "false");
     fireEvent.click(
       screen.getByTestId("handwavy-preview-overlap-bucket-toggle"),
     );
-    expect(screen.getByTestId("handwavy-preview-overlap-bucket")).toHaveAttribute(
-      "data-handwavy-overlap-bucket-collapsed",
-      "true",
-    );
+    expect(
+      screen.getByTestId("handwavy-preview-overlap-bucket"),
+    ).toHaveAttribute("data-handwavy-overlap-bucket-collapsed", "true");
 
     rerender(
       <PreviewOverlapsBlock
@@ -487,10 +496,9 @@ describe("PreviewOverlapsBlock collapse persistence (Task #440)", () => {
         candidate="anything else"
       />,
     );
-    expect(screen.getByTestId("handwavy-preview-overlap-bucket")).toHaveAttribute(
-      "data-handwavy-overlap-bucket-collapsed",
-      "true",
-    );
+    expect(
+      screen.getByTestId("handwavy-preview-overlap-bucket"),
+    ).toHaveAttribute("data-handwavy-overlap-bucket-collapsed", "true");
     expect(
       screen.queryAllByTestId("handwavy-preview-overlap-row"),
     ).toHaveLength(0);
@@ -513,7 +521,10 @@ describe("PreviewOverlapsBlock collapse persistence (Task #440)", () => {
       ),
     );
     const { rerender } = render(
-      <PreviewOverlapsBlock overlaps={initialOverlaps} candidate="the system" />,
+      <PreviewOverlapsBlock
+        overlaps={initialOverlaps}
+        candidate="the system"
+      />,
     );
 
     fireEvent.click(
@@ -567,9 +578,9 @@ describe("PreviewOverlapsBlock collapse persistence (Task #440)", () => {
     expect(
       screen.getByTestId("handwavy-preview-overlap-bucket"),
     ).toHaveAttribute("data-handwavy-overlap-bucket-collapsed", "false");
-    expect(
-      screen.getAllByTestId("handwavy-preview-overlap-row"),
-    ).toHaveLength(overflowingCount);
+    expect(screen.getAllByTestId("handwavy-preview-overlap-row")).toHaveLength(
+      overflowingCount,
+    );
   });
 
   it("resets to the auto-collapse default when the block fully unmounts (fresh session)", () => {
@@ -587,17 +598,15 @@ describe("PreviewOverlapsBlock collapse persistence (Task #440)", () => {
     fireEvent.click(
       screen.getByTestId("handwavy-preview-overlap-bucket-toggle"),
     );
-    expect(screen.getByTestId("handwavy-preview-overlap-bucket")).toHaveAttribute(
-      "data-handwavy-overlap-bucket-collapsed",
-      "false",
-    );
+    expect(
+      screen.getByTestId("handwavy-preview-overlap-bucket"),
+    ).toHaveAttribute("data-handwavy-overlap-bucket-collapsed", "false");
     unmount();
 
     render(<PreviewOverlapsBlock overlaps={overlaps} candidate="the system" />);
-    expect(screen.getByTestId("handwavy-preview-overlap-bucket")).toHaveAttribute(
-      "data-handwavy-overlap-bucket-collapsed",
-      "true",
-    );
+    expect(
+      screen.getByTestId("handwavy-preview-overlap-bucket"),
+    ).toHaveAttribute("data-handwavy-overlap-bucket-collapsed", "true");
   });
 });
 
@@ -661,9 +670,9 @@ describe("PreviewOverlapsBlock bulk expand/collapse (Task #441)", () => {
         "false",
       );
     }
-    expect(
-      screen.getAllByTestId("handwavy-preview-overlap-row"),
-    ).toHaveLength(smallCount + bigCount);
+    expect(screen.getAllByTestId("handwavy-preview-overlap-row")).toHaveLength(
+      smallCount + bigCount,
+    );
     // After flipping everything open, the toggle now offers the inverse.
     expect(bulkToggle).toHaveTextContent(/Collapse all/i);
     expect(bulkToggle).toHaveAttribute(
@@ -773,8 +782,7 @@ describe("PreviewOverlapsBlock bulk expand/collapse (Task #441)", () => {
       (b) => b.getAttribute("data-relation") === "equal",
     )!;
     const supersedeBucket = buckets.find(
-      (b) =>
-        b.getAttribute("data-relation") === "candidate-contains-existing",
+      (b) => b.getAttribute("data-relation") === "candidate-contains-existing",
     )!;
 
     fireEvent.click(
@@ -794,9 +802,7 @@ describe("PreviewOverlapsBlock bulk expand/collapse (Task #441)", () => {
       within(equalBucket).getAllByTestId("handwavy-preview-overlap-row"),
     ).toHaveLength(smallCount);
     expect(
-      within(supersedeBucket).queryAllByTestId(
-        "handwavy-preview-overlap-row",
-      ),
+      within(supersedeBucket).queryAllByTestId("handwavy-preview-overlap-row"),
     ).toHaveLength(0);
     // And the bulk label tracks the new mixed state.
     expect(bulkToggle).toHaveTextContent(/Expand all/i);
@@ -835,9 +841,7 @@ describe("PreviewOverlapsBlock bulk expand/collapse (Task #441)", () => {
       ),
       ...makeBucketOfRelation("equal", 2),
     ]);
-    rerender(
-      <PreviewOverlapsBlock overlaps={overlaps} candidate="anything" />,
-    );
+    rerender(<PreviewOverlapsBlock overlaps={overlaps} candidate="anything" />);
 
     // The block now renders, the size-based default put the oversized
     // bucket into a collapsed state, and the bulk toggle is wired up
@@ -886,9 +890,9 @@ describe("PreviewOverlapsBlock bulk expand/collapse (Task #441)", () => {
         "false",
       );
     }
-    expect(
-      screen.getAllByTestId("handwavy-preview-overlap-row"),
-    ).toHaveLength(smallCount * 3);
+    expect(screen.getAllByTestId("handwavy-preview-overlap-row")).toHaveLength(
+      smallCount * 3,
+    );
     expect(bulkToggle).toHaveTextContent(/Collapse all/i);
   });
 });
@@ -923,7 +927,9 @@ describe("PreviewOverlapsBlock — Remove all overlapping (Task #315)", () => {
     // excluded for the same reason the per-row "Remove existing" action
     // is hidden on it.
     expect(button).toHaveTextContent("Remove all overlapping (2)");
-    expect(button.getAttribute("data-handwavy-overlap-remove-all-count")).toBe("2");
+    expect(button.getAttribute("data-handwavy-overlap-remove-all-count")).toBe(
+      "2",
+    );
 
     fireEvent.click(button);
 
@@ -1113,8 +1119,8 @@ describe("PreviewOverlapsBlock — Remove all overlapping cached impact hint (Ta
       // other cache entries that happen to be present.
       ["broader one", 99],
     ]);
-    const getCachedRemoveValidLost = vi.fn(
-      (phrase: string) => cache.get(phrase),
+    const getCachedRemoveValidLost = vi.fn((phrase: string) =>
+      cache.get(phrase),
     );
 
     render(
@@ -1132,17 +1138,13 @@ describe("PreviewOverlapsBlock — Remove all overlapping cached impact hint (Ta
     expect(hint).toBeInTheDocument();
     expect(hint).toHaveTextContent("(would un-flag 3 reports)");
     expect(
-      hint.getAttribute(
-        "data-handwavy-overlap-remove-all-cached-valid-lost",
-      ),
+      hint.getAttribute("data-handwavy-overlap-remove-all-cached-valid-lost"),
     ).toBe("3");
     // Only the eligible (equal + candidate-contains-existing) phrases
     // should have been queried — the broader-existing row is excluded
     // for the same reason the per-row "Remove existing" action hides on
     // it, so its cache entry must NOT be summed.
-    const queriedPhrases = getCachedRemoveValidLost.mock.calls.map(
-      (c) => c[0],
-    );
+    const queriedPhrases = getCachedRemoveValidLost.mock.calls.map((c) => c[0]);
     expect(queriedPhrases).toEqual(["exact one", "narrower one"]);
   });
 
@@ -1215,9 +1217,7 @@ describe("PreviewOverlapsBlock — Remove all overlapping cached impact hint (Ta
       screen.getByTestId("handwavy-preview-overlap-remove-all"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByTestId(
-        "handwavy-preview-overlap-remove-all-cached-impact",
-      ),
+      screen.queryByTestId("handwavy-preview-overlap-remove-all-cached-impact"),
     ).not.toBeInTheDocument();
   });
 
@@ -1239,9 +1239,7 @@ describe("PreviewOverlapsBlock — Remove all overlapping cached impact hint (Ta
     );
 
     expect(
-      screen.queryByTestId(
-        "handwavy-preview-overlap-remove-all-cached-impact",
-      ),
+      screen.queryByTestId("handwavy-preview-overlap-remove-all-cached-impact"),
     ).not.toBeInTheDocument();
   });
 
@@ -1271,9 +1269,7 @@ describe("PreviewOverlapsBlock — Remove all overlapping cached impact hint (Ta
       screen.queryByTestId("handwavy-preview-overlap-remove-all"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByTestId(
-        "handwavy-preview-overlap-remove-all-cached-impact",
-      ),
+      screen.queryByTestId("handwavy-preview-overlap-remove-all-cached-impact"),
     ).not.toBeInTheDocument();
     expect(getCachedRemoveValidLost).not.toHaveBeenCalled();
   });

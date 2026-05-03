@@ -36,13 +36,13 @@ not part of the required-checks set.
 
 ## Workflow catalogue
 
-| Workflow                      | File                                       | Trigger                                     | What it does |
-| ----------------------------- | ------------------------------------------ | ------------------------------------------- | ------------ |
-| CI                            | `.github/workflows/ci.yml`                 | PR + push to `main`                         | Codegen verification, typecheck, every package's vitest suite, Prettier check, opt-in lint, and the diff-aware Playwright e2e suite. |
-| Build (main)                  | `.github/workflows/build.yml`              | push to `main`                              | Builds both artifacts and uploads `artifacts/*/dist` as workflow artifacts. |
-| Nightly e2e (full suite)      | `.github/workflows/nightly-e2e.yml`        | daily cron (04:17 UTC) + manual             | Forces `E2E_RUN_ALL_SPECS=1` so the whole Playwright suite runs against `main`; opens / updates a tracking issue on failure. |
-| CodeQL                        | `.github/workflows/codeql.yml`             | PR + push to `main` + weekly cron           | JavaScript/TypeScript security + quality scan. |
-| Release SBOM                  | `.github/workflows/release-sbom.yml`       | tag push (`v*`) + manual                    | Generates a CycloneDX SBOM from the pnpm lockfile and attaches it to the matching GitHub Release. |
+| Workflow                 | File                                 | Trigger                           | What it does                                                                                                                         |
+| ------------------------ | ------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| CI                       | `.github/workflows/ci.yml`           | PR + push to `main`               | Codegen verification, typecheck, every package's vitest suite, Prettier check, opt-in lint, and the diff-aware Playwright e2e suite. |
+| Build (main)             | `.github/workflows/build.yml`        | push to `main`                    | Builds both artifacts and uploads `artifacts/*/dist` as workflow artifacts.                                                          |
+| Nightly e2e (full suite) | `.github/workflows/nightly-e2e.yml`  | daily cron (04:17 UTC) + manual   | Forces `E2E_RUN_ALL_SPECS=1` so the whole Playwright suite runs against `main`; opens / updates a tracking issue on failure.         |
+| CodeQL                   | `.github/workflows/codeql.yml`       | PR + push to `main` + weekly cron | JavaScript/TypeScript security + quality scan.                                                                                       |
+| Release SBOM             | `.github/workflows/release-sbom.yml` | tag push (`v*`) + manual          | Generates a CycloneDX SBOM from the pnpm lockfile and attaches it to the matching GitHub Release.                                    |
 
 ## Dependency updates
 

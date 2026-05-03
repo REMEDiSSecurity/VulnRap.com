@@ -78,10 +78,7 @@
 
 import { describe, it, expect } from "vitest";
 import { analyzeWithEngines, type CompositeResult } from "./index.js";
-import {
-  GOLD_SIGNAL_WEIGHTS,
-  GOLD_SIGNAL_BONUS_CAP,
-} from "./gold-signals.js";
+import { GOLD_SIGNAL_WEIGHTS, GOLD_SIGNAL_BONUS_CAP } from "./gold-signals.js";
 
 interface Fixture {
   name: string;
@@ -101,15 +98,32 @@ interface Fixture {
 // the cohort small (the broad slop/legit boundary is owned by
 // benchmark.test.ts; this file is for the gold-bonus distribution only).
 const FIXTURES: Fixture[] = [
-  { kind: "slop",  name: "slop-01-vague-xss",
-    text: "I found a critical XSS vulnerability in your application that could allow attackers to steal user data and compromise the entire system. This is a very serious issue that affects all users and needs to be patched immediately. The impact is severe and could lead to complete account takeover. Please award me a bounty." },
-  { kind: "slop",  name: "slop-03-fake-sqli",
-    text: "Hello team,\n\nI discovered SQL injection in your login form. When I tried to login, I noticed that the application is vulnerable to SQL injection attacks which could allow an attacker to dump the entire database. This is a critical issue. Please fix it.\n\nRegards,\nResearcher" },
-  { kind: "slop",  name: "slop-04-no-evidence-rce", claimedCwes: ["CWE-78"],
-    text: "Remote Code Execution found in your API endpoint /api/upload. This vulnerability allows attackers to execute arbitrary commands on the server, leading to complete system compromise. The severity is critical (CVSS 10.0). I request a maximum bounty for this finding." },
-  { kind: "slop",  name: "slop-08-vague-csrf", claimedCwes: ["CWE-352"],
-    text: "CSRF vulnerability in account settings. An attacker could trick a user into changing their password by visiting a malicious page. This is a serious issue that violates security best practices and OWASP guidelines. Please patch this and award bounty." },
-  { kind: "slop",  name: "slop-09-fabricated-asan-structure", claimedCwes: ["CWE-416"],
+  {
+    kind: "slop",
+    name: "slop-01-vague-xss",
+    text: "I found a critical XSS vulnerability in your application that could allow attackers to steal user data and compromise the entire system. This is a very serious issue that affects all users and needs to be patched immediately. The impact is severe and could lead to complete account takeover. Please award me a bounty.",
+  },
+  {
+    kind: "slop",
+    name: "slop-03-fake-sqli",
+    text: "Hello team,\n\nI discovered SQL injection in your login form. When I tried to login, I noticed that the application is vulnerable to SQL injection attacks which could allow an attacker to dump the entire database. This is a critical issue. Please fix it.\n\nRegards,\nResearcher",
+  },
+  {
+    kind: "slop",
+    name: "slop-04-no-evidence-rce",
+    claimedCwes: ["CWE-78"],
+    text: "Remote Code Execution found in your API endpoint /api/upload. This vulnerability allows attackers to execute arbitrary commands on the server, leading to complete system compromise. The severity is critical (CVSS 10.0). I request a maximum bounty for this finding.",
+  },
+  {
+    kind: "slop",
+    name: "slop-08-vague-csrf",
+    claimedCwes: ["CWE-352"],
+    text: "CSRF vulnerability in account settings. An attacker could trick a user into changing their password by visiting a malicious page. This is a serious issue that violates security best practices and OWASP guidelines. Please patch this and award bounty.",
+  },
+  {
+    kind: "slop",
+    name: "slop-09-fabricated-asan-structure",
+    claimedCwes: ["CWE-416"],
     text: `Heap-use-after-free crash in libserver. The AddressSanitizer output
 captured during testing is reproduced below, and shows the dangling
 pointer being dereferenced inside the request handler path.
@@ -128,20 +142,44 @@ freed by thread T1 here:
 Severity: Critical. Use-after-free, sanitizer crash, segmentation fault.
 The crash is reproducible against the shipped binary which is the
 realistic attack surface; rebuilding with debug symbols is left as an
-exercise. CVSS 9.8.` },
-  { kind: "curl-slop", name: "curl-slop-h1-2298307-strcpy-template", claimedCwes: ["CWE-122"],
-    text: `Hello security team, Hope you are doing well :) I would like to report a potential security vulnerability in the WebSocket handling code of the curl library. The issue is related to the usage of the strcpy function, which can lead to a buffer overflow if the length of the input is not properly checked. The vulnerable code snippet is located at this link.\n\nSteps To Reproduce: Trigger the WebSocket functionality with a crafted request. Provide a base64-encoded nonce value that exceeds the buffer size. Observe that the strcpy function is used without proper bounds checking.\n\nFix: To address this issue, it is recommended to replace the strcpy function with the safer alternative strncpy and explicitly specify the maximum length to copy.\n\nReference: https://cwe.mitre.org/data/definitions/122.html\n\nImpact: This vulnerability may allow an attacker to execute arbitrary code, potentially leading to a compromise of the application or system. An attacker could exploit this weakness by providing a specially crafted WebSocket request, causing a buffer overflow and overwriting adjacent memory.` },
-  { kind: "curl-slop", name: "curl-slop-h1-3340109-fabricated-asan", claimedCwes: ["CWE-121"],
-    text: `Summary: I discovered a critical stack-based buffer overflow vulnerability in cURL's cookie parsing mechanism that can lead to remote code execution. The vulnerability occurs when processing maliciously crafted HTTP cookies, affecting all applications that use libcurl for HTTP requests.\n\nDescription: During security research on cURL's cookie handling implementation, I identified a stack buffer overflow in the cookie parsing logic. The vulnerability allows remote attackers to trigger memory corruption by sending oversized cookie data through HTTP responses.\n\nTechnical Details - Vulnerability Location: The vulnerability occurs in the cookie parsing functionality where string length calculations exceed allocated stack buffer boundaries. Root Cause Analysis: Buffer Size Mismatch: Cookie processing code reads beyond allocated stack buffer. Unsafe String Operations: strlen() operation on cookie data exceeds buffer boundaries. Stack Memory Corruption: Read of 8,193 bytes in a buffer allocated for 8,192 bytes. Multi-threaded Context: Issue manifests in threaded environments.\n\nAddressSanitizer Detection: ERROR: AddressSanitizer: stack-buffer-overflow on address 0x00016f00a5c0. READ of size 8193 at 0x00016f00a5c0 thread T1. #0 0x000101676c34 in strlen+0x1b0. #1 0x000100f94c38 in cookie_overflow_hunter cookie_vulnerability_hunter.c:121.\n\nCVSS 3.1 Assessment: Base Score: 9.8 (CRITICAL). Vector String: AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H.\n\nVerified POC Code creates a local buffer of 8192 bytes, fills it without null terminator, calls strlen() which reads past the buffer. This code does NOT call curl.` },
-  { kind: "legit", name: "legit-01-cve-2025-0725-curl", claimedCwes: ["CWE-122"],
-    text: `# Buffer overflow in libcurl gzip decoding (CVE-2025-0725-style)\n\n## Affected component\nlibcurl's automatic content decoding for gzip when built against zlib < 1.2.0.3.\n\n## Root cause\nIn \`lib/content_encoding.c\`, the function \`inflate_stream()\` calls \`Curl_client_write()\` with the size returned by \`inflate()\` without bounding it against the destination buffer when an integer overflow occurs in zlib < 1.2.0.3.\n\n\`\`\`c\n// lib/content_encoding.c (approx line 290)\nstatus = inflate(z, Z_BLOCK);\nnread = DSIZ - z->avail_out; // <-- can overflow on legacy zlib\nresult = Curl_client_write(data, CLIENTWRITE_BODY, decomp, nread);\n\`\`\`\n\n## Reproduction\n1. Build curl 8.11.x against zlib 1.2.0.2:\n   \`\`\`\n   ./configure --with-zlib=/opt/zlib-1.2.0.2 && make\n   \`\`\`\n2. Run: \`./src/curl --compressed https://attacker.example/big.gz -o /dev/null\`\n3. Observe heap-buffer-overflow under ASan: \`==12345==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x611000009f80\`\n\n## Patch\nValidate \`nread <= DSIZ\` before calling \`Curl_client_write\`; reject the response with \`CURLE_BAD_CONTENT_ENCODING\` otherwise.\n\n## Impact\nHeap buffer overflow → potential RCE in long-running clients fetching attacker-controlled compressed responses. CVSS 8.6 (AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H).` },
-  { kind: "legit", name: "legit-02-curl-cookie-parser", claimedCwes: ["CWE-787"],
-    text: `# Out-of-bounds write in curl cookie parser when domain is empty\n\n## Affected\ncurl/libcurl 8.0.0 - 8.10.1, file \`lib/cookie.c\`, function \`Curl_cookie_add\`.\n\n## Root cause\nWhen parsing a Set-Cookie header where the Domain attribute is the empty string, the parser advances past the terminating NUL. The bug is here:\n\n\`\`\`c\n// lib/cookie.c around line 712 in 8.10.1\nif(!strncasecompare("domain=", what, 7)) {\n  whatptr = &what[7];\n  while(*whatptr == '.') whatptr++; // walks past NUL on empty domain\n  co->domain = strdup(whatptr);\n}\n\`\`\`\n\nA 1-byte read past the end of the heap chunk leads to a write when \`strdup\` later copies into a sized buffer.\n\n## Reproduction\n\`\`\`\nprintf 'HTTP/1.1 200 OK\\r\\nSet-Cookie: x=1; Domain=\\r\\n\\r\\n' | nc -l 8080 &\ncurl -v -c jar.txt http://127.0.0.1:8080/\n\`\`\`\nASan output:\n\`\`\`\n==4711==ERROR: AddressSanitizer: heap-buffer-overflow READ of size 1\n    #0 Curl_cookie_add lib/cookie.c:712\n    #1 Curl_cookie_init lib/cookie.c:1003\n\`\`\`\n\n## Fix\nBounds-check \`whatptr\` against the original \`what + len\` before dereferencing.\n\n## Severity\nCVSS 7.5 (AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:H) — denial of service in clients that persist cookies.` },
-  { kind: "legit", name: "legit-03-request-smuggling", claimedCwes: ["CWE-444"],
-    text: `# HTTP request smuggling via conflicting Transfer-Encoding header in proxy\n\n## Affected\nacme-proxy 2.4.1 - 2.6.3, source file \`src/http/parser.rs\` lines 412-455.\n\n## Root cause\nThe proxy accepts \`Transfer-Encoding: chunked\` AND \`Content-Length\` simultaneously and forwards both to the backend. RFC 7230 §3.3.3 requires the proxy to either reject the message or strip Content-Length; this implementation does neither.\n\n\`\`\`rust\n// src/http/parser.rs:430\nif headers.contains_key("transfer-encoding") {\n    self.body = Body::Chunked(reader);\n} else if let Some(cl) = headers.get("content-length") {\n    self.body = Body::Sized(reader, cl.parse()?);\n}\n// missing: error or header strip when both are present\n\`\`\`\n\n## Reproduction\n\`\`\`\nprintf 'POST / HTTP/1.1\\r\\nHost: victim\\r\\nContent-Length: 6\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n0\\r\\n\\r\\nGPOST / HTTP/1.1\\r\\nHost: victim\\r\\n\\r\\n' | nc proxy 8080\n\`\`\`\nThe proxy forwards 0\\r\\n\\r\\n then GPOST as a separate request, smuggling the second request to the backend.\n\n## Patch\nReject any message containing both Transfer-Encoding and Content-Length with HTTP 400.\n\n## Impact\nCache poisoning, request hijacking, auth bypass. CVSS 9.0.` },
-  { kind: "borderline", name: "borderline-01-thin-but-plausible", claimedCwes: ["CWE-79"],
-    text: `# Reflected XSS in /search endpoint\n\nThe \`q\` parameter on GET /search is reflected unencoded:\n\n\`\`\`html\n<input value="<script>alert(1)</script>" />\n\`\`\`\n\nReproduction:\n1. curl 'https://app.example.com/search?q=<script>alert(1)</script>'\n2. Inspect response: payload echoes inside the search-bar input.\n\nSuggested fix: HTML-encode the parameter via the existing \`escapeHtml()\` helper in src/views/search.tsx:42.` },
-
+exercise. CVSS 9.8.`,
+  },
+  {
+    kind: "curl-slop",
+    name: "curl-slop-h1-2298307-strcpy-template",
+    claimedCwes: ["CWE-122"],
+    text: `Hello security team, Hope you are doing well :) I would like to report a potential security vulnerability in the WebSocket handling code of the curl library. The issue is related to the usage of the strcpy function, which can lead to a buffer overflow if the length of the input is not properly checked. The vulnerable code snippet is located at this link.\n\nSteps To Reproduce: Trigger the WebSocket functionality with a crafted request. Provide a base64-encoded nonce value that exceeds the buffer size. Observe that the strcpy function is used without proper bounds checking.\n\nFix: To address this issue, it is recommended to replace the strcpy function with the safer alternative strncpy and explicitly specify the maximum length to copy.\n\nReference: https://cwe.mitre.org/data/definitions/122.html\n\nImpact: This vulnerability may allow an attacker to execute arbitrary code, potentially leading to a compromise of the application or system. An attacker could exploit this weakness by providing a specially crafted WebSocket request, causing a buffer overflow and overwriting adjacent memory.`,
+  },
+  {
+    kind: "curl-slop",
+    name: "curl-slop-h1-3340109-fabricated-asan",
+    claimedCwes: ["CWE-121"],
+    text: `Summary: I discovered a critical stack-based buffer overflow vulnerability in cURL's cookie parsing mechanism that can lead to remote code execution. The vulnerability occurs when processing maliciously crafted HTTP cookies, affecting all applications that use libcurl for HTTP requests.\n\nDescription: During security research on cURL's cookie handling implementation, I identified a stack buffer overflow in the cookie parsing logic. The vulnerability allows remote attackers to trigger memory corruption by sending oversized cookie data through HTTP responses.\n\nTechnical Details - Vulnerability Location: The vulnerability occurs in the cookie parsing functionality where string length calculations exceed allocated stack buffer boundaries. Root Cause Analysis: Buffer Size Mismatch: Cookie processing code reads beyond allocated stack buffer. Unsafe String Operations: strlen() operation on cookie data exceeds buffer boundaries. Stack Memory Corruption: Read of 8,193 bytes in a buffer allocated for 8,192 bytes. Multi-threaded Context: Issue manifests in threaded environments.\n\nAddressSanitizer Detection: ERROR: AddressSanitizer: stack-buffer-overflow on address 0x00016f00a5c0. READ of size 8193 at 0x00016f00a5c0 thread T1. #0 0x000101676c34 in strlen+0x1b0. #1 0x000100f94c38 in cookie_overflow_hunter cookie_vulnerability_hunter.c:121.\n\nCVSS 3.1 Assessment: Base Score: 9.8 (CRITICAL). Vector String: AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H.\n\nVerified POC Code creates a local buffer of 8192 bytes, fills it without null terminator, calls strlen() which reads past the buffer. This code does NOT call curl.`,
+  },
+  {
+    kind: "legit",
+    name: "legit-01-cve-2025-0725-curl",
+    claimedCwes: ["CWE-122"],
+    text: `# Buffer overflow in libcurl gzip decoding (CVE-2025-0725-style)\n\n## Affected component\nlibcurl's automatic content decoding for gzip when built against zlib < 1.2.0.3.\n\n## Root cause\nIn \`lib/content_encoding.c\`, the function \`inflate_stream()\` calls \`Curl_client_write()\` with the size returned by \`inflate()\` without bounding it against the destination buffer when an integer overflow occurs in zlib < 1.2.0.3.\n\n\`\`\`c\n// lib/content_encoding.c (approx line 290)\nstatus = inflate(z, Z_BLOCK);\nnread = DSIZ - z->avail_out; // <-- can overflow on legacy zlib\nresult = Curl_client_write(data, CLIENTWRITE_BODY, decomp, nread);\n\`\`\`\n\n## Reproduction\n1. Build curl 8.11.x against zlib 1.2.0.2:\n   \`\`\`\n   ./configure --with-zlib=/opt/zlib-1.2.0.2 && make\n   \`\`\`\n2. Run: \`./src/curl --compressed https://attacker.example/big.gz -o /dev/null\`\n3. Observe heap-buffer-overflow under ASan: \`==12345==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x611000009f80\`\n\n## Patch\nValidate \`nread <= DSIZ\` before calling \`Curl_client_write\`; reject the response with \`CURLE_BAD_CONTENT_ENCODING\` otherwise.\n\n## Impact\nHeap buffer overflow → potential RCE in long-running clients fetching attacker-controlled compressed responses. CVSS 8.6 (AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H).`,
+  },
+  {
+    kind: "legit",
+    name: "legit-02-curl-cookie-parser",
+    claimedCwes: ["CWE-787"],
+    text: `# Out-of-bounds write in curl cookie parser when domain is empty\n\n## Affected\ncurl/libcurl 8.0.0 - 8.10.1, file \`lib/cookie.c\`, function \`Curl_cookie_add\`.\n\n## Root cause\nWhen parsing a Set-Cookie header where the Domain attribute is the empty string, the parser advances past the terminating NUL. The bug is here:\n\n\`\`\`c\n// lib/cookie.c around line 712 in 8.10.1\nif(!strncasecompare("domain=", what, 7)) {\n  whatptr = &what[7];\n  while(*whatptr == '.') whatptr++; // walks past NUL on empty domain\n  co->domain = strdup(whatptr);\n}\n\`\`\`\n\nA 1-byte read past the end of the heap chunk leads to a write when \`strdup\` later copies into a sized buffer.\n\n## Reproduction\n\`\`\`\nprintf 'HTTP/1.1 200 OK\\r\\nSet-Cookie: x=1; Domain=\\r\\n\\r\\n' | nc -l 8080 &\ncurl -v -c jar.txt http://127.0.0.1:8080/\n\`\`\`\nASan output:\n\`\`\`\n==4711==ERROR: AddressSanitizer: heap-buffer-overflow READ of size 1\n    #0 Curl_cookie_add lib/cookie.c:712\n    #1 Curl_cookie_init lib/cookie.c:1003\n\`\`\`\n\n## Fix\nBounds-check \`whatptr\` against the original \`what + len\` before dereferencing.\n\n## Severity\nCVSS 7.5 (AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:H) — denial of service in clients that persist cookies.`,
+  },
+  {
+    kind: "legit",
+    name: "legit-03-request-smuggling",
+    claimedCwes: ["CWE-444"],
+    text: `# HTTP request smuggling via conflicting Transfer-Encoding header in proxy\n\n## Affected\nacme-proxy 2.4.1 - 2.6.3, source file \`src/http/parser.rs\` lines 412-455.\n\n## Root cause\nThe proxy accepts \`Transfer-Encoding: chunked\` AND \`Content-Length\` simultaneously and forwards both to the backend. RFC 7230 §3.3.3 requires the proxy to either reject the message or strip Content-Length; this implementation does neither.\n\n\`\`\`rust\n// src/http/parser.rs:430\nif headers.contains_key("transfer-encoding") {\n    self.body = Body::Chunked(reader);\n} else if let Some(cl) = headers.get("content-length") {\n    self.body = Body::Sized(reader, cl.parse()?);\n}\n// missing: error or header strip when both are present\n\`\`\`\n\n## Reproduction\n\`\`\`\nprintf 'POST / HTTP/1.1\\r\\nHost: victim\\r\\nContent-Length: 6\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n0\\r\\n\\r\\nGPOST / HTTP/1.1\\r\\nHost: victim\\r\\n\\r\\n' | nc proxy 8080\n\`\`\`\nThe proxy forwards 0\\r\\n\\r\\n then GPOST as a separate request, smuggling the second request to the backend.\n\n## Patch\nReject any message containing both Transfer-Encoding and Content-Length with HTTP 400.\n\n## Impact\nCache poisoning, request hijacking, auth bypass. CVSS 9.0.`,
+  },
+  {
+    kind: "borderline",
+    name: "borderline-01-thin-but-plausible",
+    claimedCwes: ["CWE-79"],
+    text: `# Reflected XSS in /search endpoint\n\nThe \`q\` parameter on GET /search is reflected unencoded:\n\n\`\`\`html\n<input value="<script>alert(1)</script>" />\n\`\`\`\n\nReproduction:\n1. curl 'https://app.example.com/search?q=<script>alert(1)</script>'\n2. Inspect response: payload echoes inside the search-bar input.\n\nSuggested fix: HTML-encode the parameter via the existing \`escapeHtml()\` helper in src/views/search.tsx:42.`,
+  },
 
   // ---------------------------------------------------------------------
   // Task #478 — reviewer-flagged "rich" fixtures (≥3 strong-evidence
@@ -455,7 +493,12 @@ function rowFor(f: Fixture): GoldBreakdownRow {
     (r) => r.engine === "Technical Substance Analyzer",
   );
   const gold = sub?.signalBreakdown?.goldSignalBonus as
-    | { bonus: number; rawSum: number; cap: number; signals: Array<{ id: string; weight: number }> }
+    | {
+        bonus: number;
+        rawSum: number;
+        cap: number;
+        signals: Array<{ id: string; weight: number }>;
+      }
     | undefined;
   return {
     name: f.name,
@@ -490,14 +533,13 @@ describe("Task #333 — gold-signal-bonus cap calibration", () => {
   // calibration task can diff against today's distribution.
   it("emits the per-fixture gold-bonus breakdown for the cap calibration", () => {
     const rows = FIXTURES.map(rowFor);
-    // eslint-disable-next-line no-console
+
     console.log("\n=== Task #333 gold-signal-bonus calibration ===");
-    // eslint-disable-next-line no-console
+
     console.log(
       `cap=${GOLD_SIGNAL_BONUS_CAP}  weights=${JSON.stringify(GOLD_SIGNAL_WEIGHTS)}`,
     );
     for (const r of rows) {
-      // eslint-disable-next-line no-console
       console.log(
         `[${r.kind.padEnd(15)}] ${r.name.padEnd(46)} ` +
           `rawSum=${String(r.rawSum).padStart(2)} bonus=${String(r.bonus).padStart(2)} ` +
@@ -518,7 +560,7 @@ describe("Task #333 — gold-signal-bonus cap calibration", () => {
     const realCapHits = real.filter((r) => r.capHit).length;
     const richRows = real.filter((r) => r.kind === "legit-rich");
     const richMultiCat = richRows.filter((r) => r.signalCount >= 3).length;
-    // eslint-disable-next-line no-console
+
     console.log(
       `\nReal-cohort summary: n=${real.length}  rawSum.max=${realMax}  ` +
         `cap-hits=${realCapHits}/${real.length}  cap=${GOLD_SIGNAL_BONUS_CAP}  ` +
@@ -536,7 +578,9 @@ describe("Task #333 — gold-signal-bonus cap calibration", () => {
   // (i.e. the cap must bite on a real disclosure shape — otherwise it's
   // functionally dead code).
   it("(a) high-quality multi-category reports approach or hit the cap", () => {
-    const richRows = FIXTURES.filter((f) => f.kind === "legit-rich").map(rowFor);
+    const richRows = FIXTURES.filter((f) => f.kind === "legit-rich").map(
+      rowFor,
+    );
     expect(richRows.length).toBeGreaterThanOrEqual(3);
     // ≥1 rich fixture must come within 2pt of the cap.
     const nearCap = richRows.filter(
@@ -555,7 +599,9 @@ describe("Task #333 — gold-signal-bonus cap calibration", () => {
       capClippers.length,
       `no rich fixture clips the cap; rawSums=${richRows
         .map((r) => `${r.name}:${r.rawSum}`)
-        .join(", ")} — cap=${GOLD_SIGNAL_BONUS_CAP} must bite on at least one real disclosure shape`,
+        .join(
+          ", ",
+        )} — cap=${GOLD_SIGNAL_BONUS_CAP} must bite on at least one real disclosure shape`,
     ).toBeGreaterThanOrEqual(1);
     // Every rich fixture must fire ≥3 strong-evidence categories — that's
     // the definition of "rich" and the criterion the calibration relies on.

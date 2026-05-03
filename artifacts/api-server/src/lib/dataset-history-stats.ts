@@ -54,7 +54,8 @@ function isValidStats(parsed: unknown): parsed is PersistedStats {
   if (typeof p.lastCompactedAt !== "string") return false;
   if (!Number.isFinite(Date.parse(p.lastCompactedAt))) return false;
   if (typeof p.lastRemovedCount !== "number") return false;
-  if (!Number.isFinite(p.lastRemovedCount) || p.lastRemovedCount < 0) return false;
+  if (!Number.isFinite(p.lastRemovedCount) || p.lastRemovedCount < 0)
+    return false;
   return true;
 }
 
@@ -96,9 +97,10 @@ export async function recordDatasetCompactionRun(
   removedRows: number,
   timestamp: string = new Date().toISOString(),
 ): Promise<void> {
-  const safeRemoved = Number.isFinite(removedRows) && removedRows >= 0
-    ? Math.round(removedRows)
-    : 0;
+  const safeRemoved =
+    Number.isFinite(removedRows) && removedRows >= 0
+      ? Math.round(removedRows)
+      : 0;
   const next: DatasetCompactionStats = {
     lastCompactedAt: timestamp,
     lastRemovedCount: safeRemoved,

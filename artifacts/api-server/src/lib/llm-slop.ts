@@ -1,5 +1,5 @@
-import OpenAI from "openai";
 import { createHash } from "crypto";
+import OpenAI from "openai";
 import { logger } from "./logger";
 
 export interface LLMTriageGuidance {
@@ -124,7 +124,9 @@ function buildClient(): OpenAI | null {
 }
 
 export function isLLMAvailable(): boolean {
-  return !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY);
+  return !!(
+    process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
+  );
 }
 
 export function shouldCallLLM(
@@ -275,23 +277,66 @@ export function evaluateLlmGate(
   // Legacy heuristic-only path — unchanged. Used by callers that haven't
   // wired the composite through yet, or by the degraded-mode fallback
   // when the engine layer crashed.
-  const borderline = heuristicScore >= COST_GUARD_LOW && heuristicScore <= COST_GUARD_HIGH;
+  const borderline =
+    heuristicScore >= COST_GUARD_LOW && heuristicScore <= COST_GUARD_HIGH;
   if (borderline && uncertain) {
-    return { shouldCall: true, reason: "fired_borderline_and_low_confidence", heuristicScore, confidence, compositeScore: null, costGuard };
+    return {
+      shouldCall: true,
+      reason: "fired_borderline_and_low_confidence",
+      heuristicScore,
+      confidence,
+      compositeScore: null,
+      costGuard,
+    };
   }
   if (borderline) {
-    return { shouldCall: true, reason: "fired_borderline", heuristicScore, confidence, compositeScore: null, costGuard };
+    return {
+      shouldCall: true,
+      reason: "fired_borderline",
+      heuristicScore,
+      confidence,
+      compositeScore: null,
+      costGuard,
+    };
   }
   if (uncertain) {
-    return { shouldCall: true, reason: "fired_low_confidence", heuristicScore, confidence, compositeScore: null, costGuard };
+    return {
+      shouldCall: true,
+      reason: "fired_low_confidence",
+      heuristicScore,
+      confidence,
+      compositeScore: null,
+      costGuard,
+    };
   }
   if (heuristicScore > COST_GUARD_HIGH) {
-    return { shouldCall: false, reason: "skipped_above_borderline", heuristicScore, confidence, compositeScore: null, costGuard };
+    return {
+      shouldCall: false,
+      reason: "skipped_above_borderline",
+      heuristicScore,
+      confidence,
+      compositeScore: null,
+      costGuard,
+    };
   }
   if (heuristicScore < COST_GUARD_LOW) {
-    return { shouldCall: false, reason: "skipped_below_borderline", heuristicScore, confidence, compositeScore: null, costGuard };
+    return {
+      shouldCall: false,
+      reason: "skipped_below_borderline",
+      heuristicScore,
+      confidence,
+      compositeScore: null,
+      costGuard,
+    };
   }
-  return { shouldCall: false, reason: "skipped_high_confidence_outside_borderline", heuristicScore, confidence, compositeScore: null, costGuard };
+  return {
+    shouldCall: false,
+    reason: "skipped_high_confidence_outside_borderline",
+    heuristicScore,
+    confidence,
+    compositeScore: null,
+    costGuard,
+  };
 }
 
 function getCacheKey(text: string): string {
@@ -515,7 +560,10 @@ async function analyzeSlopWithLLMOnce(
   try {
     const model = process.env.OPENAI_MODEL || "gpt-5-nano";
     const startMs = Date.now();
-    logger.info({ model, textLength: truncatedText.length }, "LLM slop: sending request");
+    logger.info(
+      { model, textLength: truncatedText.length },
+      "LLM slop: sending request",
+    );
 
     const isNano = model.includes("nano");
     const activePrompt = getSystemPrompt(model);
@@ -533,7 +581,7 @@ async function analyzeSlopWithLLMOnce(
           },
         ],
       },
-      { signal: controller.signal }
+      { signal: controller.signal },
     );
 
     const elapsedMs = Date.now() - startMs;
@@ -542,14 +590,36 @@ async function analyzeSlopWithLLMOnce(
     const finishReason = choice?.finish_reason ?? "unknown";
     const usage = response.usage;
     if (raw.length === 0 && choice) {
-      logger.warn({ messageKeys: Object.keys(choice.message || {}), choiceKeys: Object.keys(choice), refusal: choice.message?.refusal }, "LLM slop: empty content debug");
+      logger.warn(
+        {
+          messageKeys: Object.keys(choice.message || {}),
+          choiceKeys: Object.keys(choice),
+          refusal: choice.message?.refusal,
+        },
+        "LLM slop: empty content debug",
+      );
     }
-    logger.info({ rawLength: raw.length, elapsedMs, finishReason, completionTokens: usage?.completion_tokens, promptTokens: usage?.prompt_tokens }, "LLM slop: received response");
+    logger.info(
+      {
+        rawLength: raw.length,
+        elapsedMs,
+        finishReason,
+        completionTokens: usage?.completion_tokens,
+        promptTokens: usage?.prompt_tokens,
+      },
+      "LLM slop: received response",
+    );
 
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      logger.warn({ raw: raw.slice(0, 200) }, "LLM slop: no JSON found in response");
-      return { kind: "failed", error: `no_json_in_response (finish_reason=${finishReason})` };
+      logger.warn(
+        { raw: raw.slice(0, 200) },
+        "LLM slop: no JSON found in response",
+      );
+      return {
+        kind: "failed",
+        error: `no_json_in_response (finish_reason=${finishReason})`,
+      };
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as {
@@ -612,12 +682,14 @@ async function analyzeSlopWithLLMOnce(
       };
     };
 
-    const hasV2Format = parsed.claimSpecificity !== undefined ||
+    const hasV2Format =
+      parsed.claimSpecificity !== undefined ||
       parsed.evidenceQuality !== undefined ||
       parsed.internalConsistency !== undefined ||
       parsed.hallucinationSignals !== undefined;
 
-    const hasV1Format = parsed.specificity !== undefined ||
+    const hasV1Format =
+      parsed.specificity !== undefined ||
       parsed.originality !== undefined ||
       parsed.voice !== undefined;
 
@@ -629,9 +701,10 @@ async function analyzeSlopWithLLMOnce(
       const eq = clamp25(parsed.evidenceQuality ?? 12);
       const ic = clamp25(parsed.internalConsistency ?? 12);
       const hs = clamp25(parsed.hallucinationSignals ?? 12);
-      const vs = typeof parsed.validityScore === "number"
-        ? clamp(parsed.validityScore)
-        : clamp(Math.round((cs + eq + ic + hs) * 100 / 100));
+      const vs =
+        typeof parsed.validityScore === "number"
+          ? clamp(parsed.validityScore)
+          : clamp(Math.round(((cs + eq + ic + hs) * 100) / 100));
 
       breakdown = {
         claimSpecificity: cs,
@@ -640,12 +713,23 @@ async function analyzeSlopWithLLMOnce(
         hallucinationSignals: hs,
         validityScore: vs,
         redFlags: Array.isArray(parsed.red_flags)
-          ? parsed.red_flags.filter((f): f is string => typeof f === "string" && f.trim().length > 0).slice(0, 4)
+          ? parsed.red_flags
+              .filter(
+                (f): f is string =>
+                  typeof f === "string" && f.trim().length > 0,
+              )
+              .slice(0, 4)
           : [],
         greenFlags: Array.isArray(parsed.green_flags)
-          ? parsed.green_flags.filter((f): f is string => typeof f === "string" && f.trim().length > 0).slice(0, 4)
+          ? parsed.green_flags
+              .filter(
+                (f): f is string =>
+                  typeof f === "string" && f.trim().length > 0,
+              )
+              .slice(0, 4)
           : [],
-        verdict: typeof parsed.verdict === "string" ? parsed.verdict : "UNCERTAIN",
+        verdict:
+          typeof parsed.verdict === "string" ? parsed.verdict : "UNCERTAIN",
       };
 
       weightedScore = 100 - vs;
@@ -657,33 +741,46 @@ async function analyzeSlopWithLLMOnce(
       const hall = clamp(parsed.hallucination ?? 50);
 
       const v1SlopScore = Math.round(
-        spec * 0.15 + orig * 0.25 + voice * 0.20 + coh * 0.15 + hall * 0.25
+        spec * 0.15 + orig * 0.25 + voice * 0.2 + coh * 0.15 + hall * 0.25,
       );
       const mappedValidity = 100 - v1SlopScore;
 
       breakdown = {
-        claimSpecificity: Math.round((100 - spec) * 25 / 100),
-        evidenceQuality: Math.round((100 - orig) * 25 / 100),
-        internalConsistency: Math.round((100 - coh) * 25 / 100),
-        hallucinationSignals: Math.round((100 - hall) * 25 / 100),
+        claimSpecificity: Math.round(((100 - spec) * 25) / 100),
+        evidenceQuality: Math.round(((100 - orig) * 25) / 100),
+        internalConsistency: Math.round(((100 - coh) * 25) / 100),
+        hallucinationSignals: Math.round(((100 - hall) * 25) / 100),
         validityScore: mappedValidity,
         redFlags: Array.isArray(parsed.red_flags)
-          ? parsed.red_flags.filter((f): f is string => typeof f === "string" && f.trim().length > 0).slice(0, 4)
+          ? parsed.red_flags
+              .filter(
+                (f): f is string =>
+                  typeof f === "string" && f.trim().length > 0,
+              )
+              .slice(0, 4)
           : [],
         greenFlags: [],
-        verdict: mappedValidity >= 70 ? "LIKELY_VALID" : mappedValidity >= 40 ? "UNCERTAIN" : "LIKELY_FABRICATED",
+        verdict:
+          mappedValidity >= 70
+            ? "LIKELY_VALID"
+            : mappedValidity >= 40
+              ? "UNCERTAIN"
+              : "LIKELY_FABRICATED",
       };
 
       weightedScore = v1SlopScore;
-      logger.info({ v1SlopScore, mappedValidity }, "LLM slop: mapped V1 format to V2");
+      logger.info(
+        { v1SlopScore, mappedValidity },
+        "LLM slop: mapped V1 format to V2",
+      );
     } else if (typeof parsed.score === "number") {
       const legacyScore = clamp(parsed.score);
       const mappedValidity = 100 - legacyScore;
       breakdown = {
-        claimSpecificity: Math.round(mappedValidity * 25 / 100),
-        evidenceQuality: Math.round(mappedValidity * 25 / 100),
-        internalConsistency: Math.round(mappedValidity * 25 / 100),
-        hallucinationSignals: Math.round(mappedValidity * 25 / 100),
+        claimSpecificity: Math.round((mappedValidity * 25) / 100),
+        evidenceQuality: Math.round((mappedValidity * 25) / 100),
+        internalConsistency: Math.round((mappedValidity * 25) / 100),
+        hallucinationSignals: Math.round((mappedValidity * 25) / 100),
         validityScore: mappedValidity,
         redFlags: [],
         greenFlags: [],
@@ -699,7 +796,10 @@ async function analyzeSlopWithLLMOnce(
     const redFlags = breakdown.redFlags;
 
     const feedback: string[] = [];
-    if (typeof parsed.reasoning === "string" && parsed.reasoning.trim().length > 0) {
+    if (
+      typeof parsed.reasoning === "string" &&
+      parsed.reasoning.trim().length > 0
+    ) {
       feedback.push(parsed.reasoning.trim());
     }
     if (Array.isArray(parsed.observations)) {
@@ -714,33 +814,77 @@ async function analyzeSlopWithLLMOnce(
     }
 
     if (feedback.length === 0) {
-      feedback.push(`LLM analysis complete: validity ${breakdown.validityScore}/100 (${breakdown.verdict})`);
+      feedback.push(
+        `LLM analysis complete: validity ${breakdown.validityScore}/100 (${breakdown.verdict})`,
+      );
     }
 
     let llmTriageGuidance: LLMTriageGuidance | null = null;
     if (parsed.triage_guidance) {
       const tg = parsed.triage_guidance;
       const reproSteps = Array.isArray(tg.repro_steps)
-        ? tg.repro_steps.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 5)
+        ? tg.repro_steps
+            .filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            )
+            .slice(0, 5)
         : [];
       const missingInfo = Array.isArray(tg.missing_info)
-        ? tg.missing_info.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 4)
+        ? tg.missing_info
+            .filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            )
+            .slice(0, 4)
         : [];
       const dontMiss = Array.isArray(tg.dont_miss)
-        ? tg.dont_miss.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 3)
+        ? tg.dont_miss
+            .filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            )
+            .slice(0, 3)
         : [];
-      const reporterFeedback = typeof tg.reporter_feedback === "string" ? tg.reporter_feedback.trim() : "";
+      const reporterFeedback =
+        typeof tg.reporter_feedback === "string"
+          ? tg.reporter_feedback.trim()
+          : "";
 
       const environment = Array.isArray(tg.environment)
-        ? tg.environment.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 4)
+        ? tg.environment
+            .filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            )
+            .slice(0, 4)
         : [];
-      const expectedBehavior = typeof tg.expected_behavior === "string" ? tg.expected_behavior.trim() : "";
+      const expectedBehavior =
+        typeof tg.expected_behavior === "string"
+          ? tg.expected_behavior.trim()
+          : "";
       const testingTips = Array.isArray(tg.testing_tips)
-        ? tg.testing_tips.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 3)
+        ? tg.testing_tips
+            .filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            )
+            .slice(0, 3)
         : [];
 
-      if (reproSteps.length > 0 || missingInfo.length > 0 || dontMiss.length > 0 || reporterFeedback.length > 0 || environment.length > 0 || expectedBehavior.length > 0 || testingTips.length > 0) {
-        llmTriageGuidance = { reproSteps, environment, expectedBehavior, testingTips, missingInfo, dontMiss, reporterFeedback };
+      if (
+        reproSteps.length > 0 ||
+        missingInfo.length > 0 ||
+        dontMiss.length > 0 ||
+        reporterFeedback.length > 0 ||
+        environment.length > 0 ||
+        expectedBehavior.length > 0 ||
+        testingTips.length > 0
+      ) {
+        llmTriageGuidance = {
+          reproSteps,
+          environment,
+          expectedBehavior,
+          testingTips,
+          missingInfo,
+          dontMiss,
+          reporterFeedback,
+        };
       }
     }
 
@@ -748,20 +892,49 @@ async function analyzeSlopWithLLMOnce(
     if (parsed.reproduction_recipe) {
       const rr = parsed.reproduction_recipe;
       const setupCommands = Array.isArray(rr.setup_commands)
-        ? rr.setup_commands.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 15)
+        ? rr.setup_commands
+            .filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            )
+            .slice(0, 15)
         : [];
-      const pocScript = typeof rr.poc_script === "string" && rr.poc_script.trim().length > 0 ? rr.poc_script.trim() : null;
-      const pocLanguage = typeof rr.poc_language === "string" ? rr.poc_language.trim().toLowerCase() : null;
-      const expectedOutput = typeof rr.expected_output === "string" && rr.expected_output.trim().length > 0 ? rr.expected_output.trim() : null;
+      const pocScript =
+        typeof rr.poc_script === "string" && rr.poc_script.trim().length > 0
+          ? rr.poc_script.trim()
+          : null;
+      const pocLanguage =
+        typeof rr.poc_language === "string"
+          ? rr.poc_language.trim().toLowerCase()
+          : null;
+      const expectedOutput =
+        typeof rr.expected_output === "string" &&
+        rr.expected_output.trim().length > 0
+          ? rr.expected_output.trim()
+          : null;
       const prerequisites = Array.isArray(rr.prerequisites)
-        ? rr.prerequisites.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 8)
+        ? rr.prerequisites
+            .filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            )
+            .slice(0, 8)
         : [];
       const cleanupCommands = Array.isArray(rr.cleanup_commands)
-        ? rr.cleanup_commands.filter((s): s is string => typeof s === "string" && s.trim().length > 0).slice(0, 5)
+        ? rr.cleanup_commands
+            .filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            )
+            .slice(0, 5)
         : [];
 
       if (setupCommands.length > 0 || pocScript) {
-        llmReproRecipe = { setupCommands, pocScript, pocLanguage, expectedOutput, prerequisites, cleanupCommands };
+        llmReproRecipe = {
+          setupCommands,
+          pocScript,
+          pocLanguage,
+          expectedOutput,
+          prerequisites,
+          cleanupCommands,
+        };
       }
     }
 
@@ -769,24 +942,77 @@ async function analyzeSlopWithLLMOnce(
     if (parsed.claims) {
       const c = parsed.claims;
       const validRelevance = ["high", "medium", "low", "none"] as const;
-      const relevance = typeof c.complianceRelevance === "string" && validRelevance.includes(c.complianceRelevance as typeof validRelevance[number])
-        ? c.complianceRelevance as typeof validRelevance[number]
-        : "none";
+      const relevance =
+        typeof c.complianceRelevance === "string" &&
+        validRelevance.includes(
+          c.complianceRelevance as (typeof validRelevance)[number],
+        )
+          ? (c.complianceRelevance as (typeof validRelevance)[number])
+          : "none";
       llmClaims = {
-        claimedProject: typeof c.claimedProject === "string" && c.claimedProject.trim().length > 0 ? c.claimedProject.trim() : null,
-        claimedVersion: typeof c.claimedVersion === "string" && c.claimedVersion.trim().length > 0 ? c.claimedVersion.trim() : null,
-        claimedFiles: Array.isArray(c.claimedFiles) ? c.claimedFiles.filter((f): f is string => typeof f === "string" && f.trim().length > 0).slice(0, 20) : [],
-        claimedFunctions: Array.isArray(c.claimedFunctions) ? c.claimedFunctions.filter((f): f is string => typeof f === "string" && f.trim().length > 0).slice(0, 20) : [],
-        claimedLineNumbers: Array.isArray(c.claimedLineNumbers) ? c.claimedLineNumbers.filter((n): n is number => typeof n === "number" && n > 0).slice(0, 20) : [],
-        claimedCVEs: Array.isArray(c.claimedCVEs) ? c.claimedCVEs.filter((f): f is string => typeof f === "string" && f.trim().length > 0).slice(0, 10) : [],
-        claimedImpact: typeof c.claimedImpact === "string" && c.claimedImpact.trim().length > 0 ? c.claimedImpact.trim() : null,
-        cvssScore: typeof c.cvssScore === "number" && c.cvssScore >= 0 && c.cvssScore <= 10 ? c.cvssScore : null,
+        claimedProject:
+          typeof c.claimedProject === "string" &&
+          c.claimedProject.trim().length > 0
+            ? c.claimedProject.trim()
+            : null,
+        claimedVersion:
+          typeof c.claimedVersion === "string" &&
+          c.claimedVersion.trim().length > 0
+            ? c.claimedVersion.trim()
+            : null,
+        claimedFiles: Array.isArray(c.claimedFiles)
+          ? c.claimedFiles
+              .filter(
+                (f): f is string =>
+                  typeof f === "string" && f.trim().length > 0,
+              )
+              .slice(0, 20)
+          : [],
+        claimedFunctions: Array.isArray(c.claimedFunctions)
+          ? c.claimedFunctions
+              .filter(
+                (f): f is string =>
+                  typeof f === "string" && f.trim().length > 0,
+              )
+              .slice(0, 20)
+          : [],
+        claimedLineNumbers: Array.isArray(c.claimedLineNumbers)
+          ? c.claimedLineNumbers
+              .filter((n): n is number => typeof n === "number" && n > 0)
+              .slice(0, 20)
+          : [],
+        claimedCVEs: Array.isArray(c.claimedCVEs)
+          ? c.claimedCVEs
+              .filter(
+                (f): f is string =>
+                  typeof f === "string" && f.trim().length > 0,
+              )
+              .slice(0, 10)
+          : [],
+        claimedImpact:
+          typeof c.claimedImpact === "string" &&
+          c.claimedImpact.trim().length > 0
+            ? c.claimedImpact.trim()
+            : null,
+        cvssScore:
+          typeof c.cvssScore === "number" &&
+          c.cvssScore >= 0 &&
+          c.cvssScore <= 10
+            ? c.cvssScore
+            : null,
         hasPoC: c.hasPoC === true,
         pocTargetsClaimedLibrary: c.pocTargetsClaimedLibrary === true,
         hasAsanOutput: c.hasAsanOutput === true,
         asanFromClaimedProject: c.asanFromClaimedProject === true,
         selfDisclosesAI: c.selfDisclosesAI === true,
-        complianceBuzzwords: Array.isArray(c.complianceBuzzwords) ? c.complianceBuzzwords.filter((f): f is string => typeof f === "string" && f.trim().length > 0).slice(0, 10) : [],
+        complianceBuzzwords: Array.isArray(c.complianceBuzzwords)
+          ? c.complianceBuzzwords
+              .filter(
+                (f): f is string =>
+                  typeof f === "string" && f.trim().length > 0,
+              )
+              .slice(0, 10)
+          : [],
         complianceRelevance: relevance,
       };
     }
@@ -803,7 +1029,19 @@ async function analyzeSlopWithLLMOnce(
       };
     }
 
-    logger.info({ weightedScore, validity: breakdown.validityScore, verdict: breakdown.verdict, hasClaims: !!llmClaims, hasSubstance: !!llmSubstance, hasTriageGuidance: !!llmTriageGuidance, hasReproRecipe: !!llmReproRecipe, elapsedMs }, "LLM slop: analysis complete");
+    logger.info(
+      {
+        weightedScore,
+        validity: breakdown.validityScore,
+        verdict: breakdown.verdict,
+        hasClaims: !!llmClaims,
+        hasSubstance: !!llmSubstance,
+        hasTriageGuidance: !!llmTriageGuidance,
+        hasReproRecipe: !!llmReproRecipe,
+        elapsedMs,
+      },
+      "LLM slop: analysis complete",
+    );
 
     const result: LLMSlopResult = {
       llmSlopScore: clamp(weightedScore),
@@ -862,7 +1100,9 @@ export async function analyzeSlopWithLLMDetailed(
   }
 
   const truncatedText =
-    text.length > 4000 ? text.slice(0, 4000) + "\n\n[truncated for analysis]" : text;
+    text.length > 4000
+      ? text.slice(0, 4000) + "\n\n[truncated for analysis]"
+      : text;
 
   if (!opts.bypassCache) {
     const cached = getCachedResult(truncatedText);
@@ -888,12 +1128,18 @@ export async function analyzeSlopWithLLMDetailed(
     lastError = outcome.error;
     if (attempt < MAX_RETRIES) {
       const delayMs = 1000 * Math.pow(2, attempt);
-      logger.info({ attempt: attempt + 1, delayMs, error: lastError }, "LLM slop: retrying after failure");
-      await new Promise(r => setTimeout(r, delayMs));
+      logger.info(
+        { attempt: attempt + 1, delayMs, error: lastError },
+        "LLM slop: retrying after failure",
+      );
+      await new Promise((r) => setTimeout(r, delayMs));
     }
   }
 
-  logger.warn({ attempts, lastError }, "LLM slop: all retry attempts exhausted");
+  logger.warn(
+    { attempts, lastError },
+    "LLM slop: all retry attempts exhausted",
+  );
   return { kind: "failed", error: lastError, attempts };
 }
 

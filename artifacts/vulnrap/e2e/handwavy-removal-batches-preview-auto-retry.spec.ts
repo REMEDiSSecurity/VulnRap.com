@@ -25,7 +25,8 @@ test.describe("FLAT hand-wavy phrase picker preview — silent auto-retry", () =
     const phrases = uniquePhrases(2, "task489 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
       // The generated client interpolates removedAt straight into the
@@ -80,8 +81,11 @@ test.describe("FLAT hand-wavy phrase picker preview — silent auto-retry", () =
       // MutationObserver wired up before the click, so we don't miss
       // any short-lived intermediate state.
       await page.evaluate(() => {
-        (window as unknown as { __task489Statuses: string[] }).__task489Statuses = [];
-        const seen = (window as unknown as { __task489Statuses: string[] }).__task489Statuses;
+        (
+          window as unknown as { __task489Statuses: string[] }
+        ).__task489Statuses = [];
+        const seen = (window as unknown as { __task489Statuses: string[] })
+          .__task489Statuses;
         const observer = new MutationObserver(() => {
           const dlg = document.querySelector(
             '[data-testid="handwavy-removal-batches-preview-confirm"]',
@@ -96,12 +100,16 @@ test.describe("FLAT hand-wavy phrase picker preview — silent auto-retry", () =
           attributes: true,
           attributeFilter: ["data-status"],
         });
-        (window as unknown as { __task489Observer: MutationObserver }).__task489Observer = observer;
+        (
+          window as unknown as { __task489Observer: MutationObserver }
+        ).__task489Observer = observer;
       });
 
       // Open the preview — first GET 503s, silent retry succeeds.
       await row.getByTestId("handwavy-removal-batches-reinstate").click();
-      const dialog = page.getByTestId("handwavy-removal-batches-preview-confirm");
+      const dialog = page.getByTestId(
+        "handwavy-removal-batches-preview-confirm",
+      );
       await expect(dialog).toBeVisible({ timeout: 5_000 });
       await expect(dialog).toHaveAttribute("data-status", "ready", {
         timeout: 10_000,
@@ -130,7 +138,8 @@ test.describe("FLAT hand-wavy phrase picker preview — silent auto-retry", () =
       // "error" in between. Pull the recorded statuses back out of the
       // page context.
       const statusSequence = await page.evaluate(() => {
-        return (window as unknown as { __task489Statuses: string[] }).__task489Statuses;
+        return (window as unknown as { __task489Statuses: string[] })
+          .__task489Statuses;
       });
       seenStatuses.push(...statusSequence);
       expect(seenStatuses).not.toContain("error");

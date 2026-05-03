@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  BookOpen, Play, Pause, RotateCcw, ChevronDown, Shield, Languages,
-  FlaskConical, Network, Gauge, Layers, ArrowRight, Sparkles,
+  BookOpen,
+  Play,
+  Pause,
+  RotateCcw,
+  ChevronDown,
+  Shield,
+  Languages,
+  FlaskConical,
+  Network,
+  Gauge,
+  Layers,
+  ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -41,8 +52,7 @@ const SAMPLES: Sample[] = [
     id: "slop",
     label: "AI-generated slop",
     blurb: "Confident-sounding but evidence-free.",
-    text:
-      "Critical RCE in api/login. The endpoint suffers from a classic deserialization flaw which a sophisticated attacker could leverage to execute arbitrary code on the server, leading to a complete compromise of the underlying system. CVSS 9.8.",
+    text: "Critical RCE in api/login. The endpoint suffers from a classic deserialization flaw which a sophisticated attacker could leverage to execute arbitrary code on the server, leading to a complete compromise of the underlying system. CVSS 9.8.",
     steps: {
       redact: {
         fired: true,
@@ -50,22 +60,26 @@ const SAMPLES: Sample[] = [
       },
       linguistic: {
         fired: true,
-        detail: '5 hype phrases ("classic", "sophisticated attacker", "complete compromise", "leveraged", "arbitrary code") · LLM-cadence score 0.81',
+        detail:
+          '5 hype phrases ("classic", "sophisticated attacker", "complete compromise", "leveraged", "arbitrary code") · LLM-cadence score 0.81',
         score: 0.78,
       },
       substance: {
         fired: true,
-        detail: "0 code blocks · 0 stack traces · 0 HTTP requests · density 0.04",
+        detail:
+          "0 code blocks · 0 stack traces · 0 HTTP requests · density 0.04",
         score: 0.12,
       },
       cwe: {
         fired: true,
-        detail: 'Claims "deserialization" but no class names, no payload, no sink — CWE-502 incoherent.',
+        detail:
+          'Claims "deserialization" but no class names, no payload, no sink — CWE-502 incoherent.',
         score: 0.18,
       },
       avri: {
         fired: true,
-        detail: "Asserter-vs-Reproducer gap = 0.71 (lots of claims, nothing reproduced).",
+        detail:
+          "Asserter-vs-Reproducer gap = 0.71 (lots of claims, nothing reproduced).",
         score: 0.22,
       },
       fusion: {
@@ -82,12 +96,12 @@ const SAMPLES: Sample[] = [
     id: "legit",
     label: "Real reproducible bug",
     blurb: "Short, evidence-dense, reproducible.",
-    text:
-      "POST /api/v2/reset accepts an external `redirect_uri` without allow-listing. Reproduce: curl -X POST host/api/v2/reset -d 'email=a@b&redirect_uri=//evil.tld' → 302 Location: //evil.tld . Stack: src/auth/reset.ts:48 (buildRedirect). Affects v3.4.0–v3.6.2.",
+    text: "POST /api/v2/reset accepts an external `redirect_uri` without allow-listing. Reproduce: curl -X POST host/api/v2/reset -d 'email=a@b&redirect_uri=//evil.tld' → 302 Location: //evil.tld . Stack: src/auth/reset.ts:48 (buildRedirect). Affects v3.4.0–v3.6.2.",
     steps: {
       redact: {
         fired: true,
-        detail: "1 email redacted (a@b → ⟨email⟩), 0 secrets — preserved structure.",
+        detail:
+          "1 email redacted (a@b → ⟨email⟩), 0 secrets — preserved structure.",
       },
       linguistic: {
         fired: false,
@@ -96,12 +110,14 @@ const SAMPLES: Sample[] = [
       },
       substance: {
         fired: false,
-        detail: "1 curl repro · 1 file:line ref · 1 version range · density 0.71",
+        detail:
+          "1 curl repro · 1 file:line ref · 1 version range · density 0.71",
         score: 0.78,
       },
       cwe: {
         fired: false,
-        detail: "CWE-601 (Open Redirect) coherent: sink + payload + observed effect all present.",
+        detail:
+          "CWE-601 (Open Redirect) coherent: sink + payload + observed effect all present.",
         score: 0.86,
       },
       avri: {
@@ -125,7 +141,8 @@ const STEPS: StepDef[] = [
   {
     id: "redact",
     title: "1 · Redact",
-    oneLiner: "Strip PII, secrets, and tokens before anything else touches the text.",
+    oneLiner:
+      "Strip PII, secrets, and tokens before anything else touches the text.",
     icon: <Shield className="w-4 h-4" />,
     accent: "rgba(167,139,250,0.55)",
     blogTo: "/privacy",
@@ -133,15 +150,18 @@ const STEPS: StepDef[] = [
     body: (
       <>
         <p>
-          Every report is run through a redaction pass <em>before</em> it reaches any engine, model,
-          or storage layer. Emails, IPs, JWTs, AWS keys, GitHub tokens, and a curated list of
-          secret-shaped strings are replaced with structural placeholders like{" "}
-          <code className="text-primary">⟨email⟩</code> or <code className="text-primary">⟨jwt⟩</code>.
+          Every report is run through a redaction pass <em>before</em> it
+          reaches any engine, model, or storage layer. Emails, IPs, JWTs, AWS
+          keys, GitHub tokens, and a curated list of secret-shaped strings are
+          replaced with structural placeholders like{" "}
+          <code className="text-primary">⟨email⟩</code> or{" "}
+          <code className="text-primary">⟨jwt⟩</code>.
         </p>
         <p className="mt-2">
-          The placeholders preserve <em>shape</em> so downstream engines can still tell that "a token
-          was here" without ever seeing the token. This is also what we hash and store — the original
-          text is dropped on the floor.
+          The placeholders preserve <em>shape</em> so downstream engines can
+          still tell that "a token was here" without ever seeing the token. This
+          is also what we hash and store — the original text is dropped on the
+          floor.
         </p>
       </>
     ),
@@ -149,7 +169,8 @@ const STEPS: StepDef[] = [
   {
     id: "linguistic",
     title: "2 · Linguistic",
-    oneLiner: "Looks for AI-cadence: hype phrases, hedging, and that 'confidently vague' tone.",
+    oneLiner:
+      "Looks for AI-cadence: hype phrases, hedging, and that 'confidently vague' tone.",
     icon: <Languages className="w-4 h-4" />,
     accent: "rgba(34,211,238,0.55)",
     blogTo: "/blog",
@@ -157,13 +178,15 @@ const STEPS: StepDef[] = [
     body: (
       <>
         <p>
-          A pattern bank of hype phrases ("sophisticated attacker", "complete compromise",
-          "leverages a classic flaw"), hedge-stacking, and pacing markers feeds a small classifier
-          that scores how much the text reads like a generated security writeup vs. a human one.
+          A pattern bank of hype phrases ("sophisticated attacker", "complete
+          compromise", "leverages a classic flaw"), hedge-stacking, and pacing
+          markers feeds a small classifier that scores how much the text reads
+          like a generated security writeup vs. a human one.
         </p>
         <p className="mt-2">
-          High score here is suspicious but never sufficient — plenty of real engineers write in
-          formal English. It only earns weight when the next two engines agree something is off.
+          High score here is suspicious but never sufficient — plenty of real
+          engineers write in formal English. It only earns weight when the next
+          two engines agree something is off.
         </p>
       </>
     ),
@@ -171,7 +194,8 @@ const STEPS: StepDef[] = [
   {
     id: "substance",
     title: "3 · Substance",
-    oneLiner: "Counts the concrete stuff: code, requests, stack traces, file:line refs.",
+    oneLiner:
+      "Counts the concrete stuff: code, requests, stack traces, file:line refs.",
     icon: <FlaskConical className="w-4 h-4" />,
     accent: "rgba(52,211,153,0.55)",
     blogTo: "/engines/substance",
@@ -179,13 +203,14 @@ const STEPS: StepDef[] = [
     body: (
       <>
         <p>
-          The substance engine is a structural reader: it counts code fences, HTTP request lines,
-          stack frames, file paths with line numbers, version ranges, and CVE/CWE/CVSS strings — and
-          divides by total tokens to get a density score.
+          The substance engine is a structural reader: it counts code fences,
+          HTTP request lines, stack frames, file paths with line numbers,
+          version ranges, and CVE/CWE/CVSS strings — and divides by total tokens
+          to get a density score.
         </p>
         <p className="mt-2">
-          Low density on a long report is the single strongest "this is hot air" signal we have.
-          A short report with high density is fine.
+          Low density on a long report is the single strongest "this is hot air"
+          signal we have. A short report with high density is fine.
         </p>
       </>
     ),
@@ -201,14 +226,15 @@ const STEPS: StepDef[] = [
     body: (
       <>
         <p>
-          For each CWE the reporter claims (or that we infer), this engine checks whether the
-          surrounding evidence makes sense for that weakness class. CWE-502 (deserialization)
-          without a sink, payload, or class name is incoherent. CWE-601 (open redirect) with a
-          curl repro and observed 302 is coherent.
+          For each CWE the reporter claims (or that we infer), this engine
+          checks whether the surrounding evidence makes sense for that weakness
+          class. CWE-502 (deserialization) without a sink, payload, or class
+          name is incoherent. CWE-601 (open redirect) with a curl repro and
+          observed 302 is coherent.
         </p>
         <p className="mt-2">
-          Each CWE family has its own checklist of "what should be present if this is real."
-          Mismatches dock the score; clean matches reinforce it.
+          Each CWE family has its own checklist of "what should be present if
+          this is real." Mismatches dock the score; clean matches reinforce it.
         </p>
       </>
     ),
@@ -216,7 +242,8 @@ const STEPS: StepDef[] = [
   {
     id: "avri",
     title: "5 · AVRI",
-    oneLiner: "Asserter-vs-Reproducer Index: how much of what's claimed is actually reproduced?",
+    oneLiner:
+      "Asserter-vs-Reproducer Index: how much of what's claimed is actually reproduced?",
     icon: <Gauge className="w-4 h-4" />,
     accent: "rgba(244,114,182,0.55)",
     blogTo: "/transparency",
@@ -224,13 +251,15 @@ const STEPS: StepDef[] = [
     body: (
       <>
         <p>
-          AVRI splits the report into <strong>assertions</strong> ("RCE", "any user", "complete
-          compromise") and <strong>reproductions</strong> (commands, requests, observed responses,
-          version constraints). The gap between the two is the AVRI score.
+          AVRI splits the report into <strong>assertions</strong> ("RCE", "any
+          user", "complete compromise") and <strong>reproductions</strong>{" "}
+          (commands, requests, observed responses, version constraints). The gap
+          between the two is the AVRI score.
         </p>
         <p className="mt-2">
-          A wide gap (lots of claims, little repro) is the classic shape of generated reports.
-          A narrow gap is a healthy "I claim X and here's exactly how to see X."
+          A wide gap (lots of claims, little repro) is the classic shape of
+          generated reports. A narrow gap is a healthy "I claim X and here's
+          exactly how to see X."
         </p>
       </>
     ),
@@ -238,7 +267,8 @@ const STEPS: StepDef[] = [
   {
     id: "fusion",
     title: "6 · Fusion",
-    oneLiner: "Weighted combination of all engines, with sensitivity preset applied.",
+    oneLiner:
+      "Weighted combination of all engines, with sensitivity preset applied.",
     icon: <Layers className="w-4 h-4" />,
     accent: "rgba(96,165,250,0.55)",
     blogTo: "/presets",
@@ -246,14 +276,17 @@ const STEPS: StepDef[] = [
     body: (
       <>
         <p>
-          The four engine scores are combined with per-engine weights from the active sensitivity
-          preset (e.g. <code className="text-primary">strict-triage</code> upweights substance and
-          AVRI; <code className="text-primary">research</code> is more permissive). The output is a
-          0–100 score and a tier: <em>rejected</em>, <em>needs-review</em>, or <em>accept</em>.
+          The four engine scores are combined with per-engine weights from the
+          active sensitivity preset (e.g.{" "}
+          <code className="text-primary">strict-triage</code> upweights
+          substance and AVRI; <code className="text-primary">research</code> is
+          more permissive). The output is a 0–100 score and a tier:{" "}
+          <em>rejected</em>, <em>needs-review</em>, or <em>accept</em>.
         </p>
         <p className="mt-2">
-          Fusion is intentionally boring: it's a transparent weighted sum, not a black-box model.
-          You can replay any score by hand from the four sub-scores and the preset weights.
+          Fusion is intentionally boring: it's a transparent weighted sum, not a
+          black-box model. You can replay any score by hand from the four
+          sub-scores and the preset weights.
         </p>
       </>
     ),
@@ -262,9 +295,24 @@ const STEPS: StepDef[] = [
 
 function tierStyle(tier: Sample["finalTier"]) {
   switch (tier) {
-    case "rejected": return { color: "#f87171", bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.45)" };
-    case "needs-review": return { color: "#fbbf24", bg: "rgba(251,191,36,0.12)", border: "rgba(251,191,36,0.45)" };
-    case "accept": return { color: "#34d399", bg: "rgba(52,211,153,0.12)", border: "rgba(52,211,153,0.45)" };
+    case "rejected":
+      return {
+        color: "#f87171",
+        bg: "rgba(248,113,113,0.12)",
+        border: "rgba(248,113,113,0.45)",
+      };
+    case "needs-review":
+      return {
+        color: "#fbbf24",
+        bg: "rgba(251,191,36,0.12)",
+        border: "rgba(251,191,36,0.45)",
+      };
+    case "accept":
+      return {
+        color: "#34d399",
+        bg: "rgba(52,211,153,0.12)",
+        border: "rgba(52,211,153,0.45)",
+      };
   }
 }
 
@@ -276,7 +324,10 @@ export default function HowItWorks() {
   const [playing, setPlaying] = useState(false);
   const [openId, setOpenId] = useState<StepId | null>("redact");
 
-  const sample = useMemo(() => SAMPLES.find(s => s.id === sampleId)!, [sampleId]);
+  const sample = useMemo(
+    () => SAMPLES.find((s) => s.id === sampleId)!,
+    [sampleId],
+  );
 
   useEffect(() => {
     if (!playing) return;
@@ -284,7 +335,7 @@ export default function HowItWorks() {
       const t = setTimeout(() => setPlaying(false), ANIM_STEP_MS);
       return () => clearTimeout(t);
     }
-    const t = setTimeout(() => setActiveIdx(i => i + 1), ANIM_STEP_MS);
+    const t = setTimeout(() => setActiveIdx((i) => i + 1), ANIM_STEP_MS);
     return () => clearTimeout(t);
   }, [playing, activeIdx]);
 
@@ -293,8 +344,13 @@ export default function HowItWorks() {
     setPlaying(true);
     if (activeIdx < 0) setActiveIdx(0);
   }
-  function handlePause() { setPlaying(false); }
-  function handleReset() { setPlaying(false); setActiveIdx(-1); }
+  function handlePause() {
+    setPlaying(false);
+  }
+  function handleReset() {
+    setPlaying(false);
+    setActiveIdx(-1);
+  }
   function handleSwitchSample(id: Sample["id"]) {
     setSampleId(id);
     setPlaying(false);
@@ -315,9 +371,10 @@ export default function HowItWorks() {
           From paste to tier — every step, transparently.
         </h1>
         <p className="text-muted-foreground max-w-3xl leading-relaxed">
-          VulnRap doesn't score reports with a single black-box model. It runs them through a small
-          pipeline of focused engines, each one cheap to explain and cheap to audit. Pick a sample
-          below and hit <strong>Play</strong> to watch each step light up.
+          VulnRap doesn't score reports with a single black-box model. It runs
+          them through a small pipeline of focused engines, each one cheap to
+          explain and cheap to audit. Pick a sample below and hit{" "}
+          <strong>Play</strong> to watch each step light up.
         </p>
       </header>
 
@@ -329,7 +386,7 @@ export default function HowItWorks() {
             Live walkthrough
           </div>
           <div className="flex items-center gap-1">
-            {SAMPLES.map(s => (
+            {SAMPLES.map((s) => (
               <button
                 key={s.id}
                 type="button"
@@ -338,7 +395,7 @@ export default function HowItWorks() {
                   "px-2.5 py-1 text-xs rounded-md font-medium transition-colors",
                   sampleId === s.id
                     ? "bg-primary/15 text-primary border border-primary/40"
-                    : "text-muted-foreground hover:text-primary border border-transparent"
+                    : "text-muted-foreground hover:text-primary border border-transparent",
                 )}
               >
                 {s.label}
@@ -362,7 +419,11 @@ export default function HowItWorks() {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary/15 text-primary border border-primary/40 hover:bg-primary/25 transition-colors"
               >
                 <Play className="w-3.5 h-3.5" />
-                {activeIdx >= STEPS.length - 1 ? "Replay" : activeIdx < 0 ? "Play pipeline" : "Resume"}
+                {activeIdx >= STEPS.length - 1
+                  ? "Replay"
+                  : activeIdx < 0
+                    ? "Play pipeline"
+                    : "Resume"}
               </button>
             ) : (
               <button
@@ -383,7 +444,9 @@ export default function HowItWorks() {
               Reset
             </button>
             <span className="text-[11px] text-muted-foreground/70 ml-auto font-mono">
-              {activeIdx < 0 ? "idle" : `step ${Math.min(activeIdx + 1, STEPS.length)} / ${STEPS.length}`}
+              {activeIdx < 0
+                ? "idle"
+                : `step ${Math.min(activeIdx + 1, STEPS.length)} / ${STEPS.length}`}
             </span>
           </div>
 
@@ -402,7 +465,7 @@ export default function HowItWorks() {
                     "relative text-left rounded-lg border p-2.5 transition-all duration-300 group",
                     lit
                       ? "bg-card/70 border-primary/40 shadow-[0_0_18px_-4px_rgba(34,211,238,0.5)]"
-                      : "bg-card/20 border-border/40 opacity-60"
+                      : "bg-card/20 border-border/40 opacity-60",
                   )}
                   style={lit ? { borderColor: step.accent } : undefined}
                 >
@@ -410,10 +473,12 @@ export default function HowItWorks() {
                     <span
                       className={cn(
                         "inline-block w-1.5 h-1.5 rounded-full transition-all",
-                        lit ? "scale-110" : "scale-90"
+                        lit ? "scale-110" : "scale-90",
                       )}
                       style={{
-                        backgroundColor: lit ? step.accent : "rgba(255,255,255,0.15)",
+                        backgroundColor: lit
+                          ? step.accent
+                          : "rgba(255,255,255,0.15)",
                         boxShadow: lit ? `0 0 8px ${step.accent}` : "none",
                       }}
                     />
@@ -423,16 +488,24 @@ export default function HowItWorks() {
                     {step.icon}
                     {step.title.replace(/^\d+\s·\s/, "")}
                   </div>
-                  <div className={cn(
-                    "mt-1 text-[10.5px] leading-snug transition-opacity",
-                    lit ? "opacity-100" : "opacity-0"
-                  )}>
-                    <span className={fired ? "text-amber-300/90" : "text-emerald-300/90"}>
+                  <div
+                    className={cn(
+                      "mt-1 text-[10.5px] leading-snug transition-opacity",
+                      lit ? "opacity-100" : "opacity-0",
+                    )}
+                  >
+                    <span
+                      className={
+                        fired ? "text-amber-300/90" : "text-emerald-300/90"
+                      }
+                    >
                       {fired ? "fired" : "clean"}
                     </span>
                     {typeof result.score === "number" && (
                       <span className="text-muted-foreground/70 font-mono ml-1.5">
-                        {step.id === "fusion" ? `${result.score}/100` : result.score.toFixed(2)}
+                        {step.id === "fusion"
+                          ? `${result.score}/100`
+                          : result.score.toFixed(2)}
                       </span>
                     )}
                   </div>
@@ -447,7 +520,10 @@ export default function HowItWorks() {
               <span className="text-primary font-mono uppercase tracking-wider text-[10px] mr-2">
                 {STEPS[Math.min(activeIdx, STEPS.length - 1)].title}
               </span>
-              {sample.steps[STEPS[Math.min(activeIdx, STEPS.length - 1)].id].detail}
+              {
+                sample.steps[STEPS[Math.min(activeIdx, STEPS.length - 1)].id]
+                  .detail
+              }
             </div>
           )}
 
@@ -455,17 +531,26 @@ export default function HowItWorks() {
           <div
             className={cn(
               "rounded-lg border px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 transition-opacity duration-500",
-              activeIdx >= STEPS.length - 1 ? "opacity-100" : "opacity-40"
+              activeIdx >= STEPS.length - 1 ? "opacity-100" : "opacity-40",
             )}
             style={{ borderColor: tier.border, backgroundColor: tier.bg }}
           >
-            <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: tier.color }}>
+            <div
+              className="flex items-center gap-2 text-sm font-semibold"
+              style={{ color: tier.color }}
+            >
               <ArrowRight className="w-4 h-4" />
               Verdict: {sample.finalLabel}
             </div>
             <div className="text-xs font-mono text-muted-foreground">
-              score <span style={{ color: tier.color }} className="font-bold">{sample.finalScore}</span>/100 ·
-              tier <span style={{ color: tier.color }} className="font-bold">{sample.finalTier}</span>
+              score{" "}
+              <span style={{ color: tier.color }} className="font-bold">
+                {sample.finalScore}
+              </span>
+              /100 · tier{" "}
+              <span style={{ color: tier.color }} className="font-bold">
+                {sample.finalTier}
+              </span>
             </div>
           </div>
         </div>
@@ -477,7 +562,7 @@ export default function HowItWorks() {
           Each step, in plain English
         </h2>
         <div className="space-y-2">
-          {STEPS.map(step => {
+          {STEPS.map((step) => {
             const isOpen = openId === step.id;
             return (
               <div
@@ -493,22 +578,34 @@ export default function HowItWorks() {
                 >
                   <span
                     className="inline-flex items-center justify-center w-7 h-7 rounded-md shrink-0"
-                    style={{ backgroundColor: `${step.accent.replace("0.55", "0.15")}`, color: step.accent.replace("0.55", "1") }}
+                    style={{
+                      backgroundColor: `${step.accent.replace("0.55", "0.15")}`,
+                      color: step.accent.replace("0.55", "1"),
+                    }}
                   >
                     {step.icon}
                   </span>
                   <span className="flex-1 min-w-0">
-                    <span className="block text-sm font-semibold text-foreground/95">{step.title}</span>
-                    <span className="block text-xs text-muted-foreground mt-0.5">{step.oneLiner}</span>
+                    <span className="block text-sm font-semibold text-foreground/95">
+                      {step.title}
+                    </span>
+                    <span className="block text-xs text-muted-foreground mt-0.5">
+                      {step.oneLiner}
+                    </span>
                   </span>
                   <ChevronDown
-                    className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", isOpen && "rotate-180")}
+                    className={cn(
+                      "w-4 h-4 text-muted-foreground transition-transform shrink-0",
+                      isOpen && "rotate-180",
+                    )}
                   />
                 </button>
                 <div
                   className={cn(
                     "grid transition-all duration-300 ease-out",
-                    isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                    isOpen
+                      ? "grid-rows-[1fr] opacity-100"
+                      : "grid-rows-[0fr] opacity-0",
                   )}
                 >
                   <div className="overflow-hidden">
@@ -517,14 +614,22 @@ export default function HowItWorks() {
                       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
                         <div className="rounded-md border border-primary/15 bg-black/30 px-2.5 py-1 font-mono text-muted-foreground">
                           on this sample:{" "}
-                          <span className={sample.steps[step.id].fired ? "text-amber-300" : "text-emerald-300"}>
+                          <span
+                            className={
+                              sample.steps[step.id].fired
+                                ? "text-amber-300"
+                                : "text-emerald-300"
+                            }
+                          >
                             {sample.steps[step.id].fired ? "fired" : "clean"}
                           </span>
                           {typeof sample.steps[step.id].score === "number" && (
                             <span className="ml-1.5">
-                              ({step.id === "fusion"
+                              (
+                              {step.id === "fusion"
                                 ? `${sample.steps[step.id].score}/100`
-                                : sample.steps[step.id].score!.toFixed(2)})
+                                : sample.steps[step.id].score!.toFixed(2)}
+                              )
                             </span>
                           )}
                         </div>
@@ -550,7 +655,9 @@ export default function HowItWorks() {
       {/* Footer CTAs */}
       <section className="rounded-xl border border-primary/20 bg-card/30 p-5 flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="text-sm font-semibold text-foreground/95">Ready to try it on a real report?</div>
+          <div className="text-sm font-semibold text-foreground/95">
+            Ready to try it on a real report?
+          </div>
           <div className="text-xs text-muted-foreground">
             Paste your own — or browse the public corpus to see scored examples.
           </div>

@@ -8,12 +8,6 @@ process.env.DATABASE_URL =
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
-import type { AddressInfo } from "node:net";
-import {
-  buildSitemapXml,
-  PUBLIC_ROUTES,
-  REVIEWER_ONLY_ROUTES,
-} from "./sitemap";
 
 // Lightweight sitemap validator. We avoid pulling in `fast-xml-parser`
 // just for tests — the format is simple enough to validate structurally:
@@ -89,6 +83,12 @@ afterAll(async () => {
 // forgets to register it for indexing.
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import {
+  buildSitemapXml,
+  PUBLIC_ROUTES,
+  REVIEWER_ONLY_ROUTES,
+} from "./sitemap";
+import type { AddressInfo } from "node:net";
 
 function extractFrontendRoutes(): string[] {
   const appTsx = readFileSync(
@@ -205,7 +205,9 @@ describe("buildSitemapXml", () => {
   it("never emits any reviewer-only path", () => {
     const xml = buildSitemapXml({ baseUrl: "https://vulnrap.com" });
     for (const reviewerPath of REVIEWER_ONLY_ROUTES) {
-      expect(xml).not.toContain(`<loc>https://vulnrap.com${reviewerPath}</loc>`);
+      expect(xml).not.toContain(
+        `<loc>https://vulnrap.com${reviewerPath}</loc>`,
+      );
     }
   });
 

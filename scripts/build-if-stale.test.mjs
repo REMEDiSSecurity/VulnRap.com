@@ -204,10 +204,7 @@ if (markerExists) {
     recursive: true,
   });
   const file = entries.find((e) => e.isFile());
-  check(
-    "lib/avri-rubric/src has at least one file to touch",
-    Boolean(file),
-  );
+  check("lib/avri-rubric/src has at least one file to touch", Boolean(file));
 
   if (file) {
     const touched = path.join(rubricSrc, file.name);
@@ -269,13 +266,13 @@ async function withInjectedFakeDep(fakeDep, fn) {
   const originalStat = await stat(pkgAbs);
   try {
     const parsed = JSON.parse(original);
-    parsed.dependencies = { ...(parsed.dependencies ?? {}), [fakeDep]: "workspace:*" };
+    parsed.dependencies = {
+      ...(parsed.dependencies ?? {}),
+      [fakeDep]: "workspace:*",
+    };
     // Preserve trailing newline if the original had one, to minimize churn.
     const trailingNewline = original.endsWith("\n") ? "\n" : "";
-    await writeFile(
-      pkgAbs,
-      JSON.stringify(parsed, null, 2) + trailingNewline,
-    );
+    await writeFile(pkgAbs, JSON.stringify(parsed, null, 2) + trailingNewline);
     return await fn();
   } finally {
     await writeFile(pkgAbs, original);
@@ -782,7 +779,8 @@ if (markerExists) {
   } finally {
     if (prevCacheDir === undefined) delete process.env.BUILD_IF_STALE_CACHE_DIR;
     else process.env.BUILD_IF_STALE_CACHE_DIR = prevCacheDir;
-    if (prevDisable === undefined) delete process.env.BUILD_IF_STALE_DISABLE_STATS;
+    if (prevDisable === undefined)
+      delete process.env.BUILD_IF_STALE_DISABLE_STATS;
     else process.env.BUILD_IF_STALE_DISABLE_STATS = prevDisable;
   }
 
@@ -1026,11 +1024,7 @@ if (markerExists) {
   await rm(emptyDir, { recursive: true, force: true });
   const emptyResult = spawnSync(
     process.execPath,
-    [
-      path.join(__dirname, "build-if-stale-stats.mjs"),
-      "--cache-dir",
-      emptyDir,
-    ],
+    [path.join(__dirname, "build-if-stale-stats.mjs"), "--cache-dir", emptyDir],
     { cwd: REPO_ROOT, encoding: "utf8" },
   );
   check(

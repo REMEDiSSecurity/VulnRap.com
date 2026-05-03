@@ -8,7 +8,12 @@
 // existing slop fixtures (which carry no GOLD_SIGNAL by construction).
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { computeComposite, runEngine2, type EngineResult, type TriggeredIndicator } from "./engines";
+import {
+  computeComposite,
+  runEngine2,
+  type EngineResult,
+  type TriggeredIndicator,
+} from "./engines";
 import { extractSignals } from "./extractors";
 
 type PartialEngine = {
@@ -46,7 +51,12 @@ const typeSwap: TriggeredIndicator = {
 
 const baselineQualifying = (): EngineResult[] => [
   mk({ engine: "AI Authorship Detector", score: 25, verdict: "GREEN" }),
-  mk({ engine: "Technical Substance Analyzer", score: 70, verdict: "GREEN", indicators: [goldSignal] }),
+  mk({
+    engine: "Technical Substance Analyzer",
+    score: 70,
+    verdict: "GREEN",
+    indicators: [goldSignal],
+  }),
   mk({ engine: "CWE Coherence Checker", score: 70, verdict: "GREEN" }),
 ];
 
@@ -67,42 +77,81 @@ describe("Sprint 12 A2: behavioral-match reward", () => {
 
     // Compare against the same fixture without the GOLD_SIGNAL indicator.
     const noGold = baselineQualifying();
-    noGold[1] = mk({ engine: "Technical Substance Analyzer", score: 70, verdict: "GREEN" });
+    noGold[1] = mk({
+      engine: "Technical Substance Analyzer",
+      score: 70,
+      verdict: "GREEN",
+    });
     const withoutReward = computeComposite(noGold);
 
     expect(withReward.overallScore - withoutReward.overallScore).toBe(6);
-    expect(withReward.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD"))).toBe(true);
-    expect(withoutReward.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD"))).toBe(false);
+    expect(
+      withReward.overridesApplied.some((o) =>
+        o.startsWith("BEHAVIORAL_MATCH_REWARD"),
+      ),
+    ).toBe(true);
+    expect(
+      withoutReward.overridesApplied.some((o) =>
+        o.startsWith("BEHAVIORAL_MATCH_REWARD"),
+      ),
+    ).toBe(false);
   });
 
   it("does NOT fire when E3 score is below 60 (even with GOLD_SIGNAL + clean CWE)", () => {
     const engines = baselineQualifying();
-    engines[2] = mk({ engine: "CWE Coherence Checker", score: 55, verdict: "GREY" });
+    engines[2] = mk({
+      engine: "CWE Coherence Checker",
+      score: 55,
+      verdict: "GREY",
+    });
     const r = computeComposite(engines);
-    expect(r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD"))).toBe(false);
+    expect(
+      r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD")),
+    ).toBe(false);
   });
 
   it("does NOT fire when E3 carries a TYPE_SWAP indicator (negative CWE signal blocks reward)", () => {
     const engines = baselineQualifying();
-    engines[2] = mk({ engine: "CWE Coherence Checker", score: 70, verdict: "GREY", indicators: [typeSwap] });
+    engines[2] = mk({
+      engine: "CWE Coherence Checker",
+      score: 70,
+      verdict: "GREY",
+      indicators: [typeSwap],
+    });
     const r = computeComposite(engines);
-    expect(r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD"))).toBe(false);
+    expect(
+      r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD")),
+    ).toBe(false);
     // It should still fire the existing CWE_TYPE_SWAP penalty.
-    expect(r.overridesApplied.some((o) => o.startsWith("CWE_TYPE_SWAP"))).toBe(true);
+    expect(r.overridesApplied.some((o) => o.startsWith("CWE_TYPE_SWAP"))).toBe(
+      true,
+    );
   });
 
   it("does NOT fire when E2 has no GOLD_SIGNAL", () => {
     const engines = baselineQualifying();
-    engines[1] = mk({ engine: "Technical Substance Analyzer", score: 70, verdict: "GREEN" });
+    engines[1] = mk({
+      engine: "Technical Substance Analyzer",
+      score: 70,
+      verdict: "GREEN",
+    });
     const r = computeComposite(engines);
-    expect(r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD"))).toBe(false);
+    expect(
+      r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD")),
+    ).toBe(false);
   });
 
   it("does NOT fire when E1 verdict is RED (suspect AI authorship blocks reward)", () => {
     const engines = baselineQualifying();
-    engines[0] = mk({ engine: "AI Authorship Detector", score: 85, verdict: "RED" });
+    engines[0] = mk({
+      engine: "AI Authorship Detector",
+      score: 85,
+      verdict: "RED",
+    });
     const r = computeComposite(engines);
-    expect(r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD"))).toBe(false);
+    expect(
+      r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD")),
+    ).toBe(false);
   });
 
   it("co-fires with HIGH_REJECTION_PRIOR (net +1: reward +6 minus prior -5)", () => {
@@ -114,22 +163,41 @@ describe("Sprint 12 A2: behavioral-match reward", () => {
       engine: "CWE Coherence Checker",
       score: 70,
       verdict: "GREEN",
-      indicators: [{
-        signal: "HIGH_REJECTION_PRIOR",
-        value: "CWE-79",
-        strength: "MEDIUM",
-        explanation: "historically rejected often",
-      }],
+      indicators: [
+        {
+          signal: "HIGH_REJECTION_PRIOR",
+          value: "CWE-79",
+          strength: "MEDIUM",
+          explanation: "historically rejected often",
+        },
+      ],
     });
     const r = computeComposite(engines);
-    expect(r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD"))).toBe(true);
-    expect(r.overridesApplied.some((o) => o.startsWith("HIGH_REJECTION_CWE_PRIOR"))).toBe(true);
+    expect(
+      r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD")),
+    ).toBe(true);
+    expect(
+      r.overridesApplied.some((o) => o.startsWith("HIGH_REJECTION_CWE_PRIOR")),
+    ).toBe(true);
 
     const noGold = baselineQualifying();
-    noGold[1] = mk({ engine: "Technical Substance Analyzer", score: 70, verdict: "GREEN" });
+    noGold[1] = mk({
+      engine: "Technical Substance Analyzer",
+      score: 70,
+      verdict: "GREEN",
+    });
     noGold[2] = mk({
-      engine: "CWE Coherence Checker", score: 70, verdict: "GREEN",
-      indicators: [{ signal: "HIGH_REJECTION_PRIOR", value: "CWE-79", strength: "MEDIUM", explanation: "x" }],
+      engine: "CWE Coherence Checker",
+      score: 70,
+      verdict: "GREEN",
+      indicators: [
+        {
+          signal: "HIGH_REJECTION_PRIOR",
+          value: "CWE-79",
+          strength: "MEDIUM",
+          explanation: "x",
+        },
+      ],
     });
     const baseline = computeComposite(noGold);
     // baseline already includes the -5 prior; reward fixture adds +6 on top → net +6.
@@ -143,12 +211,21 @@ describe("Sprint 12 A2: behavioral-match reward", () => {
     // both overrides apply (reward +6, thin -5 → net +1).
     const engines: EngineResult[] = [
       mk({ engine: "AI Authorship Detector", score: 30, verdict: "GREEN" }),
-      mk({ engine: "Technical Substance Analyzer", score: 15, verdict: "GREEN", indicators: [goldSignal] }),
+      mk({
+        engine: "Technical Substance Analyzer",
+        score: 15,
+        verdict: "GREEN",
+        indicators: [goldSignal],
+      }),
       mk({ engine: "CWE Coherence Checker", score: 70, verdict: "GREEN" }),
     ];
     const r = computeComposite(engines);
-    expect(r.overridesApplied).toContain("THIN_LEGITIMATE_REPORT: Low substance but not AI-authored");
-    expect(r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD"))).toBe(true);
+    expect(r.overridesApplied).toContain(
+      "THIN_LEGITIMATE_REPORT: Low substance but not AI-authored",
+    );
+    expect(
+      r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD")),
+    ).toBe(true);
   });
 
   it("legacy Engine 2 emits GOLD_SIGNAL=code_diff for a unified diff hunk", () => {
@@ -164,7 +241,9 @@ describe("Sprint 12 A2: behavioral-match reward", () => {
     ].join("\n");
     const signals = extractSignals(text);
     const e2 = runEngine2(signals, text);
-    const golds = e2.triggeredIndicators.filter((i) => i.signal === "GOLD_SIGNAL");
+    const golds = e2.triggeredIndicators.filter(
+      (i) => i.signal === "GOLD_SIGNAL",
+    );
     expect(golds.some((g) => g.value === "code_diff")).toBe(true);
   });
 
@@ -182,7 +261,9 @@ SUMMARY: AddressSanitizer: heap-buffer-overflow src/webgpu/CommandEncoder.cpp:41
 `;
     const signals = extractSignals(text);
     const e2 = runEngine2(signals, text);
-    const golds = e2.triggeredIndicators.filter((i) => i.signal === "GOLD_SIGNAL");
+    const golds = e2.triggeredIndicators.filter(
+      (i) => i.signal === "GOLD_SIGNAL",
+    );
     expect(golds.some((g) => g.value === "real_crash_trace")).toBe(true);
   });
 
@@ -199,7 +280,9 @@ SUMMARY: AddressSanitizer: heap-buffer-overflow
 `;
     const signals = extractSignals(text);
     const e2 = runEngine2(signals, text);
-    const golds = e2.triggeredIndicators.filter((i) => i.signal === "GOLD_SIGNAL");
+    const golds = e2.triggeredIndicators.filter(
+      (i) => i.signal === "GOLD_SIGNAL",
+    );
     expect(golds.some((g) => g.value === "real_crash_trace")).toBe(false);
   });
 
@@ -221,7 +304,9 @@ Accept: application/json\r
 `;
     const signals = extractSignals(text);
     const e2 = runEngine2(signals, text);
-    const golds = e2.triggeredIndicators.filter((i) => i.signal === "GOLD_SIGNAL");
+    const golds = e2.triggeredIndicators.filter(
+      (i) => i.signal === "GOLD_SIGNAL",
+    );
     expect(golds.some((g) => g.value === "real_raw_http")).toBe(true);
   });
 
@@ -238,7 +323,9 @@ Transfer-Encoding: <chunked>
 `;
     const signals = extractSignals(text);
     const e2 = runEngine2(signals, text);
-    const golds = e2.triggeredIndicators.filter((i) => i.signal === "GOLD_SIGNAL");
+    const golds = e2.triggeredIndicators.filter(
+      (i) => i.signal === "GOLD_SIGNAL",
+    );
     expect(golds.some((g) => g.value === "real_raw_http")).toBe(false);
   });
 
@@ -275,12 +362,24 @@ SUMMARY: AddressSanitizer: heap-buffer-overflow src/webgpu/CommandEncoder.cpp:41
 `;
     const signals = extractSignals(text, ["CWE-122"]);
     const e2 = runEngine2(signals, text);
-    expect(e2.triggeredIndicators.some((i) => i.signal === "GOLD_SIGNAL")).toBe(true);
+    expect(e2.triggeredIndicators.some((i) => i.signal === "GOLD_SIGNAL")).toBe(
+      true,
+    );
 
-    const e1 = mk({ engine: "AI Authorship Detector", score: 25, verdict: "GREEN" });
-    const e3 = mk({ engine: "CWE Coherence Checker", score: 70, verdict: "GREEN" });
+    const e1 = mk({
+      engine: "AI Authorship Detector",
+      score: 25,
+      verdict: "GREEN",
+    });
+    const e3 = mk({
+      engine: "CWE Coherence Checker",
+      score: 70,
+      verdict: "GREEN",
+    });
     const r = computeComposite([e1, e2, e3]);
-    expect(r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD"))).toBe(true);
+    expect(
+      r.overridesApplied.some((o) => o.startsWith("BEHAVIORAL_MATCH_REWARD")),
+    ).toBe(true);
   });
 
   it("nudges a borderline 60 composite up to PRIORITIZE territory", () => {
@@ -289,11 +388,18 @@ SUMMARY: AddressSanitizer: heap-buffer-overflow src/webgpu/CommandEncoder.cpp:41
     // With +6 reward → 67. Triage band ≥ 65 → PRIORITIZE.
     const engines: EngineResult[] = [
       mk({ engine: "AI Authorship Detector", score: 30, verdict: "GREEN" }),
-      mk({ engine: "Technical Substance Analyzer", score: 60, verdict: "GREEN", indicators: [goldSignal] }),
+      mk({
+        engine: "Technical Substance Analyzer",
+        score: 60,
+        verdict: "GREEN",
+        indicators: [goldSignal],
+      }),
       mk({ engine: "CWE Coherence Checker", score: 60, verdict: "GREEN" }),
     ];
     const r = computeComposite(engines);
-    expect(r.overridesApplied).toContain("BEHAVIORAL_MATCH_REWARD: Engine 2 gold evidence + Engine 3 coherent CWE match");
+    expect(r.overridesApplied).toContain(
+      "BEHAVIORAL_MATCH_REWARD: Engine 2 gold evidence + Engine 3 coherent CWE match",
+    );
     expect(r.overallScore).toBeGreaterThanOrEqual(65);
   });
 });

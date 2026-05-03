@@ -95,7 +95,9 @@ function isSchedulerEnabled(): boolean {
  * whatever flag combination they want.
  */
 export function buildRescoreOpts(
-  overrides: Partial<Pick<CliOpts, "limit" | "maxRuntimeMs" | "batchSize">> = {},
+  overrides: Partial<
+    Pick<CliOpts, "limit" | "maxRuntimeMs" | "batchSize">
+  > = {},
 ): CliOpts {
   return {
     dryRun: false,

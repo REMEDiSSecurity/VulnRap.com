@@ -120,7 +120,9 @@ function readPhrasesFile(path) {
   try {
     contents = readFileSync(path, "utf8");
   } catch (err) {
-    console.error(color("red", `Failed to read --phrases-file ${path}: ${err.message}`));
+    console.error(
+      color("red", `Failed to read --phrases-file ${path}: ${err.message}`),
+    );
     process.exit(2);
   }
   const out = [];
@@ -150,7 +152,11 @@ async function request(method, url, body, token) {
   let payload = null;
   const text = await res.text();
   if (text) {
-    try { payload = JSON.parse(text); } catch { payload = text; }
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = text;
+    }
   }
   return { status: res.status, ok: res.ok, payload };
 }
@@ -163,13 +169,18 @@ function renderEntry(item) {
     lines.push(`    Category:  ${item.entry.category}`);
     if (item.entry.addedBy) lines.push(`    Added by:  ${item.entry.addedBy}`);
     if (item.entry.addedAt) lines.push(`    Added at:  ${item.entry.addedAt}`);
-    if (item.entry.rationale) lines.push(`    Rationale: ${item.entry.rationale}`);
+    if (item.entry.rationale)
+      lines.push(`    Rationale: ${item.entry.rationale}`);
     if (!item.entry.addedBy && !item.entry.addedAt) {
-      lines.push(color("dim", "    (curated default — no add-history metadata)"));
+      lines.push(
+        color("dim", "    (curated default — no add-history metadata)"),
+      );
     }
   } else {
     lines.push(color("yellow", `• "${item.normalized}"`));
-    lines.push(color("yellow", "    Not in the active list — will be skipped."));
+    lines.push(
+      color("yellow", "    Not in the active list — will be skipped."),
+    );
   }
   return lines.join("\n");
 }
@@ -186,7 +197,10 @@ async function confirm(question) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args.help) { printHelp(); process.exit(0); }
+  if (args.help) {
+    printHelp();
+    process.exit(0);
+  }
 
   const collected = [...args.phrases];
   if (args.phrasesFile) {
@@ -196,7 +210,9 @@ async function main() {
     (p) => typeof p === "string" && p.trim().length > 0,
   );
   if (validRaw.length === 0) {
-    console.error("Error: at least one --phrase or a --phrases-file with content is required.");
+    console.error(
+      "Error: at least one --phrase or a --phrases-file with content is required.",
+    );
     printHelp();
     process.exit(2);
   }
@@ -211,7 +227,11 @@ async function main() {
   }
   const requests = [...seen.values()];
 
-  const baseUrl = (args.apiUrl ?? process.env.API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+  const baseUrl = (
+    args.apiUrl ??
+    process.env.API_URL ??
+    "http://localhost:3001"
+  ).replace(/\/+$/, "");
   const endpoint = `${baseUrl}/api/feedback/calibration/handwavy-phrases`;
   // The DELETE endpoint is gated by requireCalibrationAuth. The GET endpoint
   // is not, but we send the token on both requests anyway so a misconfigured
@@ -222,19 +242,34 @@ async function main() {
   console.log(color("dim", `→ Fetching active list from ${endpoint} ...`));
   const list = await request("GET", endpoint, undefined, token);
   if (list.status === 401 || list.status === 403) {
-    console.error(color("red", "Lookup failed: the calibration endpoint rejected the request as unauthorized. Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment."));
+    console.error(
+      color(
+        "red",
+        "Lookup failed: the calibration endpoint rejected the request as unauthorized. Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.",
+      ),
+    );
     process.exit(1);
   }
   if (!list.ok) {
-    const msg = list.payload && typeof list.payload === "object" && "error" in list.payload
-      ? list.payload.error
-      : `HTTP ${list.status}`;
+    const msg =
+      list.payload &&
+      typeof list.payload === "object" &&
+      "error" in list.payload
+        ? list.payload.error
+        : `HTTP ${list.status}`;
     console.error(color("red", `Lookup failed: ${msg}`));
     process.exit(1);
   }
-  const phrases = Array.isArray(list.payload?.phrases) ? list.payload.phrases : null;
+  const phrases = Array.isArray(list.payload?.phrases)
+    ? list.payload.phrases
+    : null;
   if (!phrases) {
-    console.error(color("red", "Lookup failed: server response did not include a 'phrases' array. Aborting."));
+    console.error(
+      color(
+        "red",
+        "Lookup failed: server response did not include a 'phrases' array. Aborting.",
+      ),
+    );
     process.exit(1);
   }
 
@@ -255,7 +290,12 @@ async function main() {
   const missingItems = items.filter((it) => !it.entry);
 
   console.log("");
-  console.log(color("bold", `Phrases to remove (${requests.length} requested, ${presentItems.length} found, ${missingItems.length} not in active list):`));
+  console.log(
+    color(
+      "bold",
+      `Phrases to remove (${requests.length} requested, ${presentItems.length} found, ${missingItems.length} not in active list):`,
+    ),
+  );
   for (const it of items) console.log(renderEntry(it));
   console.log("");
 
@@ -273,7 +313,12 @@ async function main() {
     // `requests` list further down.
     const dryBody = { phrases: validRaw, dryRun: true };
     if (args.reviewer) dryBody.reviewer = args.reviewer;
-    console.log(color("dim", `→ Sending dry-run DELETE for ${validRaw.length} phrase${validRaw.length === 1 ? "" : "s"} (${requests.length} unique) ...`));
+    console.log(
+      color(
+        "dim",
+        `→ Sending dry-run DELETE for ${validRaw.length} phrase${validRaw.length === 1 ? "" : "s"} (${requests.length} unique) ...`,
+      ),
+    );
     let dry;
     try {
       dry = await request("DELETE", endpoint, dryBody, token);
@@ -282,13 +327,19 @@ async function main() {
       process.exit(1);
     }
     if (dry.status === 401 || dry.status === 403) {
-      console.error(color("red", `Dry-run rejected as unauthorized (HTTP ${dry.status}). Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.`));
+      console.error(
+        color(
+          "red",
+          `Dry-run rejected as unauthorized (HTTP ${dry.status}). Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.`,
+        ),
+      );
       process.exit(1);
     }
     if (!dry.ok || !dry.payload || dry.payload.dryRun !== true) {
-      const msg = dry.payload && typeof dry.payload === "object" && "error" in dry.payload
-        ? dry.payload.error
-        : `HTTP ${dry.status}`;
+      const msg =
+        dry.payload && typeof dry.payload === "object" && "error" in dry.payload
+          ? dry.payload.error
+          : `HTTP ${dry.status}`;
       console.error(color("red", `Dry-run failed: ${msg}`));
       process.exit(1);
     }
@@ -299,7 +350,9 @@ async function main() {
     console.log(`  Would remove:        ${color("green", p.wouldRemove)}`);
     console.log(`  Not on active list:  ${color("yellow", p.notFound)}`);
     if (p.duplicateInBatch > 0) {
-      console.log(`  Duplicate-in-batch:  ${color("yellow", p.duplicateInBatch)}`);
+      console.log(
+        `  Duplicate-in-batch:  ${color("yellow", p.duplicateInBatch)}`,
+      );
     }
     console.log(`  Active list before:  ${p.total}`);
     console.log(`  Active list after:   ${p.projectedTotal}`);
@@ -310,7 +363,12 @@ async function main() {
         if (r.removed) {
           console.log(color("green", `  ✓ would remove   "${r.phrase}"`));
         } else if (r.reason === "duplicate-in-batch") {
-          console.log(color("yellow", `  ! duplicate      "${r.phrase}" — repeated earlier in batch`));
+          console.log(
+            color(
+              "yellow",
+              `  ! duplicate      "${r.phrase}" — repeated earlier in batch`,
+            ),
+          );
         } else {
           console.log(color("yellow", `  ! not-found      "${r.phrase}"`));
         }
@@ -320,27 +378,52 @@ async function main() {
     const corpus = impact.corpus;
     if (corpus) {
       console.log("");
-      console.log(color("bold", `Curated corpus impact (${corpus.corpusSize} fixtures scanned):`));
+      console.log(
+        color(
+          "bold",
+          `Curated corpus impact (${corpus.corpusSize} fixtures scanned):`,
+        ),
+      );
       console.log(`  Reports that would lose their flag: ${corpus.total}`);
-      console.log(`    T1 LEGIT (false-positive flags dropped):  ${corpus.byTier.t1Legit}`);
-      console.log(`    T2 BORDERLINE (false-positive flags dropped): ${corpus.byTier.t2Borderline}`);
-      console.log(`    T3 SLOP (real detections lost):           ${corpus.byTier.t3Slop}`);
-      console.log(`    T4 HALLUCINATED (real detections lost):   ${corpus.byTier.t4Hallucinated}`);
+      console.log(
+        `    T1 LEGIT (false-positive flags dropped):  ${corpus.byTier.t1Legit}`,
+      );
+      console.log(
+        `    T2 BORDERLINE (false-positive flags dropped): ${corpus.byTier.t2Borderline}`,
+      );
+      console.log(
+        `    T3 SLOP (real detections lost):           ${corpus.byTier.t3Slop}`,
+      );
+      console.log(
+        `    T4 HALLUCINATED (real detections lost):   ${corpus.byTier.t4Hallucinated}`,
+      );
       if (corpus.warning) console.log(color("red", `  ⚠ ${corpus.warning}`));
     }
     const prod = impact.production;
     if (prod) {
       console.log("");
-      console.log(color("bold", `Production archive impact (${prod.corpusSize} reports scanned, cap ${impact.productionLimit}):`));
+      console.log(
+        color(
+          "bold",
+          `Production archive impact (${prod.corpusSize} reports scanned, cap ${impact.productionLimit}):`,
+        ),
+      );
       console.log(`  Reports that would lose their flag: ${prod.total}`);
       console.log(`    GREEN (T1) flags dropped: ${prod.byTier.t1Legit}`);
       console.log(`    YELLOW (T2) flags dropped: ${prod.byTier.t2Borderline}`);
       console.log(`    SLOP (T3) detections lost: ${prod.byTier.t3Slop}`);
-      console.log(`    HIGH-RISK (T4) detections lost: ${prod.byTier.t4Hallucinated}`);
+      console.log(
+        `    HIGH-RISK (T4) detections lost: ${prod.byTier.t4Hallucinated}`,
+      );
       if (prod.warning) console.log(color("red", `  ⚠ ${prod.warning}`));
     } else if (impact.productionError) {
       console.log("");
-      console.log(color("yellow", `Production archive impact unavailable: ${impact.productionError}`));
+      console.log(
+        color(
+          "yellow",
+          `Production archive impact unavailable: ${impact.productionError}`,
+        ),
+      );
     }
     console.log("");
     console.log(color("dim", "(dry-run — no changes were made)"));
@@ -348,14 +431,24 @@ async function main() {
   }
 
   if (presentItems.length === 0) {
-    console.error(color("red", `None of the requested phrases are in the active list (${phrases.length} entr${phrases.length === 1 ? "y" : "ies"}). Nothing to remove.`));
+    console.error(
+      color(
+        "red",
+        `None of the requested phrases are in the active list (${phrases.length} entr${phrases.length === 1 ? "y" : "ies"}). Nothing to remove.`,
+      ),
+    );
     process.exit(1);
   }
 
   let proceed = args.yes;
   if (!proceed) {
-    const noun = presentItems.length === 1 ? "this phrase" : `these ${presentItems.length} phrases`;
-    proceed = await confirm(color("red", `Remove ${noun} from the active list? [y/N] `));
+    const noun =
+      presentItems.length === 1
+        ? "this phrase"
+        : `these ${presentItems.length} phrases`;
+    proceed = await confirm(
+      color("red", `Remove ${noun} from the active list? [y/N] `),
+    );
   }
   if (!proceed) {
     console.log(color("yellow", "Aborted — no changes were made."));
@@ -375,14 +468,23 @@ async function main() {
   const presentForServer = items.filter((it) => it.entry);
   const skippedNotFound = items.filter((it) => !it.entry);
   for (const it of skippedNotFound) {
-    results.push({ ...it, status: "skipped-not-found", message: "not in active list at lookup time" });
+    results.push({
+      ...it,
+      status: "skipped-not-found",
+      message: "not in active list at lookup time",
+    });
   }
 
   let useFallback = false;
   if (presentForServer.length > 0) {
     const batchBody = { phrases: presentForServer.map((it) => it.raw) };
     if (args.reviewer) batchBody.reviewer = args.reviewer;
-    console.log(color("dim", `→ Sending batch DELETE for ${presentForServer.length} phrase${presentForServer.length === 1 ? "" : "s"} ...`));
+    console.log(
+      color(
+        "dim",
+        `→ Sending batch DELETE for ${presentForServer.length} phrase${presentForServer.length === 1 ? "" : "s"} ...`,
+      ),
+    );
     let batch;
     try {
       batch = await request("DELETE", endpoint, batchBody, token);
@@ -397,9 +499,18 @@ async function main() {
     if (batch) {
       if (batch.status === 401 || batch.status === 403) {
         for (const it of presentForServer) {
-          results.push({ ...it, status: "auth-failed", message: `HTTP ${batch.status}` });
+          results.push({
+            ...it,
+            status: "auth-failed",
+            message: `HTTP ${batch.status}`,
+          });
         }
-      } else if (batch.ok && batch.payload && batch.payload.batch === true && Array.isArray(batch.payload.results)) {
+      } else if (
+        batch.ok &&
+        batch.payload &&
+        batch.payload.batch === true &&
+        Array.isArray(batch.payload.results)
+      ) {
         // Map server results back to our items by normalized phrase.
         const byNorm = new Map();
         for (const r of batch.payload.results) {
@@ -408,18 +519,36 @@ async function main() {
         for (const it of presentForServer) {
           const r = byNorm.get(it.normalized);
           if (!r) {
-            results.push({ ...it, status: "error", message: "server response omitted phrase" });
+            results.push({
+              ...it,
+              status: "error",
+              message: "server response omitted phrase",
+            });
           } else if (r.removed) {
             results.push({ ...it, status: "removed", message: null });
           } else if (r.reason === "not-found") {
-            results.push({ ...it, status: "not-found", message: "server reported not-found (removed by someone else?)" });
+            results.push({
+              ...it,
+              status: "not-found",
+              message: "server reported not-found (removed by someone else?)",
+            });
           } else if (r.reason === "duplicate-in-batch") {
-            results.push({ ...it, status: "error", message: "duplicate phrase within the batch (should have been deduped)" });
+            results.push({
+              ...it,
+              status: "error",
+              message:
+                "duplicate phrase within the batch (should have been deduped)",
+            });
           } else {
-            results.push({ ...it, status: "error", message: `unexpected server result: ${JSON.stringify(r)}` });
+            results.push({
+              ...it,
+              status: "error",
+              message: `unexpected server result: ${JSON.stringify(r)}`,
+            });
           }
         }
-        if (typeof batch.payload.total === "number") lastTotal = batch.payload.total;
+        if (typeof batch.payload.total === "number")
+          lastTotal = batch.payload.total;
       } else if (
         batch.status === 400 &&
         batch.payload &&
@@ -429,9 +558,19 @@ async function main() {
         // "Body must include a non-empty 'phrase' string." message.
         /'phrase'/.test(batch.payload.error)
       ) {
-        console.log(color("yellow", "→ Batch endpoint not supported by this server; falling back to per-phrase DELETEs."));
+        console.log(
+          color(
+            "yellow",
+            "→ Batch endpoint not supported by this server; falling back to per-phrase DELETEs.",
+          ),
+        );
         useFallback = true;
-      } else if (batch.status === 404 && batch.payload && batch.payload.batch === true && Array.isArray(batch.payload.results)) {
+      } else if (
+        batch.status === 404 &&
+        batch.payload &&
+        batch.payload.batch === true &&
+        Array.isArray(batch.payload.results)
+      ) {
         // Server recognised the batch but matched nothing: surface per-phrase
         // not-found from the response body so we don't double-count.
         const byNorm = new Map();
@@ -441,16 +580,28 @@ async function main() {
         for (const it of presentForServer) {
           const r = byNorm.get(it.normalized);
           if (!r) {
-            results.push({ ...it, status: "error", message: "server response omitted phrase" });
+            results.push({
+              ...it,
+              status: "error",
+              message: "server response omitted phrase",
+            });
           } else {
-            results.push({ ...it, status: "not-found", message: "server reported not-found (removed by someone else?)" });
+            results.push({
+              ...it,
+              status: "not-found",
+              message: "server reported not-found (removed by someone else?)",
+            });
           }
         }
-        if (typeof batch.payload.total === "number") lastTotal = batch.payload.total;
+        if (typeof batch.payload.total === "number")
+          lastTotal = batch.payload.total;
       } else {
-        const msg = batch.payload && typeof batch.payload === "object" && "error" in batch.payload
-          ? batch.payload.error
-          : `HTTP ${batch.status}`;
+        const msg =
+          batch.payload &&
+          typeof batch.payload === "object" &&
+          "error" in batch.payload
+            ? batch.payload.error
+            : `HTTP ${batch.status}`;
         for (const it of presentForServer) {
           results.push({ ...it, status: "error", message: msg });
         }
@@ -470,7 +621,11 @@ async function main() {
     let authFailedSticky = false;
     for (const it of presentForServer) {
       if (authFailedSticky) {
-        results.push({ ...it, status: "auth-failed", message: "skipped after earlier auth failure" });
+        results.push({
+          ...it,
+          status: "auth-failed",
+          message: "skipped after earlier auth failure",
+        });
         continue;
       }
       console.log(color("dim", `→ Removing "${it.normalized}" ...`));
@@ -485,17 +640,28 @@ async function main() {
       }
       if (del.status === 401 || del.status === 403) {
         authFailedSticky = true;
-        results.push({ ...it, status: "auth-failed", message: `HTTP ${del.status}` });
+        results.push({
+          ...it,
+          status: "auth-failed",
+          message: `HTTP ${del.status}`,
+        });
         continue;
       }
       if (del.status === 404) {
-        results.push({ ...it, status: "not-found", message: "server reported 404 (removed by someone else?)" });
+        results.push({
+          ...it,
+          status: "not-found",
+          message: "server reported 404 (removed by someone else?)",
+        });
         continue;
       }
       if (!del.ok) {
-        const msg = del.payload && typeof del.payload === "object" && "error" in del.payload
-          ? del.payload.error
-          : `HTTP ${del.status}`;
+        const msg =
+          del.payload &&
+          typeof del.payload === "object" &&
+          "error" in del.payload
+            ? del.payload.error
+            : `HTTP ${del.status}`;
         results.push({ ...it, status: "error", message: msg });
         continue;
       }
@@ -508,7 +674,13 @@ async function main() {
   // Summary
   console.log("");
   console.log(color("bold", "Removal results:"));
-  const counts = { removed: 0, "not-found": 0, "skipped-not-found": 0, "auth-failed": 0, error: 0 };
+  const counts = {
+    removed: 0,
+    "not-found": 0,
+    "skipped-not-found": 0,
+    "auth-failed": 0,
+    error: 0,
+  };
   for (const r of results) {
     counts[r.status] = (counts[r.status] ?? 0) + 1;
     let line;
@@ -517,10 +689,16 @@ async function main() {
         line = color("green", `  ✓ removed     "${r.normalized}"`);
         break;
       case "not-found":
-        line = color("yellow", `  ! not-found   "${r.normalized}" — ${r.message}`);
+        line = color(
+          "yellow",
+          `  ! not-found   "${r.normalized}" — ${r.message}`,
+        );
         break;
       case "skipped-not-found":
-        line = color("yellow", `  ! not-found   "${r.normalized}" — ${r.message}`);
+        line = color(
+          "yellow",
+          `  ! not-found   "${r.normalized}" — ${r.message}`,
+        );
         break;
       case "auth-failed":
         line = color("red", `  ✗ auth-failed "${r.normalized}" — ${r.message}`);
@@ -537,7 +715,12 @@ async function main() {
     console.log(color("dim", `Active list size after removals: ${lastTotal}`));
   }
   if (counts["auth-failed"] > 0) {
-    console.error(color("red", "One or more removals were rejected as unauthorized. Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment."));
+    console.error(
+      color(
+        "red",
+        "One or more removals were rejected as unauthorized. Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.",
+      ),
+    );
   }
 
   // Exit code: 0 only when every requested removal succeeded.
@@ -546,6 +729,8 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(color("red", `Unexpected error: ${err && err.message ? err.message : err}`));
+  console.error(
+    color("red", `Unexpected error: ${err && err.message ? err.message : err}`),
+  );
   process.exit(1);
 });

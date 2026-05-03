@@ -260,7 +260,9 @@ export function listSpecs() {
  * on `main`, so step (1) carries the real signal there. CI runs hit step
  * (3) instead, since the diff lives on a branch.
  */
-export function computeChangedFiles({ baseRef = process.env.E2E_DIFF_BASE } = {}) {
+export function computeChangedFiles({
+  baseRef = process.env.E2E_DIFF_BASE,
+} = {}) {
   // Use execFileSync with an argv array (NOT a shell string) so a refspec
   // sourced from CI / branch / user input can't smuggle in extra shell
   // tokens. Defense-in-depth: today the only inputs are HEAD, origin/main,
@@ -268,15 +270,11 @@ export function computeChangedFiles({ baseRef = process.env.E2E_DIFF_BASE } = {}
   // shouldn't have to audit this for shell escapes.
   const git = (...args) => {
     try {
-      return execFileSync(
-        "git",
-        ["--no-optional-locks", ...args],
-        {
-          cwd: REPO_ROOT,
-          encoding: "utf8",
-          stdio: ["ignore", "pipe", "pipe"],
-        },
-      );
+      return execFileSync("git", ["--no-optional-locks", ...args], {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
     } catch {
       return null;
     }

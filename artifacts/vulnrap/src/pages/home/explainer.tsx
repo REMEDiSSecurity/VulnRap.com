@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { HelpCircle } from "lucide-react";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 export function Explainer({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
@@ -8,7 +12,10 @@ export function Explainer({ text }: { text: string }) {
     <Tooltip open={open} onOpenChange={setOpen} delayDuration={150}>
       <TooltipTrigger
         type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
         aria-label="More info"
         className="inline-flex ml-1 cursor-help"
       >

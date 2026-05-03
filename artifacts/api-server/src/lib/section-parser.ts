@@ -13,16 +13,40 @@ export interface SectionAnalysis {
 }
 
 const HIGH_VALUE_SECTIONS = new Set([
-  "vulnerability", "description", "summary", "impact", "severity",
-  "steps to reproduce", "reproduction", "poc", "proof of concept",
-  "exploit", "payload", "attack", "technical details", "details",
-  "root cause", "remediation", "mitigation", "fix", "recommendation",
+  "vulnerability",
+  "description",
+  "summary",
+  "impact",
+  "severity",
+  "steps to reproduce",
+  "reproduction",
+  "poc",
+  "proof of concept",
+  "exploit",
+  "payload",
+  "attack",
+  "technical details",
+  "details",
+  "root cause",
+  "remediation",
+  "mitigation",
+  "fix",
+  "recommendation",
 ]);
 
 const MEDIUM_VALUE_SECTIONS = new Set([
-  "environment", "setup", "configuration", "prerequisites",
-  "affected", "scope", "references", "timeline", "disclosure",
-  "expected behavior", "observed behavior", "actual behavior",
+  "environment",
+  "setup",
+  "configuration",
+  "prerequisites",
+  "affected",
+  "scope",
+  "references",
+  "timeline",
+  "disclosure",
+  "expected behavior",
+  "observed behavior",
+  "actual behavior",
 ]);
 
 function classifyWeight(title: string): number {
@@ -45,7 +69,11 @@ export function parseSections(text: string): SectionAnalysis {
   const sections: ReportSection[] = [];
 
   const headerPattern = /^(#{1,4})\s+(.+)$/gm;
-  const headerMatches: Array<{ title: string; matchIndex: number; matchLength: number }> = [];
+  const headerMatches: Array<{
+    title: string;
+    matchIndex: number;
+    matchLength: number;
+  }> = [];
 
   let match;
   while ((match = headerPattern.exec(text)) !== null) {
@@ -68,8 +96,12 @@ export function parseSections(text: string): SectionAnalysis {
     }
 
     for (let i = 0; i < headerMatches.length; i++) {
-      const contentStart = headerMatches[i].matchIndex + headerMatches[i].matchLength;
-      const contentEnd = i < headerMatches.length - 1 ? headerMatches[i + 1].matchIndex : text.length;
+      const contentStart =
+        headerMatches[i].matchIndex + headerMatches[i].matchLength;
+      const contentEnd =
+        i < headerMatches.length - 1
+          ? headerMatches[i + 1].matchIndex
+          : text.length;
       const content = text.substring(contentStart, contentEnd).trim();
       if (content.length > 10) {
         sections.push({
@@ -81,7 +113,7 @@ export function parseSections(text: string): SectionAnalysis {
       }
     }
   } else {
-    const paragraphs = text.split(/\n{2,}/).filter(p => p.trim().length > 10);
+    const paragraphs = text.split(/\n{2,}/).filter((p) => p.trim().length > 10);
 
     if (paragraphs.length <= 1) {
       sections.push({
@@ -92,11 +124,26 @@ export function parseSections(text: string): SectionAnalysis {
       });
     } else {
       const labelPatterns = [
-        { pattern: /(?:vulnerability|description|summary|overview)/i, label: "Description" },
-        { pattern: /(?:step|reproduce|poc|proof)/i, label: "Reproduction Steps" },
-        { pattern: /(?:impact|severity|risk|consequence)/i, label: "Impact Assessment" },
-        { pattern: /(?:fix|remediat|mitigat|patch|recommend)/i, label: "Remediation" },
-        { pattern: /(?:code|payload|exploit|script|curl|http)/i, label: "Technical Details" },
+        {
+          pattern: /(?:vulnerability|description|summary|overview)/i,
+          label: "Description",
+        },
+        {
+          pattern: /(?:step|reproduce|poc|proof)/i,
+          label: "Reproduction Steps",
+        },
+        {
+          pattern: /(?:impact|severity|risk|consequence)/i,
+          label: "Impact Assessment",
+        },
+        {
+          pattern: /(?:fix|remediat|mitigat|patch|recommend)/i,
+          label: "Remediation",
+        },
+        {
+          pattern: /(?:code|payload|exploit|script|curl|http)/i,
+          label: "Technical Details",
+        },
       ];
 
       for (let i = 0; i < paragraphs.length; i++) {
@@ -152,7 +199,9 @@ export function findSectionMatches(
 
     for (const report of existingReports) {
       if (!report.sectionHashes) continue;
-      for (const [existingTitle, existingHash] of Object.entries(report.sectionHashes)) {
+      for (const [existingTitle, existingHash] of Object.entries(
+        report.sectionHashes,
+      )) {
         if (existingTitle === "__full_document") continue;
         if (hash === existingHash) {
           matches.push({

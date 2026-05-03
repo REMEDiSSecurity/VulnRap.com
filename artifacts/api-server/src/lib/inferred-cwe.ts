@@ -38,7 +38,9 @@ function pickSoft(
   // Prefer the AVRI-emitted block (newer pipeline) over the legacy
   // top-level one — same precedence the triage panel uses, so the badge
   // on the row matches the badge on the detail page for any given row.
-  return signalBreakdown.avri?.softCitation ?? signalBreakdown.softCitation ?? null;
+  return (
+    signalBreakdown.avri?.softCitation ?? signalBreakdown.softCitation ?? null
+  );
 }
 
 export function deriveInferredCwe(
@@ -48,11 +50,17 @@ export function deriveInferredCwe(
     ((vulnrapEngineResults ?? {}) as EngineResultsBlob).engines ?? [];
   for (const eng of engines) {
     const soft = pickSoft(eng?.signalBreakdown);
-    if (soft && typeof soft.inferredCwe === "string" && soft.inferredCwe.length > 0) {
+    if (
+      soft &&
+      typeof soft.inferredCwe === "string" &&
+      soft.inferredCwe.length > 0
+    ) {
       return {
         inferredCwe: soft.inferredCwe,
         inferredCweName:
-          typeof soft.name === "string" && soft.name.length > 0 ? soft.name : null,
+          typeof soft.name === "string" && soft.name.length > 0
+            ? soft.name
+            : null,
       };
     }
   }

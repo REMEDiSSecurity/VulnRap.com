@@ -73,7 +73,8 @@ export function buildOgSvg(input: OgCardInput): string {
   const signalLine = input.topSignal
     ? `Top signal: ${sanitizeText(input.topSignal, 70)}`
     : "No fired signals";
-  const ts = input.createdAt.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  const ts =
+    input.createdAt.toISOString().replace("T", " ").slice(0, 16) + " UTC";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${OG_WIDTH}" height="${OG_HEIGHT}" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}">
@@ -161,7 +162,8 @@ router.get(/^\/og\/result\/(\d+)\.png$/, async (req, res): Promise<void> => {
         const bw = typeof b.weight === "number" ? b.weight : 0;
         return bw - aw;
       });
-    const topSignal = sorted.length > 0 ? (sorted[0].description as string) : null;
+    const topSignal =
+      sorted.length > 0 ? (sorted[0].description as string) : null;
 
     const input: OgCardInput = {
       id: report.id as number,
@@ -190,7 +192,10 @@ router.get(/^\/og\/result\/(\d+)\.png$/, async (req, res): Promise<void> => {
     res.setHeader("ETag", etag);
     res.status(200).end(png);
   } catch (err) {
-    logger.warn({ err, reportId: idNum }, "og-card render failed; falling back to static OG image");
+    logger.warn(
+      { err, reportId: idNum },
+      "og-card render failed; falling back to static OG image",
+    );
     res.redirect(302, fallbackUrl);
   }
 });

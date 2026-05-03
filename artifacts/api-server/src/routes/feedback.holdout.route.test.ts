@@ -6,9 +6,17 @@ process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
 
 import http from "node:http";
-import type { AddressInfo } from "node:net";
 import express from "express";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import type { AddressInfo } from "node:net";
 
 const selectQueue: unknown[][] = [];
 const lastWhereSql: string[] = [];
@@ -30,7 +38,8 @@ function collectIdentifiers(node: unknown, into: string[]): void {
   if (typeof node === "object") {
     const obj = node as Record<string, unknown>;
     if (typeof obj.name === "string") into.push(obj.name);
-    if (Array.isArray(obj.queryChunks)) collectIdentifiers(obj.queryChunks, into);
+    if (Array.isArray(obj.queryChunks))
+      collectIdentifiers(obj.queryChunks, into);
     if (Array.isArray(obj.values)) collectIdentifiers(obj.values, into);
     if (obj.value !== undefined && typeof obj.value !== "object") {
       collectIdentifiers(obj.value, into);
@@ -120,14 +129,22 @@ function get<T>(urlPath: string): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
     const url = new URL(`${baseUrl}${urlPath}`);
     const req = http.request(
-      { method: "GET", hostname: url.hostname, port: url.port, path: url.pathname },
+      {
+        method: "GET",
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname,
+      },
       (res) => {
         const chunks: Buffer[] = [];
         res.on("data", (c) => chunks.push(c));
         res.on("end", () => {
           try {
             const text = Buffer.concat(chunks).toString("utf8");
-            resolve({ status: res.statusCode ?? 0, body: JSON.parse(text) as T });
+            resolve({
+              status: res.statusCode ?? 0,
+              body: JSON.parse(text) as T,
+            });
           } catch (e) {
             reject(e);
           }
@@ -141,14 +158,21 @@ function get<T>(urlPath: string): Promise<HttpResponse<T>> {
 
 interface HoldoutPartition {
   totalFeedback: number;
-  tp: number; fp: number; fn: number; tn: number;
+  tp: number;
+  fp: number;
+  fn: number;
+  tn: number;
   precision: number | null;
   recall: number | null;
   f1: number | null;
   accuracy: number | null;
 }
 interface HoldoutResponse {
-  thresholds: { scoreThreshold: number; ratingThreshold: number; description: string };
+  thresholds: {
+    scoreThreshold: number;
+    ratingThreshold: number;
+    description: string;
+  };
   holdout: HoldoutPartition;
   inSample: HoldoutPartition;
   holdoutFraction: number;
@@ -185,11 +209,22 @@ describe("GET /feedback/holdout-eval — Task #640", () => {
     expect(typeof res.body.thresholds.scoreThreshold).toBe("number");
 
     expect(res.body.holdout).toMatchObject({
-      totalFeedback: 4, tp: 1, fp: 1, fn: 1, tn: 1,
-      precision: 0.5, recall: 0.5, f1: 0.5, accuracy: 0.5,
+      totalFeedback: 4,
+      tp: 1,
+      fp: 1,
+      fn: 1,
+      tn: 1,
+      precision: 0.5,
+      recall: 0.5,
+      f1: 0.5,
+      accuracy: 0.5,
     });
     expect(res.body.inSample).toMatchObject({
-      totalFeedback: 4, tp: 2, fp: 1, fn: 0, tn: 1,
+      totalFeedback: 4,
+      tp: 2,
+      fp: 1,
+      fn: 0,
+      tn: 1,
     });
     // tp/(tp+fp) = 2/3 ≈ 0.667
     expect(res.body.inSample.precision).toBeCloseTo(0.667, 2);
@@ -205,8 +240,15 @@ describe("GET /feedback/holdout-eval — Task #640", () => {
     const res = await get<HoldoutResponse>("/feedback/holdout-eval");
     expect(res.status).toBe(200);
     expect(res.body.holdout).toMatchObject({
-      totalFeedback: 0, tp: 0, fp: 0, fn: 0, tn: 0,
-      precision: null, recall: null, f1: null, accuracy: null,
+      totalFeedback: 0,
+      tp: 0,
+      fp: 0,
+      fn: 0,
+      tn: 0,
+      precision: null,
+      recall: null,
+      f1: null,
+      accuracy: null,
     });
     expect(res.body.inSample.totalFeedback).toBe(1);
   });

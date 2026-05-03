@@ -51,7 +51,7 @@ export function generateChallenge(): {
 
 export function verifyChallenge(
   challengeId: string,
-  solution: string
+  solution: string,
 ): { valid: boolean; error?: string } {
   const stored = challengeStore.get(challengeId);
 
@@ -73,7 +73,10 @@ export function verifyChallenge(
 
   const requiredPrefix = "0".repeat(stored.difficulty);
   if (!hash.startsWith(requiredPrefix)) {
-    return { valid: false, error: "Invalid solution — hash does not meet difficulty requirement." };
+    return {
+      valid: false,
+      error: "Invalid solution — hash does not meet difficulty requirement.",
+    };
   }
 
   stored.used = true;

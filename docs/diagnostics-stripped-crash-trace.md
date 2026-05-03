@@ -43,13 +43,13 @@ a red-bordered block appears beneath the contradictions list:
 
 Each piece maps directly to a field in the diagnostics payload:
 
-| UI element                                  | Data path                                               |
-| ------------------------------------------- | ------------------------------------------------------- |
-| `STRIPPED_CRASH_TRACE` badge                | indicator emitted by Engine 2 + `crashTrace.isStripped` |
-| `crash trace downgraded (-18)`              | `signalBreakdown.avri.crashTrace.penalty`               |
-| Reason line                                 | `signalBreakdown.avri.crashTrace.reason`                |
-| `frames / good / placeholder` counts        | `crashTrace.{framesAnalyzed, goodFrames, placeholderFrames}` |
-| `Trace Gold Signals Revoked` list           | `crashTrace.revokedGoldHits[]` (id + points)            |
+| UI element                           | Data path                                                    |
+| ------------------------------------ | ------------------------------------------------------------ |
+| `STRIPPED_CRASH_TRACE` badge         | indicator emitted by Engine 2 + `crashTrace.isStripped`      |
+| `crash trace downgraded (-18)`       | `signalBreakdown.avri.crashTrace.penalty`                    |
+| Reason line                          | `signalBreakdown.avri.crashTrace.reason`                     |
+| `frames / good / placeholder` counts | `crashTrace.{framesAnalyzed, goodFrames, placeholderFrames}` |
+| `Trace Gold Signals Revoked` list    | `crashTrace.revokedGoldHits[]` (id + points)                 |
 
 The same information is mirrored in the "Copy Markdown" export so it lands in
 review threads alongside the rest of the AVRI breakdown.
@@ -67,42 +67,57 @@ full pipeline:
   "avri": {
     "family": "MEMORY_CORRUPTION",
     "familyName": "Memory corruption / unsafe C",
-    "classification": { "confidence": "HIGH", "reason": "matched member CWE-787", "evidence": ["CWE-787"], "technology": null },
+    "classification": {
+      "confidence": "HIGH",
+      "reason": "matched member CWE-787",
+      "evidence": ["CWE-787"],
+      "technology": null,
+    },
     "goldHitCount": 0,
     "velocityPenalty": 0,
     "templatePenalty": 0,
-    "rawCompositeBeforeBehavioralPenalties": 18
+    "rawCompositeBeforeBehavioralPenalties": 18,
   },
   "engines": {
-    "engines": [{
-      "engine": "Technical Substance Analyzer",
-      "score": 22, "verdict": "RED", "confidence": "MEDIUM",
-      "signalBreakdown": {
-        "avri": {
-          "family": "MEMORY_CORRUPTION",
-          "familyName": "Memory corruption / unsafe C",
-          "baseScore": 18,
-          "goldHitCount": 0, "goldTotalCount": 8,
-          "goldHits": [], "goldMisses": [],
-          "absencePenalty": 0, "absencePenalties": [],
-          "contradictions": [], "contradictionPenalty": 0,
-          "crashTrace": {
-            "framesAnalyzed": 6,
-            "goodFrames": 1,
-            "placeholderFrames": 4,
-            "isStripped": true,
-            "reason": "Crash trace has 4/6 frames with placeholder symbols/offsets",
-            "revokedGoldHits": [
-              { "id": "asan_or_sanitizer", "points": 22 },
-              { "id": "stack_trace_with_offset", "points": 14 }
-            ],
-            "penalty": -18
+    "engines": [
+      {
+        "engine": "Technical Substance Analyzer",
+        "score": 22,
+        "verdict": "RED",
+        "confidence": "MEDIUM",
+        "signalBreakdown": {
+          "avri": {
+            "family": "MEMORY_CORRUPTION",
+            "familyName": "Memory corruption / unsafe C",
+            "baseScore": 18,
+            "goldHitCount": 0,
+            "goldTotalCount": 8,
+            "goldHits": [],
+            "goldMisses": [],
+            "absencePenalty": 0,
+            "absencePenalties": [],
+            "contradictions": [],
+            "contradictionPenalty": 0,
+            "crashTrace": {
+              "framesAnalyzed": 6,
+              "goodFrames": 1,
+              "placeholderFrames": 4,
+              "isStripped": true,
+              "reason": "Crash trace has 4/6 frames with placeholder symbols/offsets",
+              "revokedGoldHits": [
+                { "id": "asan_or_sanitizer", "points": 22 },
+                { "id": "stack_trace_with_offset", "points": 14 },
+              ],
+              "penalty": -18,
+            },
+            "rawAvriScore": 0,
+            "legacyScore": 30,
+            "blendedScore": 22,
           },
-          "rawAvriScore": 0, "legacyScore": 30, "blendedScore": 22
-        }
-      }
-    }]
-  }
+        },
+      },
+    ],
+  },
 }
 ```
 
@@ -118,7 +133,7 @@ When you see the STRIPPED_CRASH_TRACE block on a low-scoring report:
    Possible but rare for a real submission; reach out to the reporter and ask
    for a re-run with `ASAN_SYMBOLIZER_PATH` set. The downgrade is technically
    right, the report just isn't actionable yet.
-3. **Are there ≥3 frames with real symbols *and* the validator still fired?**
+3. **Are there ≥3 frames with real symbols _and_ the validator still fired?**
    That's a false positive in `evaluateCrashTrace`. Drop the offending frames
    into `crash-trace.test.ts` as a regression case and tune the
    `goodFrames / framesAnalyzed` threshold or `PLACEHOLDER_TOKENS`.

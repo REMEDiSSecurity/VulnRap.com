@@ -23,7 +23,12 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function pickFirstN<T>(pool: readonly T[], dateKey: string, label: string, n: number): T[] {
+function pickFirstN<T>(
+  pool: readonly T[],
+  dateKey: string,
+  label: string,
+  n: number,
+): T[] {
   const seed = datasetSampleSeed(`${dateKey}|${label}`);
   return seededShuffle(pool, mulberry32(seed)).slice(0, n);
 }
@@ -32,8 +37,12 @@ describe("dataset sample rotation helpers", () => {
   const pool = Array.from({ length: 200 }, (_, i) => `r${i}`);
 
   it("datasetSampleDateKey returns YYYY-MM-DD in UTC", () => {
-    expect(datasetSampleDateKey(new Date("2026-04-29T23:59:59Z"))).toBe("2026-04-29");
-    expect(datasetSampleDateKey(new Date("2026-04-30T00:00:00Z"))).toBe("2026-04-30");
+    expect(datasetSampleDateKey(new Date("2026-04-29T23:59:59Z"))).toBe(
+      "2026-04-29",
+    );
+    expect(datasetSampleDateKey(new Date("2026-04-30T00:00:00Z"))).toBe(
+      "2026-04-30",
+    );
   });
 
   it("returns the identical 25-item slice for the same (date, label)", () => {
@@ -52,7 +61,7 @@ describe("dataset sample rotation helpers", () => {
     // fresh shuffle gives ~22 expected new items; we floor very generously
     // so a slightly unlucky seed never flakes the assertion.)
     const day1Set = new Set(day1);
-    const overlap = day2.filter(x => day1Set.has(x)).length;
+    const overlap = day2.filter((x) => day1Set.has(x)).length;
     expect(overlap).toBeLessThan(20);
   });
 

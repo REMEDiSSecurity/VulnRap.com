@@ -36,18 +36,26 @@ function parseIsoDate(raw: unknown): Date | null {
 
 router.get("/audit-log", requireCalibrationAuthStrict, async (req, res) => {
   try {
-    const limit = parsePositiveInt(req.query.limit, DEFAULT_LIMIT, MAX_LIMIT) || DEFAULT_LIMIT;
+    const limit =
+      parsePositiveInt(req.query.limit, DEFAULT_LIMIT, MAX_LIMIT) ||
+      DEFAULT_LIMIT;
     const offset = parsePositiveInt(req.query.offset, 0, 1_000_000);
 
     const filters: SQL[] = [];
-    const actor = typeof req.query.actor === "string" ? req.query.actor.trim() : "";
+    const actor =
+      typeof req.query.actor === "string" ? req.query.actor.trim() : "";
     if (actor.length > 0) filters.push(eq(auditLogTable.actor, actor));
 
-    const method = typeof req.query.method === "string" ? req.query.method.trim().toUpperCase() : "";
+    const method =
+      typeof req.query.method === "string"
+        ? req.query.method.trim().toUpperCase()
+        : "";
     if (method.length > 0) filters.push(eq(auditLogTable.method, method));
 
-    const endpoint = typeof req.query.endpoint === "string" ? req.query.endpoint.trim() : "";
-    if (endpoint.length > 0) filters.push(ilike(auditLogTable.endpoint, `%${endpoint}%`));
+    const endpoint =
+      typeof req.query.endpoint === "string" ? req.query.endpoint.trim() : "";
+    if (endpoint.length > 0)
+      filters.push(ilike(auditLogTable.endpoint, `%${endpoint}%`));
 
     const from = parseIsoDate(req.query.from);
     if (from) filters.push(gte(auditLogTable.createdAt, from));

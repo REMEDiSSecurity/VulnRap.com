@@ -15,9 +15,16 @@ export function VideoSection() {
         <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground group-hover:text-primary transition-colors">
           <Play className="w-4 h-4" />
           Watch the rap sheet
-          <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-primary/20 text-primary border border-primary/30 animate-pulse">New</span>
+          <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-primary/20 text-primary border border-primary/30 animate-pulse">
+            New
+          </span>
         </span>
-        <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+        <ChevronDown
+          className={cn(
+            "w-4 h-4 text-muted-foreground transition-transform",
+            open && "rotate-180",
+          )}
+        />
       </button>
       {open && (
         <div className="mt-2 space-y-2">
@@ -29,8 +36,14 @@ export function VideoSection() {
               autoPlay
               preload="metadata"
             >
-              <source src={`${import.meta.env.BASE_URL}vulnrap-rap-sheet.mov`} type="video/quicktime" />
-              <source src={`${import.meta.env.BASE_URL}vulnrap-rap-sheet.mov`} type="video/mp4" />
+              <source
+                src={`${import.meta.env.BASE_URL}vulnrap-rap-sheet.mov`}
+                type="video/quicktime"
+              />
+              <source
+                src={`${import.meta.env.BASE_URL}vulnrap-rap-sheet.mov`}
+                type="video/mp4"
+              />
               Your browser does not support video playback.
             </video>
           </div>

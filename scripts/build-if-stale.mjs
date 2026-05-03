@@ -145,11 +145,7 @@ export const TARGETS = {
 // newest source mtime. dist/ obviously, node_modules/ for performance, and
 // tsconfig build artifacts because they get touched by typecheck runs that
 // don't actually invalidate the production bundle.
-const SKIP_ENTRIES = new Set([
-  "node_modules",
-  "dist",
-  "tsconfig.tsbuildinfo",
-]);
+const SKIP_ENTRIES = new Set(["node_modules", "dist", "tsconfig.tsbuildinfo"]);
 
 // Persistent cross-restart cache root. Lives in the workspace's `.cache/`
 // (which is gitignored and survives full container restarts) so a fresh
@@ -303,9 +299,7 @@ function runBuild(cmd, args) {
 // and `devDependencies` because esbuild/vite bundle from anywhere on the
 // import graph regardless of which bucket the dep was declared in.
 async function workspaceDepSources(pkgRel) {
-  const pkg = JSON.parse(
-    await readFile(path.join(REPO_ROOT, pkgRel), "utf8"),
-  );
+  const pkg = JSON.parse(await readFile(path.join(REPO_ROOT, pkgRel), "utf8"));
   const all = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
   const deps = Object.keys(all).filter((d) => d.startsWith("@workspace/"));
   return deps.map((d) => `lib/${d.slice("@workspace/".length)}/src`);
@@ -541,9 +535,7 @@ async function main() {
           `it. To bypass this check for a one-off local run, set ` +
           `BUILD_IF_STALE_ALLOW_MISSING=1.`;
         if (allowMissing) {
-          log(
-            `WARN: ${detail} (BUILD_IF_STALE_ALLOW_MISSING=1; continuing)`,
-          );
+          log(`WARN: ${detail} (BUILD_IF_STALE_ALLOW_MISSING=1; continuing)`);
           continue;
         }
         log(`ERROR: rename detected — ${detail}`);
@@ -609,9 +601,7 @@ async function main() {
       log(`WARN: persistent cache restore failed (${err.message}); building`);
     }
   } else if (cacheDisabled) {
-    log(
-      "BUILD_IF_STALE_DISABLE_CACHE=1 — skipping persistent-cache restore",
-    );
+    log("BUILD_IF_STALE_DISABLE_CACHE=1 — skipping persistent-cache restore");
   }
 
   const code = await runBuild(cfg.build[0], cfg.build[1]);

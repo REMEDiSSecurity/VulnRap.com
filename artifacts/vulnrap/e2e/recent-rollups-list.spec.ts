@@ -66,33 +66,31 @@ async function stubConfig(
   page: import("@playwright/test").Page,
   recentRuns: CompactionRun[] | null,
 ) {
-  await page.route(
-    "**/api/test/archetype-history/config",
-    async (route) => {
-      const lastCompaction = recentRuns && recentRuns.length > 0
+  await page.route("**/api/test/archetype-history/config", async (route) => {
+    const lastCompaction =
+      recentRuns && recentRuns.length > 0
         ? {
             lastCompactedAt: recentRuns[recentRuns.length - 1].at,
             lastRemovedCount: recentRuns[recentRuns.length - 1].removed,
             recentRuns,
           }
         : null;
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          effectiveDays: 30,
-          source: "default",
-          envOverride: null,
-          persistedDays: null,
-          defaultDays: 30,
-          min: 7,
-          max: 365,
-          lastCompaction,
-          historyFile: null,
-        }),
-      });
-    },
-  );
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        effectiveDays: 30,
+        source: "default",
+        envOverride: null,
+        persistedDays: null,
+        defaultDays: 30,
+        min: 7,
+        max: 365,
+        lastCompaction,
+        historyFile: null,
+      }),
+    });
+  });
 }
 
 test.describe("EmergingArchetypesSection — Recent rollups cadence (Task #289)", () => {
@@ -102,11 +100,26 @@ test.describe("EmergingArchetypesSection — Recent rollups cadence (Task #289)"
     // Five entries — non-symmetric values let an oldest/newest flip
     // surface as "8, 0, 14, 0, 0" instead of the asserted ordering.
     const recentRuns: CompactionRun[] = [
-      { at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(), removed: 0 },
-      { at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), removed: 0 },
-      { at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), removed: 14 },
-      { at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), removed: 0 },
-      { at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(), removed: 8 },
+      {
+        at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+        removed: 0,
+      },
+      {
+        at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+        removed: 0,
+      },
+      {
+        at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+        removed: 14,
+      },
+      {
+        at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        removed: 0,
+      },
+      {
+        at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+        removed: 8,
+      },
     ];
 
     await stubTestRun(page);
@@ -114,8 +127,9 @@ test.describe("EmergingArchetypesSection — Recent rollups cadence (Task #289)"
 
     await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
-    await expect(page.getByLabel("Compaction window in days"))
-      .toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel("Compaction window in days")).toBeVisible({
+      timeout: 15_000,
+    });
 
     // Anchor on the stable `title` attribute; disambiguates the span
     // from any sibling and is independent of Tailwind class churn.
@@ -124,16 +138,14 @@ test.describe("EmergingArchetypesSection — Recent rollups cadence (Task #289)"
     );
     await expect(recentRollupsLine).toBeVisible({ timeout: 15_000 });
     await expect(recentRollupsLine).toHaveText(
-      `Recent rollups: ${recentRuns.map(r => r.removed).join(", ")}`,
+      `Recent rollups: ${recentRuns.map((r) => r.removed).join(", ")}`,
     );
   });
 
   test("hides the Recent rollups line when only one compaction pass has been recorded", async ({
     page,
   }) => {
-    const recentRuns: CompactionRun[] = [
-      { at: COMPACTED_AT, removed: 14 },
-    ];
+    const recentRuns: CompactionRun[] = [{ at: COMPACTED_AT, removed: 14 }];
 
     await stubTestRun(page);
     await stubConfig(page, recentRuns);
@@ -142,8 +154,9 @@ test.describe("EmergingArchetypesSection — Recent rollups cadence (Task #289)"
 
     // Wait for the section + sibling "Last compacted" line so the
     // negative assertion isn't vacuous against a still-pending fetch.
-    await expect(page.getByLabel("Compaction window in days"))
-      .toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel("Compaction window in days")).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(
       page.locator(`span[title="Last compacted at ${COMPACTED_AT}"]`),
     ).toBeVisible({ timeout: 15_000 });
@@ -161,13 +174,14 @@ test.describe("EmergingArchetypesSection — Recent rollups cadence (Task #289)"
 
     await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
-    await expect(page.getByLabel("Compaction window in days"))
-      .toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel("Compaction window in days")).toBeVisible({
+      timeout: 15_000,
+    });
     // Absence of the "Last compacted" sibling proves the config
     // response landed with lastCompaction:null, not still pending.
-    await expect(
-      page.locator('span[title^="Last compacted at "]'),
-    ).toHaveCount(0);
+    await expect(page.locator('span[title^="Last compacted at "]')).toHaveCount(
+      0,
+    );
     await expect(
       page.locator('span[title^="Removed counts from the last "]'),
     ).toHaveCount(0);

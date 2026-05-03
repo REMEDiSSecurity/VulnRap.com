@@ -1,5 +1,10 @@
-import { test, expect, request, type APIRequestContext } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import {
+  test,
+  expect,
+  request,
+  type APIRequestContext,
+} from "@playwright/test";
 
 // Task #212 — End-to-end coverage for the calibration cooldown banner.
 //
@@ -85,9 +90,9 @@ test.describe("Calibration cooldown banner (Task #212)", () => {
       // so we expect 0 instances pre-throttle and 2 instances afterwards.
       const adminCard = page.getByTestId("handwavy-admin");
       await expect(adminCard).toBeVisible();
-      await expect(
-        page.getByTestId("calibration-cooldown-banner"),
-      ).toHaveCount(0);
+      await expect(page.getByTestId("calibration-cooldown-banner")).toHaveCount(
+        0,
+      );
 
       // Type the candidate phrase and click Add — this normally triggers a
       // dryRun POST. With our 429 stub it triggers the cooldown path.
@@ -119,7 +124,7 @@ test.describe("Calibration cooldown banner (Task #212)", () => {
       // (the handler bails on cooldown). We give the route a moment and
       // assert the intercept counter never advances past 1. The button is
       // already disabled so this is mostly belt-and-braces.
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises -- intentional
+
       await addButton.click({ force: true }).catch(() => undefined);
       await page.waitForTimeout(250);
 

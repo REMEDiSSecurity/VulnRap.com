@@ -6,9 +6,9 @@
 // `presets.ts` (Task #631): try cwd-relative first, then fall back
 // to monorepo-relative so tests run from the repo root also resolve.
 // Curated only for v1 — there is no admin/write endpoint.
-import { Router, type IRouter } from "express";
 import { existsSync, readFileSync } from "fs";
 import path from "path";
+import { Router, type IRouter } from "express";
 import { ListIncidentsResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -32,7 +32,9 @@ function resolveIncidentsPath(): string {
 // process at boot instead of silently returning a 500 to the first
 // caller.
 function loadIncidents() {
-  const raw = JSON.parse(readFileSync(resolveIncidentsPath(), "utf8")) as Record<string, unknown>;
+  const raw = JSON.parse(
+    readFileSync(resolveIncidentsPath(), "utf8"),
+  ) as Record<string, unknown>;
   return ListIncidentsResponse.parse({
     version: raw.version,
     incidents: raw.incidents,

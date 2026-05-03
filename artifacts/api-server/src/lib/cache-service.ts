@@ -41,7 +41,9 @@ export interface CacheResult<T> {
   source: "l1" | "db" | "fresh";
 }
 
-export async function persistentCacheGet<T>(key: string): Promise<CacheResult<T> | undefined> {
+export async function persistentCacheGet<T>(
+  key: string,
+): Promise<CacheResult<T> | undefined> {
   const l1 = l1Get<T>(key);
   if (l1 !== undefined) {
     return { value: l1, source: "l1" };
@@ -58,7 +60,9 @@ export async function persistentCacheGet<T>(key: string): Promise<CacheResult<T>
 
     const row = rows[0];
     if (new Date(row.expiresAt) < new Date()) {
-      db.delete(apiCacheTable).where(eq(apiCacheTable.cacheKey, key)).catch(() => {});
+      db.delete(apiCacheTable)
+        .where(eq(apiCacheTable.cacheKey, key))
+        .catch(() => {});
       return undefined;
     }
 
@@ -70,7 +74,11 @@ export async function persistentCacheGet<T>(key: string): Promise<CacheResult<T>
   }
 }
 
-export async function persistentCacheSet<T>(key: string, value: T, category: TtlCategory): Promise<void> {
+export async function persistentCacheSet<T>(
+  key: string,
+  value: T,
+  category: TtlCategory,
+): Promise<void> {
   l1Set(key, value);
 
   const ttlMs = TTL_MS[category];
@@ -94,8 +102,7 @@ export async function persistentCacheSet<T>(key: string, value: T, category: Ttl
           createdAt: new Date(),
         },
       });
-  } catch {
-  }
+  } catch {}
 }
 
 export async function cleanExpiredCache(): Promise<number> {

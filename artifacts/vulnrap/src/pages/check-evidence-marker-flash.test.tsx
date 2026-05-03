@@ -72,7 +72,8 @@ const CHECK_RESULT_FIXTURE = {
           },
           {
             id: "implausible_thread_id",
-            description: "Thread id `T9999` outside realistic kernel pid range.",
+            description:
+              "Thread id `T9999` outside realistic kernel pid range.",
           },
         ],
       },

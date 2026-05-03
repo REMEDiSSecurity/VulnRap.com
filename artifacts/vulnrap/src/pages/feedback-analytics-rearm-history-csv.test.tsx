@@ -83,7 +83,8 @@ const REARM_HISTORY_TWO = {
       weekStart: "2026-04-20",
       kind: "FAMILY_MEAN_SHIFT" as const,
       originalNotifiedAt: "2026-04-21T10:30:00.000Z",
-      originalDetail: 'xss family mean shifted by 6pt, comma "quoted"\nsecond line.',
+      originalDetail:
+        'xss family mean shifted by 6pt, comma "quoted"\nsecond line.',
       rearmedAt: "2026-04-22T08:15:00.000Z",
       rearmedBy: undefined,
       rationale: undefined,
@@ -304,60 +305,72 @@ describe("RearmHistoryPanel — Download CSV button", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders the Download CSV button once entries exist and serialises the loaded log when clicked", { timeout: 15_000 }, async () => {
-    fetchSpy = installFetchMock(REARM_HISTORY_TWO);
-    // Click on a real anchor would attempt a navigation; intercept it
-    // and capture the download attribute + blob href instead.
-    const anchorClicks: Array<{ download: string; href: string }> = [];
-    const origAnchorClick = HTMLAnchorElement.prototype.click;
-    HTMLAnchorElement.prototype.click = function patchedClick(
-      this: HTMLAnchorElement,
-    ) {
-      anchorClicks.push({ download: this.download, href: this.href });
-    };
-    try {
-      renderPage();
+  it(
+    "renders the Download CSV button once entries exist and serialises the loaded log when clicked",
+    { timeout: 15_000 },
+    async () => {
+      fetchSpy = installFetchMock(REARM_HISTORY_TWO);
+      // Click on a real anchor would attempt a navigation; intercept it
+      // and capture the download attribute + blob href instead.
+      const anchorClicks: Array<{ download: string; href: string }> = [];
+      const origAnchorClick = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function patchedClick(
+        this: HTMLAnchorElement,
+      ) {
+        anchorClicks.push({ download: this.download, href: this.href });
+      };
+      try {
+        renderPage();
 
-      await screen.findByText(/AVRI Drift Dashboard/i, {}, { timeout: 5_000 });
-      const button = await screen.findByTestId(
-        "avri-drift-rearm-history-csv",
-        {},
-        { timeout: 5_000 },
-      );
-      expect(button).toHaveTextContent(/Download CSV/i);
+        await screen.findByText(
+          /AVRI Drift Dashboard/i,
+          {},
+          { timeout: 5_000 },
+        );
+        const button = await screen.findByTestId(
+          "avri-drift-rearm-history-csv",
+          {},
+          { timeout: 5_000 },
+        );
+        expect(button).toHaveTextContent(/Download CSV/i);
 
-      button.click();
+        button.click();
 
-      await waitFor(() => {
-        expect(anchorClicks.length).toBe(1);
-      });
-      expect(anchorClicks[0].download).toMatch(
-        /^avri-drift-rearm-audit-\d{4}-\d{2}-\d{2}\.csv$/,
-      );
-      expect(anchorClicks[0].href).toBe("blob:mock");
+        await waitFor(() => {
+          expect(anchorClicks.length).toBe(1);
+        });
+        expect(anchorClicks[0].download).toMatch(
+          /^avri-drift-rearm-audit-\d{4}-\d{2}-\d{2}\.csv$/,
+        );
+        expect(anchorClicks[0].href).toBe("blob:mock");
 
-      // The blob handed to URL.createObjectURL should carry the CSV
-      // payload (header + both rows, newest-first by rearmedAt).
-      expect(createdBlob).not.toBeNull();
-      expect(createdBlob!.type).toMatch(/text\/csv/);
-      const text = await createdBlob!.text();
-      const lines = text.split("\r\n");
-      expect(lines[0]).toBe(
-        "rearmedAt,rearmedBy,rationale,key,weekStart,kind,originalNotifiedAt,originalDetail",
-      );
-      expect(lines).toHaveLength(3);
-      // Newest-first ordering: 2026-04-22 sorts above 2026-04-15.
-      expect(lines[1].startsWith("2026-04-22T08:15:00.000Z,")).toBe(true);
-      expect(lines[2].startsWith("2026-04-15T12:00:00.000Z,alice,")).toBe(true);
-      // The second row had embedded comma + quote + newline in
-      // originalDetail; verify it ended up RFC-4180 quoted (the cell
-      // begins with a leading double quote and contains escaped "").
-      expect(lines[1]).toContain(',"xss family mean shifted by 6pt, comma ""quoted""');
+        // The blob handed to URL.createObjectURL should carry the CSV
+        // payload (header + both rows, newest-first by rearmedAt).
+        expect(createdBlob).not.toBeNull();
+        expect(createdBlob!.type).toMatch(/text\/csv/);
+        const text = await createdBlob!.text();
+        const lines = text.split("\r\n");
+        expect(lines[0]).toBe(
+          "rearmedAt,rearmedBy,rationale,key,weekStart,kind,originalNotifiedAt,originalDetail",
+        );
+        expect(lines).toHaveLength(3);
+        // Newest-first ordering: 2026-04-22 sorts above 2026-04-15.
+        expect(lines[1].startsWith("2026-04-22T08:15:00.000Z,")).toBe(true);
+        expect(lines[2].startsWith("2026-04-15T12:00:00.000Z,alice,")).toBe(
+          true,
+        );
+        // The second row had embedded comma + quote + newline in
+        // originalDetail; verify it ended up RFC-4180 quoted (the cell
+        // begins with a leading double quote and contains escaped "").
+        expect(lines[1]).toContain(
+          ',"xss family mean shifted by 6pt, comma ""quoted""',
+        );
 
-      // The shared revoke + DOM-cleanup hygiene also runs.
-      expect(revokeObjectUrlSpy).toHaveBeenCalledWith("blob:mock");
-    } finally {
-      HTMLAnchorElement.prototype.click = origAnchorClick;
-    }
-  });
+        // The shared revoke + DOM-cleanup hygiene also runs.
+        expect(revokeObjectUrlSpy).toHaveBeenCalledWith("blob:mock");
+      } finally {
+        HTMLAnchorElement.prototype.click = origAnchorClick;
+      }
+    },
+  );
 });

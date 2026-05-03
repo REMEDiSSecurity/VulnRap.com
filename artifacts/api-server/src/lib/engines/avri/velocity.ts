@@ -18,11 +18,11 @@ interface VisitorWindow {
 const STATE: Map<string, VisitorWindow> = new Map();
 const MAX_ENTRIES = 5000;
 const WINDOW_MS = 60 * 60 * 1000;
-const BURST_THRESHOLD = 10;        // >10 in 60 min triggers the window penalty
+const BURST_THRESHOLD = 10; // >10 in 60 min triggers the window penalty
 const BURST_PENALTY = -15;
-const TIGHT_GAP_MS = 30_000;       // <30s avg gap triggers the gap penalty
+const TIGHT_GAP_MS = 30_000; // <30s avg gap triggers the gap penalty
 const GAP_PENALTY = -10;
-const TOTAL_CAP = -15;             // Combined penalty floor
+const TOTAL_CAP = -15; // Combined penalty floor
 
 function utcDay(now = Date.now()): string {
   return new Date(now).toISOString().slice(0, 10);
@@ -41,20 +41,25 @@ function pruneIfNeeded(): void {
 
 export interface VelocityResult {
   submissionCount: number; // count within the rolling 60-min window (after this submission)
-  penalty: number;         // 0..TOTAL_CAP
+  penalty: number; // 0..TOTAL_CAP
   utcDay: string;
   avgGapMs: number | null; // average inter-submission gap within the window, or null when <2
 }
 
-function scoreWindow(timestamps: number[]): { penalty: number; avgGapMs: number | null } {
+function scoreWindow(timestamps: number[]): {
+  penalty: number;
+  avgGapMs: number | null;
+} {
   let penalty = 0;
   if (timestamps.length > BURST_THRESHOLD) penalty += BURST_PENALTY;
   let avgGapMs: number | null = null;
   if (timestamps.length >= 2) {
     let total = 0;
-    for (let i = 1; i < timestamps.length; i++) total += timestamps[i] - timestamps[i - 1];
+    for (let i = 1; i < timestamps.length; i++)
+      total += timestamps[i] - timestamps[i - 1];
     avgGapMs = total / (timestamps.length - 1);
-    if (avgGapMs < TIGHT_GAP_MS && timestamps.length >= 3) penalty += GAP_PENALTY;
+    if (avgGapMs < TIGHT_GAP_MS && timestamps.length >= 3)
+      penalty += GAP_PENALTY;
   }
   if (penalty < TOTAL_CAP) penalty = TOTAL_CAP;
   return { penalty, avgGapMs };
@@ -65,10 +70,13 @@ function scoreWindow(timestamps: number[]): { penalty: number; avgGapMs: number 
  * hash and return the rolling-window submission count plus the AVRI velocity
  * penalty. See Sprint 11 spec Part 6 for the scoring rules.
  */
-export function recordAndScore(visitorHash: string | null | undefined): VelocityResult {
+export function recordAndScore(
+  visitorHash: string | null | undefined,
+): VelocityResult {
   const day = utcDay();
   const now = Date.now();
-  if (!visitorHash) return { submissionCount: 0, penalty: 0, utcDay: day, avgGapMs: null };
+  if (!visitorHash)
+    return { submissionCount: 0, penalty: 0, utcDay: day, avgGapMs: null };
   const cutoff = now - WINDOW_MS;
   const existing = STATE.get(visitorHash);
   let timestamps: number[];
@@ -88,7 +96,8 @@ export function recordAndScore(visitorHash: string | null | undefined): Velocity
 export function peek(visitorHash: string | null | undefined): VelocityResult {
   const day = utcDay();
   const now = Date.now();
-  if (!visitorHash) return { submissionCount: 0, penalty: 0, utcDay: day, avgGapMs: null };
+  if (!visitorHash)
+    return { submissionCount: 0, penalty: 0, utcDay: day, avgGapMs: null };
   const existing = STATE.get(visitorHash);
   if (!existing || existing.utcDay !== day) {
     return { submissionCount: 0, penalty: 0, utcDay: day, avgGapMs: null };

@@ -2271,7 +2271,8 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/AuditRevertHint"
-      required: [id, actor, method, endpoint, responseStatus, createdAt, revertHint]
+      required:
+        [id, actor, method, endpoint, responseStatus, createdAt, revertHint]
 
     AuditLogResponse:
       type: object
@@ -2768,7 +2769,15 @@ components:
           description: Composite score 0-100, where higher = stronger evidence of a real, reproducible vulnerability.
         label:
           type: string
-          enum: ["LIKELY INVALID", "HIGH RISK", "NEEDS REVIEW", "REASONABLE", "PROMISING", "STRONG"]
+          enum:
+            [
+              "LIKELY INVALID",
+              "HIGH RISK",
+              "NEEDS REVIEW",
+              "REASONABLE",
+              "PROMISING",
+              "STRONG",
+            ]
         engines:
           type: array
           items:
@@ -3937,7 +3946,14 @@ components:
       properties:
         action:
           type: string
-          enum: [AUTO_CLOSE, MANUAL_REVIEW, CHALLENGE_REPORTER, PRIORITIZE, STANDARD_TRIAGE]
+          enum:
+            [
+              AUTO_CLOSE,
+              MANUAL_REVIEW,
+              CHALLENGE_REPORTER,
+              PRIORITIZE,
+              STANDARD_TRIAGE,
+            ]
           description: Recommended triage action based on score, confidence, and verification results
         reason:
           type: string
@@ -4597,7 +4613,16 @@ components:
               type: integer
             linkedToReport:
               type: integer
-          required: [totalFeedback, avgRating, helpfulCount, notHelpfulCount, helpfulnessRate, withComments, linkedToReport]
+          required:
+            [
+              totalFeedback,
+              avgRating,
+              helpfulCount,
+              notHelpfulCount,
+              helpfulnessRate,
+              withComments,
+              linkedToReport,
+            ]
         ratingDistribution:
           type: object
           additionalProperties:
@@ -4653,7 +4678,8 @@ components:
                 type: string
               qualityScore:
                 type: integer
-            required: [feedbackId, rating, helpful, slopScore, slopTier, qualityScore]
+            required:
+              [feedbackId, rating, helpful, slopScore, slopTier, qualityScore]
         recentFeedback:
           type: array
           items:
@@ -4678,7 +4704,15 @@ components:
                 type: string
                 nullable: true
             required: [feedbackId, rating, helpful, createdAt]
-      required: [summary, ratingDistribution, dailyTrend, scoreCorrelation, outliers, recentFeedback]
+      required:
+        [
+          summary,
+          ratingDistribution,
+          dailyTrend,
+          scoreCorrelation,
+          outliers,
+          recentFeedback,
+        ]
 
     HoldoutEvalPartition:
       type: object
@@ -4772,7 +4806,18 @@ components:
           type: number
         description:
           type: string
-      required: [version, createdAt, prior, floor, ceiling, axisThresholds, tierThresholds, fabricationBoost, description]
+      required:
+        [
+          version,
+          createdAt,
+          prior,
+          floor,
+          ceiling,
+          axisThresholds,
+          tierThresholds,
+          fabricationBoost,
+          description,
+        ]
 
     ScoringConfigResponse:
       type: object
@@ -4816,7 +4861,8 @@ components:
             Derived: `!serverRequiresToken || tokenValid`. When false, the
             UI should warn the reviewer that calibration mutations will be
             rejected with 401.
-      required: [serverRequiresToken, tokenPresented, tokenValid, mutationsAllowed]
+      required:
+        [serverRequiresToken, tokenPresented, tokenValid, mutationsAllowed]
 
     BucketAnalysis:
       type: object
@@ -4840,7 +4886,17 @@ components:
           enum: [accurate, over-scoring, under-scoring, insufficient-data]
         ratingDeviation:
           type: number
-      required: [bucket, scoreRange, feedbackCount, avgRating, helpfulPct, meetsThreshold, signal, ratingDeviation]
+      required:
+        [
+          bucket,
+          scoreRange,
+          feedbackCount,
+          avgRating,
+          helpfulPct,
+          meetsThreshold,
+          signal,
+          ratingDeviation,
+        ]
 
     CalibrationSuggestion:
       type: object
@@ -4858,7 +4914,15 @@ components:
           enum: [low, medium, high]
         basedOnCount:
           type: integer
-      required: [parameter, currentValue, suggestedValue, reason, confidence, basedOnCount]
+      required:
+        [
+          parameter,
+          currentValue,
+          suggestedValue,
+          reason,
+          confidence,
+          basedOnCount,
+        ]
 
     PublicDriftSummaryWeek:
       type: object
@@ -4924,7 +4988,15 @@ components:
             the UTC Monday of the current week. Lets the widget show a
             "this week" badge vs. an "awaiting this week's aggregate"
             hint without exposing report counts.
-      required: [generatedAt, weeks, currentSpread, previousSpread, delta, hasCurrentWeek]
+      required:
+        [
+          generatedAt,
+          weeks,
+          currentSpread,
+          previousSpread,
+          delta,
+          hasCurrentWeek,
+        ]
 
     AvriDriftFamilyMean:
       type: object
@@ -5030,7 +5102,18 @@ components:
             $ref: "#/components/schemas/AvriDriftFlag"
         runbookPath:
           type: string
-      required: [generatedAt, weeksRequested, totalReportsScanned, cohort, bucketingNote, thresholds, weeks, flags, runbookPath]
+      required:
+        [
+          generatedAt,
+          weeksRequested,
+          totalReportsScanned,
+          cohort,
+          bucketingNote,
+          thresholds,
+          weeks,
+          flags,
+          runbookPath,
+        ]
 
     AvriDriftNotificationRecord:
       type: object
@@ -5130,7 +5213,8 @@ components:
         rationale:
           type: string
           description: Free-form rationale supplied with the re-arm call (omitted when not provided).
-      required: [key, weekStart, kind, originalNotifiedAt, originalDetail, rearmedAt]
+      required:
+        [key, weekStart, kind, originalNotifiedAt, originalDetail, rearmedAt]
 
     AvriDriftRearmHistoryList:
       type: object
@@ -5186,7 +5270,16 @@ components:
             Refreshed re-arm audit log after this call so the UI can
             render the "Recently re-armed" panel without an extra
             GET. Capped at 200 entries.
-      required: [rearmed, notFound, remaining, removed, notified, auditEntries, rearmHistory]
+      required:
+        [
+          rearmed,
+          notFound,
+          remaining,
+          removed,
+          notified,
+          auditEntries,
+          rearmHistory,
+        ]
 
     CalibrationAuthBruteForceAlertEntry:
       type: object
@@ -5402,7 +5495,15 @@ components:
           enum: [good, needs-attention, needs-tuning]
         minFeedbackThreshold:
           type: integer
-      required: [currentConfig, totalFeedbackAnalyzed, bucketAnalysis, suggestions, overallHealth, minFeedbackThreshold]
+      required:
+        [
+          currentConfig,
+          totalFeedbackAnalyzed,
+          bucketAnalysis,
+          suggestions,
+          overallHealth,
+          minFeedbackThreshold,
+        ]
 
     ShadowDriftRow:
       type: object
@@ -5464,7 +5565,8 @@ components:
           type: integer
         slopToLegit:
           type: integer
-      required: [total, divergent, tierFlips, scoreFlips, legitToSlop, slopToLegit]
+      required:
+        [total, divergent, tierFlips, scoreFlips, legitToSlop, slopToLegit]
 
     ShadowDriftReport:
       type: object
@@ -5490,7 +5592,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ShadowDriftRow"
-      required: [enabled, generatedAt, lookbackDays, scoreDeltaThreshold, totals, rows]
+      required:
+        [enabled, generatedAt, lookbackDays, scoreDeltaThreshold, totals, rows]
 
     ScoreStabilityDailyBucket:
       type: object
@@ -5528,7 +5631,18 @@ components:
         flipRate:
           type: number
           description: flips / total, rounded to 4 decimals (0 when total is 0).
-      required: [date, total, flips, legitToSlop, slopToLegit, tightened, loosened, lateral, flipRate]
+      required:
+        [
+          date,
+          total,
+          flips,
+          legitToSlop,
+          slopToLegit,
+          tightened,
+          loosened,
+          lateral,
+          flipRate,
+        ]
 
     ScoreStabilitySummary:
       type: object
@@ -5564,7 +5678,17 @@ components:
             loosened: { type: integer }
             lateral: { type: integer }
             flipRate: { type: number }
-          required: [total, flips, legitToSlop, slopToLegit, tightened, loosened, lateral, flipRate]
+          required:
+            [
+              total,
+              flips,
+              legitToSlop,
+              slopToLegit,
+              tightened,
+              loosened,
+              lateral,
+              flipRate,
+            ]
       required: [generatedAt, lookbackDays, alertThreshold, daily, totals]
 
     ScoreStabilitySchedulerStatus:
@@ -5630,7 +5754,26 @@ components:
           nullable: true
         ticksCompleted:
           type: integer
-      required: [schedulerStarted, schedulerEnabled, startedAt, intervalMs, retryIntervalMs, lastTickAt, lastTickOk, lastTickRanCheck, lastTickScanned, lastTickLogged, lastTickFlips, lastTickFailed, lastAlertDate, lastAlertFlipRate, lastAlertDispatched, nextTickAt, ticksCompleted]
+      required:
+        [
+          schedulerStarted,
+          schedulerEnabled,
+          startedAt,
+          intervalMs,
+          retryIntervalMs,
+          lastTickAt,
+          lastTickOk,
+          lastTickRanCheck,
+          lastTickScanned,
+          lastTickLogged,
+          lastTickFlips,
+          lastTickFailed,
+          lastAlertDate,
+          lastAlertFlipRate,
+          lastAlertDispatched,
+          nextTickAt,
+          ticksCompleted,
+        ]
 
     ApplyCalibrationBody:
       type: object
@@ -6155,7 +6298,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/HandwavyHistoryEntry"
-      required: [undone, batch, undoneCount, skipped, total, results, phrases, history]
+      required:
+        [undone, batch, undoneCount, skipped, total, results, phrases, history]
 
     HandwavyPhraseRevertEditBody:
       type: object
@@ -6318,7 +6462,19 @@ components:
             behavior only"). Null on the curated benchmark block (the corpus
             is the full fixture set, not a sample) and when the production
             scan was skipped because nothing would be removed.
-      required: [total, byTier, validDetectionsLost, falsePositivesDropped, corpusSize, sampleMatches, warning, oldestCreatedAt, newestCreatedAt, archiveTotal]
+      required:
+        [
+          total,
+          byTier,
+          validDetectionsLost,
+          falsePositivesDropped,
+          corpusSize,
+          sampleMatches,
+          warning,
+          oldestCreatedAt,
+          newestCreatedAt,
+          archiveTotal,
+        ]
 
     HandwavyPhraseBatchRemoveDryRunResponse:
       type: object
@@ -6372,7 +6528,19 @@ components:
           items:
             $ref: "#/components/schemas/HandwavyMarker"
           description: Active list (unchanged because this is a dry run).
-      required: [dryRun, batch, wouldRemove, notFound, duplicateInBatch, total, projectedTotal, results, dryRunImpact, phrases]
+      required:
+        [
+          dryRun,
+          batch,
+          wouldRemove,
+          notFound,
+          duplicateInBatch,
+          total,
+          projectedTotal,
+          results,
+          dryRunImpact,
+          phrases,
+        ]
 
     HandwavyPhraseSingleRemoveDryRunResponse:
       type: object
@@ -6443,7 +6611,22 @@ components:
           items:
             $ref: "#/components/schemas/HandwavyMarker"
           description: Active list (unchanged because this is a dry run).
-      required: [dryRun, batch, wouldRemove, notFound, duplicateInBatch, phrase, raw, removed, total, projectedTotal, results, dryRunImpact, phrases]
+      required:
+        [
+          dryRun,
+          batch,
+          wouldRemove,
+          notFound,
+          duplicateInBatch,
+          phrase,
+          raw,
+          removed,
+          total,
+          projectedTotal,
+          results,
+          dryRunImpact,
+          phrases,
+        ]
 
     HandwavyPhraseBatchRemoveResultEntry:
       type: object
@@ -6611,7 +6794,19 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/HandwavyHistoryEntry"
-      required: [reinstated, batch, removedAt, reinstatedCount, skipped, total, results, historyEntry, phrases, history]
+      required:
+        [
+          reinstated,
+          batch,
+          removedAt,
+          reinstatedCount,
+          skipped,
+          total,
+          results,
+          historyEntry,
+          phrases,
+          history,
+        ]
 
     HandwavyPhraseReinstateBatchEntryResult:
       type: object
@@ -6678,7 +6873,19 @@ components:
           items:
             $ref: "#/components/schemas/HandwavyHistoryEntry"
           description: Removal-history log (unchanged because this is a dry run).
-      required: [dryRun, batch, removedAt, reinstatedCount, skipped, total, results, historyEntry, phrases, history]
+      required:
+        [
+          dryRun,
+          batch,
+          removedAt,
+          reinstatedCount,
+          skipped,
+          total,
+          results,
+          historyEntry,
+          phrases,
+          history,
+        ]
 
     HandwavyPhraseDryRunMatches:
       type: object
@@ -6774,7 +6981,16 @@ components:
             Task #124 — For production scans, the most recent `createdAt` among the
             rows actually included in the scanned sample. See `oldestCreatedAt` for
             details. Null on the curated benchmark block and when the scan was empty.
-      required: [total, byTier, falsePositives, corpusSize, sampleMatches, oldestCreatedAt, newestCreatedAt]
+      required:
+        [
+          total,
+          byTier,
+          falsePositives,
+          corpusSize,
+          sampleMatches,
+          oldestCreatedAt,
+          newestCreatedAt,
+        ]
 
     HandwavyPhraseDryRunOverlaps:
       type: object
@@ -6802,7 +7018,12 @@ components:
                 $ref: "#/components/schemas/HandwavyCategory"
               relation:
                 type: string
-                enum: [equal, candidate-contains-existing, existing-contains-candidate]
+                enum:
+                  [
+                    equal,
+                    candidate-contains-existing,
+                    existing-contains-candidate,
+                  ]
                 description: |
                   How the candidate relates to the existing curated phrase:
                   - `equal`: identical normalized text (exact duplicate).
@@ -7045,7 +7266,8 @@ components:
           oneOf:
             - $ref: "#/components/schemas/LatencyWorstEngine"
             - type: "null"
-      required: [windowHours, generatedAt, sampleCount, pipeline, engines, worstEngine]
+      required:
+        [windowHours, generatedAt, sampleCount, pipeline, engines, worstEngine]
 
     PublicStatusEngine:
       type: object
@@ -7381,7 +7603,8 @@ components:
           type: integer
           minimum: 1
           description: Seed report id; click-through opens `/results/<reportId>`.
-      required: [id, title, category, score, tier, excerpt, whyInteresting, reportId]
+      required:
+        [id, title, category, score, tier, excerpt, whyInteresting, reportId]
 
     ShowcaseResponse:
       type: object

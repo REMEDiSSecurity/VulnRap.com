@@ -180,7 +180,9 @@ async function baselineExistingSchemaIfNeeded(
   );
 }
 
-export async function runMigrations(opts: RunMigrationsOptions = {}): Promise<void> {
+export async function runMigrations(
+  opts: RunMigrationsOptions = {},
+): Promise<void> {
   const databaseUrl = opts.databaseUrl ?? process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error(

@@ -133,7 +133,12 @@ async function deliverOne(
     } catch (err) {
       clearTimeout(timer);
       logger.warn(
-        { webhookId, url, attempt, err: err instanceof Error ? err.message : String(err) },
+        {
+          webhookId,
+          url,
+          attempt,
+          err: err instanceof Error ? err.message : String(err),
+        },
         "[webhook-delivery] request failed",
       );
     }
@@ -172,7 +177,9 @@ async function recordFailure(webhookId: number): Promise<void> {
   }
 }
 
-export async function dispatchReportScoredEvent(payload: ReportScoredPayload): Promise<void> {
+export async function dispatchReportScoredEvent(
+  payload: ReportScoredPayload,
+): Promise<void> {
   let subscribers: Array<{ id: number; url: string }>;
   try {
     subscribers = await db
@@ -184,7 +191,11 @@ export async function dispatchReportScoredEvent(payload: ReportScoredPayload): P
       .from(webhooksTable)
       .then((rows) =>
         rows
-          .filter((r) => Array.isArray(r.eventTypes) && r.eventTypes.includes(REPORT_SCORED_EVENT))
+          .filter(
+            (r) =>
+              Array.isArray(r.eventTypes) &&
+              r.eventTypes.includes(REPORT_SCORED_EVENT),
+          )
           .map((r) => ({ id: r.id, url: r.url })),
       );
   } catch (err) {

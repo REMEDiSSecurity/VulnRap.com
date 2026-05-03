@@ -21,10 +21,10 @@
 // test self-skips when `TEST_DATABASE_URL` is unset so contributors
 // without a Postgres handy don't see spurious failures.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { runMigrations, MIGRATIONS_FOLDER } from "../src/migrate";
 
@@ -110,7 +110,10 @@ describeIfDb("drizzle migrations", () => {
   it("re-running the migrator is a no-op (idempotent)", async () => {
     // Capture the per-table column count before the second apply, then
     // assert nothing changed after a second runMigrations call.
-    const before = await pool.query<{ table_name: string; column_count: string }>(
+    const before = await pool.query<{
+      table_name: string;
+      column_count: string;
+    }>(
       `SELECT table_name, COUNT(*)::text AS column_count
          FROM information_schema.columns
         WHERE table_schema = 'public'
@@ -123,7 +126,10 @@ describeIfDb("drizzle migrations", () => {
       log: () => {},
     });
 
-    const after = await pool.query<{ table_name: string; column_count: string }>(
+    const after = await pool.query<{
+      table_name: string;
+      column_count: string;
+    }>(
       `SELECT table_name, COUNT(*)::text AS column_count
          FROM information_schema.columns
         WHERE table_schema = 'public'
@@ -235,7 +241,9 @@ describeIfDb("drizzle migrations", () => {
             // drizzle.config.ts throws if DATABASE_URL is unset; `generate`
             // does not connect, but the config is evaluated regardless.
             DATABASE_URL:
-              process.env.DATABASE_URL ?? TEST_DATABASE_URL ?? "postgres://unused",
+              process.env.DATABASE_URL ??
+              TEST_DATABASE_URL ??
+              "postgres://unused",
           },
         },
       );
@@ -253,7 +261,10 @@ describeIfDb("drizzle migrations", () => {
         fs.unlinkSync(path.join(drizzleDir, f));
       }
     }
-    expect(after, "drizzle-kit generate produced a new migration — schema and migrations are out of sync. Run `pnpm --filter @workspace/db run generate` and commit the result.").toEqual(before);
+    expect(
+      after,
+      "drizzle-kit generate produced a new migration — schema and migrations are out of sync. Run `pnpm --filter @workspace/db run generate` and commit the result.",
+    ).toEqual(before);
   });
 });
 
@@ -265,7 +276,10 @@ describe("drizzle migrations metadata", () => {
   it("every journal entry has a matching .sql file and snapshot", async () => {
     const fs = await import("node:fs");
     const journal = JSON.parse(
-      fs.readFileSync(path.join(MIGRATIONS_FOLDER, "meta", "_journal.json"), "utf8"),
+      fs.readFileSync(
+        path.join(MIGRATIONS_FOLDER, "meta", "_journal.json"),
+        "utf8",
+      ),
     ) as { entries: { idx: number; tag: string }[] };
 
     for (const entry of journal.entries) {
@@ -275,8 +289,13 @@ describe("drizzle migrations metadata", () => {
         "meta",
         `${String(entry.idx).padStart(4, "0")}_snapshot.json`,
       );
-      expect(fs.existsSync(sqlPath), `missing migration SQL ${sqlPath}`).toBe(true);
-      expect(fs.existsSync(snapshotPath), `missing snapshot ${snapshotPath}`).toBe(true);
+      expect(fs.existsSync(sqlPath), `missing migration SQL ${sqlPath}`).toBe(
+        true,
+      );
+      expect(
+        fs.existsSync(snapshotPath),
+        `missing snapshot ${snapshotPath}`,
+      ).toBe(true);
     }
   });
 });

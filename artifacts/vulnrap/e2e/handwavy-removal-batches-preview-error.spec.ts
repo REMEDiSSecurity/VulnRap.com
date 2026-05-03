@@ -28,7 +28,8 @@ test.describe("FLAT hand-wavy phrase picker preview — error recovery", () => {
     const phrases = uniquePhrases(2, "task343 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
       // The generated client interpolates removedAt straight into the
@@ -81,7 +82,9 @@ test.describe("FLAT hand-wavy phrase picker preview — error recovery", () => {
 
       // Open the preview — first GET is intercepted and 404s.
       await row.getByTestId("handwavy-removal-batches-reinstate").click();
-      const dialog = page.getByTestId("handwavy-removal-batches-preview-confirm");
+      const dialog = page.getByTestId(
+        "handwavy-removal-batches-preview-confirm",
+      );
       await expect(dialog).toBeVisible({ timeout: 5_000 });
       await expect(dialog).toHaveAttribute("data-status", "error", {
         timeout: 10_000,
@@ -104,7 +107,9 @@ test.describe("FLAT hand-wavy phrase picker preview — error recovery", () => {
       // second call hits the real server (route falls back), the batch
       // exists, and the dialog flips to the ready state populated with
       // the seeded phrases.
-      const retry = dialog.getByTestId("handwavy-removal-batches-preview-retry");
+      const retry = dialog.getByTestId(
+        "handwavy-removal-batches-preview-retry",
+      );
       await expect(retry).toBeVisible();
       await expect(retry).toBeEnabled();
       await retry.click();
@@ -152,7 +157,8 @@ test.describe("FLAT hand-wavy phrase picker preview — error recovery", () => {
     const phrases = uniquePhrases(2, "task490 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
       const encoded = encodeURIComponent(removedAt);
@@ -181,7 +187,8 @@ test.describe("FLAT hand-wavy phrase picker preview — error recovery", () => {
             status: 404,
             contentType: "application/json",
             body: JSON.stringify({
-              error: "removal-history entry is a single-phrase removal, not a batch",
+              error:
+                "removal-history entry is a single-phrase removal, not a batch",
               reason: "not-a-batch",
             }),
           });
@@ -197,7 +204,9 @@ test.describe("FLAT hand-wavy phrase picker preview — error recovery", () => {
       await expect(row).toHaveCount(1, { timeout: 15_000 });
 
       await row.getByTestId("handwavy-removal-batches-reinstate").click();
-      const dialog = page.getByTestId("handwavy-removal-batches-preview-confirm");
+      const dialog = page.getByTestId(
+        "handwavy-removal-batches-preview-confirm",
+      );
       await expect(dialog).toBeVisible({ timeout: 5_000 });
       await expect(dialog).toHaveAttribute("data-status", "error", {
         timeout: 10_000,
@@ -222,7 +231,9 @@ test.describe("FLAT hand-wavy phrase picker preview — error recovery", () => {
       // and clickable, then confirm clicking it re-issues the GET
       // (the route stays installed, so we just see the call count
       // tick up and the dialog stays in the error state).
-      const retry = dialog.getByTestId("handwavy-removal-batches-preview-retry");
+      const retry = dialog.getByTestId(
+        "handwavy-removal-batches-preview-retry",
+      );
       await expect(retry).toBeVisible();
       await expect(retry).toBeEnabled();
       const callsBeforeRetry = detailCalls;

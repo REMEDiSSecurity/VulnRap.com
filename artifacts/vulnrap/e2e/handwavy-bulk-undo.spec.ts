@@ -49,7 +49,8 @@ test.describe("Bulk-removal Undo this batch (Task #142)", () => {
     const phrases = uniquePhrases(3, "task142 undo happy");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -61,7 +62,9 @@ test.describe("Bulk-removal Undo this batch (Task #142)", () => {
       await expect(banner).toBeVisible({ timeout: 15_000 });
       await expect(banner).toHaveAttribute("data-kind", "remove");
       await expect(banner).toContainText(/Bulk removal results/);
-      await expect(banner).toContainText(`${phrases.length} / ${phrases.length} removed`);
+      await expect(banner).toContainText(
+        `${phrases.length} / ${phrases.length} removed`,
+      );
       const removedRows = banner.locator(
         `[data-testid="handwavy-bulk-result-row"][data-status="removed"]`,
       );
@@ -110,7 +113,9 @@ test.describe("Bulk-removal Undo this batch (Task #142)", () => {
     }
   });
 
-  test("Undo button is hidden when no row reports REMOVED", async ({ page }) => {
+  test("Undo button is hidden when no row reports REMOVED", async ({
+    page,
+  }) => {
     const apiCtx = await newApiContext();
     const [phrase] = uniquePhrases(1, "task142 undo auth-failed-only");
 

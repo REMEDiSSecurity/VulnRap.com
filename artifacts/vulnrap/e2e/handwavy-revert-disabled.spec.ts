@@ -1,9 +1,5 @@
 import { test, expect } from "@playwright/test";
-import {
-  cleanup,
-  newApiContext,
-  uniquePhrase,
-} from "./helpers/handwavy";
+import { cleanup, newApiContext, uniquePhrase } from "./helpers/handwavy";
 
 // Task #148 — End-to-end coverage for the per-edit Revert button's disabled
 // state on the per-phrase edit-history panel. Task #132 introduced the
@@ -39,14 +35,17 @@ test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (T
       // back at the original category. We do this through the API instead of
       // the UI to keep the spec focused on the disabled-state assertion (the
       // add + edit UI flows are exercised by other handwavy specs).
-      const addResp = await apiCtx.post("/api/feedback/calibration/handwavy-phrases", {
-        data: {
-          phrase,
-          category: "absence",
-          reviewer: `${REVIEWER_PREFIX}-seed`,
-          rationale: "seed rationale",
+      const addResp = await apiCtx.post(
+        "/api/feedback/calibration/handwavy-phrases",
+        {
+          data: {
+            phrase,
+            category: "absence",
+            reviewer: `${REVIEWER_PREFIX}-seed`,
+            rationale: "seed rationale",
+          },
         },
-      });
+      );
       expect(addResp.ok(), `add failed: ${addResp.status()}`).toBe(true);
 
       // Edit #1: absence -> hedging.
@@ -81,14 +80,20 @@ test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (T
       const row = page
         .locator(`[data-testid="handwavy-row"]`)
         .filter({ hasText: phrase });
-      await expect(row, "seeded phrase should appear in the active list").toHaveCount(1, {
+      await expect(
+        row,
+        "seeded phrase should appear in the active list",
+      ).toHaveCount(1, {
         timeout: 15_000,
       });
 
       // Two recorded edits => the multi-edit history toggle renders. Open
       // the per-row history panel.
       const historyToggle = row.getByTestId("handwavy-edit-history-toggle");
-      await expect(historyToggle, "edit-history toggle should appear for >1 edits").toBeVisible({
+      await expect(
+        historyToggle,
+        "edit-history toggle should appear for >1 edits",
+      ).toBeVisible({
         timeout: 15_000,
       });
       if ((await historyToggle.getAttribute("aria-expanded")) !== "true") {
@@ -121,7 +126,9 @@ test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (T
       await expect(olderRevert).toContainText("At this state");
       await expect(olderRevert).toHaveAttribute(
         "aria-label",
-        new RegExp(`Revert unavailable for ${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+        new RegExp(
+          `Revert unavailable for ${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+        ),
       );
 
       // Task #241 — the disabled row also renders a visible inline hint
@@ -132,14 +139,24 @@ test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (T
       // aria-describedby.
       const olderRow = historyList
         .getByTestId("handwavy-edit-history-row")
-        .filter({ has: page.locator('[data-testid="handwavy-revert-edit"][data-noop="true"]') });
+        .filter({
+          has: page.locator(
+            '[data-testid="handwavy-revert-edit"][data-noop="true"]',
+          ),
+        });
       await expect(olderRow).toHaveCount(1);
       const noopHint = olderRow.getByTestId("handwavy-revert-noop-hint");
-      await expect(noopHint, "disabled row must show a visible non-hover-only hint").toBeVisible();
+      await expect(
+        noopHint,
+        "disabled row must show a visible non-hover-only hint",
+      ).toBeVisible();
       await expect(noopHint).toContainText(/already matches/i);
       await expect(noopHint).toContainText(/nothing to undo/i);
       const hintId = await noopHint.getAttribute("id");
-      expect(hintId, "hint must have a stable id for aria-describedby wiring").toBeTruthy();
+      expect(
+        hintId,
+        "hint must have a stable id for aria-describedby wiring",
+      ).toBeTruthy();
       // The id MUST be whitespace-free — aria-describedby is an IDREF list
       // split on whitespace, and the seed phrases here contain spaces, so a
       // raw-phrase id would silently break the screen-reader association.
@@ -151,9 +168,15 @@ test.describe("FLAT hand-wavy phrase panel — per-edit Revert disabled state (T
       // explains the disabled state and leaves working rows untouched.
       const enabledRow = historyList
         .getByTestId("handwavy-edit-history-row")
-        .filter({ has: page.locator('[data-testid="handwavy-revert-edit"][data-noop="false"]') });
+        .filter({
+          has: page.locator(
+            '[data-testid="handwavy-revert-edit"][data-noop="false"]',
+          ),
+        });
       await expect(enabledRow).toHaveCount(1);
-      await expect(enabledRow.getByTestId("handwavy-revert-noop-hint")).toHaveCount(0);
+      await expect(
+        enabledRow.getByTestId("handwavy-revert-noop-hint"),
+      ).toHaveCount(0);
       await expect(newestRevert).not.toHaveAttribute("aria-describedby", /.+/);
     } finally {
       await cleanup(apiCtx, phrase, { reviewer: `${REVIEWER_PREFIX}-cleanup` });

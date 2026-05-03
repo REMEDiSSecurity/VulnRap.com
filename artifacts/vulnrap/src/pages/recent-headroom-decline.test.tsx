@@ -32,25 +32,25 @@ describe("recentHeadroomDecline (Task #261 — calibration headroom-decline math
 
   it("returns 0 or negative for an improving series (headroom growing)", () => {
     // Earlier half = [5, 6] → max 6. Latest = 12. Decline = 6 - 12 = -6.
-    expect(
-      recentHeadroomDecline([snap(5), snap(6), snap(9), snap(12)]),
-    ).toBe(-6);
+    expect(recentHeadroomDecline([snap(5), snap(6), snap(9), snap(12)])).toBe(
+      -6,
+    );
   });
 
   it("returns the expected positive delta for a clearly regressing series", () => {
     // Earlier half = [20, 18] → max 20. Latest = 8. Decline = 20 - 8 = 12.
-    expect(
-      recentHeadroomDecline([snap(20), snap(18), snap(12), snap(8)]),
-    ).toBe(12);
+    expect(recentHeadroomDecline([snap(20), snap(18), snap(12), snap(8)])).toBe(
+      12,
+    );
   });
 
   it("uses the MAX of the earlier half as the baseline (not the latest of that half)", () => {
     // Earlier half (first 2 of 4) = [25, 10]. If the helper compared to the
     // latest of that half (10), the decline would be 10 - 9 = 1. The helper
     // must instead pick the MAX (25), giving 25 - 9 = 16.
-    expect(
-      recentHeadroomDecline([snap(25), snap(10), snap(11), snap(9)]),
-    ).toBe(16);
+    expect(recentHeadroomDecline([snap(25), snap(10), snap(11), snap(9)])).toBe(
+      16,
+    );
   });
 
   it("always slices at least one snapshot for the earlier-half baseline (n=2 case)", () => {

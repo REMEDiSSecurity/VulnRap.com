@@ -38,7 +38,9 @@ describe("RateLimitCooldownBanner", () => {
       />,
     );
     expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByTestId("generic-cooldown-banner")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("generic-cooldown-banner"),
+    ).not.toBeInTheDocument();
   });
 
   it("uses the supplied testIdBase for both the card and the headline", () => {

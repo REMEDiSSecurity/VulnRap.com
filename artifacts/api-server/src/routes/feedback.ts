@@ -20,10 +20,25 @@ router.get("/feedback/challenge", (_req, res) => {
 
 router.post("/feedback", async (req, res) => {
   try {
-    const { challengeId, challengeSolution, reportId, rating, helpful, comment } = req.body;
+    const {
+      challengeId,
+      challengeSolution,
+      reportId,
+      rating,
+      helpful,
+      comment,
+    } = req.body;
 
-    if (!challengeId || typeof challengeId !== "string" || !challengeSolution || typeof challengeSolution !== "string") {
-      res.status(400).json({ error: "Proof-of-work challenge is required. Fetch a challenge from GET /feedback/challenge first." });
+    if (
+      !challengeId ||
+      typeof challengeId !== "string" ||
+      !challengeSolution ||
+      typeof challengeSolution !== "string"
+    ) {
+      res.status(400).json({
+        error:
+          "Proof-of-work challenge is required. Fetch a challenge from GET /feedback/challenge first.",
+      });
       return;
     }
 
@@ -33,7 +48,12 @@ router.post("/feedback", async (req, res) => {
       return;
     }
 
-    if (typeof rating !== "number" || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+    if (
+      typeof rating !== "number" ||
+      rating < 1 ||
+      rating > 5 ||
+      !Number.isInteger(rating)
+    ) {
       res.status(400).json({ error: "Rating must be an integer from 1 to 5." });
       return;
     }
@@ -42,8 +62,14 @@ router.post("/feedback", async (req, res) => {
       return;
     }
 
-    const trimmedComment = typeof comment === "string" ? comment.trim().slice(0, 1000) || null : null;
-    const validReportId = typeof reportId === "number" && Number.isInteger(reportId) ? reportId : null;
+    const trimmedComment =
+      typeof comment === "string"
+        ? comment.trim().slice(0, 1000) || null
+        : null;
+    const validReportId =
+      typeof reportId === "number" && Number.isInteger(reportId)
+        ? reportId
+        : null;
 
     // Task #640 — atomically insert the feedback row AND stamp the
     // deterministic holdout flag in a single transaction so a partial
@@ -102,7 +128,13 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
       .groupBy(userFeedbackTable.rating)
       .orderBy(userFeedbackTable.rating);
 
-    const ratingDist: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
+    const ratingDist: Record<string, number> = {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+    };
     for (const row of ratingDistribution) {
       ratingDist[String(row.rating)] = row.count;
     }
@@ -142,8 +174,8 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
             (${userFeedbackTable.rating} <= 2 AND ${reportsTable.slopScore} >= 60) OR
             (${userFeedbackTable.rating} >= 4 AND ${reportsTable.slopScore} <= 20) OR
             (${userFeedbackTable.helpful} = false)
-          )`
-        )
+          )`,
+        ),
       )
       .orderBy(desc(userFeedbackTable.createdAt))
       .limit(50);
@@ -163,13 +195,15 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
       })
       .from(userFeedbackTable)
       .innerJoin(reportsTable, eq(userFeedbackTable.reportId, reportsTable.id))
-      .groupBy(sql`case
+      .groupBy(
+        sql`case
         when ${reportsTable.slopScore} <= 20 then 'Clean (0-20)'
         when ${reportsTable.slopScore} <= 40 then 'Likely Human (21-40)'
         when ${reportsTable.slopScore} <= 60 then 'Questionable (41-60)'
         when ${reportsTable.slopScore} <= 80 then 'Likely Slop (61-80)'
         else 'Slop (81-100)'
-      end`)
+      end`,
+      )
       .orderBy(sql`min(${reportsTable.slopScore})`);
 
     const recentFeedback = await db
@@ -183,10 +217,13 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
         slopTier: reportsTable.slopTier,
       })
       .from(userFeedbackTable)
-      .innerJoin(reportsTable, and(
-        eq(userFeedbackTable.reportId, reportsTable.id),
-        eq(reportsTable.showInFeed, true),
-      ))
+      .innerJoin(
+        reportsTable,
+        and(
+          eq(userFeedbackTable.reportId, reportsTable.id),
+          eq(reportsTable.showInFeed, true),
+        ),
+      )
       .orderBy(desc(userFeedbackTable.createdAt))
       .limit(25);
 
@@ -196,16 +233,19 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
         avgRating: summary.avgRating,
         helpfulCount: summary.helpfulCount,
         notHelpfulCount: summary.notHelpfulCount,
-        helpfulnessRate: summary.totalFeedback > 0
-          ? Math.round(1000 * summary.helpfulCount / summary.totalFeedback) / 10
-          : 0,
+        helpfulnessRate:
+          summary.totalFeedback > 0
+            ? Math.round(
+                (1000 * summary.helpfulCount) / summary.totalFeedback,
+              ) / 10
+            : 0,
         withComments: summary.withComments,
         linkedToReport: summary.linkedToReport,
       },
       ratingDistribution: ratingDist,
       dailyTrend,
       scoreCorrelation,
-      outliers: outliers.map(o => ({
+      outliers: outliers.map((o) => ({
         feedbackId: o.feedbackId,
         rating: o.rating,
         helpful: o.helpful,
@@ -215,7 +255,7 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
         slopTier: o.slopTier,
         qualityScore: o.qualityScore,
       })),
-      recentFeedback: recentFeedback.map(f => ({
+      recentFeedback: recentFeedback.map((f) => ({
         feedbackId: f.feedbackId,
         rating: f.rating,
         helpful: f.helpful,
@@ -269,8 +309,15 @@ router.get("/feedback/holdout-eval", async (_req, res): Promise<void> => {
       accuracy: number | null;
     };
     const empty = (): Partition => ({
-      totalFeedback: 0, tp: 0, fp: 0, fn: 0, tn: 0,
-      precision: null, recall: null, f1: null, accuracy: null,
+      totalFeedback: 0,
+      tp: 0,
+      fp: 0,
+      fn: 0,
+      tn: 0,
+      precision: null,
+      recall: null,
+      f1: null,
+      accuracy: null,
     });
     const holdout = empty();
     const inSample = empty();
@@ -278,7 +325,8 @@ router.get("/feedback/holdout-eval", async (_req, res): Promise<void> => {
     for (const row of rows) {
       const score = row.slopScore ?? 0;
       const predictedSlop = score >= scoreThreshold;
-      const actuallySlop = row.rating <= ratingThreshold || row.helpful === false;
+      const actuallySlop =
+        row.rating <= ratingThreshold || row.helpful === false;
       const target = row.isHoldout ? holdout : inSample;
       target.totalFeedback++;
       if (predictedSlop && actuallySlop) target.tp++;
@@ -294,9 +342,10 @@ router.get("/feedback/holdout-eval", async (_req, res): Promise<void> => {
       const total = p.totalFeedback;
       const precision = precDen > 0 ? round(p.tp / precDen) : null;
       const recall = recDen > 0 ? round(p.tp / recDen) : null;
-      const f1 = precision != null && recall != null && (precision + recall) > 0
-        ? round((2 * precision * recall) / (precision + recall))
-        : null;
+      const f1 =
+        precision != null && recall != null && precision + recall > 0
+          ? round((2 * precision * recall) / (precision + recall))
+          : null;
       const accuracy = total > 0 ? round((p.tp + p.tn) / total) : null;
       return { ...p, precision, recall, f1, accuracy };
     };
@@ -305,8 +354,7 @@ router.get("/feedback/holdout-eval", async (_req, res): Promise<void> => {
       thresholds: {
         scoreThreshold,
         ratingThreshold,
-        description:
-          `Predicted slop = slopScore >= ${scoreThreshold}; actually slop = user rating <= ${ratingThreshold} OR helpful = false`,
+        description: `Predicted slop = slopScore >= ${scoreThreshold}; actually slop = user rating <= ${ratingThreshold} OR helpful = false`,
       },
       holdout: finalize(holdout),
       inSample: finalize(inSample),
@@ -341,11 +389,16 @@ router.get("/feedback/per-signal-eval", async (_req, res): Promise<void> => {
       .innerJoin(reportsTable, eq(userFeedbackTable.reportId, reportsTable.id))
       .where(isNotNull(reportsTable.slopScore));
 
-    type Bucket = { fires: number; firesAndSlop: number; firesAndNotSlop: number };
+    type Bucket = {
+      fires: number;
+      firesAndSlop: number;
+      firesAndNotSlop: number;
+    };
     const perSignal = new Map<string, Bucket>();
 
     for (const row of rows) {
-      const actuallySlop = row.rating <= ratingThreshold || row.helpful === false;
+      const actuallySlop =
+        row.rating <= ratingThreshold || row.helpful === false;
       const evidence = (row.evidence ?? []) as Array<{ type?: string }>;
       const seen = new Set<string>();
       for (const e of evidence) {

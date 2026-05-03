@@ -59,24 +59,21 @@ const DYNAMIC_MARKER_PATTERNS: DynamicMarkerPattern[] = [
     match: /^status_(?<code>\d{3})_with_wrong_reason_phrase$/,
     build: ({ code }) => ({
       label: `${code} status line has the wrong reason phrase`,
-      explanation:
-        `The reason phrase paired with status ${code} doesn't match the canonical wording for that code (RFC 7231 / IANA HTTP Status Code Registry). Real servers either emit the canonical phrase or omit it; an LLM mixing "200 Not Found" or "404 OK" is reading the two halves of the status line from different templates.`,
+      explanation: `The reason phrase paired with status ${code} doesn't match the canonical wording for that code (RFC 7231 / IANA HTTP Status Code Registry). Real servers either emit the canonical phrase or omit it; an LLM mixing "200 Not Found" or "404 OK" is reading the two halves of the status line from different templates.`,
     }),
   },
   {
     match: /^response_carries_request_only_(?<header>[a-z][a-z0-9-]*)$/,
     build: ({ header }) => ({
       label: `Response carries request-only header: ${humanHeader(header)}`,
-      explanation:
-        `${humanHeader(header)} is defined as a request header (RFC 7231 / RFC 6265 §3 for Cookie). A real HTTP stack never emits it on a response; an LLM that has seen request and response excerpts in the same window has confused which side the header belongs to.`,
+      explanation: `${humanHeader(header)} is defined as a request header (RFC 7231 / RFC 6265 §3 for Cookie). A real HTTP stack never emits it on a response; an LLM that has seen request and response excerpts in the same window has confused which side the header belongs to.`,
     }),
   },
   {
     match: /^request_carries_response_only_(?<header>[a-z][a-z0-9-]*)$/,
     build: ({ header }) => ({
       label: `Request carries response-only header: ${humanHeader(header)}`,
-      explanation:
-        `${humanHeader(header)} is defined as a response header (RFC 6265 §3 for Set-Cookie, RFC 7235 for WWW-Authenticate / Proxy-Authenticate, RFC 7231 §7.1.2 for Location). A real client never sends it on a request; this is a classic AI-mirroring tell.`,
+      explanation: `${humanHeader(header)} is defined as a response header (RFC 6265 §3 for Set-Cookie, RFC 7235 for WWW-Authenticate / Proxy-Authenticate, RFC 7231 §7.1.2 for Location). A real client never sends it on a request; this is a classic AI-mirroring tell.`,
     }),
   },
   {
@@ -94,7 +91,9 @@ const DYNAMIC_MARKER_PATTERNS: DynamicMarkerPattern[] = [
 function humanHeader(fragment: string): string {
   return fragment
     .split(/[-_]/)
-    .map((part) => (part.length === 0 ? part : part[0].toUpperCase() + part.slice(1)))
+    .map((part) =>
+      part.length === 0 ? part : part[0].toUpperCase() + part.slice(1),
+    )
     .join("-");
 }
 
@@ -146,7 +145,9 @@ export function ImpossibleHttpMarkers({
                   className="text-[10px] border-red-500/40 text-red-300 font-mono normal-case"
                 >
                   <span className="font-semibold">{info.label}</span>
-                  <span className="ml-1 text-red-400/70 text-[9px]">({id})</span>
+                  <span className="ml-1 text-red-400/70 text-[9px]">
+                    ({id})
+                  </span>
                 </Badge>
               </TooltipTrigger>
               <TooltipContent
@@ -158,7 +159,9 @@ export function ImpossibleHttpMarkers({
               >
                 <div className="font-semibold mb-1">{info.label}</div>
                 <div className="text-foreground/80">{info.explanation}</div>
-                <div className="text-muted-foreground mt-1 text-[10px] font-mono">{id}</div>
+                <div className="text-muted-foreground mt-1 text-[10px] font-mono">
+                  {id}
+                </div>
               </TooltipContent>
             </Tooltip>
           );

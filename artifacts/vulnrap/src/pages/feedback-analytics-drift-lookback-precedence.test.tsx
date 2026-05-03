@@ -230,9 +230,7 @@ function getActiveLookbackLabel(): string {
     name: /Lookback window \(weeks\)/i,
   });
   const radios = within(group).getAllByRole("radio");
-  const active = radios.find(
-    (r) => r.getAttribute("aria-checked") === "true",
-  );
+  const active = radios.find((r) => r.getAttribute("aria-checked") === "true");
   if (!active) {
     throw new Error(
       `No active lookback radio found. Saw: ${radios

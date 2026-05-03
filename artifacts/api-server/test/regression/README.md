@@ -3,28 +3,28 @@
 A locked golden corpus of ~200 labeled fixtures (T1/T2/T3/T4) with
 snapshotted pipeline scores. Every PR runs the corpus and any tier-flip
 on any fixture fails CI loudly. This is the regression baseline the user
-asked for: *"we need to test each update to make sure we are NOT
-worsening our results."*
+asked for: _"we need to test each update to make sure we are NOT
+worsening our results."_
 
 ## Files
 
-| File | Role | Regen workflow |
-| --- | --- | --- |
-| `golden-corpus.json` | Curated corpus: `id`, `text`, `claimedCwes?`, `expectedTier`, `expectedScoreRange` (±3 band), `expectedSignals[]`. Hand-reviewed. | `REGENERATE_CORPUS=1` |
-| `golden-corpus.snap.json` | Per-entry current pipeline composite score. Drift inside the band shows up as a PR diff but does not fail; drift outside the band fails the band assertion. | `UPDATE_SNAPSHOTS=1` |
-| `golden-corpus.regression.test.ts` | Loads both files, replays the full scoring pipeline (`analyzeWithEnginesTraced`) on every entry, asserts (a) tier matches, (b) score in band, (c) expected signals all fired. | n/a |
+| File                               | Role                                                                                                                                                                          | Regen workflow        |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| `golden-corpus.json`               | Curated corpus: `id`, `text`, `claimedCwes?`, `expectedTier`, `expectedScoreRange` (±3 band), `expectedSignals[]`. Hand-reviewed.                                             | `REGENERATE_CORPUS=1` |
+| `golden-corpus.snap.json`          | Per-entry current pipeline composite score. Drift inside the band shows up as a PR diff but does not fail; drift outside the band fails the band assertion.                   | `UPDATE_SNAPSHOTS=1`  |
+| `golden-corpus.regression.test.ts` | Loads both files, replays the full scoring pipeline (`analyzeWithEnginesTraced`) on every entry, asserts (a) tier matches, (b) score in band, (c) expected signals all fired. | n/a                   |
 
 ## Tier mapping (composite → tier)
 
 The composite score is 0..100, higher = better. The corpus uses the
 project's existing 4-bucket vocabulary:
 
-| composite | tier |
-| --- | --- |
-| `>= 60` | `T1` (legit) |
-| `>= 40` | `T2` (borderline) |
-| `>= 20` | `T3` (slop) |
-| `<  20` | `T4` (hallucinated) |
+| composite | tier                |
+| --------- | ------------------- |
+| `>= 60`   | `T1` (legit)        |
+| `>= 40`   | `T2` (borderline)   |
+| `>= 20`   | `T3` (slop)         |
+| `<  20`   | `T4` (hallucinated) |
 
 Bands are deliberately wider than the per-fixture `expectedScoreRange`
 (±3) so a single small calibration tweak cannot silently flip a tier on
@@ -40,7 +40,7 @@ pnpm --filter @workspace/api-server test test/regression/golden-corpus.regressio
 
 ## Intentional snapshot updates
 
-A calibration change that *intentionally* nudges scores by a few points
+A calibration change that _intentionally_ nudges scores by a few points
 within the recorded band will surface as a per-entry diff in
 `golden-corpus.snap.json`. Update the snapshot with:
 

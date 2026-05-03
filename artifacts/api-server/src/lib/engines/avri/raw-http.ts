@@ -144,7 +144,8 @@ export interface RawHttpEvaluation {
 // uppercase letter token so smuggled "GPOST" / fabricated methods are
 // still picked up (they are themselves a smuggling-tell, not a parser
 // error here).
-const REQUEST_LINE_RE = /(^|\n)([A-Z]{3,10})[ \t]+(\S+)[ \t]+HTTP\/1\.[01]\r?\n/g;
+const REQUEST_LINE_RE =
+  /(^|\n)([A-Z]{3,10})[ \t]+(\S+)[ \t]+HTTP\/1\.[01]\r?\n/g;
 
 // Task #427 — shell-escaped HTTP framing. Many real smuggling
 // reproductions paste the request as a `printf 'POST / HTTP/1.1\r\n…'`
@@ -160,10 +161,8 @@ const REQUEST_LINE_RE = /(^|\n)([A-Z]{3,10})[ \t]+(\S+)[ \t]+HTTP\/1\.[01]\r?\n/
 // keep the match anchored to one shell-line so we don't accidentally
 // span paragraphs of unrelated prose. The `\b(?:HTTP|HTTP)` shape
 // inside the body keeps neutral quoted strings out of the match.
-const SHELL_ESCAPED_HTTP_SINGLE_RE =
-  /'([^'\n]*HTTP\/1\.[01]\\r\\n[^'\n]*)'/g;
-const SHELL_ESCAPED_HTTP_DOUBLE_RE =
-  /"([^"\n]*HTTP\/1\.[01]\\r\\n[^"\n]*)"/g;
+const SHELL_ESCAPED_HTTP_SINGLE_RE = /'([^'\n]*HTTP\/1\.[01]\\r\\n[^'\n]*)'/g;
+const SHELL_ESCAPED_HTTP_DOUBLE_RE = /"([^"\n]*HTTP\/1\.[01]\\r\\n[^"\n]*)"/g;
 
 /** Decode the common shell-escape sequences (`\r`, `\n`, `\t`, `\v`,
  * `\0`, `\\`, `\'`, `\"`) inside a `printf '...'`-style body. Unknown
@@ -323,7 +322,11 @@ function inspectJwtToken(token: string): string | null {
   } catch {
     return "JWT payload is not valid JSON";
   }
-  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+  if (
+    payload === null ||
+    typeof payload !== "object" ||
+    Array.isArray(payload)
+  ) {
     return "JWT payload is not a JSON object";
   }
   const entries = Object.entries(payload as Record<string, unknown>);
@@ -419,7 +422,10 @@ function inspectCredentialHeader(name: string, value: string): string | null {
     const basic = /^Basic\s+(\S+)$/i.exec(v);
     if (basic) {
       const decoded = decodeBase64Url(basic[1].replace(/=+$/, ""));
-      if (decoded !== null && /^(admin|user|test|root|guest):.{0,40}$/i.test(decoded)) {
+      if (
+        decoded !== null &&
+        /^(admin|user|test|root|guest):.{0,40}$/i.test(decoded)
+      ) {
         return `Basic auth credential is a placeholder ("${decoded}")`;
       }
     }
@@ -454,7 +460,11 @@ export function isPlaceholderBody(body: string): boolean {
   // Bare admit-this-is-a-placeholder body.
   if (/^(?:tbd|todo|fixme|placeholder|n\/?a)$/i.test(trimmed)) return true;
   // [your payload] / [insert here] style square-bracket placeholders.
-  if (/\[(?:your|insert|placeholder|fill|todo|tbd|payload|inject|here)\b[^\]]*\]/i.test(trimmed)) {
+  if (
+    /\[(?:your|insert|placeholder|fill|todo|tbd|payload|inject|here)\b[^\]]*\]/i.test(
+      trimmed,
+    )
+  ) {
     return true;
   }
   // Find every angle-bracketed token in the body. Real exploit payloads
@@ -743,12 +753,36 @@ export function findProsePlaceholderPayloadRanges(
     noSlot?: boolean;
     category: ProsePlaceholderCategory;
   }> = [
-    { re: PROSE_PAYLOAD_PLACEHOLDER_RE, requireSlopVocab: false, category: "slot" },
-    { re: PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE, requireSlopVocab: false, category: "slot" },
-    { re: PROSE_PAYLOAD_PLACEHOLDER_BARE_RE, requireSlopVocab: true, category: "slot" },
-    { re: PROSE_PAYLOAD_PLACEHOLDER_DQUOTE_RE, requireSlopVocab: true, category: "slot" },
-    { re: PROSE_PAYLOAD_PLACEHOLDER_SQBRACKET_RE, requireSlopVocab: true, category: "slot" },
-    { re: PROSE_PAYLOAD_PLACEHOLDER_POSTSLOT_RE, requireSlopVocab: false, category: "slot" },
+    {
+      re: PROSE_PAYLOAD_PLACEHOLDER_RE,
+      requireSlopVocab: false,
+      category: "slot",
+    },
+    {
+      re: PROSE_PAYLOAD_PLACEHOLDER_INLINE_RE,
+      requireSlopVocab: false,
+      category: "slot",
+    },
+    {
+      re: PROSE_PAYLOAD_PLACEHOLDER_BARE_RE,
+      requireSlopVocab: true,
+      category: "slot",
+    },
+    {
+      re: PROSE_PAYLOAD_PLACEHOLDER_DQUOTE_RE,
+      requireSlopVocab: true,
+      category: "slot",
+    },
+    {
+      re: PROSE_PAYLOAD_PLACEHOLDER_SQBRACKET_RE,
+      requireSlopVocab: true,
+      category: "slot",
+    },
+    {
+      re: PROSE_PAYLOAD_PLACEHOLDER_POSTSLOT_RE,
+      requireSlopVocab: false,
+      category: "slot",
+    },
     {
       re: PROSE_PAYLOAD_PLACEHOLDER_NOSLOT_LABEL_RE,
       requireSlopVocab: false,
@@ -803,9 +837,7 @@ export function findProsePlaceholderPayloadRanges(
       // shapes the slot regexes don't match at all (no `<...>`
       // anywhere). A future edit could broaden any of them, so we still
       // skip overlapping ranges to keep the byte-strip pass idempotent.
-      const overlaps = ranges.some(
-        (r) => start < r.end && end > r.start,
-      );
+      const overlaps = ranges.some((r) => start < r.end && end > r.start);
       if (!overlaps) {
         ranges.push({
           start,
@@ -919,8 +951,7 @@ export function evaluateRawHttpRequest(
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
-    const nextBound =
-      i + 1 < blocks.length ? blocks[i + 1].start : text.length;
+    const nextBound = i + 1 < blocks.length ? blocks[i + 1].start : text.length;
     const headerSection = text.slice(block.headerStart, nextBound);
     // Header section ends at the first blank line (CRLF CRLF or LF LF).
     const blankMatch = /\r?\n\r?\n/.exec(headerSection);
@@ -932,8 +963,7 @@ export function evaluateRawHttpRequest(
     // the next request-block, bounded by a closing markdown fence (``` on
     // its own line) when present so we don't slurp surrounding prose.
     if (blankIdx >= 0 && blankMatch) {
-      const bodyStart =
-        block.headerStart + blankIdx + blankMatch[0].length;
+      const bodyStart = block.headerStart + blankIdx + blankMatch[0].length;
       let bodyEnd = nextBound;
       const bodySlice = text.slice(bodyStart, bodyEnd);
       const fenceIdx = bodySlice.search(/(^|\n)```/);
@@ -951,7 +981,10 @@ export function evaluateRawHttpRequest(
     // text. We require at least 2 line breaks (request-line + one header)
     // before treating the absence of CRLF as evidence of fabrication —
     // single-line snippets are just too short to judge.
-    const blockChunk = text.slice(block.start, block.headerStart + headerOnly.length);
+    const blockChunk = text.slice(
+      block.start,
+      block.headerStart + headerOnly.length,
+    );
     const lineBreaks = (blockChunk.match(/\n/g) || []).length;
     if (lineBreaks >= 2) {
       crlfRequired = true;
@@ -1024,7 +1057,7 @@ export function evaluateRawHttpRequest(
   } else if (teClConflicts > 0 && teClBroken === teClConflicts) {
     isFake = true;
     reason =
-      "Claimed TE/CL conflict has incoherent values (Content-Length is not a plain integer or Transfer-Encoding is not \"chunked\")";
+      'Claimed TE/CL conflict has incoherent values (Content-Length is not a plain integer or Transfer-Encoding is not "chunked")';
     signals.push({ id: "broken_te_cl_conflict", description: reason });
   } else if (strictCrlf && crlfRequired && !crlfPresent && totalHeaders >= 2) {
     // Smuggling depends on byte-precise framing. A request-shaped block
@@ -1139,9 +1172,7 @@ export function stripPlaceholderBodies(
   while ((im = INLINE_RE.exec(text)) !== null) {
     const start = im.index;
     const end = im.index + im[0].length;
-    const insideFence = preserve.some(
-      (r) => start >= r.start && end <= r.end,
-    );
+    const insideFence = preserve.some((r) => start >= r.start && end <= r.end);
     if (!insideFence) preserve.push({ start, end });
   }
   preserve.sort((a, b) => a.start - b.start);
@@ -1196,12 +1227,8 @@ export const RAW_HTTP_GOLD_SIGNAL_IDS_BY_FAMILY: Readonly<
     "te_or_cl_conflict",
     "smuggled_second_request",
   ]),
-  AUTHN_AUTHZ: new Set([
-    "authorization_header_swap",
-  ]),
-  INJECTION: new Set([
-    "specific_endpoint_param",
-  ]),
+  AUTHN_AUTHZ: new Set(["authorization_header_swap"]),
+  INJECTION: new Set(["specific_endpoint_param"]),
 };
 
 export function rawHttpGoldSignalIdsFor(
@@ -1227,10 +1254,7 @@ export function rawHttpGoldSignalIdsFor(
 export const RAW_HTTP_BODY_PAYLOAD_GOLD_SIGNAL_IDS_BY_FAMILY: Readonly<
   Record<string, ReadonlySet<string>>
 > = {
-  INJECTION: new Set([
-    "concrete_payload",
-    "vulnerable_query_construction",
-  ]),
+  INJECTION: new Set(["concrete_payload", "vulnerable_query_construction"]),
 };
 
 export function rawHttpBodyPayloadGoldSignalIdsFor(
@@ -1325,7 +1349,8 @@ export interface RawHttpResponseEvaluation {
 // OK\\r\\n...'` does NOT match (the literal backslashes after "OK"
 // aren't valid reason-phrase characters and the regex requires a true
 // CR/LF immediately after the phrase).
-const RESPONSE_LINE_RE = /(^|\n)HTTP\/1\.[01][ \t]+(\d{3})[ \t]+([A-Za-z][A-Za-z0-9 .\-]{0,40})\r?\n/g;
+const RESPONSE_LINE_RE =
+  /(^|\n)HTTP\/1\.[01][ \t]+(\d{3})[ \t]+([A-Za-z][A-Za-z0-9 .\-]{0,40})\r?\n/g;
 
 interface ResponseBlock {
   /** Offset in `text` of the start of the status-line. */
@@ -1463,9 +1488,10 @@ function isRealUuidValue(s: string): boolean {
  * date and time components are entirely zeros. A real `Date:` /
  * `created_at` value carries non-zero seconds or a non-Jan-1 date. */
 function isRealTimestampValue(s: string): boolean {
-  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:?\d{2})?$/.exec(
-    s,
-  );
+  const m =
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:?\d{2})?$/.exec(
+      s,
+    );
   if (!m) return true;
   const year = Number(m[1]);
   const month = Number(m[2]);
@@ -1476,8 +1502,7 @@ function isRealTimestampValue(s: string): boolean {
   const subsec = m[7] ? Number(m[7]) : 0;
   if (year <= 1) return false;
   if (year === 1970 && month === 1 && day === 1) return false;
-  const isMidnight =
-    hour === 0 && minute === 0 && second === 0 && subsec === 0;
+  const isMidnight = hour === 0 && minute === 0 && second === 0 && subsec === 0;
   if (month === 1 && day === 1 && isMidnight) return false;
   return true;
 }
@@ -1680,8 +1705,7 @@ export function evaluateRawHttpResponse(
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
-    const nextBound =
-      i + 1 < blocks.length ? blocks[i + 1].start : text.length;
+    const nextBound = i + 1 < blocks.length ? blocks[i + 1].start : text.length;
     const headerSection = text.slice(block.headerStart, nextBound);
     const blankMatch = /\r?\n\r?\n/.exec(headerSection);
     const blankIdx = blankMatch ? blankMatch.index : -1;
@@ -1767,9 +1791,7 @@ export function evaluateRawHttpResponse(
     }
     if (missingIncidentals) {
       markerCount++;
-      fired.push(
-        "no X-Request-Id/Content-Length/Cache-Control/Set-Cookie",
-      );
+      fired.push("no X-Request-Id/Content-Length/Cache-Control/Set-Cookie");
       firedSignals.push({
         id: "missing_incidental_headers",
         description:
@@ -1846,12 +1868,8 @@ export function stripFakeResponses(
 export const RAW_HTTP_RESPONSE_GOLD_SIGNAL_IDS_BY_FAMILY: Readonly<
   Record<string, ReadonlySet<string>>
 > = {
-  INJECTION: new Set([
-    "request_response_diff",
-  ]),
-  WEB_CLIENT: new Set([
-    "reflection_or_dom_proof",
-  ]),
+  INJECTION: new Set(["request_response_diff"]),
+  WEB_CLIENT: new Set(["reflection_or_dom_proof"]),
 };
 
 export function rawHttpResponseGoldSignalIdsFor(
@@ -1883,13 +1901,13 @@ export function rawHttpResponseGoldSignalIdsFor(
 export const RAW_HTTP_RESPONSE_BODY_PAYLOAD_GOLD_SIGNAL_IDS_BY_FAMILY: Readonly<
   Record<string, ReadonlySet<string>>
 > = {
-  WEB_CLIENT: new Set([
-    "concrete_payload",
-  ]),
+  WEB_CLIENT: new Set(["concrete_payload"]),
 };
 
 export function rawHttpResponseBodyPayloadGoldSignalIdsFor(
   familyId: string,
 ): ReadonlySet<string> | null {
-  return RAW_HTTP_RESPONSE_BODY_PAYLOAD_GOLD_SIGNAL_IDS_BY_FAMILY[familyId] ?? null;
+  return (
+    RAW_HTTP_RESPONSE_BODY_PAYLOAD_GOLD_SIGNAL_IDS_BY_FAMILY[familyId] ?? null
+  );
 }

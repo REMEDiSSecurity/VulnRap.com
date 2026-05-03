@@ -2,6 +2,18 @@ import {
   useGetLatencySnapshot,
   getGetLatencySnapshotQueryKey,
 } from "@workspace/api-client-react";
+import { Timer, AlertTriangle, Info } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+import { useMemo, useState } from "react";
 import {
   Card,
   CardContent,
@@ -17,20 +29,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Timer, AlertTriangle, Info } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
-import { useMemo, useState } from "react";
 
-const ENGINE_COLORS = ["#06b6d4", "#a78bfa", "#f97316", "#22c55e", "#eab308", "#ec4899"];
+const ENGINE_COLORS = [
+  "#06b6d4",
+  "#a78bfa",
+  "#f97316",
+  "#22c55e",
+  "#eab308",
+  "#ec4899",
+];
 
 function formatMs(ms: number): string {
   if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
@@ -43,16 +50,29 @@ function binLabel(ltMs: number, idx: number, edges: number[]): string {
   return `${formatMs(edges[idx - 1])}–${formatMs(ltMs)}`;
 }
 
-function HistTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
+function HistTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ name: string; value: number; color: string }>;
+  label?: string;
+}) {
   if (!active || !payload?.length) return null;
   return (
     <div className="glass-card rounded-lg px-3 py-2 border border-border/30 text-xs space-y-1">
       <div className="font-mono text-muted-foreground">{label}</div>
       {payload.map((entry, i) => (
         <div key={i} className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+          <span
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: entry.color }}
+          />
           <span className="text-muted-foreground">{entry.name}:</span>
-          <span className="font-mono font-bold text-foreground">{entry.value}</span>
+          <span className="font-mono font-bold text-foreground">
+            {entry.value}
+          </span>
         </div>
       ))}
     </div>
@@ -76,7 +96,9 @@ function PercentileBadge({
             <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
               {label}
             </span>
-            <span className="font-mono font-bold text-sm">{formatMs(value)}</span>
+            <span className="font-mono font-bold text-sm">
+              {formatMs(value)}
+            </span>
             <Info className="w-3 h-3 text-muted-foreground/60" />
           </div>
         </TooltipTrigger>
@@ -201,13 +223,15 @@ export default function LatencySnapshotCard() {
                     {data.worstEngine.engine}
                   </span>
                   <span className="text-muted-foreground">
-                    {" "}is dragging the tail — p95 of{" "}
+                    {" "}
+                    is dragging the tail — p95 of{" "}
                   </span>
                   <span className="font-mono text-foreground">
                     {formatMs(data.worstEngine.p95)}
                   </span>
                   <span className="text-muted-foreground">
-                    {" "}({data.worstEngine.ratio.toFixed(2)}× the median engine).
+                    {" "}
+                    ({data.worstEngine.ratio.toFixed(2)}× the median engine).
                   </span>
                 </div>
               </div>
@@ -218,7 +242,10 @@ export default function LatencySnapshotCard() {
                 data={view === "pipeline" ? pipelineChartData : engineChartData}
                 margin={{ top: 5, right: 5, bottom: 5, left: -10 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(255,255,255,0.05)"
+                />
                 <XAxis
                   dataKey="label"
                   tick={{ fontSize: 9, fill: "rgba(255,255,255,0.4)" }}

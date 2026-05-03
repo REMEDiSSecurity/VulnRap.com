@@ -12,11 +12,11 @@ recover from the common misconfigurations.
 
 ## When you need a token
 
-| Deployment shape                              | Token required?                               |
-| --------------------------------------------- | --------------------------------------------- |
-| Local dev / single-reviewer laptop            | No — leave both env vars unset                |
-| Internal staging behind VPN, single reviewer  | Optional, but recommended for parity with prod|
-| Anything publicly reachable                   | **Yes — set on both API and vulnrap build**   |
+| Deployment shape                             | Token required?                                |
+| -------------------------------------------- | ---------------------------------------------- |
+| Local dev / single-reviewer laptop           | No — leave both env vars unset                 |
+| Internal staging behind VPN, single reviewer | Optional, but recommended for parity with prod |
+| Anything publicly reachable                  | **Yes — set on both API and vulnrap build**    |
 
 The mutation gate (`requireCalibrationAuth`) is intentionally a no-op
 when `CALIBRATION_TOKEN` is unset so existing single-reviewer flows
@@ -109,12 +109,14 @@ browser network tab.
 ## Failure modes
 
 ### Server token set, UI token unset (or stale)
+
 Symptoms: every calibration mutation in the UI returns 401, and the
 hand-wavy phrase list panel comes up empty / errored.
 Fix: set `VITE_CALIBRATION_TOKEN` to the same value as
 `CALIBRATION_TOKEN`, rebuild vulnrap, and redeploy the static assets.
 
 ### UI token set, server token unset
+
 Symptoms: mutations succeed but reviewer-metadata reads still 401
 because `requireCalibrationAuthStrict` fails closed when
 `CALIBRATION_TOKEN` is not configured. The mutation gate is also
@@ -122,12 +124,14 @@ effectively off — anyone who can reach the API can write.
 Fix: set `CALIBRATION_TOKEN` on the API server and restart it.
 
 ### Tokens differ between the two sides
+
 Symptoms: identical to "server set, UI unset" — every gated request
 returns 401.
 Fix: re-copy the token into both env vars; do not edit it by hand in
 two places.
 
 ### 401 with the right header
+
 Check that nothing is stripping the `X-Calibration-Token` header in
 front of the API (CDN, reverse proxy, WAF). The header name is
 case-insensitive but must arrive intact at the Express app.
@@ -163,15 +167,15 @@ webhook is dispatched naming the offending IP and linking back to the
 
 ### Configuration
 
-| Env var                                            | Default                                              | What it does                                                  |
-| -------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------- |
-| `CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL`         | *(unset — no webhook dispatched)*                    | Where to POST the alert payload (Slack/Discord/PagerDuty).    |
-| `CALIBRATION_AUTH_BRUTE_FORCE_ALERT_WINDOW_MS`     | `CALIBRATION_AUTH_RATE_LIMIT_WINDOW_MS` (60 000 ms)  | Sliding window for counting wrong-token events per IP.        |
-| `CALIBRATION_AUTH_BRUTE_FORCE_ALERT_THRESHOLD`     | `CALIBRATION_AUTH_RATE_LIMIT_MAX_FAILURES` (10)      | Wrong-token attempts per IP per window before an alert fires. |
-| `CALIBRATION_AUTH_BRUTE_FORCE_RUNBOOK_URL`         | `${PUBLIC_URL}/docs/calibration-reviewer-token.md#rotation` | Link included in the dispatched payload.               |
-| `CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH`          | `artifacts/api-server/data/calibration-auth-brute-force-state.json` | JSON file used to persist per-IP cooldown timestamps so a deploy / restart mid-attack does not re-page the on-call inside the cooldown window. Capped at 256 entries. |
+| Env var                                        | Default                                                             | What it does                                                                                                                                                          |
+| ---------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL`     | _(unset — no webhook dispatched)_                                   | Where to POST the alert payload (Slack/Discord/PagerDuty).                                                                                                            |
+| `CALIBRATION_AUTH_BRUTE_FORCE_ALERT_WINDOW_MS` | `CALIBRATION_AUTH_RATE_LIMIT_WINDOW_MS` (60 000 ms)                 | Sliding window for counting wrong-token events per IP.                                                                                                                |
+| `CALIBRATION_AUTH_BRUTE_FORCE_ALERT_THRESHOLD` | `CALIBRATION_AUTH_RATE_LIMIT_MAX_FAILURES` (10)                     | Wrong-token attempts per IP per window before an alert fires.                                                                                                         |
+| `CALIBRATION_AUTH_BRUTE_FORCE_RUNBOOK_URL`     | `${PUBLIC_URL}/docs/calibration-reviewer-token.md#rotation`         | Link included in the dispatched payload.                                                                                                                              |
+| `CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH`      | `artifacts/api-server/data/calibration-auth-brute-force-state.json` | JSON file used to persist per-IP cooldown timestamps so a deploy / restart mid-attack does not re-page the on-call inside the cooldown window. Capped at 256 entries. |
 
-The window/threshold defaults are *intentionally* the same env vars
+The window/threshold defaults are _intentionally_ the same env vars
 the limiter already exposes — set `CALIBRATION_AUTH_RATE_LIMIT_*` once
 and both the throttle and the alert move together. Override the
 brute-force-specific vars when you want them to diverge (e.g. only
@@ -186,7 +190,7 @@ the `calibration auth: brute-force probe threshold crossed` message
 without setting the webhook at all.
 
 > **Per-process limitation.** The in-process counter is computed
-> *inside one api-server replica*. If you run more than one replica
+> _inside one api-server replica_. If you run more than one replica
 > (rolling deploys, blue/green, autoscaling), a probe whose requests
 > are spread across replicas by the load balancer can stay below the
 > in-process threshold on each replica even though the cross-replica
@@ -204,7 +208,7 @@ grouped by `ip` in your log aggregator. The recommended alert is
 **"calibration-auth wrong-token rejections from a single IP exceeded
 `CALIBRATION_AUTH_BRUTE_FORCE_ALERT_THRESHOLD` over
 `CALIBRATION_AUTH_BRUTE_FORCE_ALERT_WINDOW_MS`"** — group across
-*all* api-server replicas and page the on-call with a link to the
+_all_ api-server replicas and page the on-call with a link to the
 [Rotation](#rotation) section.
 
 The two messages to match are:
@@ -287,7 +291,7 @@ fields `ip`, `threshold`, `windowMs`, `wrongTokenCount`,
   "rejectionsByStatus": { "401": 9, "429": 2 },
   "rejectionsByGate": { "mutation": 11, "strict-read": 0 },
   "firstSeenAt": "2026-04-30T02:59:38.000Z",
-  "lastSeenAt":  "2026-04-30T03:00:12.000Z",
+  "lastSeenAt": "2026-04-30T03:00:12.000Z",
   "lastRoute": "/api/feedback/calibration/handwavy-phrases",
   "lastMethod": "POST",
   "runbookUrl": "https://example.com/docs/calibration-reviewer-token.md#rotation",

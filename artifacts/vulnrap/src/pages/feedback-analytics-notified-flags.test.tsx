@@ -202,7 +202,10 @@ function installFetchMock(): MockHandle {
     }
     if (url.includes("/api/feedback/calibration/avri-drift/notifications")) {
       if (method === "GET") {
-        return jsonResponse({ notified: [...notified], total: notified.length });
+        return jsonResponse({
+          notified: [...notified],
+          total: notified.length,
+        });
       }
       return jsonResponse({ notified: [...notified], total: notified.length });
     }
@@ -438,9 +441,7 @@ describe("NotifiedFlagsPanel — bulk re-arm bar (Task #408 / #280)", () => {
       ).not.toBeInTheDocument();
     });
     expect(
-      screen.queryByTestId(
-        `notified-flag-checkbox-${SEEDED_NOTIFIED[2]!.key}`,
-      ),
+      screen.queryByTestId(`notified-flag-checkbox-${SEEDED_NOTIFIED[2]!.key}`),
     ).not.toBeInTheDocument();
     // The middle row was never selected, so it must still be visible.
     expect(
@@ -497,9 +498,9 @@ describe("NotifiedFlagsPanel — bulk re-arm bar (Task #408 / #280)", () => {
       screen.getByTestId(`notified-flag-checkbox-${SEEDED_NOTIFIED[1]!.key}`),
     ).toBeChecked();
     await waitFor(() => {
-      expect(
-        screen.getByTestId("notified-flags-bulk-rearm"),
-      ).toHaveTextContent(/Re-arm selected \(1\)/);
+      expect(screen.getByTestId("notified-flags-bulk-rearm")).toHaveTextContent(
+        /Re-arm selected \(1\)/,
+      );
     });
   });
 });

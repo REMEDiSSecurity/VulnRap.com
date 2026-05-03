@@ -30,11 +30,21 @@ process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
 
 import http from "node:http";
-import type { AddressInfo } from "node:net";
 import express from "express";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import type { AddressInfo } from "node:net";
 
-type ExecuteFn = (...args: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
+type ExecuteFn = (
+  ...args: unknown[]
+) => Promise<{ rows: Record<string, unknown>[] }>;
 
 // Per-test handle: each test installs a fresh implementation before issuing
 // requests. Default is "table absent" (42P01) so a test that forgets to
@@ -84,7 +94,9 @@ vi.mock("@workspace/db", async () => {
   return {
     db: {
       execute: (...args: unknown[]) =>
-        (executeMock as unknown as (...a: unknown[]) => Promise<unknown>)(...args),
+        (executeMock as unknown as (...a: unknown[]) => Promise<unknown>)(
+          ...args,
+        ),
       // /stats, /stats/recent, /stats/distribution, /stats/trends all
       // build their result via `db.select(...).from(...).[where|orderBy|
       // limit|groupBy](...)`. Each top-level db.select(...) call pulls the
@@ -145,7 +157,8 @@ function request<T>(
   body?: unknown,
 ): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const req = http.request(
       {
@@ -157,7 +170,10 @@ function request<T>(
         // route.
         path: `${url.pathname}${url.search}`,
         headers: data
-          ? { "Content-Type": "application/json", "Content-Length": String(data.length) }
+          ? {
+              "Content-Type": "application/json",
+              "Content-Length": String(data.length),
+            }
           : {},
       },
       (res) => {
@@ -200,7 +216,9 @@ function request<T>(
 // Build a fake pg "undefined_table" error. The SQLSTATE 42P01 code is what
 // the stats handlers key off of via isMissingPageViewsTable().
 function makeUndefinedTableError(): Error {
-  const err = new Error('relation "page_views" does not exist') as Error & { code?: string };
+  const err = new Error('relation "page_views" does not exist') as Error & {
+    code?: string;
+  };
   err.code = "42P01";
   return err;
 }
@@ -209,7 +227,9 @@ function makeUndefinedTableError(): Error {
 // original pg error (with its SQLSTATE) on `.cause`. The stats handlers
 // must detect either shape; this helper covers the wrapped case.
 function makeWrappedUndefinedTableError(): Error {
-  const wrapped = new Error("Failed query: insert into page_views ...") as Error & {
+  const wrapped = new Error(
+    "Failed query: insert into page_views ...",
+  ) as Error & {
     cause?: unknown;
   };
   wrapped.cause = makeUndefinedTableError();
@@ -218,43 +238,46 @@ function makeWrappedUndefinedTableError(): Error {
 
 describe("GET /stats/visitors", () => {
   it("degrades to zero counts when page_views table is absent (42P01)", async () => {
-    (executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void })
-      .mockImplementation(async () => {
-        throw makeUndefinedTableError();
-      });
+    (
+      executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void }
+    ).mockImplementation(async () => {
+      throw makeUndefinedTableError();
+    });
 
-    const r = await request<{ totalUniqueVisitors: number; totalVisits: number }>(
-      "GET",
-      "/stats/visitors",
-    );
+    const r = await request<{
+      totalUniqueVisitors: number;
+      totalVisits: number;
+    }>("GET", "/stats/visitors");
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ totalUniqueVisitors: 0, totalVisits: 0 });
   });
 
   it("degrades to zero counts when 42P01 is wrapped in DrizzleQueryError.cause", async () => {
-    (executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void })
-      .mockImplementation(async () => {
-        throw makeWrappedUndefinedTableError();
-      });
+    (
+      executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void }
+    ).mockImplementation(async () => {
+      throw makeWrappedUndefinedTableError();
+    });
 
-    const r = await request<{ totalUniqueVisitors: number; totalVisits: number }>(
-      "GET",
-      "/stats/visitors",
-    );
+    const r = await request<{
+      totalUniqueVisitors: number;
+      totalVisits: number;
+    }>("GET", "/stats/visitors");
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ totalUniqueVisitors: 0, totalVisits: 0 });
   });
 
   it("returns real counts when page_views exists with rows", async () => {
-    (executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void })
-      .mockImplementation(async () => ({
-        rows: [{ total_unique_visitors: 42, total_visits: 7 }],
-      }));
+    (
+      executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void }
+    ).mockImplementation(async () => ({
+      rows: [{ total_unique_visitors: 42, total_visits: 7 }],
+    }));
 
-    const r = await request<{ totalUniqueVisitors: number; totalVisits: number }>(
-      "GET",
-      "/stats/visitors",
-    );
+    const r = await request<{
+      totalUniqueVisitors: number;
+      totalVisits: number;
+    }>("GET", "/stats/visitors");
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ totalUniqueVisitors: 42, totalVisits: 7 });
   });
@@ -262,13 +285,14 @@ describe("GET /stats/visitors", () => {
   it("returns zero counts when page_views exists but has no rows", async () => {
     // Postgres' count(distinct ...) returns 0/0 for an empty table, but
     // defensive coding in the handler also coerces a missing row to 0.
-    (executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void })
-      .mockImplementation(async () => ({ rows: [] }));
+    (
+      executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void }
+    ).mockImplementation(async () => ({ rows: [] }));
 
-    const r = await request<{ totalUniqueVisitors: number; totalVisits: number }>(
-      "GET",
-      "/stats/visitors",
-    );
+    const r = await request<{
+      totalUniqueVisitors: number;
+      totalVisits: number;
+    }>("GET", "/stats/visitors");
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ totalUniqueVisitors: 0, totalVisits: 0 });
   });
@@ -276,24 +300,29 @@ describe("GET /stats/visitors", () => {
   it("surfaces non-undefined-table DB errors as 500 (no silent fallback)", async () => {
     // A genuine connection or permission error must NOT be coerced into a
     // {0,0} success — that would mask real breakage in production.
-    (executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void })
-      .mockImplementation(async () => {
-        const err = new Error("connection refused") as Error & { code?: string };
-        err.code = "08006"; // connection_failure, not 42P01
-        throw err;
-      });
+    (
+      executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void }
+    ).mockImplementation(async () => {
+      const err = new Error("connection refused") as Error & { code?: string };
+      err.code = "08006"; // connection_failure, not 42P01
+      throw err;
+    });
 
-    const r = await request<{ totalUniqueVisitors?: number }>("GET", "/stats/visitors");
+    const r = await request<{ totalUniqueVisitors?: number }>(
+      "GET",
+      "/stats/visitors",
+    );
     expect(r.status).toBe(500);
   });
 });
 
 describe("POST /stats/visit", () => {
   it("returns { recorded: false } when page_views table is absent (42P01)", async () => {
-    (executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void })
-      .mockImplementation(async () => {
-        throw makeUndefinedTableError();
-      });
+    (
+      executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void }
+    ).mockImplementation(async () => {
+      throw makeUndefinedTableError();
+    });
 
     const r = await request<{ recorded: boolean }>("POST", "/stats/visit", {});
     expect(r.status).toBe(200);
@@ -301,10 +330,11 @@ describe("POST /stats/visit", () => {
   });
 
   it("returns { recorded: false } when 42P01 is wrapped in DrizzleQueryError.cause", async () => {
-    (executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void })
-      .mockImplementation(async () => {
-        throw makeWrappedUndefinedTableError();
-      });
+    (
+      executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void }
+    ).mockImplementation(async () => {
+      throw makeWrappedUndefinedTableError();
+    });
 
     const r = await request<{ recorded: boolean }>("POST", "/stats/visit", {});
     expect(r.status).toBe(200);
@@ -312,8 +342,9 @@ describe("POST /stats/visit", () => {
   });
 
   it("returns { recorded: true } on a successful insert", async () => {
-    (executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void })
-      .mockImplementation(async () => ({ rows: [] }));
+    (
+      executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void }
+    ).mockImplementation(async () => ({ rows: [] }));
 
     const r = await request<{ recorded: boolean }>("POST", "/stats/visit", {});
     expect(r.status).toBe(200);
@@ -321,12 +352,13 @@ describe("POST /stats/visit", () => {
   });
 
   it("surfaces non-undefined-table DB errors as 500 (no silent fallback)", async () => {
-    (executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void })
-      .mockImplementation(async () => {
-        const err = new Error("unique violation") as Error & { code?: string };
-        err.code = "23505"; // unique_violation, not 42P01
-        throw err;
-      });
+    (
+      executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void }
+    ).mockImplementation(async () => {
+      const err = new Error("unique violation") as Error & { code?: string };
+      err.code = "23505"; // unique_violation, not 42P01
+      throw err;
+    });
 
     const r = await request<{ recorded?: boolean }>("POST", "/stats/visit", {});
     expect(r.status).toBe(500);
@@ -444,12 +476,15 @@ describe("GET /stats/distribution", () => {
     // Handler issues a single db.select(...) call returning one row with the
     // total + 5 bucket counts (b0..b4) corresponding to the bucket defs in
     // the handler.
-    selectQueue.push([
-      { total: 50, b0: 10, b1: 8, b2: 12, b3: 14, b4: 6 },
-    ]);
+    selectQueue.push([{ total: 50, b0: 10, b1: 8, b2: 12, b3: 14, b4: 6 }]);
 
     const r = await request<{
-      buckets: Array<{ label: string; min: number; max: number; count: number }>;
+      buckets: Array<{
+        label: string;
+        min: number;
+        max: number;
+        count: number;
+      }>;
       totalReports: number;
     }>("GET", "/stats/distribution");
 

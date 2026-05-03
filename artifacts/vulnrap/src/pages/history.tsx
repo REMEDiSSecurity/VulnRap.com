@@ -1,12 +1,30 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, Trash2, FileText, Search, XCircle, Info, AlertTriangle, ArrowDownWideNarrow } from "lucide-react";
+import {
+  Clock,
+  Trash2,
+  FileText,
+  Search,
+  XCircle,
+  Info,
+  AlertTriangle,
+  ArrowDownWideNarrow,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { getHistory, clearHistory, removeHistoryEntry, type HistoryEntry } from "@/lib/history";
-import { getSettings, getSlopColorCustom, getSlopProgressColorCustom } from "@/lib/settings";
+import {
+  getHistory,
+  clearHistory,
+  removeHistoryEntry,
+  type HistoryEntry,
+} from "@/lib/history";
+import {
+  getSettings,
+  getSlopColorCustom,
+  getSlopProgressColorCustom,
+} from "@/lib/settings";
 
 function timeAgo(date: string): string {
   const now = Date.now();
@@ -93,13 +111,21 @@ function sortEntries(entries: HistoryEntry[], mode: SortMode): HistoryEntry[] {
 
 export default function History() {
   const [entries, setEntries] = useState<HistoryEntry[]>(getHistory());
-  const [showOnlyReconstructed, setShowOnlyReconstructedState] = useState<boolean>(() => readFilterFromStorage());
-  const [sortMode, setSortModeState] = useState<SortMode>(() => readSortFromSession());
+  const [showOnlyReconstructed, setShowOnlyReconstructedState] =
+    useState<boolean>(() => readFilterFromStorage());
+  const [sortMode, setSortModeState] = useState<SortMode>(() =>
+    readSortFromSession(),
+  );
   const settings = getSettings();
 
-  const setShowOnlyReconstructed = (value: boolean | ((prev: boolean) => boolean)) => {
+  const setShowOnlyReconstructed = (
+    value: boolean | ((prev: boolean) => boolean),
+  ) => {
     setShowOnlyReconstructedState((prev) => {
-      const next = typeof value === "function" ? (value as (p: boolean) => boolean)(prev) : value;
+      const next =
+        typeof value === "function"
+          ? (value as (p: boolean) => boolean)(prev)
+          : value;
       writeFilterToStorage(next);
       return next;
     });
@@ -114,7 +140,8 @@ export default function History() {
   const filteredEntries = showOnlyReconstructed
     ? entries.filter((e) => e.reconstructed)
     : entries;
-  const effectiveSort: SortMode = showOnlyReconstructed && sortMode === "reconstructed" ? "recent" : sortMode;
+  const effectiveSort: SortMode =
+    showOnlyReconstructed && sortMode === "reconstructed" ? "recent" : sortMode;
   const visibleEntries = sortEntries(filteredEntries, effectiveSort);
 
   const handleClearAll = () => {
@@ -137,8 +164,9 @@ export default function History() {
             Your Bookmarks
           </h1>
           <p className="text-sm text-muted-foreground mt-2 max-w-2xl leading-relaxed">
-            Quick links back to reports you have submitted or looked up from this browser. Because VulnRap has no
-            accounts, this list is the only way to find your past work.
+            Quick links back to reports you have submitted or looked up from
+            this browser. Because VulnRap has no accounts, this list is the only
+            way to find your past work.
           </p>
         </div>
         {entries.length > 0 && (
@@ -160,33 +188,51 @@ export default function History() {
           <Info className="w-4 h-4 text-primary/70 shrink-0 mt-0.5" />
           <div className="space-y-2.5">
             <div>
-              <p className="text-foreground font-medium mb-1">How this list works</p>
+              <p className="text-foreground font-medium mb-1">
+                How this list works
+              </p>
               <p>
-                VulnRap has no accounts and uses no cookies. This bookmark list is kept in your browser's
-                <code className="text-primary/90 mx-1 px-1 py-0.5 rounded bg-primary/5 font-mono text-[10.5px]">localStorage</code>
-                under the key <code className="text-primary/90 mx-1 px-1 py-0.5 rounded bg-primary/5 font-mono text-[10.5px]">vulnrap_history</code>,
-                so you can find your way back to reports you've already analyzed. It is never transmitted to
-                our servers and contains no login, no session, and no authentication of any kind.
+                VulnRap has no accounts and uses no cookies. This bookmark list
+                is kept in your browser's
+                <code className="text-primary/90 mx-1 px-1 py-0.5 rounded bg-primary/5 font-mono text-[10.5px]">
+                  localStorage
+                </code>
+                under the key{" "}
+                <code className="text-primary/90 mx-1 px-1 py-0.5 rounded bg-primary/5 font-mono text-[10.5px]">
+                  vulnrap_history
+                </code>
+                , so you can find your way back to reports you've already
+                analyzed. It is never transmitted to our servers and contains no
+                login, no session, and no authentication of any kind.
               </p>
             </div>
             <div>
-              <p className="text-foreground font-medium mb-1">What's actually stored</p>
+              <p className="text-foreground font-medium mb-1">
+                What's actually stored
+              </p>
               <p>
-                For each entry: the public report code, the score and tier, when you opened it, and whether
-                you submitted it or just looked it up. That's it. The report text itself lives on our
-                server (anonymized and redacted) and is referenced here only by its public ID — anyone with
-                that ID can already view the report from the Reports feed.
+                For each entry: the public report code, the score and tier, when
+                you opened it, and whether you submitted it or just looked it
+                up. That's it. The report text itself lives on our server
+                (anonymized and redacted) and is referenced here only by its
+                public ID — anyone with that ID can already view the report from
+                the Reports feed.
               </p>
             </div>
             <div>
               <p className="text-foreground font-medium mb-1">Security notes</p>
               <p>
-                Because there is no session token here, there is nothing to hijack and no request that
-                could be replayed against the server. The delete tokens for reports you submitted are
-                stored separately in <code className="text-primary/90 mx-1 px-1 py-0.5 rounded bg-primary/5 font-mono text-[10.5px]">sessionStorage</code>
-                and are wiped when you close the tab — they never appear in this list. Clearing
-                bookmarks does <em>not</em> delete the reports themselves; for that, open a report
-                you submitted and use its delete token.
+                Because there is no session token here, there is nothing to
+                hijack and no request that could be replayed against the server.
+                The delete tokens for reports you submitted are stored
+                separately in{" "}
+                <code className="text-primary/90 mx-1 px-1 py-0.5 rounded bg-primary/5 font-mono text-[10.5px]">
+                  sessionStorage
+                </code>
+                and are wiped when you close the tab — they never appear in this
+                list. Clearing bookmarks does <em>not</em> delete the reports
+                themselves; for that, open a report you submitted and use its
+                delete token.
               </p>
             </div>
           </div>
@@ -197,11 +243,17 @@ export default function History() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 -mb-2">
           <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
             <span data-testid="text-history-summary">
-              <span className="font-mono text-foreground">{entries.length}</span> bookmark{entries.length !== 1 ? "s" : ""}
+              <span className="font-mono text-foreground">
+                {entries.length}
+              </span>{" "}
+              bookmark{entries.length !== 1 ? "s" : ""}
               {reconstructedCount > 0 && (
                 <>
                   {" · "}
-                  <span className="font-mono text-amber-300">{reconstructedCount}</span> reconstructed
+                  <span className="font-mono text-amber-300">
+                    {reconstructedCount}
+                  </span>{" "}
+                  reconstructed
                 </>
               )}
             </span>
@@ -217,13 +269,18 @@ export default function History() {
                 <ArrowDownWideNarrow className="w-3 h-3" />
                 Sort
               </span>
-              {([
+              {[
                 { mode: "recent" as const, label: "Recent" },
                 { mode: "score" as const, label: "Score" },
-                { mode: "reconstructed" as const, label: "Recon first", disabled: showOnlyReconstructed || reconstructedCount === 0 },
-              ]).map((opt) => {
+                {
+                  mode: "reconstructed" as const,
+                  label: "Recon first",
+                  disabled: showOnlyReconstructed || reconstructedCount === 0,
+                },
+              ].map((opt) => {
                 const active = effectiveSort === opt.mode;
-                const disabled = (opt as { disabled?: boolean }).disabled ?? false;
+                const disabled =
+                  (opt as { disabled?: boolean }).disabled ?? false;
                 return (
                   <button
                     key={opt.mode}
@@ -236,8 +293,8 @@ export default function History() {
                       active
                         ? "bg-primary/20 text-primary"
                         : disabled
-                        ? "text-muted-foreground/40 cursor-not-allowed"
-                        : "text-muted-foreground hover:bg-primary/10 hover:text-foreground"
+                          ? "text-muted-foreground/40 cursor-not-allowed"
+                          : "text-muted-foreground hover:bg-primary/10 hover:text-foreground"
                     }`}
                   >
                     {opt.label}
@@ -258,7 +315,9 @@ export default function History() {
                 }`}
               >
                 <AlertTriangle className="w-3 h-3" />
-                {showOnlyReconstructed ? "Showing reconstructed only" : "Only show reconstructed"}
+                {showOnlyReconstructed
+                  ? "Showing reconstructed only"
+                  : "Only show reconstructed"}
               </button>
             )}
           </div>
@@ -272,7 +331,9 @@ export default function History() {
               <Clock className="w-12 h-12 text-primary/50" />
             </div>
             <p className="font-medium text-foreground">No bookmarks yet</p>
-            <p className="text-sm mt-1">Reports you submit or look up will appear here as quick links.</p>
+            <p className="text-sm mt-1">
+              Reports you submit or look up will appear here as quick links.
+            </p>
             <div className="flex gap-3 mt-6">
               <Button asChild variant="outline" className="gap-2 glass-card">
                 <Link to="/">
@@ -295,8 +356,13 @@ export default function History() {
             <div className="p-3 rounded-full icon-glow-green mb-3">
               <AlertTriangle className="w-8 h-8 text-amber-300/60" />
             </div>
-            <p className="font-medium text-foreground">No reconstructed bookmarks match this filter</p>
-            <p className="text-sm mt-1">Turn the filter off to see all {entries.length} bookmark{entries.length !== 1 ? "s" : ""}.</p>
+            <p className="font-medium text-foreground">
+              No reconstructed bookmarks match this filter
+            </p>
+            <p className="text-sm mt-1">
+              Turn the filter off to see all {entries.length} bookmark
+              {entries.length !== 1 ? "s" : ""}.
+            </p>
             <Button
               variant="outline"
               size="sm"
@@ -311,10 +377,21 @@ export default function History() {
       ) : (
         <div className="space-y-3">
           {visibleEntries.map((entry) => {
-            const slopColor = getSlopColorCustom(entry.slopScore, settings.slopThresholdLow, settings.slopThresholdHigh);
-            const progressColor = getSlopProgressColorCustom(entry.slopScore, settings.slopThresholdLow, settings.slopThresholdHigh);
+            const slopColor = getSlopColorCustom(
+              entry.slopScore,
+              settings.slopThresholdLow,
+              settings.slopThresholdHigh,
+            );
+            const progressColor = getSlopProgressColorCustom(
+              entry.slopScore,
+              settings.slopThresholdLow,
+              settings.slopThresholdHigh,
+            );
             return (
-              <Card key={`${entry.type}-${entry.id}`} className="glass-card rounded-xl group">
+              <Card
+                key={`${entry.type}-${entry.id}`}
+                className="glass-card rounded-xl group"
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center gap-4">
                     <div className="flex-1 min-w-0">
@@ -360,14 +437,18 @@ export default function History() {
                               recon
                             </Badge>
                             <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 rounded-md glass-card px-3 py-2 text-[11px] text-popover-foreground opacity-0 group-hover/recon:opacity-100 group-focus-within/recon:opacity-100 transition-opacity z-50 glow-border text-left font-normal normal-case leading-relaxed">
-                              Composite was rebuilt from cached signals rather than a fresh pipeline run. Treat this score as approximate.
+                              Composite was rebuilt from cached signals rather
+                              than a fresh pipeline run. Treat this score as
+                              approximate.
                             </span>
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-3 mt-2">
                         <div className="flex items-center gap-2 flex-1 max-w-xs">
-                          <span className={`font-mono text-sm font-bold ${slopColor}`}>
+                          <span
+                            className={`font-mono text-sm font-bold ${slopColor}`}
+                          >
                             {entry.slopScore}
                           </span>
                           <Progress
@@ -376,10 +457,16 @@ export default function History() {
                             indicatorClassName={progressColor}
                           />
                         </div>
-                        <span className="text-xs text-muted-foreground">{entry.slopTier}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {entry.slopTier}
+                        </span>
                         {entry.matchCount > 0 && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                            {entry.matchCount} match{entry.matchCount !== 1 ? "es" : ""}
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] px-1.5 py-0 h-4"
+                          >
+                            {entry.matchCount} match
+                            {entry.matchCount !== 1 ? "es" : ""}
                           </Badge>
                         )}
                       </div>
@@ -407,7 +494,10 @@ export default function History() {
 
       {entries.length > 0 && (
         <div className="text-center text-xs text-muted-foreground/50 pb-4">
-          <p>Bookmarks live in this browser only. The reports they link to are stored on our server (see Reports feed).</p>
+          <p>
+            Bookmarks live in this browser only. The reports they link to are
+            stored on our server (see Reports feed).
+          </p>
         </div>
       )}
     </div>

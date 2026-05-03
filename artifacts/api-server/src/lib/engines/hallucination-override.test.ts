@@ -19,7 +19,11 @@
 import { describe, it, expect } from "vitest";
 import { computeComposite, type EngineResult } from "./engines";
 
-function mk(engine: string, score: number, verdict: EngineResult["verdict"] = "GREY"): EngineResult {
+function mk(
+  engine: string,
+  score: number,
+  verdict: EngineResult["verdict"] = "GREY",
+): EngineResult {
   return {
     engine,
     score,
@@ -40,7 +44,11 @@ const baselineEngines = (): EngineResult[] => [
 describe("Task #48: hallucination composite override", () => {
   it("does NOT fire when text is omitted (backward-compatible)", () => {
     const r = computeComposite(baselineEngines());
-    expect(r.overridesApplied.some((o) => o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"))).toBe(false);
+    expect(
+      r.overridesApplied.some((o) =>
+        o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"),
+      ),
+    ).toBe(false);
   });
 
   it("does NOT fire on a clean text with no hallucination signals", () => {
@@ -63,7 +71,11 @@ Patch:
 `;
     const before = computeComposite(baselineEngines()).overallScore;
     const after = computeComposite(baselineEngines(), cleanText);
-    expect(after.overridesApplied.some((o) => o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"))).toBe(false);
+    expect(
+      after.overridesApplied.some((o) =>
+        o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"),
+      ),
+    ).toBe(false);
     expect(after.overallScore).toBe(before);
   });
 
@@ -78,7 +90,9 @@ attack.py (not attached for safety).
 `;
     const before = computeComposite(baselineEngines()).overallScore;
     const after = computeComposite(baselineEngines(), text);
-    const note = after.overridesApplied.find((o) => o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"));
+    const note = after.overridesApplied.find((o) =>
+      o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"),
+    );
     expect(note).toBeDefined();
     expect(note).toMatch(/moderate fabrication/i);
     expect(before - after.overallScore).toBe(10);
@@ -101,7 +115,9 @@ Severity: Critical and high impact.
 `;
     const before = computeComposite(baselineEngines()).overallScore;
     const after = computeComposite(baselineEngines(), text);
-    const note = after.overridesApplied.find((o) => o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"));
+    const note = after.overridesApplied.find((o) =>
+      o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"),
+    );
     expect(note).toBeDefined();
     expect(note).toMatch(/strong fabrication/i);
     expect(before - after.overallScore).toBe(15);
@@ -127,7 +143,9 @@ Working PoC in exploit.py (private). Working PoC in exploit.py (private).
 `;
     const before = computeComposite(baselineEngines()).overallScore;
     const after = computeComposite(baselineEngines(), text);
-    const note = after.overridesApplied.find((o) => o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"));
+    const note = after.overridesApplied.find((o) =>
+      o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"),
+    );
     expect(note).toBeDefined();
     expect(note).toMatch(/overwhelming fabrication/i);
     expect(before - after.overallScore).toBe(25);
@@ -162,7 +180,11 @@ Working PoC in exploit.py (private). Working PoC in exploit.py (private).
     const after = computeComposite(engines, fabricatedText);
     expect(before).toBeGreaterThanOrEqual(45);
     expect(after.overallScore).toBeLessThanOrEqual(35);
-    expect(after.overridesApplied.some((o) => o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"))).toBe(true);
+    expect(
+      after.overridesApplied.some((o) =>
+        o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"),
+      ),
+    ).toBe(true);
   });
 
   it("does NOT fire on a legit truncated ASan excerpt that uses the textbook PID 12345", () => {
@@ -183,7 +205,11 @@ Repro under ASan:
 Patch validates the inflate() return size before client_write.
 `;
     const r = computeComposite(baselineEngines(), text);
-    expect(r.overridesApplied.some((o) => o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"))).toBe(false);
+    expect(
+      r.overridesApplied.some((o) =>
+        o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"),
+      ),
+    ).toBe(false);
   });
 
   it("co-fires algebraically with the existing CONVERGENT_NEGATIVE override", () => {
@@ -198,7 +224,13 @@ Working PoC in exploit.py (private). Working PoC in exploit.py (private).
 Working PoC in exploit.py (private).
 `;
     const r = computeComposite(engines, fabricatedText);
-    expect(r.overridesApplied.some((o) => o.startsWith("CONVERGENT_NEGATIVE"))).toBe(true);
-    expect(r.overridesApplied.some((o) => o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"))).toBe(true);
+    expect(
+      r.overridesApplied.some((o) => o.startsWith("CONVERGENT_NEGATIVE")),
+    ).toBe(true);
+    expect(
+      r.overridesApplied.some((o) =>
+        o.startsWith("HALLUCINATION_FABRICATED_EVIDENCE"),
+      ),
+    ).toBe(true);
   });
 });

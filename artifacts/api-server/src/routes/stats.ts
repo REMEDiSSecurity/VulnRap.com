@@ -1,7 +1,6 @@
-import { Router, type IRouter } from "express";
-import { sql, gte, and, eq } from "drizzle-orm";
 import { createHmac, randomBytes } from "crypto";
-import { logger } from "../lib/logger";
+import { sql, gte, and, eq } from "drizzle-orm";
+import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { reportsTable, userFeedbackTable } from "@workspace/db";
 // page_views is intentionally NOT defined as a Drizzle pgTable anywhere in the
@@ -17,6 +16,7 @@ import {
   GetTrendsResponse,
   GetCorpusStatsResponse,
 } from "@workspace/api-zod";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -86,7 +86,11 @@ router.get("/stats/recent", async (_req, res): Promise<void> => {
     .limit(20);
 
   const mapped = recentReports.map((r) => {
-    const matches = r.similarityMatches as Array<{ reportId: number; similarity: number; matchType: string }>;
+    const matches = r.similarityMatches as Array<{
+      reportId: number;
+      similarity: number;
+      matchType: string;
+    }>;
     const tier = r.slopTier;
 
     return {
@@ -228,7 +232,10 @@ router.get("/stats/visitors", async (_req, res): Promise<void> => {
     });
   } catch (err) {
     if (isMissingPageViewsTable(err)) {
-      res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+      res.set(
+        "Cache-Control",
+        "public, max-age=60, stale-while-revalidate=120",
+      );
       res.json({ totalUniqueVisitors: 0, totalVisits: 0 });
       return;
     }
@@ -275,7 +282,10 @@ router.get("/stats/trends", async (req, res): Promise<void> => {
     date: row.date,
     count: row.count,
     avgRating: row.avgRating,
-    agreementRate: row.totalCount > 0 ? Math.round((row.helpfulCount / row.totalCount) * 100) : 0,
+    agreementRate:
+      row.totalCount > 0
+        ? Math.round((row.helpfulCount / row.totalCount) * 100)
+        : 0,
   }));
 
   const [totals] = await db

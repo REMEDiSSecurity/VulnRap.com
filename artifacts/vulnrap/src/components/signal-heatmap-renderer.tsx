@@ -243,7 +243,10 @@ export function SignalHeatmapRenderer({
           </span>
         )}
         {rangeCount > 0 && (
-          <span className="text-muted-foreground/70" data-testid="heatmap-range-count">
+          <span
+            className="text-muted-foreground/70"
+            data-testid="heatmap-range-count"
+          >
             {rangeCount} engine-range
           </span>
         )}
@@ -280,7 +283,9 @@ export function SignalHeatmapRenderer({
                     via {sp.source}
                   </span>
                 </div>
-                <div className="text-muted-foreground leading-snug mt-0.5">{sp.description}</div>
+                <div className="text-muted-foreground leading-snug mt-0.5">
+                  {sp.description}
+                </div>
               </div>
             </div>
           ))}
@@ -310,7 +315,10 @@ export function SignalHeatmapRenderer({
               return `${a} ${from}%, ${a} ${to}%`;
             })
             .join(", ");
-          const borderColor = colorForSpan(cell.signals[cell.signals.length - 1], 0.9);
+          const borderColor = colorForSpan(
+            cell.signals[cell.signals.length - 1],
+            0.9,
+          );
           const isHumanStack = cell.signals.every((s) => s.isHuman);
           const tooltip = cell.signals
             .map((s) => `${s.type}: ${s.label} (w:${s.weight})`)
@@ -341,9 +349,13 @@ export function SignalHeatmapRenderer({
       </pre>
 
       {legend.length > 0 ? (
-        <div className="rounded-lg border border-border/40 bg-muted/10 p-3" data-testid="heatmap-legend">
+        <div
+          className="rounded-lg border border-border/40 bg-muted/10 p-3"
+          data-testid="heatmap-legend"
+        >
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">
-            Legend — {legend.length} firing signal{legend.length !== 1 ? "s" : ""}
+            Legend — {legend.length} firing signal
+            {legend.length !== 1 ? "s" : ""}
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1.5">
             {legend.map((sp) => (
@@ -359,7 +371,12 @@ export function SignalHeatmapRenderer({
                     borderColor: colorForSpan(sp, 0.9),
                   }}
                 />
-                <span className={cn("font-mono text-[10px]", sp.isHuman ? "text-green-400/90" : "text-foreground/80")}>
+                <span
+                  className={cn(
+                    "font-mono text-[10px]",
+                    sp.isHuman ? "text-green-400/90" : "text-foreground/80",
+                  )}
+                >
                   {sp.type}
                 </span>
                 <span className="text-muted-foreground">{sp.label}</span>
@@ -374,7 +391,10 @@ export function SignalHeatmapRenderer({
           </div>
         </div>
       ) : (
-        <div className="text-[11px] text-muted-foreground italic" data-testid="heatmap-no-signals">
+        <div
+          className="text-[11px] text-muted-foreground italic"
+          data-testid="heatmap-no-signals"
+        >
           No signals fired with locatable evidence — nothing to tint.
         </div>
       )}

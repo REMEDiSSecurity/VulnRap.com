@@ -23,7 +23,11 @@ const CHECK_STEPS: Step[] = [
   { id: "redact", label: "Redact", description: "Scanning for PII & secrets" },
   { id: "linguistic", label: "Linguistic", description: "AI phrase detection" },
   { id: "factual", label: "Factual", description: "Verifying claims & CVEs" },
-  { id: "similarity", label: "Similarity", description: "Comparing against database" },
+  {
+    id: "similarity",
+    label: "Similarity",
+    description: "Comparing against database",
+  },
   { id: "scoring", label: "Scoring", description: "Computing final score" },
 ];
 
@@ -33,7 +37,11 @@ interface AnalysisStepperProps {
   className?: string;
 }
 
-export function AnalysisStepper({ isActive, mode = "submit", className }: AnalysisStepperProps) {
+export function AnalysisStepper({
+  isActive,
+  mode = "submit",
+  className,
+}: AnalysisStepperProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const steps = mode === "submit" ? ANALYSIS_STEPS : CHECK_STEPS;
 
@@ -49,9 +57,8 @@ export function AnalysisStepper({ isActive, mode = "submit", className }: Analys
 
     steps.forEach((_, i) => {
       if (i === 0) return;
-      const delay = i <= 2
-        ? baseDelay * i
-        : baseDelay * 2 + (i - 2) * (baseDelay * 1.3);
+      const delay =
+        i <= 2 ? baseDelay * i : baseDelay * 2 + (i - 2) * (baseDelay * 1.3);
       timers.push(setTimeout(() => setCurrentStep(i), delay));
     });
 
@@ -64,7 +71,8 @@ export function AnalysisStepper({ isActive, mode = "submit", className }: Analys
     <div className={cn("w-full max-w-md mx-auto", className)}>
       <div className="space-y-0.5">
         {steps.map((step, i) => {
-          const state = i < currentStep ? "done" : i === currentStep ? "active" : "pending";
+          const state =
+            i < currentStep ? "done" : i === currentStep ? "active" : "pending";
           return (
             <div key={step.id} className="flex items-center gap-3">
               <div className="flex flex-col items-center w-5">
@@ -76,26 +84,42 @@ export function AnalysisStepper({ isActive, mode = "submit", className }: Analys
                   <Circle className="w-3.5 h-3.5 text-muted-foreground/30" />
                 )}
                 {i < steps.length - 1 && (
-                  <div className={cn(
-                    "w-px h-3 mt-0.5",
-                    state === "done" ? "bg-green-400/40" : "bg-muted-foreground/10"
-                  )} />
+                  <div
+                    className={cn(
+                      "w-px h-3 mt-0.5",
+                      state === "done"
+                        ? "bg-green-400/40"
+                        : "bg-muted-foreground/10",
+                    )}
+                  />
                 )}
               </div>
-              <div className={cn(
-                "flex-1 flex items-center justify-between py-0.5 transition-opacity duration-300",
-                state === "pending" ? "opacity-30" : "opacity-100"
-              )}>
-                <span className={cn(
-                  "text-xs font-medium",
-                  state === "active" ? "text-primary" : state === "done" ? "text-muted-foreground" : "text-muted-foreground/50"
-                )}>
+              <div
+                className={cn(
+                  "flex-1 flex items-center justify-between py-0.5 transition-opacity duration-300",
+                  state === "pending" ? "opacity-30" : "opacity-100",
+                )}
+              >
+                <span
+                  className={cn(
+                    "text-xs font-medium",
+                    state === "active"
+                      ? "text-primary"
+                      : state === "done"
+                        ? "text-muted-foreground"
+                        : "text-muted-foreground/50",
+                  )}
+                >
                   {step.label}
                 </span>
-                <span className={cn(
-                  "text-[10px]",
-                  state === "active" ? "text-primary/70" : "text-muted-foreground/40"
-                )}>
+                <span
+                  className={cn(
+                    "text-[10px]",
+                    state === "active"
+                      ? "text-primary/70"
+                      : "text-muted-foreground/40",
+                  )}
+                >
                   {step.description}
                 </span>
               </div>

@@ -12,9 +12,17 @@
 // route's filtered SELECT + COUNT.
 
 import http from "node:http";
-import type { AddressInfo } from "node:net";
 import express from "express";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import type { AddressInfo } from "node:net";
 
 interface FakeAuditRow {
   id: number;
@@ -49,7 +57,9 @@ vi.mock("@workspace/db", () => {
     | { kind: "predicate"; fn: FilterPredicate }
     | { kind: "and"; parts: FilterPredicate[] };
 
-  function tokenToPredicate(token: FilterToken | undefined | null): FilterPredicate {
+  function tokenToPredicate(
+    token: FilterToken | undefined | null,
+  ): FilterPredicate {
     if (!token) return () => true;
     if (token.kind === "predicate") return token.fn;
     return (r) => token.parts.every((p) => p(r));
@@ -81,11 +91,17 @@ vi.mock("@workspace/db", () => {
       then<T>(onF: (rows: unknown[]) => T) {
         const matching = auditRows
           .filter(predicate)
-          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id);
+          .sort(
+            (a, b) =>
+              b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id,
+          );
         if (isCount) {
           return Promise.resolve([{ count: matching.length }]).then(onF);
         }
-        const sliced = matching.slice(offsetN, limitN != null ? offsetN + limitN : undefined);
+        const sliced = matching.slice(
+          offsetN,
+          limitN != null ? offsetN + limitN : undefined,
+        );
         return Promise.resolve(sliced).then(onF);
       },
     };
@@ -108,11 +124,11 @@ vi.mock("@workspace/db", () => {
 
   // drizzle-orm helpers: return tagged predicates the fake builder can
   // collapse back into JS filters.
-  const eq = (col: { __field: string }, val: unknown) =>
-    ({
-      kind: "predicate" as const,
-      fn: (r: FakeAuditRow) => (r as unknown as Record<string, unknown>)[col.__field] === val,
-    });
+  const eq = (col: { __field: string }, val: unknown) => ({
+    kind: "predicate" as const,
+    fn: (r: FakeAuditRow) =>
+      (r as unknown as Record<string, unknown>)[col.__field] === val,
+  });
   const ilike = (col: { __field: string }, pattern: string) => {
     const needle = pattern.replace(/^%|%$/g, "").toLowerCase();
     return {
@@ -126,12 +142,16 @@ vi.mock("@workspace/db", () => {
   const gte = (col: { __field: string }, val: Date) => ({
     kind: "predicate" as const,
     fn: (r: FakeAuditRow) =>
-      ((r as unknown as Record<string, unknown>)[col.__field] as Date).getTime() >= val.getTime(),
+      (
+        (r as unknown as Record<string, unknown>)[col.__field] as Date
+      ).getTime() >= val.getTime(),
   });
   const lte = (col: { __field: string }, val: Date) => ({
     kind: "predicate" as const,
     fn: (r: FakeAuditRow) =>
-      ((r as unknown as Record<string, unknown>)[col.__field] as Date).getTime() <= val.getTime(),
+      (
+        (r as unknown as Record<string, unknown>)[col.__field] as Date
+      ).getTime() <= val.getTime(),
   });
   const and = (...preds: Array<{ fn: FilterPredicate }>) => ({
     kind: "and" as const,
@@ -190,9 +210,8 @@ let baseUrl: string;
 
 beforeAll(async () => {
   process.env.CALIBRATION_TOKEN = TOKEN;
-  const { auditLogMutationMiddleware, writeAuditLogEntry } = await import(
-    "../middlewares/audit-log-middleware"
-  );
+  const { auditLogMutationMiddleware, writeAuditLogEntry } =
+    await import("../middlewares/audit-log-middleware");
   const auditLogRouter = (await import("./audit-log")).default;
 
   const app = express();
@@ -269,10 +288,14 @@ function request<T>(
   headers: Record<string, string> = {},
 ): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const baseHeaders: Record<string, string> = data
-      ? { "content-type": "application/json", "content-length": String(data.length) }
+      ? {
+          "content-type": "application/json",
+          "content-length": String(data.length),
+        }
       : {};
     const req = http.request(
       {
@@ -288,7 +311,11 @@ function request<T>(
         res.on("end", () => {
           const text = Buffer.concat(chunks).toString("utf8");
           let parsed: unknown = text;
-          try { parsed = JSON.parse(text); } catch { /* keep raw */ }
+          try {
+            parsed = JSON.parse(text);
+          } catch {
+            /* keep raw */
+          }
           resolve({
             status: res.statusCode ?? 0,
             body: parsed as T,
@@ -312,7 +339,9 @@ async function waitForAuditRow(start: number, timeoutMs = 1000): Promise<void> {
     if (auditRows.length > start) return;
     await new Promise((r) => setTimeout(r, 5));
   }
-  throw new Error(`audit row never landed (start=${start}, current=${auditRows.length})`);
+  throw new Error(
+    `audit row never landed (start=${start}, current=${auditRows.length})`,
+  );
 }
 
 describe("audit-log middleware", () => {
@@ -330,7 +359,10 @@ describe("audit-log middleware", () => {
     expect(row.method).toBe("POST");
     expect(row.endpoint).toBe("/api/feedback/calibration/handwavy-phrases");
     expect(row.responseStatus).toBe(201);
-    expect(row.requestPayload).toMatchObject({ phrase: "new phrase", reviewer: "carol@example.com" });
+    expect(row.requestPayload).toMatchObject({
+      phrase: "new phrase",
+      reviewer: "carol@example.com",
+    });
   });
 
   it("redacts secret-shaped keys from the persisted body", async () => {
@@ -384,7 +416,13 @@ describe("GET /api/audit-log", () => {
       total: number;
       limit: number;
       offset: number;
-      entries: Array<{ id: number; actor: string; method: string; endpoint: string; revertHint: unknown }>;
+      entries: Array<{
+        id: number;
+        actor: string;
+        method: string;
+        endpoint: string;
+        revertHint: unknown;
+      }>;
     }>("GET", "/api/audit-log", undefined, { "x-calibration-token": TOKEN });
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(2);
@@ -395,31 +433,34 @@ describe("GET /api/audit-log", () => {
   });
 
   it("filters by actor", async () => {
-    const res = await request<{ total: number; entries: Array<{ actor: string }> }>(
-      "GET",
-      "/api/audit-log?actor=alice",
-      undefined,
-      { "x-calibration-token": TOKEN },
-    );
+    const res = await request<{
+      total: number;
+      entries: Array<{ actor: string }>;
+    }>("GET", "/api/audit-log?actor=alice", undefined, {
+      "x-calibration-token": TOKEN,
+    });
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
     expect(res.body.entries[0].actor).toBe("alice");
   });
 
   it("filters by method (case-insensitive)", async () => {
-    const res = await request<{ total: number; entries: Array<{ method: string }> }>(
-      "GET",
-      "/api/audit-log?method=delete",
-      undefined,
-      { "x-calibration-token": TOKEN },
-    );
+    const res = await request<{
+      total: number;
+      entries: Array<{ method: string }>;
+    }>("GET", "/api/audit-log?method=delete", undefined, {
+      "x-calibration-token": TOKEN,
+    });
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
     expect(res.body.entries[0].method).toBe("DELETE");
   });
 
   it("filters by endpoint substring and date range", async () => {
-    const res = await request<{ total: number; entries: Array<{ actor: string }> }>(
+    const res = await request<{
+      total: number;
+      entries: Array<{ actor: string }>;
+    }>(
       "GET",
       "/api/audit-log?endpoint=handwavy&from=2026-01-15T00:00:00Z",
       undefined,
@@ -432,13 +473,18 @@ describe("GET /api/audit-log", () => {
 
   it("attaches revertHint for known revertible endpoints", async () => {
     const res = await request<{
-      entries: Array<{ method: string; revertHint: { method: string; endpoint: string } | null }>;
+      entries: Array<{
+        method: string;
+        revertHint: { method: string; endpoint: string } | null;
+      }>;
     }>("GET", "/api/audit-log", undefined, { "x-calibration-token": TOKEN });
     expect(res.status).toBe(200);
     const post = res.body.entries.find((e) => e.method === "POST");
     const del = res.body.entries.find((e) => e.method === "DELETE");
     expect(post?.revertHint?.method).toBe("DELETE");
     expect(del?.revertHint?.method).toBe("POST");
-    expect(del?.revertHint?.endpoint).toBe("/api/feedback/calibration/handwavy-phrases/reinstate");
+    expect(del?.revertHint?.endpoint).toBe(
+      "/api/feedback/calibration/handwavy-phrases/reinstate",
+    );
   });
 });

@@ -1,16 +1,47 @@
-import { useGetTrends, useGetStats, useGetVisitorStats, getGetTrendsQueryKey, getGetStatsQueryKey, getGetVisitorStatsQueryKey } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  useGetTrends,
+  useGetStats,
+  useGetVisitorStats,
+  getGetTrendsQueryKey,
+  getGetStatsQueryKey,
+  getGetVisitorStatsQueryKey,
+} from "@workspace/api-client-react";
+import {
+  TrendingUp,
+  BarChart3,
+  Users,
+  FileText,
+  ThumbsUp,
+  Activity,
+  Eye,
+} from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, BarChart3, Users, FileText, ThumbsUp, Activity, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TransparencyDriftWidget } from "@/components/transparency-drift-widget";
 import LatencySnapshotCard from "@/components/LatencySnapshotCard";
 import PhraseSuggestionForm from "@/components/phrase-suggestion-form";
-import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-} from "recharts";
 
 const TIER_COLORS = {
   clean: "#22c55e",
@@ -20,7 +51,13 @@ const TIER_COLORS = {
   slop: "#ef4444",
 };
 
-function HeroStat({ label, value, icon, color, loading }: {
+function HeroStat({
+  label,
+  value,
+  icon,
+  color,
+  loading,
+}: {
   label: string;
   value: string | number;
   icon: React.ReactNode;
@@ -31,29 +68,46 @@ function HeroStat({ label, value, icon, color, loading }: {
     <Card className="glass-card rounded-xl">
       <CardContent className="p-5">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider">{label}</span>
+          <span className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider">
+            {label}
+          </span>
           <div className={cn("p-2 rounded-lg", color)}>{icon}</div>
         </div>
         {loading ? (
           <Skeleton className="h-8 w-20" />
         ) : (
-          <div className="text-3xl font-mono font-bold glow-text-sm">{value}</div>
+          <div className="text-3xl font-mono font-bold glow-text-sm">
+            {value}
+          </div>
         )}
       </CardContent>
     </Card>
   );
 }
 
-function ChartTooltipContent({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
+function ChartTooltipContent({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ name: string; value: number; color: string }>;
+  label?: string;
+}) {
   if (!active || !payload?.length) return null;
   return (
     <div className="glass-card rounded-lg px-3 py-2 border border-border/30 text-xs space-y-1">
       <div className="font-mono text-muted-foreground">{label}</div>
       {payload.map((entry, i) => (
         <div key={i} className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+          <span
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: entry.color }}
+          />
           <span className="text-muted-foreground">{entry.name}:</span>
-          <span className="font-mono font-bold text-foreground">{entry.value}</span>
+          <span className="font-mono font-bold text-foreground">
+            {entry.value}
+          </span>
         </div>
       ))}
     </div>
@@ -68,7 +122,12 @@ function formatDate(dateStr: string) {
 export default function Transparency() {
   const { data: trends, isLoading: trendsLoading } = useGetTrends(
     { days: 90 },
-    { query: { queryKey: getGetTrendsQueryKey({ days: 90 }), refetchInterval: 120_000 } },
+    {
+      query: {
+        queryKey: getGetTrendsQueryKey({ days: 90 }),
+        refetchInterval: 120_000,
+      },
+    },
   );
 
   const { data: stats, isLoading: statsLoading } = useGetStats({
@@ -98,9 +157,10 @@ export default function Transparency() {
     count: d.count,
   }));
 
-  const detectionRate = stats && stats.totalReports > 0
-    ? Math.round((stats.duplicatesDetected / stats.totalReports) * 100)
-    : 0;
+  const detectionRate =
+    stats && stats.totalReports > 0
+      ? Math.round((stats.duplicatesDetected / stats.totalReports) * 100)
+      : 0;
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -110,7 +170,8 @@ export default function Transparency() {
           Transparency Dashboard
         </h1>
         <p className="text-muted-foreground mt-2">
-          VulnRap's journey in data — reports analyzed, detection rates, and scoring trends over time.
+          VulnRap's journey in data — reports analyzed, detection rates, and
+          scoring trends over time.
         </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-6" />
       </div>
@@ -163,83 +224,222 @@ export default function Transparency() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="glass-card rounded-xl">
           <CardHeader>
-            <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">Reports Analyzed Per Day</CardTitle>
-            <CardDescription>Daily volume over the last {trends?.days ?? 90} days</CardDescription>
+            <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">
+              Reports Analyzed Per Day
+            </CardTitle>
+            <CardDescription>
+              Daily volume over the last {trends?.days ?? 90} days
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {loading ? <Skeleton className="h-64 w-full" /> : dailyData.length > 0 ? (
+            {loading ? (
+              <Skeleton className="h-64 w-full" />
+            ) : dailyData.length > 0 ? (
               <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={dailyData} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
+                <AreaChart
+                  data={dailyData}
+                  margin={{ top: 5, right: 5, bottom: 5, left: -10 }}
+                >
                   <defs>
-                    <linearGradient id="reportsFill" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient
+                      id="reportsFill"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
                       <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.05} />
+                      <stop
+                        offset="100%"
+                        stopColor="#06b6d4"
+                        stopOpacity={0.05}
+                      />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.05)"
+                  />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                  />
                   <Tooltip content={<ChartTooltipContent />} />
-                  <Area type="monotone" dataKey="reports" stroke="#06b6d4" fill="url(#reportsFill)" strokeWidth={2} name="Reports" />
+                  <Area
+                    type="monotone"
+                    dataKey="reports"
+                    stroke="#06b6d4"
+                    fill="url(#reportsFill)"
+                    strokeWidth={2}
+                    name="Reports"
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">No report data yet</div>
+              <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+                No report data yet
+              </div>
             )}
           </CardContent>
         </Card>
 
         <Card className="glass-card rounded-xl">
           <CardHeader>
-            <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">Slop Tier Distribution Over Time</CardTitle>
-            <CardDescription>How the mix of tiers evolves day by day</CardDescription>
+            <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">
+              Slop Tier Distribution Over Time
+            </CardTitle>
+            <CardDescription>
+              How the mix of tiers evolves day by day
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {loading ? <Skeleton className="h-64 w-full" /> : dailyData.length > 0 ? (
+            {loading ? (
+              <Skeleton className="h-64 w-full" />
+            ) : dailyData.length > 0 ? (
               <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={dailyData} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <AreaChart
+                  data={dailyData}
+                  margin={{ top: 5, right: 5, bottom: 5, left: -10 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.05)"
+                  />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                  />
                   <Tooltip content={<ChartTooltipContent />} />
                   <Legend wrapperStyle={{ fontSize: 10 }} />
-                  <Area type="monotone" dataKey="clean" stackId="1" stroke={TIER_COLORS.clean} fill={TIER_COLORS.clean} fillOpacity={0.4} name="Clean" />
-                  <Area type="monotone" dataKey="likelyHuman" stackId="1" stroke={TIER_COLORS.likelyHuman} fill={TIER_COLORS.likelyHuman} fillOpacity={0.4} name="Likely Human" />
-                  <Area type="monotone" dataKey="questionable" stackId="1" stroke={TIER_COLORS.questionable} fill={TIER_COLORS.questionable} fillOpacity={0.4} name="Questionable" />
-                  <Area type="monotone" dataKey="likelySlop" stackId="1" stroke={TIER_COLORS.likelySlop} fill={TIER_COLORS.likelySlop} fillOpacity={0.4} name="Likely Slop" />
-                  <Area type="monotone" dataKey="slop" stackId="1" stroke={TIER_COLORS.slop} fill={TIER_COLORS.slop} fillOpacity={0.4} name="Slop" />
+                  <Area
+                    type="monotone"
+                    dataKey="clean"
+                    stackId="1"
+                    stroke={TIER_COLORS.clean}
+                    fill={TIER_COLORS.clean}
+                    fillOpacity={0.4}
+                    name="Clean"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="likelyHuman"
+                    stackId="1"
+                    stroke={TIER_COLORS.likelyHuman}
+                    fill={TIER_COLORS.likelyHuman}
+                    fillOpacity={0.4}
+                    name="Likely Human"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="questionable"
+                    stackId="1"
+                    stroke={TIER_COLORS.questionable}
+                    fill={TIER_COLORS.questionable}
+                    fillOpacity={0.4}
+                    name="Questionable"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="likelySlop"
+                    stackId="1"
+                    stroke={TIER_COLORS.likelySlop}
+                    fill={TIER_COLORS.likelySlop}
+                    fillOpacity={0.4}
+                    name="Likely Slop"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="slop"
+                    stackId="1"
+                    stroke={TIER_COLORS.slop}
+                    fill={TIER_COLORS.slop}
+                    fillOpacity={0.4}
+                    name="Slop"
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">No report data yet</div>
+              <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+                No report data yet
+              </div>
             )}
           </CardContent>
         </Card>
 
         <Card className="glass-card rounded-xl">
           <CardHeader>
-            <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">Average Slop Score Trend</CardTitle>
-            <CardDescription>Calibration drift or improvement over time</CardDescription>
+            <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">
+              Average Slop Score Trend
+            </CardTitle>
+            <CardDescription>
+              Calibration drift or improvement over time
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {loading ? <Skeleton className="h-64 w-full" /> : dailyData.length > 0 ? (
+            {loading ? (
+              <Skeleton className="h-64 w-full" />
+            ) : dailyData.length > 0 ? (
               <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={dailyData} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
+                <LineChart
+                  data={dailyData}
+                  margin={{ top: 5, right: 5, bottom: 5, left: -10 }}
+                >
                   <defs>
                     <linearGradient id="scoreLine" x1="0" y1="0" x2="1" y2="0">
                       <stop offset="0%" stopColor="#a78bfa" />
                       <stop offset="100%" stopColor="#06b6d4" />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }} tickLine={false} axisLine={false} />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.05)"
+                  />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
                   <Tooltip content={<ChartTooltipContent />} />
-                  <Line type="monotone" dataKey="avgScore" stroke="url(#scoreLine)" strokeWidth={2} dot={false} name="Avg Score" />
+                  <Line
+                    type="monotone"
+                    dataKey="avgScore"
+                    stroke="url(#scoreLine)"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Avg Score"
+                  />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">No score data yet</div>
+              <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+                No score data yet
+              </div>
             )}
           </CardContent>
         </Card>
@@ -248,8 +448,12 @@ export default function Transparency() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">Feedback Accuracy Trend</CardTitle>
-                <CardDescription>Human agreement rate over time</CardDescription>
+                <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">
+                  Feedback Accuracy Trend
+                </CardTitle>
+                <CardDescription>
+                  Human agreement rate over time
+                </CardDescription>
               </div>
               {feedbackData.length > 0 && (
                 <Badge variant="outline" className="text-xs font-mono">
@@ -259,25 +463,54 @@ export default function Transparency() {
             </div>
           </CardHeader>
           <CardContent>
-            {loading ? <Skeleton className="h-64 w-full" /> : feedbackData.length > 0 ? (
+            {loading ? (
+              <Skeleton className="h-64 w-full" />
+            ) : feedbackData.length > 0 ? (
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={feedbackData} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
+                <BarChart
+                  data={feedbackData}
+                  margin={{ top: 5, right: 5, bottom: 5, left: -10 }}
+                >
                   <defs>
                     <linearGradient id="agreeFill" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#22c55e" stopOpacity={0.6} />
-                      <stop offset="100%" stopColor="#22c55e" stopOpacity={0.1} />
+                      <stop
+                        offset="100%"
+                        stopColor="#22c55e"
+                        stopOpacity={0.1}
+                      />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }} tickLine={false} axisLine={false} />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.05)"
+                  />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
                   <Tooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="agreementRate" fill="url(#agreeFill)" radius={[4, 4, 0, 0]} name="Agreement %" />
+                  <Bar
+                    dataKey="agreementRate"
+                    fill="url(#agreeFill)"
+                    radius={[4, 4, 0, 0]}
+                    name="Agreement %"
+                  />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
               <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
-                No feedback data yet — as users rate reports, agreement trends will appear here.
+                No feedback data yet — as users rate reports, agreement trends
+                will appear here.
               </div>
             )}
           </CardContent>
@@ -299,12 +532,20 @@ export default function Transparency() {
           <div className="flex items-start gap-3">
             <FileText className="w-5 h-5 text-primary mt-0.5 shrink-0" />
             <div className="text-sm text-muted-foreground leading-relaxed">
-              <span className="text-foreground font-medium">About this page:</span>{" "}
-              All data shown here is computed from VulnRap's live database. Reports are counted from the{" "}
-              <code className="text-[11px] bg-muted/50 px-1 rounded font-mono">reports</code> table,
-              feedback from <code className="text-[11px] bg-muted/50 px-1 rounded font-mono">user_feedback</code>,
-              and visitors are tracked with privacy-respecting hashed identifiers (no PII stored).
-              Charts refresh every 2 minutes.
+              <span className="text-foreground font-medium">
+                About this page:
+              </span>{" "}
+              All data shown here is computed from VulnRap's live database.
+              Reports are counted from the{" "}
+              <code className="text-[11px] bg-muted/50 px-1 rounded font-mono">
+                reports
+              </code>{" "}
+              table, feedback from{" "}
+              <code className="text-[11px] bg-muted/50 px-1 rounded font-mono">
+                user_feedback
+              </code>
+              , and visitors are tracked with privacy-respecting hashed
+              identifiers (no PII stored). Charts refresh every 2 minutes.
             </div>
           </div>
         </CardContent>

@@ -5,16 +5,21 @@ import { performActiveVerification } from "./active-verification.js";
 // Each mode-specific test asserts which check *types* appear, so the actual
 // HTTP status returned is mostly irrelevant — we just need a deterministic
 // response that drives the same code paths regardless of network state.
-function mockFetch(handler: (url: string) => { ok: boolean; status: number; body?: unknown }) {
-  vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => {
-    const url = typeof input === "string" ? input : input.toString();
-    const r = handler(url);
-    return {
-      ok: r.ok,
-      status: r.status,
-      json: async () => r.body ?? {},
-    } as Response;
-  }));
+function mockFetch(
+  handler: (url: string) => { ok: boolean; status: number; body?: unknown },
+) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const r = handler(url);
+      return {
+        ok: r.ok,
+        status: r.status,
+        json: async () => r.body ?? {},
+      } as Response;
+    }),
+  );
 }
 
 describe("performActiveVerification — verification routing", () => {
@@ -166,18 +171,29 @@ describe("performActiveVerification — verification routing", () => {
       verificationMode: "SOURCE_CODE",
     });
 
-    const fallbackGh = fallback.checks.filter((c) => c.type.startsWith("github_"));
-    const referencedGh = referenced.checks.filter((c) => c.type.startsWith("github_"));
+    const fallbackGh = fallback.checks.filter((c) =>
+      c.type.startsWith("github_"),
+    );
+    const referencedGh = referenced.checks.filter((c) =>
+      c.type.startsWith("github_"),
+    );
 
     expect(fallbackGh.length).toBeGreaterThan(0);
     expect(referencedGh.length).toBeGreaterThan(0);
     expect(fallbackGh.every((c) => c.source === "search_fallback")).toBe(true);
-    expect(referencedGh.every((c) => c.source === "referenced_in_report")).toBe(true);
+    expect(referencedGh.every((c) => c.source === "referenced_in_report")).toBe(
+      true,
+    );
 
     // (1) Each search_fallback check weighs ~50% of its referenced peer.
     for (const fb of fallbackGh) {
-      const ref = referencedGh.find((r) => r.type === fb.type && r.target === fb.target);
-      expect(ref, `expected referenced peer for ${fb.type}:${fb.target}`).toBeDefined();
+      const ref = referencedGh.find(
+        (r) => r.type === fb.type && r.target === fb.target,
+      );
+      expect(
+        ref,
+        `expected referenced peer for ${fb.type}:${fb.target}`,
+      ).toBeDefined();
       expect(fb.weight).toBe(Math.round(ref!.weight * 0.5));
     }
 
@@ -191,7 +207,9 @@ describe("performActiveVerification — verification routing", () => {
     const stripped = await performActiveVerification(strippedText, {
       verificationMode: "SOURCE_CODE",
     });
-    expect(stripped.checks.filter((c) => c.type.startsWith("github_"))).toHaveLength(0);
+    expect(
+      stripped.checks.filter((c) => c.type.startsWith("github_")),
+    ).toHaveLength(0);
 
     // Score is unchanged by the search_fallback checks.
     expect(fallback.score).toBe(stripped.score);
@@ -201,8 +219,12 @@ describe("performActiveVerification — verification routing", () => {
     // does not put fabrication pressure on the report. Everything else —
     // including the "could not be verified" reviewer pressure — must match.
     const PROJECT_NOTE_PREFIX = "Report references";
-    const fbScored = fallback.triageNotes.filter((n) => !n.startsWith(PROJECT_NOTE_PREFIX));
-    const stripScored = stripped.triageNotes.filter((n) => !n.startsWith(PROJECT_NOTE_PREFIX));
+    const fbScored = fallback.triageNotes.filter(
+      (n) => !n.startsWith(PROJECT_NOTE_PREFIX),
+    );
+    const stripScored = stripped.triageNotes.filter(
+      (n) => !n.startsWith(PROJECT_NOTE_PREFIX),
+    );
     expect(fbScored).toEqual(stripScored);
 
     // Sanity checks: prove the assertions above are non-vacuous by showing

@@ -18,13 +18,18 @@ export interface EngineBreakdown {
 }
 
 export const ENGINE_FUSION_WEIGHTS: Record<EngineKey, number> = {
-  linguistic: 0.30,
-  factual: 0.30,
+  linguistic: 0.3,
+  factual: 0.3,
   template: 0.15,
   llm: 0.25,
 };
 
-export const ENGINE_ORDER: EngineKey[] = ["linguistic", "factual", "template", "llm"];
+export const ENGINE_ORDER: EngineKey[] = [
+  "linguistic",
+  "factual",
+  "template",
+  "llm",
+];
 
 export interface EngineContribution {
   key: EngineKey;
@@ -68,7 +73,8 @@ export function refuseEngines(
     .filter((s) => s.enabled)
     .reduce((sum, s) => sum + s.baseWeight, 0);
   const contributions: EngineContribution[] = states.map((s) => {
-    const normalizedWeight = totalWeight > 0 && s.enabled ? s.baseWeight / totalWeight : 0;
+    const normalizedWeight =
+      totalWeight > 0 && s.enabled ? s.baseWeight / totalWeight : 0;
     return {
       key: s.key,
       available: s.available,
@@ -79,9 +85,10 @@ export function refuseEngines(
       contribution: s.enabled ? normalizedWeight * s.rawScore : 0,
     };
   });
-  const score = totalWeight > 0
-    ? Math.round(contributions.reduce((sum, c) => sum + c.contribution, 0))
-    : 0;
+  const score =
+    totalWeight > 0
+      ? Math.round(contributions.reduce((sum, c) => sum + c.contribution, 0))
+      : 0;
   return { score, contributions };
 }
 

@@ -1,5 +1,12 @@
-import { test, expect, request, type APIRequestContext, type Page, type Locator } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import {
+  test,
+  expect,
+  request,
+  type APIRequestContext,
+  type Page,
+  type Locator,
+} from "@playwright/test";
 
 // Task #234 — End-to-end coverage for the "N category flips" badge on
 // removed-history rows. Task #149 added the badge to the active-phrase
@@ -46,7 +53,10 @@ interface BatchRemovalResponse {
 
 function uniquePhrases(prefix: string, count: number): string[] {
   const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  return Array.from({ length: count }, (_, i) => `task234 ${prefix} ${id} phrase ${i + 1}`);
+  return Array.from(
+    { length: count },
+    (_, i) => `task234 ${prefix} ${id} phrase ${i + 1}`,
+  );
 }
 
 async function addPhrase(
@@ -79,7 +89,11 @@ async function patchCategory(
   ).toBeTruthy();
 }
 
-async function removeSingle(api: APIRequestContext, phrase: string, reviewer: string): Promise<string> {
+async function removeSingle(
+  api: APIRequestContext,
+  phrase: string,
+  reviewer: string,
+): Promise<string> {
   const res = await api.delete("/api/feedback/calibration/handwavy-phrases", {
     data: { phrase, reviewer },
   });
@@ -89,7 +103,9 @@ async function removeSingle(api: APIRequestContext, phrase: string, reviewer: st
   ).toBeTruthy();
   const body = (await res.json()) as SingleRemovalResponse;
   const removedAt = body.historyEntry?.removedAt;
-  expect(typeof removedAt, "single removal should produce a removedAt").toBe("string");
+  expect(typeof removedAt, "single removal should produce a removedAt").toBe(
+    "string",
+  );
   return removedAt as string;
 }
 
@@ -108,11 +124,17 @@ async function batchRemove(
   const body = (await res.json()) as BatchRemovalResponse;
   expect(body.batch).toBe(true);
   expect(body.removed).toBe(phrases.length);
-  expect(body.historyEntry?.removedAt, "batch removal should produce a history entry").toBeTruthy();
+  expect(
+    body.historyEntry?.removedAt,
+    "batch removal should produce a history entry",
+  ).toBeTruthy();
   return body;
 }
 
-async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void> {
+async function cleanup(
+  api: APIRequestContext,
+  phrases: string[],
+): Promise<void> {
   await api
     .delete("/api/feedback/calibration/handwavy-phrases", {
       data: { phrases, reviewer: "e2e-task234-cleanup" },
@@ -131,7 +153,9 @@ async function openHistory(page: Page): Promise<void> {
 }
 
 async function findHistoryRowFor(page: Page, phrase: string): Promise<Locator> {
-  const row = page.getByTestId("handwavy-history-row").filter({ hasText: phrase });
+  const row = page
+    .getByTestId("handwavy-history-row")
+    .filter({ hasText: phrase });
   await expect(
     row,
     `expected exactly one history row for "${phrase}"`,
@@ -180,7 +204,9 @@ test.describe("FLAT hand-wavy phrase panel — removed-history category-flip bad
       // the reviewer + timestamp, mirroring the active-row tooltip from
       // Task #149.
       await badge.hover();
-      const tooltip = page.getByTestId("handwavy-history-category-flip-tooltip");
+      const tooltip = page.getByTestId(
+        "handwavy-history-category-flip-tooltip",
+      );
       await expect(tooltip).toBeVisible();
       await expect(tooltip).toContainText("Category changed 2 times");
       // Both transitions appear in chronological order with their editors.

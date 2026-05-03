@@ -288,10 +288,7 @@ export function createInMemoryDb(options: InMemoryDbOptions): InMemoryDb {
         joined = { rows: merged, schema: effectiveSchema };
         return chain;
       },
-      then(
-        resolve: (rows: FakeRow[]) => void,
-        reject: (err: unknown) => void,
-      ) {
+      then(resolve: (rows: FakeRow[]) => void, reject: (err: unknown) => void) {
         try {
           let rows = joined ? joined.rows : getTableRows(baseTable);
           const effectiveSchema = joined

@@ -15,7 +15,15 @@
 // nullable because some endpoints accept multipart/form-data or no
 // body at all.
 
-import { pgTable, serial, varchar, jsonb, timestamp, integer, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  serial,
+  varchar,
+  jsonb,
+  timestamp,
+  integer,
+  index,
+} from "drizzle-orm/pg-core";
 
 export const auditLogTable = pgTable(
   "audit_log",
@@ -28,7 +36,9 @@ export const auditLogTable = pgTable(
     queryParams: jsonb("query_params").$type<unknown>(),
     responseStatus: integer("response_status").notNull(),
     ip: varchar("ip", { length: 64 }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
     index("idx_audit_log_created_at").on(table.createdAt),

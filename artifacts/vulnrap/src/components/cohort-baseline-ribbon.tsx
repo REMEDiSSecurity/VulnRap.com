@@ -59,7 +59,9 @@ function sparklineHeights(bins: CohortBaseline["bins"]): number[] {
   if (max === 0) return bins.map(() => 0);
   // Boost the floor so a 1-count bucket is still visible against a 50-count
   // peak — a pure linear scale makes the smallest non-zero buckets vanish.
-  return bins.map((b) => (b.count === 0 ? 0 : Math.max(8, Math.round((b.count / max) * 100))));
+  return bins.map((b) =>
+    b.count === 0 ? 0 : Math.max(8, Math.round((b.count / max) * 100)),
+  );
 }
 
 function markerLeftPercent(score: number): number {
@@ -67,7 +69,10 @@ function markerLeftPercent(score: number): number {
   return Math.max(0, Math.min(100, score));
 }
 
-export function CohortBaselineRibbon({ score, cwe }: CohortBaselineRibbonProps) {
+export function CohortBaselineRibbon({
+  score,
+  cwe,
+}: CohortBaselineRibbonProps) {
   const platformQuery = useGetCohortBaseline(undefined, {
     query: {
       queryKey: getGetCohortBaselineQueryKey(),
@@ -79,17 +84,14 @@ export function CohortBaselineRibbon({ score, cwe }: CohortBaselineRibbonProps) 
     },
   });
   const familyParams = cwe ? { cwe } : undefined;
-  const familyQuery = useGetCohortBaseline(
-    familyParams,
-    {
-      query: {
-        queryKey: getGetCohortBaselineQueryKey(familyParams),
-        enabled: Boolean(cwe),
-        staleTime: 5 * 60 * 1000,
-        retry: false,
-      },
+  const familyQuery = useGetCohortBaseline(familyParams, {
+    query: {
+      queryKey: getGetCohortBaselineQueryKey(familyParams),
+      enabled: Boolean(cwe),
+      staleTime: 5 * 60 * 1000,
+      retry: false,
     },
-  );
+  });
 
   const platform = platformQuery.data;
   const family = familyQuery.data;
@@ -152,7 +154,10 @@ export function CohortBaselineRibbon({ score, cwe }: CohortBaselineRibbonProps) 
             <div
               key={`${bin.min}-${bin.max}`}
               className="flex-1 bg-cyan-400/40 rounded-sm"
-              style={{ height: `${heights[i] ?? 0}%`, minHeight: heights[i] ? 1 : 0 }}
+              style={{
+                height: `${heights[i] ?? 0}%`,
+                minHeight: heights[i] ? 1 : 0,
+              }}
               data-testid={`cohort-baseline-ribbon-bar-${i}`}
               data-count={bin.count}
               title={`${bin.min}-${bin.max}: ${bin.count} report${bin.count === 1 ? "" : "s"}`}
@@ -188,11 +193,17 @@ export function CohortBaselineRibbon({ score, cwe }: CohortBaselineRibbonProps) 
           <span className="font-mono text-cyan-400">{cwe}</span>
           <span className="text-muted-foreground/60">·</span>
           {family.totalReports === 0 || family.median == null ? (
-            <span>no {cwe} reports in the last {family.windowDays}d</span>
+            <span>
+              no {cwe} reports in the last {family.windowDays}d
+            </span>
           ) : (
             <span>
-              median <span className="font-mono text-foreground">{family.median}</span>
-              <span className="text-muted-foreground/60"> · n={family.totalReports}</span>
+              median{" "}
+              <span className="font-mono text-foreground">{family.median}</span>
+              <span className="text-muted-foreground/60">
+                {" "}
+                · n={family.totalReports}
+              </span>
             </span>
           )}
         </div>

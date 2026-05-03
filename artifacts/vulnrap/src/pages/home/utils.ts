@@ -1,4 +1,8 @@
-import { getSettings, getSlopColorCustom, getSlopProgressColorCustom } from "@/lib/settings";
+import {
+  getSettings,
+  getSlopColorCustom,
+  getSlopProgressColorCustom,
+} from "@/lib/settings";
 
 export function getSlopColor(score: number) {
   const s = getSettings();
@@ -7,7 +11,11 @@ export function getSlopColor(score: number) {
 
 export function getSlopProgressColor(score: number) {
   const s = getSettings();
-  return getSlopProgressColorCustom(score, s.slopThresholdLow, s.slopThresholdHigh);
+  return getSlopProgressColorCustom(
+    score,
+    s.slopThresholdLow,
+    s.slopThresholdHigh,
+  );
 }
 
 export function timeAgo(date: string): string {

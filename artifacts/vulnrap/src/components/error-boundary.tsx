@@ -1,7 +1,7 @@
 import { Component } from "react";
-import type { ReactNode, ErrorInfo } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { ReactNode, ErrorInfo } from "react";
 
 interface Props {
   children: ReactNode;
@@ -32,7 +32,9 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="min-h-[60vh] flex items-center justify-center">
           <div className="text-center space-y-4 max-w-md">
             <AlertTriangle className="w-16 h-16 text-destructive mx-auto" />
-            <h2 className="text-2xl font-bold uppercase tracking-tight">Something went wrong</h2>
+            <h2 className="text-2xl font-bold uppercase tracking-tight">
+              Something went wrong
+            </h2>
             <p className="text-muted-foreground">
               An unexpected error occurred. This might be a temporary issue.
             </p>

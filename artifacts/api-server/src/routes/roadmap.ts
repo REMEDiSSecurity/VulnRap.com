@@ -6,9 +6,9 @@
 // try cwd-relative first, then fall back to monorepo-relative so tests
 // run from the repo root also resolve. Curated only — there is no
 // admin/write endpoint.
-import { Router, type IRouter } from "express";
 import { existsSync, readFileSync } from "fs";
 import path from "path";
+import { Router, type IRouter } from "express";
 import { ListRoadmapResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -32,7 +32,10 @@ function resolveRoadmapPath(): string {
 // process at boot instead of silently returning a 500 to the first
 // caller.
 function loadRoadmap() {
-  const raw = JSON.parse(readFileSync(resolveRoadmapPath(), "utf8")) as Record<string, unknown>;
+  const raw = JSON.parse(readFileSync(resolveRoadmapPath(), "utf8")) as Record<
+    string,
+    unknown
+  >;
   return ListRoadmapResponse.parse({
     version: raw.version,
     updatedAt: raw.updatedAt,

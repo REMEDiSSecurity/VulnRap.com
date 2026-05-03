@@ -9,7 +9,13 @@ function analyzeReport(text: string, llm?: LLMSlopResult | null) {
   const linguistic = analyzeLinguistic(text);
   const factual = analyzeFactual(text);
   const heuristic = analyzeSloppiness(text);
-  const fusion = fuseScores(linguistic, factual, llm ?? null, heuristic.qualityScore, text);
+  const fusion = fuseScores(
+    linguistic,
+    factual,
+    llm ?? null,
+    heuristic.qualityScore,
+    text,
+  );
   return fusion;
 }
 

@@ -54,7 +54,9 @@ async function main() {
       (err, result) => {
         if (err) return reject(err);
         if (!result || !result.result) {
-          return reject(new Error(`conversion failed: ${result?.reason ?? "unknown"}`));
+          return reject(
+            new Error(`conversion failed: ${result?.reason ?? "unknown"}`),
+          );
         }
         const out = result.output?.[0];
         if (!out || out.type !== "collection" || !out.data) {
@@ -78,7 +80,8 @@ async function main() {
       key: "baseUrl",
       value: "https://vulnrap.com/api",
       type: "string",
-      description: "Base URL for the VulnRap API. Override to point at a self-hosted instance.",
+      description:
+        "Base URL for the VulnRap API. Override to point at a self-hosted instance.",
     },
   ];
 
@@ -112,8 +115,12 @@ async function main() {
       if (item.id) item.id = stableUuid(identity);
       if (Array.isArray(item.response)) {
         for (const resp of item.response) {
-          if (resp.id) resp.id = stableUuid(identity + "|response|" + (resp.name ?? resp.code ?? ""));
-          if (resp.originalRequest?.url) replaceServerVar(resp.originalRequest.url);
+          if (resp.id)
+            resp.id = stableUuid(
+              identity + "|response|" + (resp.name ?? resp.code ?? ""),
+            );
+          if (resp.originalRequest?.url)
+            replaceServerVar(resp.originalRequest.url);
         }
       }
       if (Array.isArray(item.item)) walk(item.item, identity);
@@ -153,10 +160,16 @@ function stableUuid(seed) {
   // Format as a v4-shaped UUID: 8-4-4-4-12. Set version nibble to 4 and
   // variant nibble to 8 for cosmetic conformance with what Postman emits.
   return (
-    h.slice(0, 8) + "-" +
-    h.slice(8, 12) + "-" +
-    "4" + h.slice(13, 16) + "-" +
-    "8" + h.slice(17, 20) + "-" +
+    h.slice(0, 8) +
+    "-" +
+    h.slice(8, 12) +
+    "-" +
+    "4" +
+    h.slice(13, 16) +
+    "-" +
+    "8" +
+    h.slice(17, 20) +
+    "-" +
     h.slice(20, 32)
   );
 }

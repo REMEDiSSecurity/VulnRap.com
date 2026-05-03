@@ -9,6 +9,7 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { setCalibrationToken } from "@workspace/api-client-react";
+import { HandwavyPhrasesAdmin, SuggestionCard } from "./feedback-analytics";
 import type {
   CalibrationSuggestion,
   HandwavyMarker,
@@ -16,7 +17,6 @@ import type {
   HandwavyPhrasesList,
   HandwavyPhraseRemovalBatchesList,
 } from "@workspace/api-client-react";
-import { HandwavyPhrasesAdmin, SuggestionCard } from "./feedback-analytics";
 
 // Task #291 — focused unit coverage for the `mutationsAllowed` prop wiring on
 // every mutating control inside the FLAT hand-wavy admin panel + the
@@ -291,9 +291,7 @@ function installFetchMock(
     // Reinstate-batch dry-run — match BEFORE the general /handwavy-phrases
     // route so this suffix isn't swallowed by it.
     if (
-      url.includes(
-        "/api/feedback/calibration/handwavy-phrases/reinstate-batch",
-      )
+      url.includes("/api/feedback/calibration/handwavy-phrases/reinstate-batch")
     ) {
       return jsonResponse({
         dryRun: true,
@@ -344,7 +342,11 @@ function installFetchMock(
             total: PHRASES.length,
             projectedTotal: PHRASES.length - 1,
             results: [
-              { raw: PHRASES[0].phrase, phrase: PHRASES[0].phrase, removed: true },
+              {
+                raw: PHRASES[0].phrase,
+                phrase: PHRASES[0].phrase,
+                removed: true,
+              },
             ],
             dryRunImpact: BULK_DRY_RUN_IMPACT,
             phrases: PHRASES,
@@ -362,7 +364,11 @@ function installFetchMock(
           total: PHRASES.length,
           projectedTotal: PHRASES.length - 1,
           results: [
-            { raw: PHRASES[0].phrase, phrase: PHRASES[0].phrase, removed: true },
+            {
+              raw: PHRASES[0].phrase,
+              phrase: PHRASES[0].phrase,
+              removed: true,
+            },
           ],
           dryRunImpact: SINGLE_DRY_RUN_IMPACT,
           phrases: PHRASES,
@@ -441,7 +447,10 @@ async function waitForPanelReady() {
 }
 
 function expectBlocked(el: HTMLElement, label: string) {
-  expect(el, `${label} must be disabled when mutations are blocked`).toBeDisabled();
+  expect(
+    el,
+    `${label} must be disabled when mutations are blocked`,
+  ).toBeDisabled();
   expect(
     el.getAttribute("title"),
     `${label} must carry the MUTATIONS_BLOCKED_TITLE tooltip`,
@@ -530,7 +539,10 @@ describe("Task #291 — calibration mutation buttons honour mutationsAllowed=fal
 
     rerender(false);
 
-    expectBlocked(screen.getByTestId("handwavy-edit-save"), "handwavy-edit-save");
+    expectBlocked(
+      screen.getByTestId("handwavy-edit-save"),
+      "handwavy-edit-save",
+    );
     expectEnabledCancel(
       screen.getByTestId("handwavy-edit-cancel"),
       "handwavy-edit-cancel",
@@ -643,7 +655,9 @@ describe("Task #291 — calibration mutation buttons honour mutationsAllowed=fal
     });
     fireEvent.click(screen.getByTestId("handwavy-add"));
     await waitFor(() =>
-      expect(screen.getByTestId("handwavy-preview-confirm")).toBeInTheDocument(),
+      expect(
+        screen.getByTestId("handwavy-preview-confirm"),
+      ).toBeInTheDocument(),
     );
 
     rerender(false);
@@ -724,7 +738,9 @@ describe("Task #291 — calibration mutation buttons honour mutationsAllowed=fal
 
     // Click the per-batch Preview; mocked dry-run returns reinstatedCount=2,
     // so the preview panel mounts gated only by `!mutationsAllowed`.
-    fireEvent.click(screen.getAllByTestId("handwavy-reinstate-batch-preview")[0]);
+    fireEvent.click(
+      screen.getAllByTestId("handwavy-reinstate-batch-preview")[0],
+    );
     await waitFor(() =>
       expect(
         screen.getByTestId("handwavy-reinstate-batch-preview-confirm"),
@@ -755,7 +771,10 @@ describe("Task #291 — calibration mutation buttons honour mutationsAllowed=fal
     const thrashRow = rows.find((r) =>
       r.textContent?.includes(PHRASE_WITH_THRASH.phrase),
     );
-    expect(thrashRow, "expected an active-list row for the thrashed phrase").toBeDefined();
+    expect(
+      thrashRow,
+      "expected an active-list row for the thrashed phrase",
+    ).toBeDefined();
     const removeBtn = within(thrashRow as HTMLElement).getByTestId(
       "handwavy-remove",
     );

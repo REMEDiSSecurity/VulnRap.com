@@ -83,57 +83,296 @@ interface PhraseRule {
 
 const RULES: PhraseRule[] = [
   // GPT-4 / ChatGPT pleasantry & framing tells
-  { id: "gpt4_certainly_opening", agent: "gpt4", weight: 5, description: "Pleasantry opener (\"Certainly!\")", pattern: /(^|[\n.!?]\s+)certainly[!,.](?:\s|$)/i },
-  { id: "gpt4_of_course", agent: "gpt4", weight: 4, description: "\"Of course!\" opener", pattern: /(^|[\n.!?]\s+)of course[!,.](?:\s|$)/i },
-  { id: "gpt4_id_be_happy", agent: "gpt4", weight: 5, description: "\"I'd be happy to\" / \"I would be happy to\"", pattern: /\bi(?:'d| would)\s+be\s+happy\s+to\b/i },
-  { id: "gpt4_lets_dive_into", agent: "gpt4", weight: 4, description: "\"Let's dive into\"", pattern: /\blet'?s\s+dive\s+(?:in|into)\b/i },
-  { id: "gpt4_in_conclusion", agent: "gpt4", weight: 3, description: "\"In conclusion,\"", pattern: /(^|[\n.!?]\s+)in conclusion[,:]/i },
-  { id: "gpt4_to_summarize", agent: "gpt4", weight: 2, description: "\"To summarize,\"", pattern: /(^|[\n.!?]\s+)to summarize[,:]/i },
-  { id: "gpt4_remember_that", agent: "gpt4", weight: 2, description: "\"Remember that\" sermon tell", pattern: /\bremember\s+that\b/i },
+  {
+    id: "gpt4_certainly_opening",
+    agent: "gpt4",
+    weight: 5,
+    description: 'Pleasantry opener ("Certainly!")',
+    pattern: /(^|[\n.!?]\s+)certainly[!,.](?:\s|$)/i,
+  },
+  {
+    id: "gpt4_of_course",
+    agent: "gpt4",
+    weight: 4,
+    description: '"Of course!" opener',
+    pattern: /(^|[\n.!?]\s+)of course[!,.](?:\s|$)/i,
+  },
+  {
+    id: "gpt4_id_be_happy",
+    agent: "gpt4",
+    weight: 5,
+    description: '"I\'d be happy to" / "I would be happy to"',
+    pattern: /\bi(?:'d| would)\s+be\s+happy\s+to\b/i,
+  },
+  {
+    id: "gpt4_lets_dive_into",
+    agent: "gpt4",
+    weight: 4,
+    description: '"Let\'s dive into"',
+    pattern: /\blet'?s\s+dive\s+(?:in|into)\b/i,
+  },
+  {
+    id: "gpt4_in_conclusion",
+    agent: "gpt4",
+    weight: 3,
+    description: '"In conclusion,"',
+    pattern: /(^|[\n.!?]\s+)in conclusion[,:]/i,
+  },
+  {
+    id: "gpt4_to_summarize",
+    agent: "gpt4",
+    weight: 2,
+    description: '"To summarize,"',
+    pattern: /(^|[\n.!?]\s+)to summarize[,:]/i,
+  },
+  {
+    id: "gpt4_remember_that",
+    agent: "gpt4",
+    weight: 2,
+    description: '"Remember that" sermon tell',
+    pattern: /\bremember\s+that\b/i,
+  },
 
   // Claude tells
-  { id: "claude_ill_help", agent: "claude", weight: 4, description: "\"I'll help\" opener", pattern: /\bi'?ll\s+help\s+(?:you\s+)?(?:with|understand|investigate|analy[sz]e|walk)\b/i },
-  { id: "claude_heres_what", agent: "claude", weight: 4, description: "\"Here's what I found / I'll do\"", pattern: /\bhere'?s\s+what\s+i(?:'?ll|'?ve|\s+(?:found|did|see|noticed))\b/i },
-  { id: "claude_i_notice", agent: "claude", weight: 3, description: "\"I notice\" observation tell", pattern: /\bi\s+notice\s+(?:that|a|the|some)\b/i },
-  { id: "claude_walk_you_through", agent: "claude", weight: 5, description: "\"Let me walk you through\"", pattern: /\blet\s+me\s+walk\s+you\s+through\b/i },
-  { id: "claude_worth_noting", agent: "claude", weight: 3, description: "\"It's worth noting\"", pattern: /\bit'?s\s+worth\s+noting\b/i },
-  { id: "claude_to_be_clear", agent: "claude", weight: 2, description: "\"To be clear,\" qualifier", pattern: /(^|[\n.!?]\s+)to be clear[,:]/i },
-  { id: "claude_thoughtful_hedging", agent: "claude", weight: 2, description: "\"It seems\" / \"appears to be\" hedging cluster", pattern: /\b(?:it\s+(?:seems|appears)|appears\s+to\s+be)\b/i },
+  {
+    id: "claude_ill_help",
+    agent: "claude",
+    weight: 4,
+    description: '"I\'ll help" opener',
+    pattern:
+      /\bi'?ll\s+help\s+(?:you\s+)?(?:with|understand|investigate|analy[sz]e|walk)\b/i,
+  },
+  {
+    id: "claude_heres_what",
+    agent: "claude",
+    weight: 4,
+    description: "\"Here's what I found / I'll do\"",
+    pattern:
+      /\bhere'?s\s+what\s+i(?:'?ll|'?ve|\s+(?:found|did|see|noticed))\b/i,
+  },
+  {
+    id: "claude_i_notice",
+    agent: "claude",
+    weight: 3,
+    description: '"I notice" observation tell',
+    pattern: /\bi\s+notice\s+(?:that|a|the|some)\b/i,
+  },
+  {
+    id: "claude_walk_you_through",
+    agent: "claude",
+    weight: 5,
+    description: '"Let me walk you through"',
+    pattern: /\blet\s+me\s+walk\s+you\s+through\b/i,
+  },
+  {
+    id: "claude_worth_noting",
+    agent: "claude",
+    weight: 3,
+    description: '"It\'s worth noting"',
+    pattern: /\bit'?s\s+worth\s+noting\b/i,
+  },
+  {
+    id: "claude_to_be_clear",
+    agent: "claude",
+    weight: 2,
+    description: '"To be clear," qualifier',
+    pattern: /(^|[\n.!?]\s+)to be clear[,:]/i,
+  },
+  {
+    id: "claude_thoughtful_hedging",
+    agent: "claude",
+    weight: 2,
+    description: '"It seems" / "appears to be" hedging cluster',
+    pattern: /\b(?:it\s+(?:seems|appears)|appears\s+to\s+be)\b/i,
+  },
 
   // Gemini tells
-  { id: "gemini_of_course_here_is", agent: "gemini", weight: 6, description: "\"Of course. Here is\" / \"Sure! Here's\"", pattern: /(^|[\n.!?]\s+)(?:of course\.\s+here\s+is|sure[!,.]\s+here'?s)\b/i },
-  { id: "gemini_crucially", agent: "gemini", weight: 4, description: "\"Crucially,\" sentence starter", pattern: /(^|[\n.!?]\s+)crucially[,:]/i },
-  { id: "gemini_important_bold", agent: "gemini", weight: 4, description: "Bold callouts like **Important:** / **Note:**", pattern: /\*\*(?:important|note|warning|caution|key takeaway)\*\*\s*[:.]/i },
-  { id: "gemini_paramount", agent: "gemini", weight: 3, description: "\"It is paramount\" / \"of paramount importance\"", pattern: /\b(?:it\s+is\s+paramount|of\s+paramount\s+importance)\b/i },
-  { id: "gemini_i_can_certainly", agent: "gemini", weight: 3, description: "\"I can certainly help\"", pattern: /\bi\s+can\s+certainly\s+(?:help|assist|provide)\b/i },
-  { id: "gemini_robust_solution", agent: "gemini", weight: 2, description: "\"robust solution\" / \"comprehensive overview\"", pattern: /\b(?:robust\s+solution|comprehensive\s+overview|thorough\s+analysis)\b/i },
+  {
+    id: "gemini_of_course_here_is",
+    agent: "gemini",
+    weight: 6,
+    description: '"Of course. Here is" / "Sure! Here\'s"',
+    pattern: /(^|[\n.!?]\s+)(?:of course\.\s+here\s+is|sure[!,.]\s+here'?s)\b/i,
+  },
+  {
+    id: "gemini_crucially",
+    agent: "gemini",
+    weight: 4,
+    description: '"Crucially," sentence starter',
+    pattern: /(^|[\n.!?]\s+)crucially[,:]/i,
+  },
+  {
+    id: "gemini_important_bold",
+    agent: "gemini",
+    weight: 4,
+    description: "Bold callouts like **Important:** / **Note:**",
+    pattern: /\*\*(?:important|note|warning|caution|key takeaway)\*\*\s*[:.]/i,
+  },
+  {
+    id: "gemini_paramount",
+    agent: "gemini",
+    weight: 3,
+    description: '"It is paramount" / "of paramount importance"',
+    pattern: /\b(?:it\s+is\s+paramount|of\s+paramount\s+importance)\b/i,
+  },
+  {
+    id: "gemini_i_can_certainly",
+    agent: "gemini",
+    weight: 3,
+    description: '"I can certainly help"',
+    pattern: /\bi\s+can\s+certainly\s+(?:help|assist|provide)\b/i,
+  },
+  {
+    id: "gemini_robust_solution",
+    agent: "gemini",
+    weight: 2,
+    description: '"robust solution" / "comprehensive overview"',
+    pattern:
+      /\b(?:robust\s+solution|comprehensive\s+overview|thorough\s+analysis)\b/i,
+  },
 
   // Cursor agent tells
-  { id: "cursor_ive_edited", agent: "cursor-agent", weight: 5, description: "\"I've edited / added / updated\" code-action narration", pattern: /\bi'?ve\s+(?:edited|added|updated|created|modified|refactored|fixed)\b/i },
-  { id: "cursor_let_me_check_file", agent: "cursor-agent", weight: 4, description: "\"Let me check the file / function\"", pattern: /\blet\s+me\s+(?:check|read|look\s+at|inspect)\s+(?:the\s+)?(?:file|function|code|implementation)\b/i },
-  { id: "cursor_now_ill", agent: "cursor-agent", weight: 3, description: "\"Now I'll\" code-action narration", pattern: /(^|[\n.!?]\s+)now i'?ll\s+(?:add|edit|update|create|fix|run|check)\b/i },
-  { id: "cursor_inline_file_paths", agent: "cursor-agent", weight: 3, description: "Three or more inline `path/to/file.ext` references", pattern: /`[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|c|cpp|h|hpp|md|json|yaml|yml|toml)`/g },
-  { id: "cursor_the_diff", agent: "cursor-agent", weight: 2, description: "\"the diff\" / \"the patch\" code-tool framing", pattern: /\bthe\s+(?:diff|patch|change\s+set)\b/i },
-  { id: "cursor_apply_patch", agent: "cursor-agent", weight: 3, description: "\"apply_patch\" / \"edit_file\" tool tell", pattern: /\b(?:apply_patch|edit_file|search_replace)\b/i },
+  {
+    id: "cursor_ive_edited",
+    agent: "cursor-agent",
+    weight: 5,
+    description: '"I\'ve edited / added / updated" code-action narration',
+    pattern:
+      /\bi'?ve\s+(?:edited|added|updated|created|modified|refactored|fixed)\b/i,
+  },
+  {
+    id: "cursor_let_me_check_file",
+    agent: "cursor-agent",
+    weight: 4,
+    description: '"Let me check the file / function"',
+    pattern:
+      /\blet\s+me\s+(?:check|read|look\s+at|inspect)\s+(?:the\s+)?(?:file|function|code|implementation)\b/i,
+  },
+  {
+    id: "cursor_now_ill",
+    agent: "cursor-agent",
+    weight: 3,
+    description: '"Now I\'ll" code-action narration',
+    pattern:
+      /(^|[\n.!?]\s+)now i'?ll\s+(?:add|edit|update|create|fix|run|check)\b/i,
+  },
+  {
+    id: "cursor_inline_file_paths",
+    agent: "cursor-agent",
+    weight: 3,
+    description: "Three or more inline `path/to/file.ext` references",
+    pattern:
+      /`[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|c|cpp|h|hpp|md|json|yaml|yml|toml)`/g,
+  },
+  {
+    id: "cursor_the_diff",
+    agent: "cursor-agent",
+    weight: 2,
+    description: '"the diff" / "the patch" code-tool framing',
+    pattern: /\bthe\s+(?:diff|patch|change\s+set)\b/i,
+  },
+  {
+    id: "cursor_apply_patch",
+    agent: "cursor-agent",
+    weight: 3,
+    description: '"apply_patch" / "edit_file" tool tell',
+    pattern: /\b(?:apply_patch|edit_file|search_replace)\b/i,
+  },
 
   // Replit agent tells
-  { id: "replit_ive_created", agent: "replit-agent", weight: 4, description: "\"I've created / set up\" project-action narration", pattern: /\bi'?ve\s+(?:created|set\s+up|configured|installed|deployed)\b/i },
-  { id: "replit_workflow", agent: "replit-agent", weight: 5, description: "References to \"the workflow\" / Replit workflows", pattern: /\bthe\s+workflow\b/i },
-  { id: "replit_run_button", agent: "replit-agent", weight: 5, description: "\"Run button\" / \"the Run button\"", pattern: /\bthe\s+run\s+button\b/i },
-  { id: "replit_repl", agent: "replit-agent", weight: 4, description: "\"Repl\" / \"this Repl\" reference", pattern: /\b(?:this\s+|your\s+|the\s+)?repl\b(?!\.it)/i },
-  { id: "replit_preview_pane", agent: "replit-agent", weight: 4, description: "\"the preview pane\" / \"webview\"", pattern: /\bthe\s+(?:preview\s+pane|webview)\b/i },
-  { id: "replit_checkpoint", agent: "replit-agent", weight: 3, description: "\"checkpoint\" reference", pattern: /\bcheckpoint(?:s|ed)?\b/i },
-  { id: "replit_secrets_pane", agent: "replit-agent", weight: 3, description: "\"the Secrets pane\" / \"environment secrets\"", pattern: /\bthe\s+secrets\s+(?:pane|tab|tool)\b/i },
+  {
+    id: "replit_ive_created",
+    agent: "replit-agent",
+    weight: 4,
+    description: '"I\'ve created / set up" project-action narration',
+    pattern: /\bi'?ve\s+(?:created|set\s+up|configured|installed|deployed)\b/i,
+  },
+  {
+    id: "replit_workflow",
+    agent: "replit-agent",
+    weight: 5,
+    description: 'References to "the workflow" / Replit workflows',
+    pattern: /\bthe\s+workflow\b/i,
+  },
+  {
+    id: "replit_run_button",
+    agent: "replit-agent",
+    weight: 5,
+    description: '"Run button" / "the Run button"',
+    pattern: /\bthe\s+run\s+button\b/i,
+  },
+  {
+    id: "replit_repl",
+    agent: "replit-agent",
+    weight: 4,
+    description: '"Repl" / "this Repl" reference',
+    pattern: /\b(?:this\s+|your\s+|the\s+)?repl\b(?!\.it)/i,
+  },
+  {
+    id: "replit_preview_pane",
+    agent: "replit-agent",
+    weight: 4,
+    description: '"the preview pane" / "webview"',
+    pattern: /\bthe\s+(?:preview\s+pane|webview)\b/i,
+  },
+  {
+    id: "replit_checkpoint",
+    agent: "replit-agent",
+    weight: 3,
+    description: '"checkpoint" reference',
+    pattern: /\bcheckpoint(?:s|ed)?\b/i,
+  },
+  {
+    id: "replit_secrets_pane",
+    agent: "replit-agent",
+    weight: 3,
+    description: '"the Secrets pane" / "environment secrets"',
+    pattern: /\bthe\s+secrets\s+(?:pane|tab|tool)\b/i,
+  },
 
   // Human tells (mirroring + extending lib/human-indicators.ts so the
   // detector remains self-contained and so a "human" verdict here can
   // disagree with the broader human-indicators system without coupling
   // weights).
-  { id: "human_contractions_dense", agent: "human", weight: 2, description: "Three or more informal contractions in close succession", pattern: /\b(?:don't|won't|can't|isn't|doesn't|didn't|i'm|i've|i'll|we're|they're|that's|gonna|wanna|kinda|sorta|y'all)\b/gi },
-  { id: "human_informal_abbr", agent: "human", weight: 4, description: "Informal abbreviations (btw / fwiw / iirc / imo / tldr)", pattern: /\b(?:btw|fwiw|iirc|imo|imho|tldr|tl;dr|ymmv|afaict|idk|ngl|wrt)\b/i },
-  { id: "human_commit_hash", agent: "human", weight: 5, description: "Commit hash / PR reference", pattern: /\b(?:commit\s+[0-9a-f]{7,40}|(?:pull\s+request|pr|mr)\s*#?\d+|[0-9a-f]{8,40}\.\.[0-9a-f]{8,40})\b/i },
-  { id: "human_named_researcher", agent: "human", weight: 4, description: "Named-researcher credit line", pattern: /\b(?:reported\s+by|discovered\s+by|found\s+by|credited?\s+to)\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/ },
-  { id: "human_swearing", agent: "human", weight: 3, description: "Mild profanity (no AI agent uses it)", pattern: /\b(?:wtf|damn|crap|sucks|annoying\s+as\s+hell|wtaf)\b/i },
+  {
+    id: "human_contractions_dense",
+    agent: "human",
+    weight: 2,
+    description: "Three or more informal contractions in close succession",
+    pattern:
+      /\b(?:don't|won't|can't|isn't|doesn't|didn't|i'm|i've|i'll|we're|they're|that's|gonna|wanna|kinda|sorta|y'all)\b/gi,
+  },
+  {
+    id: "human_informal_abbr",
+    agent: "human",
+    weight: 4,
+    description: "Informal abbreviations (btw / fwiw / iirc / imo / tldr)",
+    pattern:
+      /\b(?:btw|fwiw|iirc|imo|imho|tldr|tl;dr|ymmv|afaict|idk|ngl|wrt)\b/i,
+  },
+  {
+    id: "human_commit_hash",
+    agent: "human",
+    weight: 5,
+    description: "Commit hash / PR reference",
+    pattern:
+      /\b(?:commit\s+[0-9a-f]{7,40}|(?:pull\s+request|pr|mr)\s*#?\d+|[0-9a-f]{8,40}\.\.[0-9a-f]{8,40})\b/i,
+  },
+  {
+    id: "human_named_researcher",
+    agent: "human",
+    weight: 4,
+    description: "Named-researcher credit line",
+    pattern:
+      /\b(?:reported\s+by|discovered\s+by|found\s+by|credited?\s+to)\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/,
+  },
+  {
+    id: "human_swearing",
+    agent: "human",
+    weight: 3,
+    description: "Mild profanity (no AI agent uses it)",
+    pattern: /\b(?:wtf|damn|crap|sucks|annoying\s+as\s+hell|wtaf)\b/i,
+  },
 ];
 
 /** Cap on how many distinct rules of one agent can score. Keeps a single
@@ -159,9 +398,18 @@ function styloFeatures(text: string): AgentFingerprintResult["features"] {
   const sentenceCount = sentences.length || 1;
   const avgSentenceLen = wordCount / sentenceCount;
   const emDashCount = (text.match(/—/g) ?? []).length;
-  const boldHeaderCount = (text.match(/\*\*[^*\n]{1,40}\*\*\s*[:.\n]/g) ?? []).length;
-  const bulletCount = (text.match(/(^|\n)\s*(?:[-*•]\s+|\d+\.\s+)/g) ?? []).length;
-  return { wordCount, sentenceCount, avgSentenceLen, emDashCount, boldHeaderCount, bulletCount };
+  const boldHeaderCount = (text.match(/\*\*[^*\n]{1,40}\*\*\s*[:.\n]/g) ?? [])
+    .length;
+  const bulletCount = (text.match(/(^|\n)\s*(?:[-*•]\s+|\d+\.\s+)/g) ?? [])
+    .length;
+  return {
+    wordCount,
+    sentenceCount,
+    avgSentenceLen,
+    emDashCount,
+    boldHeaderCount,
+    bulletCount,
+  };
 }
 
 /**
@@ -178,15 +426,34 @@ export function detectAgentFingerprint(
   const empty: AgentFingerprintResult = {
     likelyAgent: "unknown",
     confidence: 0,
-    scores: { gpt4: 0, claude: 0, gemini: 0, "cursor-agent": 0, "replit-agent": 0, human: 0 },
+    scores: {
+      gpt4: 0,
+      claude: 0,
+      gemini: 0,
+      "cursor-agent": 0,
+      "replit-agent": 0,
+      human: 0,
+    },
     matches: [],
-    features: { wordCount: 0, sentenceCount: 0, avgSentenceLen: 0, emDashCount: 0, boldHeaderCount: 0, bulletCount: 0 },
+    features: {
+      wordCount: 0,
+      sentenceCount: 0,
+      avgSentenceLen: 0,
+      emDashCount: 0,
+      boldHeaderCount: 0,
+      bulletCount: 0,
+    },
   };
   if (!text || typeof text !== "string") return empty;
 
   const features = styloFeatures(text);
   const scores: Record<Exclude<AgentLabel, "unknown">, number> = {
-    gpt4: 0, claude: 0, gemini: 0, "cursor-agent": 0, "replit-agent": 0, human: 0,
+    gpt4: 0,
+    claude: 0,
+    gemini: 0,
+    "cursor-agent": 0,
+    "replit-agent": 0,
+    human: 0,
   };
   const perAgentRuleCount: Record<string, number> = {};
   const matches: AgentFingerprintMatch[] = [];
@@ -230,7 +497,8 @@ export function detectAgentFingerprint(
   // calls without dominating phrase evidence.
   const stylo = Math.min(
     STYLO_MAX_POINTS,
-    Math.round(features.emDashCount / 4) + Math.round(features.boldHeaderCount / 3),
+    Math.round(features.emDashCount / 4) +
+      Math.round(features.boldHeaderCount / 3),
   );
   if (stylo > 0 && features.wordCount >= 60) {
     // Em-dash + bold-header density tilts toward GPT-4 / Gemini formatting
@@ -268,7 +536,9 @@ export function detectAgentFingerprint(
   let topAgent: Exclude<AgentLabel, "unknown"> = "gpt4";
   let topScore = -1;
   let runnerUp = 0;
-  for (const k of Object.keys(scores) as Array<Exclude<AgentLabel, "unknown">>) {
+  for (const k of Object.keys(scores) as Array<
+    Exclude<AgentLabel, "unknown">
+  >) {
     const v = scores[k];
     if (v > topScore) {
       runnerUp = topScore;
@@ -289,7 +559,13 @@ export function detectAgentFingerprint(
   const magnitude = Math.min(1, topScore / 18);
   const confidence = Math.min(0.95, 0.5 * margin + 0.5 * magnitude);
 
-  return { likelyAgent: topAgent, confidence: Number(confidence.toFixed(3)), scores, matches, features };
+  return {
+    likelyAgent: topAgent,
+    confidence: Number(confidence.toFixed(3)),
+    scores,
+    matches,
+    features,
+  };
 }
 
 /** Friendly label for the diagnostics panel. */

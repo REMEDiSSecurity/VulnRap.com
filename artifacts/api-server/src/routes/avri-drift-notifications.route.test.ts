@@ -8,9 +8,17 @@ import http from "node:http";
 import path from "node:path";
 import os from "node:os";
 import { promises as fs } from "node:fs";
-import type { AddressInfo } from "node:net";
 import express from "express";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
+import type { AddressInfo } from "node:net";
 
 const TOKEN = "drift-notify-token";
 
@@ -89,10 +97,14 @@ function request<T>(
   headers: Record<string, string> = {},
 ): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const baseHeaders: Record<string, string> = data
-      ? { "Content-Type": "application/json", "Content-Length": String(data.length) }
+      ? {
+          "Content-Type": "application/json",
+          "Content-Length": String(data.length),
+        }
       : {};
     const req = http.request(
       {
@@ -203,7 +215,9 @@ describe("POST /feedback/calibration/avri-drift/notifications/rearm", () => {
     expect(r.body.rearmed).toBe(1);
     expect(r.body.notFound).toEqual([]);
     expect(r.body.remaining).toBe(1);
-    expect(r.body.removed.map((rm) => rm.key)).toEqual(["2026-04-20|GAP_BELOW_45"]);
+    expect(r.body.removed.map((rm) => rm.key)).toEqual([
+      "2026-04-20|GAP_BELOW_45",
+    ]);
     expect(r.body.notified.map((n) => n.key)).toEqual([
       "2026-04-20|FAMILY_MEAN_SHIFT|T1|INJECTION",
     ]);
@@ -238,10 +252,7 @@ describe("POST /feedback/calibration/avri-drift/notifications/rearm", () => {
       "POST",
       "/feedback/calibration/avri-drift/notifications/rearm",
       {
-        keys: [
-          "2026-04-20|GAP_BELOW_45",
-          "2099-01-01|GAP_BELOW_45",
-        ],
+        keys: ["2026-04-20|GAP_BELOW_45", "2099-01-01|GAP_BELOW_45"],
       },
       AUTH,
     );

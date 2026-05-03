@@ -11,17 +11,17 @@ where possible, and returns the upstream JSON verbatim.
 
 ## Tools
 
-| MCP tool                | Wraps                                  |
-|-------------------------|----------------------------------------|
-| `score_report`          | `POST /api/reports/check`              |
-| `lookup_report`         | `GET /api/reports/{id}`                |
-| `query_stats`           | `GET /api/stats`                       |
-| `query_transparency`    | `GET /api/public/corpus-stats`         |
-| `query_gallery`         | `GET /api/reports/feed`                |
-| `get_drift_summary`     | `GET /api/public/drift-summary`        |
-| `query_signal_metrics`  | `GET /api/feedback/holdout-eval`       |
-| `get_cohort_baseline`   | `GET /api/cohort/baseline`             |
-| `test_yourself`         | `GET /api/test/run` (BYO rows POSTed)  |
+| MCP tool               | Wraps                                 |
+| ---------------------- | ------------------------------------- |
+| `score_report`         | `POST /api/reports/check`             |
+| `lookup_report`        | `GET /api/reports/{id}`               |
+| `query_stats`          | `GET /api/stats`                      |
+| `query_transparency`   | `GET /api/public/corpus-stats`        |
+| `query_gallery`        | `GET /api/reports/feed`               |
+| `get_drift_summary`    | `GET /api/public/drift-summary`       |
+| `query_signal_metrics` | `GET /api/feedback/holdout-eval`      |
+| `get_cohort_baseline`  | `GET /api/cohort/baseline`            |
+| `test_yourself`        | `GET /api/test/run` (BYO rows POSTed) |
 
 Reviewer-only endpoints are intentionally **not** exposed.
 
@@ -44,10 +44,10 @@ The server speaks MCP over stdio. Override the API base URL with
       "command": "node",
       "args": ["/absolute/path/to/lib/mcp-server/dist/index.js"],
       "env": {
-        "VULNRAP_API_BASE_URL": "https://vulnrap.com"
-      }
-    }
-  }
+        "VULNRAP_API_BASE_URL": "https://vulnrap.com",
+      },
+    },
+  },
 }
 ```
 

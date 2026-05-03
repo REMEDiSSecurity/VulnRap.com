@@ -3,8 +3,19 @@
 // /api/feedback/per-signal-eval.
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Radar, Info, AlertTriangle, FileWarning } from "lucide-react";
-import { SIGNALS_BY_ID, SIGNAL_CATEGORIES, type SignalMeta } from "@/lib/signal-metadata";
+import {
+  ArrowLeft,
+  ExternalLink,
+  Radar,
+  Info,
+  AlertTriangle,
+  FileWarning,
+} from "lucide-react";
+import {
+  SIGNALS_BY_ID,
+  SIGNAL_CATEGORIES,
+  type SignalMeta,
+} from "@/lib/signal-metadata";
 import NotFound from "@/pages/not-found";
 
 interface PerSignalEval {
@@ -41,7 +52,9 @@ function MetricsPanel({ id }: { id: string }) {
         <Info className="w-3.5 h-3.5" />
         Hit rate from reviewer feedback
       </div>
-      {isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
+      {isLoading && (
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      )}
       {isError && (
         <div className="text-sm text-amber-400/80">Could not load metrics.</div>
       )}
@@ -52,8 +65,8 @@ function MetricsPanel({ id }: { id: string }) {
       )}
       {stat && stat.precision === null && (
         <div className="text-sm text-muted-foreground">
-          Only {stat.samples} sample{stat.samples === 1 ? "" : "s"} so far — needs ≥5 to compute a stable
-          precision.
+          Only {stat.samples} sample{stat.samples === 1 ? "" : "s"} so far —
+          needs ≥5 to compute a stable precision.
         </div>
       )}
       {stat && stat.precision !== null && (
@@ -67,12 +80,19 @@ function MetricsPanel({ id }: { id: string }) {
             </span>
           </div>
           <div className="text-[12px] text-muted-foreground font-mono">
-            n = {stat.samples} rated reports · {stat.firesAndSlop} slop · {stat.firesAndNotSlop} not slop
+            n = {stat.samples} rated reports · {stat.firesAndSlop} slop ·{" "}
+            {stat.firesAndNotSlop} not slop
           </div>
           <div className="text-[11px] text-muted-foreground/70 leading-snug">
             Computed across the full feedback set, not the holdout split. Use
-            the <Link to="/feedback-analytics" className="text-primary hover:underline">Feedback
-            Analytics</Link> page for the honest holdout numbers.
+            the{" "}
+            <Link
+              to="/feedback-analytics"
+              className="text-primary hover:underline"
+            >
+              Feedback Analytics
+            </Link>{" "}
+            page for the honest holdout numbers.
           </div>
         </div>
       )}
@@ -87,7 +107,7 @@ function ExampleBlock({ ex }: { ex: SignalMeta["examples"][number] }) {
         {ex.title}
       </div>
       <pre className="p-3 text-[12px] font-mono text-foreground/90 whitespace-pre-wrap break-all overflow-x-auto">
-{ex.snippet}
+        {ex.snippet}
       </pre>
       <div className="px-3 py-2 text-[12px] text-muted-foreground border-t border-border/40 leading-snug">
         <span className="font-semibold text-foreground/80">Why it fires: </span>
@@ -107,9 +127,11 @@ export default function SignalsDetail() {
 
   const category = SIGNAL_CATEGORIES.find((c) => c.id === signal.category);
   const CategoryIcon =
-    signal.category === "hallucination" ? FileWarning :
-    signal.category === "substance" ? AlertTriangle :
-                                       Radar;
+    signal.category === "hallucination"
+      ? FileWarning
+      : signal.category === "substance"
+        ? AlertTriangle
+        : Radar;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -191,8 +213,8 @@ export default function SignalsDetail() {
         </h2>
         {signal.examples.length === 0 ? (
           <div className="text-[13px] text-muted-foreground italic">
-            No public example fixtures attached yet — see the detector source for the regex patterns
-            it matches.
+            No public example fixtures attached yet — see the detector source
+            for the regex patterns it matches.
           </div>
         ) : (
           <div className="space-y-3">

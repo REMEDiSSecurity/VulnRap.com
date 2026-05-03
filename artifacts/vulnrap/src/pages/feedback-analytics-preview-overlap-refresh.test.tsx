@@ -9,13 +9,13 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { setCalibrationToken } from "@workspace/api-client-react";
+import { HandwavyPhrasesAdmin } from "./feedback-analytics";
 import type {
   HandwavyMarker,
   HandwavyHistoryEntry,
   HandwavyPhrasesList,
   HandwavyPhraseRemovalBatchesList,
 } from "@workspace/api-client-react";
-import { HandwavyPhrasesAdmin } from "./feedback-analytics";
 
 // Task #314 — integration coverage for the post-remove preview refresh.
 // Task #226 added a "Remove existing" quick-action to each overlap row in
@@ -228,14 +228,8 @@ function installFetchMock(): ReturnType<typeof vi.spyOn> {
           /* fall through */
         }
         const original = body.phrase ?? "";
-        const next = body.newPhrase
-          ?.toLowerCase()
-          .replace(/\s+/g, " ")
-          .trim();
-        const originalNorm = original
-          .toLowerCase()
-          .replace(/\s+/g, " ")
-          .trim();
+        const next = body.newPhrase?.toLowerCase().replace(/\s+/g, " ").trim();
+        const originalNorm = original.toLowerCase().replace(/\s+/g, " ").trim();
         const renamed = !!next && next.length > 0 && next !== originalNorm;
         if (renamed) {
           activePhrases = activePhrases
@@ -294,7 +288,9 @@ function installFetchMock(): ReturnType<typeof vi.spyOn> {
             removed: true,
             total: activePhrases.length,
             projectedTotal: Math.max(activePhrases.length - 1, 0),
-            results: [{ raw: targetPhrase, phrase: targetPhrase, removed: true }],
+            results: [
+              { raw: targetPhrase, phrase: targetPhrase, removed: true },
+            ],
             dryRunImpact: SINGLE_ZERO_IMPACT,
             phrases: activePhrases,
           });
@@ -302,9 +298,7 @@ function installFetchMock(): ReturnType<typeof vi.spyOn> {
         // Live DELETE: mutate the shared mock state so the refetched
         // GET — and the post-remove add dry-run that Task #314 fires —
         // both reflect the new curated list.
-        activePhrases = activePhrases.filter(
-          (p) => p.phrase !== targetPhrase,
-        );
+        activePhrases = activePhrases.filter((p) => p.phrase !== targetPhrase);
         return jsonResponse({
           removed: true,
           phrase: targetPhrase,
@@ -440,7 +434,11 @@ describe("Task #314 — preview overlap refresh after a quick-action remove", ()
     // downstream symptom (the row disappearing), so a future refactor
     // that achieves the same UI by some other means still trips this
     // test if it skipped the documented re-issue.
-    type FetchCall = { url: string; method: string; body: { dryRun?: boolean } };
+    type FetchCall = {
+      url: string;
+      method: string;
+      body: { dryRun?: boolean };
+    };
     const calls: FetchCall[] =
       fetchSpy?.mock.calls.map(
         ([input, init]: [RequestInfo | URL, RequestInit?]) => {
@@ -664,10 +662,7 @@ describe("Task #443 — preview overlap refresh after an edit-rename", () => {
     // the list isn't pathologically small. Neither phrase equals
     // CANDIDATE_PHRASE at preview-open time, so the overlaps block
     // starts empty.
-    activePhrases = [
-      makeMarker(PHRASE_TO_RENAME),
-      makeMarker(OTHER_PHRASE),
-    ];
+    activePhrases = [makeMarker(PHRASE_TO_RENAME), makeMarker(OTHER_PHRASE)];
     activeHistory = [];
     setCalibrationToken("test-token");
     fetchSpy = installFetchMock();

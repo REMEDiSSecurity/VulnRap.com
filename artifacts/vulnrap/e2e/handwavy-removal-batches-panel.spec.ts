@@ -70,7 +70,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     const phrases = uniquePhrases(3, "task175 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -94,7 +95,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       const btn = row.getByTestId("handwavy-removal-batches-reinstate");
       await expect(btn).toBeVisible();
       await expect(btn).toBeEnabled();
-      await expect(row.getByTestId("handwavy-removal-batches-reinstated")).toHaveCount(0);
+      await expect(
+        row.getByTestId("handwavy-removal-batches-reinstated"),
+      ).toHaveCount(0);
 
       // The picker now opens a preview-and-confirm dialog before firing.
       await btn.click();
@@ -116,10 +119,14 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
 
       // After the round-trip the row swaps to the "Already reinstated" badge
       // and the button itself is gone.
-      await expect(row.getByTestId("handwavy-removal-batches-reinstated")).toBeVisible({
+      await expect(
+        row.getByTestId("handwavy-removal-batches-reinstated"),
+      ).toBeVisible({
         timeout: 15_000,
       });
-      await expect(row.getByTestId("handwavy-removal-batches-reinstate")).toHaveCount(0);
+      await expect(
+        row.getByTestId("handwavy-removal-batches-reinstate"),
+      ).toHaveCount(0);
 
       // Every phrase should once again be on the active list.
       for (const p of phrases) {
@@ -144,7 +151,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     const phrases = uniquePhrases(7, "task175 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -160,7 +168,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       await expect(samples).toContainText(phrases[0]);
       await expect(samples).not.toContainText(phrases[5]);
       await expect(samples).not.toContainText(phrases[6]);
-      await expect(row.getByTestId("handwavy-removal-batches-full")).toHaveCount(0);
+      await expect(
+        row.getByTestId("handwavy-removal-batches-full"),
+      ).toHaveCount(0);
 
       const toggle = row.getByTestId("handwavy-removal-batches-toggle");
       await expect(toggle).toBeVisible();
@@ -175,14 +185,20 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       for (const p of phrases) {
         await expect(full).toContainText(p);
       }
-      await expect(row.getByTestId("handwavy-removal-batches-samples")).toHaveCount(0);
+      await expect(
+        row.getByTestId("handwavy-removal-batches-samples"),
+      ).toHaveCount(0);
       await expect(toggle).toHaveText(/Hide/);
 
       // Collapse again — back to the samples preview.
       await toggle.click();
       await expect(row).toHaveAttribute("data-batch-expanded", "false");
-      await expect(row.getByTestId("handwavy-removal-batches-samples")).toBeVisible();
-      await expect(row.getByTestId("handwavy-removal-batches-full")).toHaveCount(0);
+      await expect(
+        row.getByTestId("handwavy-removal-batches-samples"),
+      ).toBeVisible();
+      await expect(
+        row.getByTestId("handwavy-removal-batches-full"),
+      ).toHaveCount(0);
       await expect(toggle).toHaveText(/Show all \(7\)/);
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
@@ -200,13 +216,18 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     const phrases = uniquePhrases(3, "task175 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
       const row = await openPanelAndFindBatch(page, removedAt);
-      await expect(row.getByTestId("handwavy-removal-batches-samples")).toBeVisible();
-      await expect(row.getByTestId("handwavy-removal-batches-toggle")).toHaveCount(0);
+      await expect(
+        row.getByTestId("handwavy-removal-batches-samples"),
+      ).toBeVisible();
+      await expect(
+        row.getByTestId("handwavy-removal-batches-toggle"),
+      ).toHaveCount(0);
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
@@ -220,7 +241,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     const phrases = uniquePhrases(2, "task175 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -233,8 +255,12 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       expect(reinstateRes.ok()).toBeTruthy();
 
       const row = await openPanelAndFindBatch(page, removedAt);
-      await expect(row.getByTestId("handwavy-removal-batches-reinstated")).toBeVisible();
-      await expect(row.getByTestId("handwavy-removal-batches-reinstate")).toHaveCount(0);
+      await expect(
+        row.getByTestId("handwavy-removal-batches-reinstated"),
+      ).toBeVisible();
+      await expect(
+        row.getByTestId("handwavy-removal-batches-reinstate"),
+      ).toHaveCount(0);
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
@@ -255,7 +281,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     try {
       // Add three, then remove all three as one batch. This is the row we
       // want the chip to appear on later.
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -292,7 +319,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     try {
       // Add both phrases and remove them as one batch — this is the
       // "older" batch the chip should warn about.
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -303,7 +331,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       // removal-history row whose removedAt is strictly newer than the
       // batch's removedAt — so it should still be flagged as a conflict.
       await addPhrase(apiCtx, phrases[0], { reviewer: REVIEWER });
-      const followUp = await batchRemove(apiCtx, [phrases[0]], { reviewer: REVIEWER });
+      const followUp = await batchRemove(apiCtx, [phrases[0]], {
+        reviewer: REVIEWER,
+      });
       expect(followUp.historyEntry!.removedAt > removedAt).toBe(true);
 
       const row = await openPanelAndFindBatch(page, removedAt);
@@ -325,7 +355,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     const phrases = uniquePhrases(2, "task175 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -355,7 +386,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     const phrases = uniquePhrases(3, "task175 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -377,7 +409,10 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
 
       // Detail panel is closed by default.
       await expect(chip).toHaveAttribute("aria-expanded", "false");
-      await expect(row).toHaveAttribute("data-batch-conflict-expanded", "false");
+      await expect(row).toHaveAttribute(
+        "data-batch-conflict-expanded",
+        "false",
+      );
       await expect(
         row.getByTestId("handwavy-removal-batches-conflict-detail"),
       ).toHaveCount(0);
@@ -387,7 +422,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       await chip.click();
       await expect(chip).toHaveAttribute("aria-expanded", "true");
       await expect(row).toHaveAttribute("data-batch-conflict-expanded", "true");
-      const detail = row.getByTestId("handwavy-removal-batches-conflict-detail");
+      const detail = row.getByTestId(
+        "handwavy-removal-batches-conflict-detail",
+      );
       await expect(detail).toBeVisible();
 
       const conflictRows = detail.getByTestId(
@@ -438,7 +475,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     const phrases = uniquePhrases(2, "task175 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -450,7 +488,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       await expect(chip).toBeVisible({ timeout: 15_000 });
       await chip.click();
 
-      const detail = row.getByTestId("handwavy-removal-batches-conflict-detail");
+      const detail = row.getByTestId(
+        "handwavy-removal-batches-conflict-detail",
+      );
       await expect(detail).toBeVisible();
 
       const jumpButton = detail.getByTestId(
@@ -491,7 +531,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     const phrases = uniquePhrases(2, "task481 batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -500,7 +541,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       // than the original batch — that newer entry is the row the click
       // should jump to.
       await addPhrase(apiCtx, phrases[0], { reviewer: REVIEWER });
-      const followUp = await batchRemove(apiCtx, [phrases[0]], { reviewer: REVIEWER });
+      const followUp = await batchRemove(apiCtx, [phrases[0]], {
+        reviewer: REVIEWER,
+      });
       const laterRemovedAt = followUp.historyEntry!.removedAt;
       expect(laterRemovedAt > removedAt).toBe(true);
 
@@ -509,7 +552,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       await expect(chip).toBeVisible({ timeout: 15_000 });
       await chip.click();
 
-      const detail = row.getByTestId("handwavy-removal-batches-conflict-detail");
+      const detail = row.getByTestId(
+        "handwavy-removal-batches-conflict-detail",
+      );
       await expect(detail).toBeVisible();
 
       const historyJumpButton = detail.getByTestId(
@@ -539,7 +584,10 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       const olderHistoryRow = page.locator(
         `[data-handwavy-history-phrase="${phrases[0]}"][data-handwavy-history-removed-at="${removedAt}"]`,
       );
-      await expect(olderHistoryRow).not.toHaveAttribute("data-highlighted", "true");
+      await expect(olderHistoryRow).not.toHaveAttribute(
+        "data-highlighted",
+        "true",
+      );
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
@@ -562,7 +610,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     try {
       // Add three, then remove all three as one batch — this is the
       // batch group whose header we want the chip to appear on.
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -584,7 +633,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
 
       // The chip is purely informational — both the "Preview reinstate"
       // and "Reinstate all" buttons are still present and enabled.
-      await expect(group.getByTestId("handwavy-reinstate-batch-preview")).toBeEnabled();
+      await expect(
+        group.getByTestId("handwavy-reinstate-batch-preview"),
+      ).toBeEnabled();
       await expect(group.getByTestId("handwavy-reinstate-batch")).toBeEnabled();
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
@@ -599,7 +650,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     const phrases = uniquePhrases(2, "task339 history batch");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -636,8 +688,11 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
 
     try {
       // 1) Set up the target batch — three phrases removed as one batch.
-      for (const p of targetPhrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
-      const targetBatch = await batchRemove(apiCtx, targetPhrases, { reviewer: REVIEWER });
+      for (const p of targetPhrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      const targetBatch = await batchRemove(apiCtx, targetPhrases, {
+        reviewer: REVIEWER,
+      });
       const targetRemovedAt = targetBatch.historyEntry!.removedAt;
 
       // 2) Re-add two of the three so the target batch carries a real
@@ -648,7 +703,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       // 3) Push the target out of the picker by creating 11 newer
       //    1-phrase batches.
       for (const noise of noiseBatches) {
-        for (const p of noise) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+        for (const p of noise)
+          await addPhrase(apiCtx, p, { reviewer: REVIEWER });
         await batchRemove(apiCtx, noise, { reviewer: REVIEWER });
       }
 
@@ -674,10 +730,7 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
       await expect(chip).toHaveAttribute("data-conflict-total", "3");
       await expect(group).toHaveAttribute("data-batch-conflict-count", "2");
     } finally {
-      const everyPhrase = [
-        ...targetPhrases,
-        ...noiseBatches.flatMap((b) => b),
-      ];
+      const everyPhrase = [...targetPhrases, ...noiseBatches.flatMap((b) => b)];
       await cleanup(apiCtx, everyPhrase, { reviewer: `${REVIEWER}-cleanup` });
       await apiCtx.dispose();
     }
@@ -700,7 +753,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     try {
       // Add three, then remove all three as one batch — this is the
       // batch whose confirm dialog we want the chip to appear on.
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -732,7 +786,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
         dialog.getByTestId("handwavy-reinstate-batch-confirm-confirm"),
       ).toBeEnabled();
 
-      await dialog.getByTestId("handwavy-reinstate-batch-confirm-cancel").click();
+      await dialog
+        .getByTestId("handwavy-reinstate-batch-confirm-cancel")
+        .click();
       await expect(dialog).toHaveCount(0, { timeout: 5_000 });
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });
@@ -747,7 +803,8 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
     const phrases = uniquePhrases(2, "task470 confirm clean");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       const batch = await batchRemove(apiCtx, phrases, { reviewer: REVIEWER });
       const removedAt = batch.historyEntry!.removedAt;
 
@@ -761,7 +818,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Recent batch removals' picker", 
         dialog.getByTestId("handwavy-reinstate-batch-confirm-conflict-chip"),
       ).toHaveCount(0);
 
-      await dialog.getByTestId("handwavy-reinstate-batch-confirm-cancel").click();
+      await dialog
+        .getByTestId("handwavy-reinstate-batch-confirm-cancel")
+        .click();
       await expect(dialog).toHaveCount(0, { timeout: 5_000 });
     } finally {
       await cleanup(apiCtx, phrases, { reviewer: `${REVIEWER}-cleanup` });

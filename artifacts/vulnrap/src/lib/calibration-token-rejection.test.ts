@@ -18,20 +18,21 @@ import {
   useCalibrationTokenRejection,
 } from "./calibration-token-rejection";
 
-function makeNotice(overrides: {
-  url?: string;
-  method?: string;
-  status?: number;
-  body?: unknown;
-} = {}) {
+function makeNotice(
+  overrides: {
+    url?: string;
+    method?: string;
+    status?: number;
+    body?: unknown;
+  } = {},
+) {
   return {
     method: overrides.method ?? "POST",
     url: overrides.url ?? "/api/feedback/calibration/handwavy-phrases",
     status: overrides.status ?? 401,
-    body:
-      overrides.body ?? {
-        error: "Unauthorized: reviewer token rejected.",
-      },
+    body: overrides.body ?? {
+      error: "Unauthorized: reviewer token rejected.",
+    },
     headers: new Headers(),
   };
 }
@@ -77,9 +78,7 @@ describe("calibration-token-rejection store", () => {
   });
 
   it("ignores non-401 statuses even on calibration mutation URLs", () => {
-    const next = applyUnauthorizedNotice(
-      makeNotice({ status: 429 }),
-    );
+    const next = applyUnauthorizedNotice(makeNotice({ status: 429 }));
     expect(next.rejected).toBe(false);
   });
 
@@ -140,11 +139,13 @@ describe("calibration-token-rejection store", () => {
 // the moment a non-401 2xx lands on `/feedback/calibration/*`. These
 // tests push success notices through `applySuccessNotice` directly,
 // which is the same path the observer takes.
-function makeSuccessNotice(overrides: {
-  url?: string;
-  method?: string;
-  status?: number;
-} = {}) {
+function makeSuccessNotice(
+  overrides: {
+    url?: string;
+    method?: string;
+    status?: number;
+  } = {},
+) {
   return {
     method: overrides.method ?? "POST",
     url: overrides.url ?? "/api/feedback/calibration/handwavy-phrases",

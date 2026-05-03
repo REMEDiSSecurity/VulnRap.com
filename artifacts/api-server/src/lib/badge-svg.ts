@@ -1,5 +1,11 @@
-export const BADGE_STYLES = ["default", "flat", "plastic", "social", "square"] as const;
-export type BadgeStyle = typeof BADGE_STYLES[number];
+export const BADGE_STYLES = [
+  "default",
+  "flat",
+  "plastic",
+  "social",
+  "square",
+] as const;
+export type BadgeStyle = (typeof BADGE_STYLES)[number];
 
 interface RenderInput {
   label: string;
@@ -9,7 +15,11 @@ interface RenderInput {
 }
 
 function escapeXml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function textWidth(s: string): number {

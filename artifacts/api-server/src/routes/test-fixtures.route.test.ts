@@ -7,9 +7,9 @@ import http from "node:http";
 import path from "node:path";
 import os from "node:os";
 import { promises as fs } from "node:fs";
-import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { AddressInfo } from "node:net";
 
 interface ArchetypeFixture {
   id: string;
@@ -46,7 +46,8 @@ const previousHistoryPath = process.env.ARCHETYPE_HISTORY_PATH;
 const previousHistoryConfigPath = process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
 const previousHistoryStatsPath = process.env.ARCHETYPE_HISTORY_STATS_PATH;
 const previousDatasetHistoryPath = process.env.DATASET_HISTORY_PATH;
-const previousDatasetHistoryConfigPath = process.env.DATASET_HISTORY_CONFIG_PATH;
+const previousDatasetHistoryConfigPath =
+  process.env.DATASET_HISTORY_CONFIG_PATH;
 const previousDatasetsDir = process.env.VULNRAP_DATASETS_DIR;
 const previousCalibrationToken = process.env.CALIBRATION_TOKEN;
 
@@ -54,21 +55,36 @@ beforeAll(async () => {
   delete process.env.NODE_ENV; // route 404s in production
   delete process.env.CALIBRATION_TOKEN; // PUT /test/archetype-history/config is open in single-reviewer mode
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "archetype-history-"));
-  process.env.ARCHETYPE_HISTORY_PATH = path.join(tmpDir, "archetype-history.json");
-  process.env.ARCHETYPE_HISTORY_CONFIG_PATH = path.join(tmpDir, "archetype-history-config.json");
+  process.env.ARCHETYPE_HISTORY_PATH = path.join(
+    tmpDir,
+    "archetype-history.json",
+  );
+  process.env.ARCHETYPE_HISTORY_CONFIG_PATH = path.join(
+    tmpDir,
+    "archetype-history-config.json",
+  );
   // Task #211 — sibling stats file gets written on every compaction
   // pass. Point it at the per-suite tmpdir so the route test doesn't
   // pollute the repo's data directory.
-  process.env.ARCHETYPE_HISTORY_STATS_PATH = path.join(tmpDir, "archetype-history-stats.json");
+  process.env.ARCHETYPE_HISTORY_STATS_PATH = path.join(
+    tmpDir,
+    "archetype-history-stats.json",
+  );
   process.env.DATASET_HISTORY_PATH = path.join(tmpDir, "dataset-history.json");
   // Task #378 — pin the persisted dataset-history compaction-window
   // config at a per-suite tmpdir so the new GET/PUT/DELETE endpoint
   // tests don't pollute the repo's data directory and can rely on a
   // clean "no persisted setting" starting state.
-  process.env.DATASET_HISTORY_CONFIG_PATH = path.join(tmpDir, "dataset-history-config.json");
+  process.env.DATASET_HISTORY_CONFIG_PATH = path.join(
+    tmpDir,
+    "dataset-history-config.json",
+  );
   // Task #379 — pin the dataset-history compaction-stats sibling file
   // to the tmpdir for the same reason as the archetype-history one.
-  process.env.DATASET_HISTORY_STATS_PATH = path.join(tmpDir, "dataset-history-stats.json");
+  process.env.DATASET_HISTORY_STATS_PATH = path.join(
+    tmpDir,
+    "dataset-history-stats.json",
+  );
   // Task #187 — point the dataset-loader at a tmpdir that we'll *only*
   // populate inside the positive Task #187 test. The dataset-loader
   // captures DATA_ROOTS at import time, so the env var must be set
@@ -84,7 +100,7 @@ beforeAll(async () => {
   // GET endpoints do not require it but it's harmless to mount globally.
   app.use(express.json());
   app.use("/api", testFixturesRouter);
-  await new Promise<void>(resolve => {
+  await new Promise<void>((resolve) => {
     server = app.listen(0, "127.0.0.1", () => resolve());
   });
   const addr = server.address() as AddressInfo;
@@ -94,33 +110,48 @@ beforeAll(async () => {
 afterAll(async () => {
   if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = previousNodeEnv;
-  if (previousHistoryPath === undefined) delete process.env.ARCHETYPE_HISTORY_PATH;
+  if (previousHistoryPath === undefined)
+    delete process.env.ARCHETYPE_HISTORY_PATH;
   else process.env.ARCHETYPE_HISTORY_PATH = previousHistoryPath;
-  if (previousHistoryConfigPath === undefined) delete process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
+  if (previousHistoryConfigPath === undefined)
+    delete process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
   else process.env.ARCHETYPE_HISTORY_CONFIG_PATH = previousHistoryConfigPath;
-  if (previousHistoryStatsPath === undefined) delete process.env.ARCHETYPE_HISTORY_STATS_PATH;
+  if (previousHistoryStatsPath === undefined)
+    delete process.env.ARCHETYPE_HISTORY_STATS_PATH;
   else process.env.ARCHETYPE_HISTORY_STATS_PATH = previousHistoryStatsPath;
-  if (previousDatasetHistoryPath === undefined) delete process.env.DATASET_HISTORY_PATH;
+  if (previousDatasetHistoryPath === undefined)
+    delete process.env.DATASET_HISTORY_PATH;
   else process.env.DATASET_HISTORY_PATH = previousDatasetHistoryPath;
-  if (previousDatasetHistoryConfigPath === undefined) delete process.env.DATASET_HISTORY_CONFIG_PATH;
-  else process.env.DATASET_HISTORY_CONFIG_PATH = previousDatasetHistoryConfigPath;
-  if (previousDatasetsDir === undefined) delete process.env.VULNRAP_DATASETS_DIR;
+  if (previousDatasetHistoryConfigPath === undefined)
+    delete process.env.DATASET_HISTORY_CONFIG_PATH;
+  else
+    process.env.DATASET_HISTORY_CONFIG_PATH = previousDatasetHistoryConfigPath;
+  if (previousDatasetsDir === undefined)
+    delete process.env.VULNRAP_DATASETS_DIR;
   else process.env.VULNRAP_DATASETS_DIR = previousDatasetsDir;
-  if (previousCalibrationToken === undefined) delete process.env.CALIBRATION_TOKEN;
+  if (previousCalibrationToken === undefined)
+    delete process.env.CALIBRATION_TOKEN;
   else process.env.CALIBRATION_TOKEN = previousCalibrationToken;
-  await new Promise<void>(resolve => server.close(() => resolve()));
-  try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  try {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
 });
 
 function fetchJson<T>(urlPath: string): Promise<T> {
   return new Promise((resolve, reject) => {
     http
-      .get(`${baseUrl}${urlPath}`, res => {
+      .get(`${baseUrl}${urlPath}`, (res) => {
         const chunks: Buffer[] = [];
-        res.on("data", c => chunks.push(c));
+        res.on("data", (c) => chunks.push(c));
         res.on("end", () => {
-          try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8"))); }
-          catch (err) { reject(err); }
+          try {
+            resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8")));
+          } catch (err) {
+            reject(err);
+          }
         });
       })
       .on("error", reject);
@@ -130,9 +161,9 @@ function fetchJson<T>(urlPath: string): Promise<T> {
 function fetchTestRun(): Promise<TestRunResponse> {
   return new Promise((resolve, reject) => {
     http
-      .get(`${baseUrl}/api/test/run`, res => {
+      .get(`${baseUrl}/api/test/run`, (res) => {
         const chunks: Buffer[] = [];
-        res.on("data", c => chunks.push(c));
+        res.on("data", (c) => chunks.push(c));
         res.on("end", () => {
           try {
             resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8")));
@@ -160,7 +191,7 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
       "prose_poc",
       "pseudo_asan",
     ];
-    const labels = body.archetypes.map(a => a.archetype).sort();
+    const labels = body.archetypes.map((a) => a.archetype).sort();
     expect(labels).toEqual(expected);
 
     for (const group of body.archetypes) {
@@ -173,12 +204,14 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
         expect(f.distanceToCeiling).toBeCloseTo(35 - f.avriOnScore, 1);
         expect(f.tier).toBe("T3_SLOP");
       }
-      const maxOn = Math.max(...group.fixtures.map(f => f.avriOnScore));
+      const maxOn = Math.max(...group.fixtures.map((f) => f.avriOnScore));
       expect(group.avriOnMax).toBeCloseTo(maxOn, 1);
       expect(group.minDistanceToCeiling).toBeCloseTo(35 - maxOn, 1);
     }
 
-    const sprint12Ids = new Set(body.archetypes.flatMap(a => a.fixtures.map(f => f.id)));
+    const sprint12Ids = new Set(
+      body.archetypes.flatMap((a) => a.fixtures.map((f) => f.id)),
+    );
     for (const id of [
       "T3-11-fabricated-diff-no-proof",
       "T3-12-paraphrased-cve-renamed-fn",
@@ -204,10 +237,15 @@ describe("GET /api/test/run — Sprint 12 emerging slop archetypes", () => {
       "T3-28-flat-slop-structural-only",
       "T3-29-flat-slop-buzzword-soup",
     ]) {
-      expect(sprint12Ids.has(id), `archetype groups should include ${id}`).toBe(true);
+      expect(sprint12Ids.has(id), `archetype groups should include ${id}`).toBe(
+        true,
+      );
     }
 
-    const labeledTop = body.results.filter(r => r.archetype !== null).map(r => r.id).sort();
+    const labeledTop = body.results
+      .filter((r) => r.archetype !== null)
+      .map((r) => r.id)
+      .sort();
     expect(labeledTop).toEqual(
       [
         "T3-11-fabricated-diff-no-proof",
@@ -281,7 +319,9 @@ describe("GET /api/test/run — Task #209 auditTelemetry contract", () => {
   }
 
   it("exposes the auditTelemetry block with the documented shape (default run, no LLM)", async () => {
-    const body = await fetchJson<{ auditTelemetry: AuditTelemetry }>("/api/test/run");
+    const body = await fetchJson<{ auditTelemetry: AuditTelemetry }>(
+      "/api/test/run",
+    );
     expect(body.auditTelemetry).toBeDefined();
 
     const gating = body.auditTelemetry.llmGating;
@@ -351,7 +391,9 @@ describe("GET /api/test/run — Task #209 auditTelemetry contract", () => {
     // The note copy must call out which numbers are stable vs variable
     // so dashboards quoting it cannot accidentally treat the floor-fire
     // count as deterministic.
-    expect(fusion.note).toMatch(/Stable counters|stable|Counters in this block are 0/);
+    expect(fusion.note).toMatch(
+      /Stable counters|stable|Counters in this block are 0/,
+    );
   }, 60_000);
 
   // Task #311 — the per-fixture `_audit` blob is stripped from the default
@@ -368,8 +410,14 @@ describe("GET /api/test/run — Task #209 auditTelemetry contract", () => {
       gateReason: string;
       gateShouldCall: boolean;
     }
-    interface ResultRow { id: string; tier: string; _audit?: AuditRow }
-    interface RunBody { results: ResultRow[] }
+    interface ResultRow {
+      id: string;
+      tier: string;
+      _audit?: AuditRow;
+    }
+    interface RunBody {
+      results: ResultRow[];
+    }
 
     const defaultBody = await fetchJson<RunBody>("/api/test/run");
     expect(Array.isArray(defaultBody.results)).toBe(true);
@@ -473,14 +521,20 @@ describe("GET /api/test/archetype-history — Sprint 13 trend persistence", () =
   }
 
   it("appends one snapshot per archetype on each /api/test/run and exposes the time series", async () => {
-    const before = await fetchJson<HistoryResponse>("/api/test/archetype-history");
+    const before = await fetchJson<HistoryResponse>(
+      "/api/test/archetype-history",
+    );
     const baselineCount = before.totalSnapshots;
 
     await fetchTestRun();
     await fetchTestRun();
 
-    const after = await fetchJson<HistoryResponse>("/api/test/archetype-history");
-    expect(after.totalSnapshots).toBe(baselineCount + after.archetypes.length * 2);
+    const after = await fetchJson<HistoryResponse>(
+      "/api/test/archetype-history",
+    );
+    expect(after.totalSnapshots).toBe(
+      baselineCount + after.archetypes.length * 2,
+    );
 
     for (const a of after.archetypes) {
       expect(a.snapshots.length).toBeGreaterThanOrEqual(2);
@@ -491,7 +545,7 @@ describe("GET /api/test/archetype-history — Sprint 13 trend persistence", () =
       expect(typeof last.avriOnMean).toBe("number");
       expect(typeof last.avriOnMax).toBe("number");
       // Timestamps in chronological order.
-      const ts = a.snapshots.map(s => Date.parse(s.timestamp));
+      const ts = a.snapshots.map((s) => Date.parse(s.timestamp));
       const sorted = [...ts].sort((x, y) => x - y);
       expect(ts).toEqual(sorted);
     }
@@ -512,7 +566,9 @@ describe("GET /api/test/run — Task #47 dataset samples block", () => {
     compositeMax: number | null;
     engine2Mean: number | null;
   }
-  interface DatasetSamplesAbsent { available: false }
+  interface DatasetSamplesAbsent {
+    available: false;
+  }
   interface DatasetSamplesPresent {
     available: true;
     sourcePath: string;
@@ -526,15 +582,22 @@ describe("GET /api/test/run — Task #47 dataset samples block", () => {
     gapTarget: number;
     gapMeetsTarget: boolean;
     samples: Array<{
-      id: string; label: string; tier: string;
-      composite: number; e1: number | null; e2: number | null; e3: number | null;
+      id: string;
+      label: string;
+      tier: string;
+      composite: number;
+      e1: number | null;
+      e2: number | null;
+      e3: number | null;
       triage: string;
     }>;
   }
   type DatasetSamples = DatasetSamplesAbsent | DatasetSamplesPresent;
 
   it("always includes the datasetSamples block and matches its declared shape", async () => {
-    const body = await fetchJson<{ datasetSamples: DatasetSamples }>("/api/test/run");
+    const body = await fetchJson<{ datasetSamples: DatasetSamples }>(
+      "/api/test/run",
+    );
     expect(body.datasetSamples).toBeDefined();
     const ds = body.datasetSamples;
     if (!ds.available) {
@@ -547,16 +610,18 @@ describe("GET /api/test/run — Task #47 dataset samples block", () => {
     expect(ds.sampleDateKey).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(ds.sampleSizeRequestedPerLabel).toBeGreaterThan(0);
     expect(ds.sampleCount).toBe(ds.samples.length);
-    expect(ds.cohorts.map(c => c.tier).sort()).toEqual(
-      ["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP"],
-    );
+    expect(ds.cohorts.map((c) => c.tier).sort()).toEqual([
+      "T1_LEGIT",
+      "T2_BORDERLINE",
+      "T3_SLOP",
+    ]);
     for (const c of ds.cohorts) {
       // Each cohort caps at the requested sample size.
       expect(c.count).toBeLessThanOrEqual(ds.sampleSizeRequestedPerLabel);
       // Cross-check that the per-label slice in `samples` also obeys the
       // cap — c.count is computed from `samples`, but we want a direct
       // assertion in case the cohort-summary path ever drifts.
-      const perLabelSamples = ds.samples.filter(s => s.label === c.label);
+      const perLabelSamples = ds.samples.filter((s) => s.label === c.label);
       expect(perLabelSamples.length).toBeLessThanOrEqual(
         ds.sampleSizeRequestedPerLabel,
       );
@@ -606,7 +671,9 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     maxSnapshots: number;
   }
 
-  function deleteJson<T>(urlPath: string): Promise<{ status: number; body: T }> {
+  function deleteJson<T>(
+    urlPath: string,
+  ): Promise<{ status: number; body: T }> {
     return new Promise((resolve, reject) => {
       const url = new URL(`${baseUrl}${urlPath}`);
       const req = http.request(
@@ -616,12 +683,14 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
           port: url.port,
           path: url.pathname + url.search,
         },
-        res => {
+        (res) => {
           const chunks: Buffer[] = [];
-          res.on("data", c => chunks.push(c));
+          res.on("data", (c) => chunks.push(c));
           res.on("end", () => {
             try {
-              const parsed = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+              const parsed = JSON.parse(
+                Buffer.concat(chunks).toString("utf-8"),
+              );
               resolve({ status: res.statusCode ?? 0, body: parsed as T });
             } catch (err) {
               reject(err);
@@ -634,7 +703,10 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     });
   }
 
-  function putJson<T>(urlPath: string, body: unknown): Promise<{ status: number; body: T }> {
+  function putJson<T>(
+    urlPath: string,
+    body: unknown,
+  ): Promise<{ status: number; body: T }> {
     return new Promise((resolve, reject) => {
       const data = Buffer.from(JSON.stringify(body), "utf-8");
       const url = new URL(`${baseUrl}${urlPath}`);
@@ -649,12 +721,14 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
             "content-length": String(data.length),
           },
         },
-        res => {
+        (res) => {
           const chunks: Buffer[] = [];
-          res.on("data", c => chunks.push(c));
+          res.on("data", (c) => chunks.push(c));
           res.on("end", () => {
             try {
-              const parsed = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+              const parsed = JSON.parse(
+                Buffer.concat(chunks).toString("utf-8"),
+              );
               resolve({ status: res.statusCode ?? 0, body: parsed as T });
             } catch (err) {
               reject(err);
@@ -685,7 +759,9 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     // The shared beforeAll points ARCHETYPE_HISTORY_CONFIG_PATH at a fresh
     // tmpdir file, and the describe-level beforeEach DELETEs any persisted
     // row, so source must be "default" regardless of test execution order.
-    const cfg = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    const cfg = await fetchJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+    );
     expect(cfg.source).toBe("default");
     expect(cfg.effectiveDays).toBe(cfg.defaultDays);
     expect(cfg.envOverride).toBeNull();
@@ -704,7 +780,9 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     expect(put.body.source).toBe("persisted");
     expect(put.body.persistedDays).toBe(60);
 
-    const get = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    const get = await fetchJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+    );
     expect(get.effectiveDays).toBe(60);
     expect(get.source).toBe("persisted");
   });
@@ -721,7 +799,9 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
     expect(seeded.body.persistedDays).toBe(90);
     expect(seeded.body.source).toBe("persisted");
 
-    const del = await deleteJson<CompactWindow>("/api/test/archetype-history/config");
+    const del = await deleteJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+    );
     expect(del.status).toBe(200);
     expect(del.body.persistedDays).toBeNull();
     expect(del.body.source).toBe("default");
@@ -729,11 +809,15 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
 
     // GET reflects the cleared state, and a follow-up DELETE on an
     // already-cleared config is a no-op (no ENOENT bleeding through).
-    const get = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    const get = await fetchJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+    );
     expect(get.persistedDays).toBeNull();
     expect(get.source).toBe("default");
 
-    const delAgain = await deleteJson<CompactWindow>("/api/test/archetype-history/config");
+    const delAgain = await deleteJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+    );
     expect(delAgain.status).toBe(200);
     expect(delAgain.body.source).toBe("default");
   });
@@ -767,7 +851,9 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
   // time this test executes the stats file must be populated even
   // though no rows are old enough to be rolled up yet.
   it("GET surfaces the most recent compaction pass timestamp + rows-removed count", async () => {
-    const cfg = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    const cfg = await fetchJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+    );
     expect(cfg.lastCompaction).not.toBeNull();
     const stats = cfg.lastCompaction!;
     expect(typeof stats.lastCompactedAt).toBe("string");
@@ -785,7 +871,9 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
   // Earlier describe blocks have already triggered multiple /api/test/run
   // calls, so the buffer must contain >1 entry (proving append, not overwrite).
   it("GET surfaces a bounded recentRuns history with at least the most recent passes", async () => {
-    const cfg = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    const cfg = await fetchJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+    );
     expect(cfg.lastCompaction).not.toBeNull();
     const stats = cfg.lastCompaction!;
     expect(Array.isArray(stats.recentRuns)).toBe(true);
@@ -796,7 +884,7 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
       expect(typeof run.removed).toBe("number");
       expect(run.removed).toBeGreaterThanOrEqual(0);
     }
-    const order = stats.recentRuns.map(r => Date.parse(r.at));
+    const order = stats.recentRuns.map((r) => Date.parse(r.at));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     // Tail mirrors the legacy last-run fields so the indicator and the list agree.
     const tail = stats.recentRuns.at(-1)!;
@@ -812,7 +900,9 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
   // /api/test/run, so the history file must exist and have a positive
   // size + snapshot count.
   it("GET surfaces the persisted history file's on-disk size and snapshot count", async () => {
-    const cfg = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    const cfg = await fetchJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+    );
     expect(cfg.historyFile).not.toBeNull();
     const file = cfg.historyFile!;
     expect(typeof file.sizeBytes).toBe("number");
@@ -842,7 +932,9 @@ describe("/api/test/archetype-history/config — reviewer-tunable compaction win
   // "approaching the cap" badge against snapshotCount without
   // hard-coding the number on the client.
   it("GET and PUT surface the writer's MAX_SNAPSHOTS row cap so the dashboard can render an approaching-cap badge", async () => {
-    const get = await fetchJson<CompactWindow>("/api/test/archetype-history/config");
+    const get = await fetchJson<CompactWindow>(
+      "/api/test/archetype-history/config",
+    );
     expect(typeof get.maxSnapshots).toBe("number");
     expect(Number.isInteger(get.maxSnapshots)).toBe(true);
     expect(get.maxSnapshots).toBeGreaterThan(0);
@@ -899,7 +991,9 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
     // /api/test/run has already been called by earlier specs in this file.
     // Without the curated dataset mounted, no cohort rows should have been
     // persisted — the endpoint must still return a well-formed response.
-    const body = await fetchJson<DatasetHistoryResponse>("/api/test/dataset-history");
+    const body = await fetchJson<DatasetHistoryResponse>(
+      "/api/test/dataset-history",
+    );
     expect(body.totalSnapshots).toBe(0);
     expect(body.cohorts).toEqual([]);
     // Task #379 — lastCompaction is null until appendDatasetCohortSnapshots
@@ -933,7 +1027,9 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
     await fs.writeFile(datasetFile, JSON.stringify(reports), "utf-8");
 
     try {
-      const before = await fetchJson<DatasetHistoryResponse>("/api/test/dataset-history");
+      const before = await fetchJson<DatasetHistoryResponse>(
+        "/api/test/dataset-history",
+      );
       const baselineCount = before.totalSnapshots;
 
       // Capture the expected UTC date key right before the request so the
@@ -956,7 +1052,9 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
         // The slice key must be the YYYY-MM-DD captured just above (or, if
         // the request straddled a UTC midnight, the next day) so reviewers
         // can correlate cohort drift with the daily slice rotation.
-        const tomorrowDateKey = new Date(Date.parse(expectedDateKey) + 86_400_000)
+        const tomorrowDateKey = new Date(
+          Date.parse(expectedDateKey) + 86_400_000,
+        )
           .toISOString()
           .slice(0, 10);
         expect([expectedDateKey, tomorrowDateKey]).toContain(
@@ -964,10 +1062,12 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
         );
       }
 
-      const after = await fetchJson<DatasetHistoryResponse>("/api/test/dataset-history");
+      const after = await fetchJson<DatasetHistoryResponse>(
+        "/api/test/dataset-history",
+      );
       // Three cohorts (T1/T2/T3) → three rows appended on this single run.
       expect(after.totalSnapshots).toBe(baselineCount + 3);
-      const tiers = after.cohorts.map(c => c.tier).sort();
+      const tiers = after.cohorts.map((c) => c.tier).sort();
       expect(tiers).toEqual(["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP"]);
       // Task #358 — every persisted cohort row must carry the same
       // slice key the live block returned, so the dashboard's trend can
@@ -996,11 +1096,11 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
       // The gap must match across cohort rows of the same run, since it's
       // a per-run statistic repeated on every cohort row.
       const lastTimestamps = after.cohorts.map(
-        c => c.snapshots[c.snapshots.length - 1]!.timestamp,
+        (c) => c.snapshots[c.snapshots.length - 1]!.timestamp,
       );
       expect(new Set(lastTimestamps).size).toBe(1);
       const gaps = after.cohorts.map(
-        c => c.snapshots[c.snapshots.length - 1]!.gap,
+        (c) => c.snapshots[c.snapshots.length - 1]!.gap,
       );
       expect(new Set(gaps).size).toBe(1);
       // Task #379 — once /api/test/run has actually appended cohort
@@ -1012,7 +1112,9 @@ describe("GET /api/test/dataset-history — Task #187 cohort drift persistence",
       // timestamp must still be present and finite.
       expect(after.lastCompaction).not.toBeNull();
       expect(typeof after.lastCompaction!.lastCompactedAt).toBe("string");
-      expect(Number.isFinite(Date.parse(after.lastCompaction!.lastCompactedAt))).toBe(true);
+      expect(
+        Number.isFinite(Date.parse(after.lastCompaction!.lastCompactedAt)),
+      ).toBe(true);
       expect(typeof after.lastCompaction!.lastRemovedCount).toBe("number");
       expect(after.lastCompaction!.lastRemovedCount).toBeGreaterThanOrEqual(0);
     } finally {
@@ -1039,7 +1141,9 @@ describe("/api/test/dataset-history/config — reviewer-tunable compaction windo
     max: number;
   }
 
-  function deleteJson<T>(urlPath: string): Promise<{ status: number; body: T }> {
+  function deleteJson<T>(
+    urlPath: string,
+  ): Promise<{ status: number; body: T }> {
     return new Promise((resolve, reject) => {
       const url = new URL(`${baseUrl}${urlPath}`);
       const req = http.request(
@@ -1049,12 +1153,14 @@ describe("/api/test/dataset-history/config — reviewer-tunable compaction windo
           port: url.port,
           path: url.pathname + url.search,
         },
-        res => {
+        (res) => {
           const chunks: Buffer[] = [];
-          res.on("data", c => chunks.push(c));
+          res.on("data", (c) => chunks.push(c));
           res.on("end", () => {
             try {
-              const parsed = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+              const parsed = JSON.parse(
+                Buffer.concat(chunks).toString("utf-8"),
+              );
               resolve({ status: res.statusCode ?? 0, body: parsed as T });
             } catch (err) {
               reject(err);
@@ -1067,7 +1173,10 @@ describe("/api/test/dataset-history/config — reviewer-tunable compaction windo
     });
   }
 
-  function putJson<T>(urlPath: string, body: unknown): Promise<{ status: number; body: T }> {
+  function putJson<T>(
+    urlPath: string,
+    body: unknown,
+  ): Promise<{ status: number; body: T }> {
     return new Promise((resolve, reject) => {
       const data = Buffer.from(JSON.stringify(body), "utf-8");
       const url = new URL(`${baseUrl}${urlPath}`);
@@ -1082,12 +1191,14 @@ describe("/api/test/dataset-history/config — reviewer-tunable compaction windo
             "content-length": String(data.length),
           },
         },
-        res => {
+        (res) => {
           const chunks: Buffer[] = [];
-          res.on("data", c => chunks.push(c));
+          res.on("data", (c) => chunks.push(c));
           res.on("end", () => {
             try {
-              const parsed = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+              const parsed = JSON.parse(
+                Buffer.concat(chunks).toString("utf-8"),
+              );
               resolve({ status: res.statusCode ?? 0, body: parsed as T });
             } catch (err) {
               reject(err);
@@ -1104,7 +1215,9 @@ describe("/api/test/dataset-history/config — reviewer-tunable compaction windo
   it("GET reports the default window when nothing is configured", async () => {
     // Sibling specs have only persisted via PUT below, and afterEach DELETEs
     // them again, so when this test runs first the source must be "default".
-    const cfg = await fetchJson<CompactWindow>("/api/test/dataset-history/config");
+    const cfg = await fetchJson<CompactWindow>(
+      "/api/test/dataset-history/config",
+    );
     expect(cfg.source).toBe("default");
     expect(cfg.effectiveDays).toBe(cfg.defaultDays);
     expect(cfg.envOverride).toBeNull();
@@ -1123,7 +1236,9 @@ describe("/api/test/dataset-history/config — reviewer-tunable compaction windo
     expect(put.body.source).toBe("persisted");
     expect(put.body.persistedDays).toBe(60);
 
-    const get = await fetchJson<CompactWindow>("/api/test/dataset-history/config");
+    const get = await fetchJson<CompactWindow>(
+      "/api/test/dataset-history/config",
+    );
     expect(get.effectiveDays).toBe(60);
     expect(get.source).toBe("persisted");
 
@@ -1141,19 +1256,25 @@ describe("/api/test/dataset-history/config — reviewer-tunable compaction windo
     expect(seeded.body.persistedDays).toBe(90);
     expect(seeded.body.source).toBe("persisted");
 
-    const del = await deleteJson<CompactWindow>("/api/test/dataset-history/config");
+    const del = await deleteJson<CompactWindow>(
+      "/api/test/dataset-history/config",
+    );
     expect(del.status).toBe(200);
     expect(del.body.persistedDays).toBeNull();
     expect(del.body.source).toBe("default");
     expect(del.body.effectiveDays).toBe(del.body.defaultDays);
 
-    const get = await fetchJson<CompactWindow>("/api/test/dataset-history/config");
+    const get = await fetchJson<CompactWindow>(
+      "/api/test/dataset-history/config",
+    );
     expect(get.persistedDays).toBeNull();
     expect(get.source).toBe("default");
 
     // A second DELETE on an already-cleared config is a no-op (no ENOENT
     // bleeding through to the response).
-    const delAgain = await deleteJson<CompactWindow>("/api/test/dataset-history/config");
+    const delAgain = await deleteJson<CompactWindow>(
+      "/api/test/dataset-history/config",
+    );
     expect(delAgain.status).toBe(200);
     expect(delAgain.body.source).toBe("default");
   });

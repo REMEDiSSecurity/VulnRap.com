@@ -125,7 +125,10 @@ async function readFromDisk(p: string): Promise<DatasetHistoryFile> {
     const raw = await fs.readFile(p, "utf-8");
     const parsed = JSON.parse(raw) as Partial<DatasetHistoryFile>;
     if (parsed && Array.isArray(parsed.snapshots)) {
-      return { version: 1, snapshots: parsed.snapshots as DatasetCohortSnapshot[] };
+      return {
+        version: 1,
+        snapshots: parsed.snapshots as DatasetCohortSnapshot[],
+      };
     }
     return { version: 1, snapshots: [] };
   } catch (err) {
@@ -250,18 +253,18 @@ export function compactSnapshots(
         // samples rolled into this day" if it wants to. For a single
         // per-run snapshot this stays equal to the original count.
         count: bucket.reduce((a, b) => a + b.count, 0),
-        compositeMean: weightedMean(bucket, b => b.compositeMean),
+        compositeMean: weightedMean(bucket, (b) => b.compositeMean),
         // Task #362 — fold the per-tier synthetic-fixture mean across
         // the day's runs the same way as compositeMean so the dashboard
         // can reconstruct (datasetMean − fixtureMean) on aggregated
         // rows. Buckets containing only legacy rows that lack a
         // fixtureMean produce a null aggregated value (treated as "no
         // delta point" by the consumer).
-        fixtureMean: weightedMean(bucket, b => b.fixtureMean ?? null),
+        fixtureMean: weightedMean(bucket, (b) => b.fixtureMean ?? null),
         // The gap is repeated across cohort rows of the same run, so
         // averaging it weighted by count gives a representative
         // run-day value while still folding multi-run days correctly.
-        gap: weightedMean(bucket, b => b.gap),
+        gap: weightedMean(bucket, (b) => b.gap),
         aggregated: true,
         ...(sampleDateKey !== undefined ? { sampleDateKey } : {}),
       });
@@ -300,7 +303,11 @@ export function appendDatasetCohortSnapshots(
     // 0-row pass is still recorded so reviewers can see the routine
     // ran on a quiet runner instead of assuming it stopped.
     const beforeCompact = file.snapshots.length;
-    file.snapshots = compactSnapshots(file.snapshots, new Date(), compactAfterDays());
+    file.snapshots = compactSnapshots(
+      file.snapshots,
+      new Date(),
+      compactAfterDays(),
+    );
     const removedByCompaction = beforeCompact - file.snapshots.length;
     if (file.snapshots.length > MAX_SNAPSHOTS) {
       file.snapshots.splice(0, file.snapshots.length - MAX_SNAPSHOTS);

@@ -7,7 +7,6 @@ process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
 
 import http from "node:http";
-import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -17,6 +16,7 @@ import testYourselfRouter, {
   recordRateHit,
   _resetRateLimitForTests,
 } from "./test-yourself";
+import type { AddressInfo } from "node:net";
 
 describe("computeAggregate — F1 / precision / recall math", () => {
   it("returns all zeros for an empty battery", () => {
@@ -48,10 +48,10 @@ describe("computeAggregate — F1 / precision / recall math", () => {
 
   it("handles a mixed battery — TP=2 FP=1 TN=1 FN=1", () => {
     const a = computeAggregate([
-      { expectedLabel: "valid", predictedLabel: "valid" },     // TP
-      { expectedLabel: "valid", predictedLabel: "valid" },     // TP
-      { expectedLabel: "valid", predictedLabel: "invalid" },   // FN
-      { expectedLabel: "invalid", predictedLabel: "valid" },   // FP
+      { expectedLabel: "valid", predictedLabel: "valid" }, // TP
+      { expectedLabel: "valid", predictedLabel: "valid" }, // TP
+      { expectedLabel: "valid", predictedLabel: "invalid" }, // FN
+      { expectedLabel: "invalid", predictedLabel: "valid" }, // FP
       { expectedLabel: "invalid", predictedLabel: "invalid" }, // TN
     ]);
     expect(a.confusionMatrix).toEqual({
@@ -117,11 +117,15 @@ describe("POST /test-yourself/run — HTTP", () => {
     const app = express();
     app.use(express.json({ limit: "10mb" }));
     app.use(testYourselfRouter);
-    await new Promise<void>((resolve) => { server = app.listen(0, () => resolve()); });
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, () => resolve());
+    });
     const { port } = server.address() as AddressInfo;
     baseUrl = `http://127.0.0.1:${port}`;
   });
-  afterAll(async () => { await new Promise<void>((resolve) => server.close(() => resolve())); });
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
   beforeEach(() => _resetRateLimitForTests());
 
   async function post(body: unknown) {
@@ -132,7 +136,11 @@ describe("POST /test-yourself/run — HTTP", () => {
     });
     const text = await res.text();
     let json: unknown = {};
-    try { json = JSON.parse(text); } catch { /* leave empty */ }
+    try {
+      json = JSON.parse(text);
+    } catch {
+      /* leave empty */
+    }
     return { status: res.status, body: json as Record<string, unknown> };
   }
 
@@ -148,7 +156,10 @@ describe("POST /test-yourself/run — HTTP", () => {
   });
 
   it("rejects > 50 rows with 400", async () => {
-    const rows = Array.from({ length: 51 }, () => ({ text: "x", label: "valid" }));
+    const rows = Array.from({ length: 51 }, () => ({
+      text: "x",
+      label: "valid",
+    }));
     const r = await post({ rows });
     expect(r.status).toBe(400);
   });
@@ -156,14 +167,29 @@ describe("POST /test-yourself/run — HTTP", () => {
   it("happy path — returns aggregate + perRow + rateLimit", async () => {
     const r = await post({
       rows: [
-        { text: "Reflected XSS in /search via the q parameter. PoC: /search?q=<script>alert(1)</script>. Repro: open the URL, alert fires.", label: "valid" },
+        {
+          text: "Reflected XSS in /search via the q parameter. PoC: /search?q=<script>alert(1)</script>. Repro: open the URL, alert fires.",
+          label: "valid",
+        },
         { text: "this report is great please accept", label: "invalid" },
       ],
     });
     expect(r.status).toBe(200);
     const body = r.body as {
-      aggregate: { total: number; precision: number; recall: number; f1: number; confusionMatrix: Record<string, number> };
-      perRow: Array<{ index: number; predictedLabel: string; expectedLabel: string; correct: boolean; compositeScore: number }>;
+      aggregate: {
+        total: number;
+        precision: number;
+        recall: number;
+        f1: number;
+        confusionMatrix: Record<string, number>;
+      };
+      perRow: Array<{
+        index: number;
+        predictedLabel: string;
+        expectedLabel: string;
+        correct: boolean;
+        compositeScore: number;
+      }>;
       rateLimit: { limit: number; remaining: number };
     };
     expect(body.aggregate.total).toBe(2);

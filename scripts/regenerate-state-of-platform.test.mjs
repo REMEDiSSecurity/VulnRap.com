@@ -129,8 +129,7 @@ for (const h of FAMILY_HEADERS) {
 }
 check(
   "per-family signal table renders a known gold signal id",
-  after.includes("`asan_or_sanitizer`") &&
-    after.includes("AddressSanitizer"),
+  after.includes("`asan_or_sanitizer`") && after.includes("AddressSanitizer"),
   "asan_or_sanitizer / AddressSanitizer description missing",
 );
 check(
@@ -139,8 +138,9 @@ check(
     after.includes("No concrete injection payload"),
   "no_payload / 'No concrete injection payload' missing",
 );
-const goldRowCount = (after.match(/^\| `[a-z_0-9]+` \| .+ \| \+\d+ \|$/gm) || [])
-  .length;
+const goldRowCount = (
+  after.match(/^\| `[a-z_0-9]+` \| .+ \| \+\d+ \|$/gm) || []
+).length;
 check(
   "rendered gold-signal rows >= 50 (every signal id, not just counts)",
   goldRowCount >= 50,

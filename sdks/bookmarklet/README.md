@@ -36,12 +36,12 @@ If nothing is selected the bookmarklet still opens `/check`, just empty.
 
 ## What ships
 
-| File | Purpose |
-| --- | --- |
-| `src/bookmarklet.js` | Hand-written IIFE source — the thing you'd review. |
-| `generate.mjs` | Tiny Node script that minifies the source and emits the artifacts below. No third-party dependencies. |
-| `vulnrap.bookmarklet.js` | Minified IIFE (the body of the `javascript:` URL). |
-| `vulnrap.bookmarklet.url` | The full `javascript:`-prefixed href, ready to paste into a bookmark. |
+| File                      | Purpose                                                                                               |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `src/bookmarklet.js`      | Hand-written IIFE source — the thing you'd review.                                                    |
+| `generate.mjs`            | Tiny Node script that minifies the source and emits the artifacts below. No third-party dependencies. |
+| `vulnrap.bookmarklet.js`  | Minified IIFE (the body of the `javascript:` URL).                                                    |
+| `vulnrap.bookmarklet.url` | The full `javascript:`-prefixed href, ready to paste into a bookmark.                                 |
 
 `artifacts/vulnrap/public/vulnrap.bookmarklet.js` is a mirror of the minified
 JS so the `/developers` page can serve it same-origin without a GitHub

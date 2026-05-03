@@ -73,7 +73,9 @@ function readTierOverrides(): TierOverrides | null {
   const raw = process.env.SHADOW_SCORING_TIER_OVERRIDES;
   if (typeof raw !== "string" || raw.trim().length === 0) return null;
   try {
-    const parsed = JSON.parse(raw) as Partial<Record<keyof TierOverrides, unknown>>;
+    const parsed = JSON.parse(raw) as Partial<
+      Record<keyof TierOverrides, unknown>
+    >;
     const slop = Number(parsed.slop ?? 80);
     const likelySlop = Number(parsed.likelySlop ?? 60);
     const questionable = Number(parsed.questionable ?? 40);

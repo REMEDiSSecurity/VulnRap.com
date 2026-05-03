@@ -43,17 +43,27 @@ function MetricBadge({ stat }: { stat?: PerSignalEval["signals"][number] }) {
   }
   const pct = Math.round(stat.precision * 100);
   const tone =
-    pct >= 70 ? "text-rose-400 border-rose-400/40" :
-    pct >= 40 ? "text-amber-400 border-amber-400/40" :
-                "text-emerald-400 border-emerald-400/40";
+    pct >= 70
+      ? "text-rose-400 border-rose-400/40"
+      : pct >= 40
+        ? "text-amber-400 border-amber-400/40"
+        : "text-emerald-400 border-emerald-400/40";
   return (
-    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${tone}`}>
+    <span
+      className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${tone}`}
+    >
       {pct}% slop · n={stat.samples}
     </span>
   );
 }
 
-function SignalCard({ signal, stat }: { signal: SignalMeta; stat?: PerSignalEval["signals"][number] }) {
+function SignalCard({
+  signal,
+  stat,
+}: {
+  signal: SignalMeta;
+  stat?: PerSignalEval["signals"][number];
+}) {
   return (
     <Link
       to={`/signals/${signal.id}`}
@@ -65,7 +75,9 @@ function SignalCard({ signal, stat }: { signal: SignalMeta; stat?: PerSignalEval
         </div>
         <MetricBadge stat={stat} />
       </div>
-      <div className="text-sm font-semibold text-foreground/95 mb-1">{signal.title}</div>
+      <div className="text-sm font-semibold text-foreground/95 mb-1">
+        {signal.title}
+      </div>
       <div className="text-[12px] text-muted-foreground leading-snug line-clamp-3">
         {signal.description}
       </div>
@@ -88,9 +100,7 @@ export default function SignalsIndex() {
     },
   });
 
-  const statByType = new Map(
-    (data?.signals ?? []).map((s) => [s.type, s]),
-  );
+  const statByType = new Map((data?.signals ?? []).map((s) => [s.type, s]));
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -100,8 +110,9 @@ export default function SignalsIndex() {
           Signal Reference
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground max-w-3xl leading-relaxed">
-          Every detector that can fire on a report, what it looks for, why it matters, and how often
-          its presence correlates with reviewer feedback marking the report as slop.
+          Every detector that can fire on a report, what it looks for, why it
+          matters, and how often its presence correlates with reviewer feedback
+          marking the report as slop.
         </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-4" />
       </div>
@@ -135,8 +146,8 @@ export default function SignalsIndex() {
         Total signals: {ALL_SIGNALS.length}.{" "}
         {data && (
           <>
-            Per-signal precision computed across {data.totalFeedbackRows} rated reports. Open a
-            signal page for full detail{" "}
+            Per-signal precision computed across {data.totalFeedbackRows} rated
+            reports. Open a signal page for full detail{" "}
             <ArrowRight className="inline w-3 h-3 -mt-0.5" />.
           </>
         )}

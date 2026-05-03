@@ -4,7 +4,9 @@
 // (e.g. `HandwavyCategoryFlipBadge`) need to render the same format without
 // taking a prop-injected formatter and without depending on the 12k-line
 // page module.
-export function formatAuditTimestamp(iso: string | undefined | null): string | null {
+export function formatAuditTimestamp(
+  iso: string | undefined | null,
+): string | null {
   if (!iso) return null;
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return null;

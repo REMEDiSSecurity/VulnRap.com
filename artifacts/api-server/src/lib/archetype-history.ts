@@ -97,7 +97,10 @@ async function readFromDisk(p: string): Promise<ArchetypeHistoryFile> {
   }
 }
 
-async function writeToDisk(p: string, file: ArchetypeHistoryFile): Promise<void> {
+async function writeToDisk(
+  p: string,
+  file: ArchetypeHistoryFile,
+): Promise<void> {
   await fs.mkdir(path.dirname(p), { recursive: true });
   const tmp = `${p}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(file, null, 2), "utf-8");
@@ -155,11 +158,12 @@ export function compactSnapshots(
     for (const [archetype, bucket] of perArch) {
       // Weight the mean by the original sample count so re-aggregating an
       // already-rolled-up row preserves its representativeness.
-      const weights = bucket.map(b => Math.max(1, b.count));
+      const weights = bucket.map((b) => Math.max(1, b.count));
       const totalWeight = weights.reduce((a, b) => a + b, 0);
       const weightedMean =
-        bucket.reduce((acc, b, i) => acc + b.avriOnMean * weights[i]!, 0) / totalWeight;
-      const maxOn = Math.max(...bucket.map(b => b.avriOnMax));
+        bucket.reduce((acc, b, i) => acc + b.avriOnMean * weights[i]!, 0) /
+        totalWeight;
+      const maxOn = Math.max(...bucket.map((b) => b.avriOnMax));
       const ceiling = bucket[0]!.ceiling;
       aggregated.push({
         timestamp: `${day}T00:00:00.000Z`,
@@ -206,7 +210,11 @@ export function appendArchetypeSnapshots(
     // MAX_SNAPSHOTS truncation below — those are conceptually separate
     // (eviction vs. roll-up) and reviewers care about the latter.
     const beforeCompact = file.snapshots.length;
-    file.snapshots = compactSnapshots(file.snapshots, new Date(), compactAfterDays());
+    file.snapshots = compactSnapshots(
+      file.snapshots,
+      new Date(),
+      compactAfterDays(),
+    );
     const removedByCompaction = beforeCompact - file.snapshots.length;
     if (file.snapshots.length > MAX_SNAPSHOTS) {
       file.snapshots.splice(0, file.snapshots.length - MAX_SNAPSHOTS);

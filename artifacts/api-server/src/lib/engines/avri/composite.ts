@@ -3,14 +3,19 @@
 // Sprint 11 AVRI overrides (family-no-gold, family-contradiction, off-family,
 // behavioral velocity, campaign template).
 
-import { runEngine1, computeComposite, type CompositeResult, type EngineResult } from "../engines";
+import {
+  runEngine1,
+  computeComposite,
+  type CompositeResult,
+  type EngineResult,
+} from "../engines";
 import { extractSignals } from "../extractors";
 import { computePerplexity } from "../perplexity";
 import { classifyReport, type ClassificationResult } from "./classify";
 import { runEngine2Avri } from "./engine2-avri";
 import { runEngine3Avri } from "./engine3-avri";
-import type { FamilyRubric } from "./families";
 import { fabricatedPatchPenalty } from "./slop-signals";
+import type { FamilyRubric } from "./families";
 
 export interface AvriCompositeOptions {
   claimedCwes?: string[];
@@ -47,7 +52,9 @@ export function runAvriComposite(
   // Engine 1 — keep the existing perplexity-blended scoring identical to the
   // legacy pipeline so the AI authorship signal remains comparable.
   const e1Raw = runEngine1(signals);
-  const blendedScore = Math.round(e1Raw.score * 0.6 + perplexity.combinedScore * 0.4);
+  const blendedScore = Math.round(
+    e1Raw.score * 0.6 + perplexity.combinedScore * 0.4,
+  );
   const blendedVerdict =
     blendedScore <= 25 ? "GREEN" : blendedScore <= 74 ? "YELLOW" : "RED";
   const e1: EngineResult = {
@@ -86,18 +93,30 @@ export function runAvriComposite(
   const additionalPenalties = velocityPenalty + templatePenalty;
   const newOverrides = [...baseComposite.overridesApplied];
   if (velocityPenalty < 0) {
-    newOverrides.push(`AVRI_VELOCITY: same-day submission velocity penalty (${velocityPenalty})`);
+    newOverrides.push(
+      `AVRI_VELOCITY: same-day submission velocity penalty (${velocityPenalty})`,
+    );
   }
   if (templatePenalty < 0) {
-    newOverrides.push(`AVRI_TEMPLATE_CAMPAIGN: structural fingerprint reused (${templatePenalty})`);
+    newOverrides.push(
+      `AVRI_TEMPLATE_CAMPAIGN: structural fingerprint reused (${templatePenalty})`,
+    );
   }
 
   // Family-no-gold + off-family overrides.
-  if (family.id !== "FLAT" && e2.goldHitCount === 0 && e3.detail.goldHitCount === 0) {
-    newOverrides.push(`AVRI_NO_GOLD_SIGNALS: zero gold signals for ${family.displayName}`);
+  if (
+    family.id !== "FLAT" &&
+    e2.goldHitCount === 0 &&
+    e3.detail.goldHitCount === 0
+  ) {
+    newOverrides.push(
+      `AVRI_NO_GOLD_SIGNALS: zero gold signals for ${family.displayName}`,
+    );
   }
   if (family.id !== "FLAT" && e2.detail.contradictions.length >= 1) {
-    newOverrides.push(`AVRI_FAMILY_CONTRADICTION: report contradicts claimed family (${e2.detail.contradictions[0]})`);
+    newOverrides.push(
+      `AVRI_FAMILY_CONTRADICTION: report contradicts claimed family (${e2.detail.contradictions[0]})`,
+    );
   }
 
   // FLAT slop additional composite haircut: when an unclassifiable report
@@ -116,7 +135,9 @@ export function runAvriComposite(
   let flatSlopPenalty = 0;
   if (family.id === "FLAT" && flatHaircut >= 18) {
     flatSlopPenalty = -8;
-    newOverrides.push(`AVRI_FLAT_SLOP_HAIRCUT: hand-wavy unclassifiable report (${flatSlopPenalty})`);
+    newOverrides.push(
+      `AVRI_FLAT_SLOP_HAIRCUT: hand-wavy unclassifiable report (${flatSlopPenalty})`,
+    );
   }
 
   // Family-agnostic slop signal: report claims a "patch"/"fix"/"diff" in
@@ -133,7 +154,10 @@ export function runAvriComposite(
     0,
     Math.min(
       100,
-      baseComposite.overallScore + additionalPenalties + flatSlopPenalty + fabricatedPatch.points,
+      baseComposite.overallScore +
+        additionalPenalties +
+        flatSlopPenalty +
+        fabricatedPatch.points,
     ),
   );
 

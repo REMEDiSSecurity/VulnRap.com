@@ -10,11 +10,34 @@ import {
   type EngineKey,
 } from "@/lib/engine-fusion";
 
-const ENGINE_META: Record<EngineKey, { label: string; icon: typeof Cpu; color: string; bg: string }> = {
-  linguistic: { label: "Linguistic", icon: Cpu, color: "text-cyan-400", bg: "bg-cyan-400" },
-  factual: { label: "Factual", icon: Target, color: "text-amber-400", bg: "bg-amber-400" },
-  template: { label: "Template", icon: FileText, color: "text-violet-400", bg: "bg-violet-400" },
-  llm: { label: "LLM", icon: Brain, color: "text-emerald-400", bg: "bg-emerald-400" },
+const ENGINE_META: Record<
+  EngineKey,
+  { label: string; icon: typeof Cpu; color: string; bg: string }
+> = {
+  linguistic: {
+    label: "Linguistic",
+    icon: Cpu,
+    color: "text-cyan-400",
+    bg: "bg-cyan-400",
+  },
+  factual: {
+    label: "Factual",
+    icon: Target,
+    color: "text-amber-400",
+    bg: "bg-amber-400",
+  },
+  template: {
+    label: "Template",
+    icon: FileText,
+    color: "text-violet-400",
+    bg: "bg-violet-400",
+  },
+  llm: {
+    label: "LLM",
+    icon: Brain,
+    color: "text-emerald-400",
+    bg: "bg-emerald-400",
+  },
 };
 
 interface EngineTogglePanelProps {
@@ -30,19 +53,37 @@ interface EngineTogglePanelProps {
   className?: string;
 }
 
-export function EngineTogglePanel({ breakdown, canonicalScore, className }: EngineTogglePanelProps) {
-  const [enabled, setEnabled] = useState<Record<EngineKey, boolean>>({ ...ALL_ENGINES_ON });
+export function EngineTogglePanel({
+  breakdown,
+  canonicalScore,
+  className,
+}: EngineTogglePanelProps) {
+  const [enabled, setEnabled] = useState<Record<EngineKey, boolean>>({
+    ...ALL_ENGINES_ON,
+  });
 
-  const baseline = useMemo(() => refuseEngines(breakdown, ALL_ENGINES_ON), [breakdown]);
-  const { score, contributions } = useMemo(() => refuseEngines(breakdown, enabled), [breakdown, enabled]);
+  const baseline = useMemo(
+    () => refuseEngines(breakdown, ALL_ENGINES_ON),
+    [breakdown],
+  );
+  const { score, contributions } = useMemo(
+    () => refuseEngines(breakdown, enabled),
+    [breakdown, enabled],
+  );
 
   const allOn = ENGINE_ORDER.every((k) => enabled[k] || breakdown[k] == null);
   const reset = () => setEnabled({ ...ALL_ENGINES_ON });
   const delta = score - baseline.score;
-  const maxContribution = Math.max(1, ...contributions.map((c) => c.contribution));
+  const maxContribution = Math.max(
+    1,
+    ...contributions.map((c) => c.contribution),
+  );
 
   return (
-    <div className={cn("space-y-4", className)} data-testid="engine-toggle-panel">
+    <div
+      className={cn("space-y-4", className)}
+      data-testid="engine-toggle-panel"
+    >
       <div>
         <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
           <span>Per-Engine On / Off</span>
@@ -50,26 +91,36 @@ export function EngineTogglePanel({ breakdown, canonicalScore, className }: Engi
             <span
               className={cn(
                 "font-mono",
-                delta > 0 ? "text-destructive" : delta < 0 ? "text-green-400" : "text-muted-foreground",
+                delta > 0
+                  ? "text-destructive"
+                  : delta < 0
+                    ? "text-green-400"
+                    : "text-muted-foreground",
               )}
               data-testid="engine-toggle-recalc-score"
             >
-              recalc {score} ({delta >= 0 ? "+" : ""}{delta} vs all-on)
+              recalc {score} ({delta >= 0 ? "+" : ""}
+              {delta} vs all-on)
             </span>
           )}
         </div>
         <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-          Diagnostic only — disable an engine to see what the score would be without it. Does not affect stored reports.
+          Diagnostic only — disable an engine to see what the score would be
+          without it. Does not affect stored reports.
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2" data-testid="engine-toggle-checkboxes">
+      <div
+        className="grid grid-cols-2 gap-2"
+        data-testid="engine-toggle-checkboxes"
+      >
         {ENGINE_ORDER.map((key) => {
           const meta = ENGINE_META[key];
           const Icon = meta.icon;
           const available = breakdown[key] != null;
           const raw = available ? Number(breakdown[key]) : 0;
-          const baseWeight = contributions.find((c) => c.key === key)?.baseWeight ?? 0;
+          const baseWeight =
+            contributions.find((c) => c.key === key)?.baseWeight ?? 0;
           return (
             <label
               key={key}
@@ -84,7 +135,9 @@ export function EngineTogglePanel({ breakdown, canonicalScore, className }: Engi
                 type="checkbox"
                 checked={available && enabled[key]}
                 disabled={!available}
-                onChange={(e) => setEnabled((prev) => ({ ...prev, [key]: e.target.checked }))}
+                onChange={(e) =>
+                  setEnabled((prev) => ({ ...prev, [key]: e.target.checked }))
+                }
                 className="rounded border-border accent-primary w-4 h-4 mt-0.5"
                 data-testid={`engine-toggle-${key}`}
               />
@@ -97,7 +150,9 @@ export function EngineTogglePanel({ breakdown, canonicalScore, className }: Engi
                   </span>
                 </span>
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  {available ? `Base weight ${(baseWeight * 100).toFixed(0)}%` : "Not available for this report."}
+                  {available
+                    ? `Base weight ${(baseWeight * 100).toFixed(0)}%`
+                    : "Not available for this report."}
                 </p>
               </div>
             </label>
@@ -110,7 +165,11 @@ export function EngineTogglePanel({ breakdown, canonicalScore, className }: Engi
           <span>Engine Contribution</span>
           <span className="font-mono">
             recalc <span className="text-foreground font-bold">{score}</span>
-            <span className="text-muted-foreground/70"> · all-on baseline {baseline.score} · server canonical {canonicalScore}</span>
+            <span className="text-muted-foreground/70">
+              {" "}
+              · all-on baseline {baseline.score} · server canonical{" "}
+              {canonicalScore}
+            </span>
           </span>
         </div>
         <div
@@ -125,7 +184,9 @@ export function EngineTogglePanel({ breakdown, canonicalScore, className }: Engi
                 <div
                   key={c.key}
                   className={cn("h-full", meta.bg)}
-                  style={{ width: `${Math.max(0, Math.min(100, c.contribution))}%` }}
+                  style={{
+                    width: `${Math.max(0, Math.min(100, c.contribution))}%`,
+                  }}
                   title={`${meta.label}: ${c.contribution.toFixed(1)} pts (${(c.normalizedWeight * 100).toFixed(0)}% weight)`}
                   data-testid={`engine-contribution-segment-${c.key}`}
                 />
@@ -141,15 +202,29 @@ export function EngineTogglePanel({ breakdown, canonicalScore, className }: Engi
                 className="flex items-center gap-1.5"
                 data-testid={`engine-contribution-row-${c.key}`}
               >
-                <span className={cn("w-2 h-2 rounded-sm", meta.bg, !c.enabled && "opacity-30")} />
-                <span className={cn("text-muted-foreground", !c.enabled && "line-through opacity-60")}>
+                <span
+                  className={cn(
+                    "w-2 h-2 rounded-sm",
+                    meta.bg,
+                    !c.enabled && "opacity-30",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "text-muted-foreground",
+                    !c.enabled && "line-through opacity-60",
+                  )}
+                >
                   {meta.label}
                 </span>
                 <span className="ml-auto font-mono text-foreground/80">
                   {c.available && c.enabled ? (
                     <>
                       {c.contribution.toFixed(1)}
-                      <span className="text-muted-foreground/60"> · {(c.normalizedWeight * 100).toFixed(0)}%</span>
+                      <span className="text-muted-foreground/60">
+                        {" "}
+                        · {(c.normalizedWeight * 100).toFixed(0)}%
+                      </span>
                     </>
                   ) : (
                     <span className="text-muted-foreground/50">off</span>

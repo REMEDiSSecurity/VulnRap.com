@@ -7,11 +7,12 @@
 // the fallback for FLAT classifications and as a contributor to the AVRI
 // composite when AVRI doesn't override it.
 
-import type { ExtractedSignals } from "../extractors";
-import type { EngineResult, TriggeredIndicator, Verdict } from "../engines";
 import { runEngine2 as runEngine2Legacy } from "../engines";
-import type { FamilyRubric } from "./families";
-import { evaluateCrashTrace, crashTraceGoldSignalIdsFor, type CrashTraceEvaluation } from "./crash-trace";
+import {
+  evaluateCrashTrace,
+  crashTraceGoldSignalIdsFor,
+  type CrashTraceEvaluation,
+} from "./crash-trace";
 import {
   augmentTextWithUnescapedHttp,
   evaluateRawHttpRequest,
@@ -31,6 +32,9 @@ import {
   AI_SELF_DISCLOSURE_PENALTY,
   type AiSelfDisclosureResult,
 } from "./ai-self-disclosure";
+import type { FamilyRubric } from "./families";
+import type { EngineResult, TriggeredIndicator, Verdict } from "../engines";
+import type { ExtractedSignals } from "../extractors";
 import type {
   AvriEngine2AbsencePenalty,
   AvriEngine2Block,
@@ -102,7 +106,10 @@ function buildAiSelfDisclosureIndicator(
  * on prose. */
 function stripCodeAndDiffs(text: string): string {
   let out = text.replace(/```[\s\S]*?```/g, " ");
-  out = out.replace(/(?:^|\n)(?:diff --git[^\n]*\n)?(?:---[^\n]+\n)?(?:\+\+\+[^\n]+\n)?(?:@@[^\n]*@@\n)?(?:[ +\-][^\n]*\n)+/g, " ");
+  out = out.replace(
+    /(?:^|\n)(?:diff --git[^\n]*\n)?(?:---[^\n]+\n)?(?:\+\+\+[^\n]+\n)?(?:@@[^\n]*@@\n)?(?:[ +\-][^\n]*\n)+/g,
+    " ",
+  );
   return out;
 }
 
@@ -164,7 +171,9 @@ export function runEngine2Avri(
   // -evidenced report that mentions AI drafting help gets docked exactly
   // once and not enough to crater it.
   const aiSelfDisclosure = detectAiSelfDisclosure(fullText);
-  const aiSelfDisclosurePenalty = aiSelfDisclosure.detected ? AI_SELF_DISCLOSURE_PENALTY : 0;
+  const aiSelfDisclosurePenalty = aiSelfDisclosure.detected
+    ? AI_SELF_DISCLOSURE_PENALTY
+    : 0;
 
   // FLAT family: legacy passes through, but apply a hand-wavy haircut when
   // the report explicitly admits to having no reproducer / private PoC /
@@ -187,7 +196,12 @@ export function runEngine2Avri(
     // diagnostics panel can show reviewers exactly which language fired.
     // The displayed per-entry value is the per-hit weight (6); the score
     // impact is the capped sum below, surfaced separately.
-    const absencePenaltiesApplied: Array<{ id: string; description: string; points: number; flatHandwavyCategory?: HandwavyCategory }> = [];
+    const absencePenaltiesApplied: Array<{
+      id: string;
+      description: string;
+      points: number;
+      flatHandwavyCategory?: HandwavyCategory;
+    }> = [];
     let haircutRaw = 0;
     for (const m of handwavyMarkers) {
       if (lowered.includes(m.phrase)) {
@@ -236,21 +250,33 @@ export function runEngine2Avri(
       contradictionPenalty: 0,
       crashTrace: null,
       rawHttp: null,
-      aiSelfDisclosure: aiSelfDisclosureBlock(aiSelfDisclosure, aiSelfDisclosurePenalty),
+      aiSelfDisclosure: aiSelfDisclosureBlock(
+        aiSelfDisclosure,
+        aiSelfDisclosurePenalty,
+      ),
       rawAvriScore: adjusted,
       legacyScore: legacy.score,
       blendedScore: adjusted,
     } satisfies AvriEngine2Block;
     const flatNoteParts: string[] = [];
     if (absencePenaltiesApplied.length > 0) {
-      flatNoteParts.push(`${absencePenaltiesApplied.length} hand-wavy phrase(s), -${haircut} haircut`);
+      flatNoteParts.push(
+        `${absencePenaltiesApplied.length} hand-wavy phrase(s), -${haircut} haircut`,
+      );
     }
     if (aiSelfDisclosurePenalty > 0) {
-      flatNoteParts.push(`-${aiSelfDisclosurePenalty} AI self-disclosure (${aiSelfDisclosure.matches.length} phrase${aiSelfDisclosure.matches.length === 1 ? "" : "s"})`);
+      flatNoteParts.push(
+        `-${aiSelfDisclosurePenalty} AI self-disclosure (${aiSelfDisclosure.matches.length} phrase${aiSelfDisclosure.matches.length === 1 ? "" : "s"})`,
+      );
     }
     const flatIndicators: TriggeredIndicator[] = [];
     if (aiSelfDisclosure.detected) {
-      flatIndicators.push(buildAiSelfDisclosureIndicator(aiSelfDisclosure, aiSelfDisclosurePenalty));
+      flatIndicators.push(
+        buildAiSelfDisclosureIndicator(
+          aiSelfDisclosure,
+          aiSelfDisclosurePenalty,
+        ),
+      );
     }
     // Task #394: `detail` is the same `AvriEngine2Block` instance the
     // diagnostics panel and triage exporter read from
@@ -265,9 +291,10 @@ export function runEngine2Avri(
           ...legacy.signalBreakdown,
           avri: flatAvriBreakdown,
         },
-        note: flatNoteParts.length > 0
-          ? `AVRI ${family.displayName}: ${flatNoteParts.join(", ")} applied to legacy substance ${legacy.score} → ${adjusted}.`
-          : legacy.note,
+        note:
+          flatNoteParts.length > 0
+            ? `AVRI ${family.displayName}: ${flatNoteParts.join(", ")} applied to legacy substance ${legacy.score} → ${adjusted}.`
+            : legacy.note,
       },
       goldHitCount: 0,
       detail: flatAvriBreakdown,
@@ -291,11 +318,16 @@ export function runEngine2Avri(
     : fullText;
 
   // 1. Sum gold-signal points (cap at 100 raw).
-  const goldHits: Array<{ id: string; description: string; points: number }> = [];
+  const goldHits: Array<{ id: string; description: string; points: number }> =
+    [];
   let goldTotal = 0;
   for (const sig of family.goldSignals) {
     if (sig.pattern.test(httpAugmentedText)) {
-      goldHits.push({ id: sig.id, description: sig.description, points: sig.points });
+      goldHits.push({
+        id: sig.id,
+        description: sig.description,
+        points: sig.points,
+      });
       goldTotal += sig.points;
     }
   }
@@ -309,14 +341,19 @@ export function runEngine2Avri(
   // tool-emitted-trace gold signals (currently MEMORY_CORRUPTION and
   // RACE_CONCURRENCY).
   let crashTrace: CrashTraceEvaluation | null = null;
-  const revokedTraceHits: Array<{ id: string; description: string; points: number }> = [];
+  const revokedTraceHits: Array<{
+    id: string;
+    description: string;
+    points: number;
+  }> = [];
   const traceGoldIds = crashTraceGoldSignalIdsFor(family.id);
   if (traceGoldIds) {
     crashTrace = evaluateCrashTrace(fullText);
     // Sprint 13B-2: structural fabrication takes the same revocation path as
     // a stripped trace — both indicate the trace itself is unreliable, so any
     // gold points the family awarded for the trace must come back.
-    const traceFabricated = crashTrace.isStripped || crashTrace.hasStructuralFabrication;
+    const traceFabricated =
+      crashTrace.isStripped || crashTrace.hasStructuralFabrication;
     if (traceFabricated) {
       const remaining: typeof goldHits = [];
       for (const hit of goldHits) {
@@ -343,7 +380,11 @@ export function runEngine2Avri(
   // past the gold threshold on fake HTTP request bytes. Runs for any
   // family whose rubric declares raw-HTTP-byte gold signals.
   let rawHttp: RawHttpEvaluation | null = null;
-  const revokedRawHttpHits: Array<{ id: string; description: string; points: number }> = [];
+  const revokedRawHttpHits: Array<{
+    id: string;
+    description: string;
+    points: number;
+  }> = [];
   const rawHttpGoldIds = rawHttpGoldSignalIdsFor(family.id);
   if (rawHttpGoldIds) {
     // Strict CRLF only for REQUEST_SMUGGLING — that family explicitly
@@ -420,8 +461,7 @@ export function runEngine2Avri(
           const detail = rawHttp.prosePlaceholderDetails[0];
           const count = rawHttp.prosePlaceholderPayloads;
           if (detail) {
-            const more =
-              count > 1 ? ` (+${count - 1} more)` : "";
+            const more = count > 1 ? ` (+${count - 1} more)` : "";
             fallbackReason = `Prose payload reference is a placeholder (${detail.category} dodge: "${detail.snippet}"${more})`;
           } else {
             fallbackReason = `Prose payload reference is a placeholder (${count} mention(s) with no concrete payload)`;
@@ -476,7 +516,11 @@ export function runEngine2Avri(
   // parent `revokedRawHttpHits` still receives them too so the existing
   // top-level "Gold signals revoked" line and indicator continue to show
   // the OR-merged view.
-  const revokedResponseHits: Array<{ id: string; description: string; points: number }> = [];
+  const revokedResponseHits: Array<{
+    id: string;
+    description: string;
+    points: number;
+  }> = [];
   const responseGoldIds = rawHttpResponseGoldSignalIdsFor(family.id);
   if (responseGoldIds) {
     rawHttpResponse = evaluateRawHttpResponse(fullText);
@@ -510,7 +554,9 @@ export function runEngine2Avri(
     // inside the fake response). Surrounding prose / legitimate
     // excerpts that carry the same payload bytes survive stripping
     // and keep the point.
-    const responseBodyPayloadIds = rawHttpResponseBodyPayloadGoldSignalIdsFor(family.id);
+    const responseBodyPayloadIds = rawHttpResponseBodyPayloadGoldSignalIdsFor(
+      family.id,
+    );
     if (
       responseBodyPayloadIds &&
       rawHttpResponse.isFake &&
@@ -553,14 +599,22 @@ export function runEngine2Avri(
   // augmented view for raw-HTTP families so a printf reproduction
   // satisfies the "raw HTTP request bytes provided" check the same
   // way a literal-CRLF block does.
-  const absencePenaltiesApplied: Array<{ id: string; description: string; points: number }> = [];
+  const absencePenaltiesApplied: Array<{
+    id: string;
+    description: string;
+    points: number;
+  }> = [];
   let totalAbsencePenalty = 0;
   for (const ap of family.absencePenalties) {
     if (!ap.pattern.test(httpAugmentedText)) {
       const remaining = ABSENCE_PENALTY_CAP - totalAbsencePenalty;
       if (remaining <= 0) break;
       const applied = Math.min(ap.points, remaining);
-      absencePenaltiesApplied.push({ id: ap.id, description: ap.description, points: applied });
+      absencePenaltiesApplied.push({
+        id: ap.id,
+        description: ap.description,
+        points: applied,
+      });
       totalAbsencePenalty += applied;
     }
   }
@@ -569,14 +623,17 @@ export function runEngine2Avri(
   const proseOnly = stripCodeAndDiffs(fullText).toLowerCase();
   const contradictionsFound: string[] = [];
   for (const phrase of family.contradictionPhrases) {
-    if (proseOnly.includes(phrase.toLowerCase())) contradictionsFound.push(phrase);
+    if (proseOnly.includes(phrase.toLowerCase()))
+      contradictionsFound.push(phrase);
   }
   const contradictionPenalty = Math.min(24, contradictionsFound.length * 8);
 
   // 3b. Stripped-trace penalty (out-of-cap). Applied directly to baseScore
   // so it composes with absence/contradiction without sharing the absence
   // cap budget. Only fires when the validator detected a placeholder trace.
-  const strippedTracePenalty = crashTrace?.isStripped ? STRIPPED_TRACE_PENALTY : 0;
+  const strippedTracePenalty = crashTrace?.isStripped
+    ? STRIPPED_TRACE_PENALTY
+    : 0;
 
   // 3b'. Sprint 13B-2 / Task #303 / Task #316 — structural-fabrication
   // penalty (out-of-cap). Fires when ≥2 of the nine structural detectors
@@ -603,7 +660,8 @@ export function runEngine2Avri(
   // detects a fabricated `HTTP/1.1 200 OK` block — but it's applied
   // once even if both sides fired (we don't double-bill the same kind
   // of fabrication).
-  const anyRawHttpFake = (rawHttp?.isFake ?? false) || (rawHttpResponse?.isFake ?? false);
+  const anyRawHttpFake =
+    (rawHttp?.isFake ?? false) || (rawHttpResponse?.isFake ?? false);
   const fakeRawHttpPenalty = anyRawHttpFake ? FAKE_RAW_HTTP_PENALTY : 0;
 
   const rawAvriScore = clamp(
@@ -644,7 +702,9 @@ export function runEngine2Avri(
   ) {
     avriWeight = 0.25;
   }
-  const blendedScore = Math.round(rawAvriScore * avriWeight + legacy.score * (1 - avriWeight));
+  const blendedScore = Math.round(
+    rawAvriScore * avriWeight + legacy.score * (1 - avriWeight),
+  );
 
   // Build indicators surfaced to diagnostics.
   const indicators: TriggeredIndicator[] = [];
@@ -687,12 +747,14 @@ export function runEngine2Avri(
     // The indicator fires whether or not STRIPPED_CRASH_TRACE also fired so
     // reviewers can see all the fabrication evidence at a glance.
     const ids = crashTrace.structuralMarkers.map((m) => m.id).join(", ");
-    const penaltyNote = structuralFabPenalty > 0
-      ? ` (-${structuralFabPenalty}`
-      : ` (penalty subsumed by stripped-trace`;
-    const revokedNote = !strippedTracePenalty && revokedTraceHits.length > 0
-      ? `; revoked ${revokedTraceHits.length} trace gold signal(s)`
-      : "";
+    const penaltyNote =
+      structuralFabPenalty > 0
+        ? ` (-${structuralFabPenalty}`
+        : ` (penalty subsumed by stripped-trace`;
+    const revokedNote =
+      !strippedTracePenalty && revokedTraceHits.length > 0
+        ? `; revoked ${revokedTraceHits.length} trace gold signal(s)`
+        : "";
     indicators.push({
       signal: "STRUCTURAL_FABRICATION",
       value: ids,
@@ -727,19 +789,23 @@ export function runEngine2Avri(
   if (aiSelfDisclosure.detected) {
     // Task #300 — surface every matched phrase so reviewers see the exact
     // wording that earned the AI self-disclosure penalty.
-    indicators.push(buildAiSelfDisclosureIndicator(aiSelfDisclosure, aiSelfDisclosurePenalty));
+    indicators.push(
+      buildAiSelfDisclosureIndicator(aiSelfDisclosure, aiSelfDisclosurePenalty),
+    );
   }
   // Keep a couple of legacy indicators for continuity.
   for (const li of legacy.triggeredIndicators) {
-    if (li.signal === "POC_MISMATCH" || li.signal === "PLACEHOLDER_URLS" || li.signal === "CLAIM_EVIDENCE_EXTREME") {
+    if (
+      li.signal === "POC_MISMATCH" ||
+      li.signal === "PLACEHOLDER_URLS" ||
+      li.signal === "CLAIM_EVIDENCE_EXTREME"
+    ) {
       indicators.push(li);
     }
   }
 
   const verdict: Verdict =
-    blendedScore >= 65 ? "GREEN" :
-    blendedScore >= 40 ? "YELLOW" :
-    "RED";
+    blendedScore >= 65 ? "GREEN" : blendedScore >= 40 ? "YELLOW" : "RED";
 
   // Build the gold-signal "miss" list so the diagnostics panel can show
   // reviewers which expected signals were absent for this family.
@@ -760,10 +826,18 @@ export function runEngine2Avri(
     baseScore: Math.round(baseScore),
     goldHitCount: goldHits.length,
     goldTotalCount: family.goldSignals.length,
-    goldHits: goldHits.map((g) => ({ id: g.id, description: g.description, points: g.points })),
+    goldHits: goldHits.map((g) => ({
+      id: g.id,
+      description: g.description,
+      points: g.points,
+    })),
     goldMisses,
     absencePenalty: -totalAbsencePenalty,
-    absencePenalties: absencePenaltiesApplied.map((a) => ({ id: a.id, description: a.description, points: a.points })),
+    absencePenalties: absencePenaltiesApplied.map((a) => ({
+      id: a.id,
+      description: a.description,
+      points: a.points,
+    })),
     contradictions: contradictionsFound,
     contradictionPenalty: -contradictionPenalty,
     crashTrace: crashTrace
@@ -773,7 +847,10 @@ export function runEngine2Avri(
           placeholderFrames: crashTrace.placeholderFrames,
           isStripped: crashTrace.isStripped,
           reason: crashTrace.reason,
-          revokedGoldHits: revokedTraceHits.map((r) => ({ id: r.id, points: r.points })),
+          revokedGoldHits: revokedTraceHits.map((r) => ({
+            id: r.id,
+            points: r.points,
+          })),
           penalty: -strippedTracePenalty,
           // Sprint 13B-2: list of structural-fabrication markers that
           // fired against this trace (each with id + description), so the
@@ -819,7 +896,10 @@ export function runEngine2Avri(
                   : rawHttpResponse?.isFake
                     ? rawHttpResponse.reason
                     : (rawHttp?.reason ?? null),
-            revokedGoldHits: revokedRawHttpHits.map((r) => ({ id: r.id, points: r.points })),
+            revokedGoldHits: revokedRawHttpHits.map((r) => ({
+              id: r.id,
+              points: r.points,
+            })),
             penalty: -fakeRawHttpPenalty,
             // Task #450 — forward the per-signal fabrication tells from
             // `evaluateRawHttpRequest` (and the engine's prose-payload
@@ -842,9 +922,12 @@ export function runEngine2Avri(
                   responsesFlagged: rawHttpResponse.responsesFlagged,
                   totalHeaders: rawHttpResponse.totalHeaders,
                   responsesMissingDate: rawHttpResponse.responsesMissingDate,
-                  responsesMissingServer: rawHttpResponse.responsesMissingServer,
-                  responsesWithSuspiciousJsonBody: rawHttpResponse.responsesWithSuspiciousJsonBody,
-                  responsesMissingIncidentals: rawHttpResponse.responsesMissingIncidentals,
+                  responsesMissingServer:
+                    rawHttpResponse.responsesMissingServer,
+                  responsesWithSuspiciousJsonBody:
+                    rawHttpResponse.responsesWithSuspiciousJsonBody,
+                  responsesMissingIncidentals:
+                    rawHttpResponse.responsesMissingIncidentals,
                   isFake: rawHttpResponse.isFake,
                   reason: rawHttpResponse.reason,
                   // Task #319 — response-class gold signals revoked by the
@@ -870,7 +953,10 @@ export function runEngine2Avri(
               : null,
           }
         : null,
-    aiSelfDisclosure: aiSelfDisclosureBlock(aiSelfDisclosure, aiSelfDisclosurePenalty),
+    aiSelfDisclosure: aiSelfDisclosureBlock(
+      aiSelfDisclosure,
+      aiSelfDisclosurePenalty,
+    ),
     rawAvriScore: Math.round(rawAvriScore),
     legacyScore: legacy.score,
     blendedScore,

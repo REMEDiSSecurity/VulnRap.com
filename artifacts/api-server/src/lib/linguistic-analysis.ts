@@ -94,35 +94,164 @@ interface FormulaicPattern {
 }
 
 const FORMULAIC_AI_PHRASES: FormulaicPattern[] = [
-  { pattern: /I\s+(?:sincerely\s+)?apologize\s+for/i, weight: 10, type: "ai_apology" },
-  { pattern: /I\s+hope\s+this\s+(?:helps|message\s+finds)/i, weight: 12, type: "ai_pleasantry" },
-  { pattern: /(?:Certainly|Absolutely)!\s+(?:Let\s+me|I'll)/i, weight: 15, type: "ai_eager_response" },
-  { pattern: /Thank\s+you\s+for\s+your\s+(?:dedication|time|attention)/i, weight: 8, type: "ai_gratitude" },
-  { pattern: /(?:best|kind)\s+regards,?\s*\n\s*Security\s+Researcher/i, weight: 10, type: "ai_sign_off" },
-  { pattern: /I\s+(?:would\s+be|am)\s+happy\s+to\s+provide/i, weight: 8, type: "ai_offer" },
-  { pattern: /upon\s+further\s+(?:analysis|investigation|review)/i, weight: 8, type: "ai_hedge" },
-  { pattern: /my\s+(?:advanced|sophisticated)\s+(?:security\s+)?tools/i, weight: 12, type: "ai_self_aggrandize" },
-  { pattern: /maintain\s+a\s+(?:better|good)\s+relationship/i, weight: 10, type: "ai_relationship" },
-  { pattern: /(?:Dear|Hello)\s+Security\s+Team/i, weight: 6, type: "ai_formal_greeting" },
-  { pattern: /as\s+(?:a\s+)?(?:senior|experienced)\s+(?:security|penetration)/i, weight: 8, type: "ai_credential_claim" },
-  { pattern: /during\s+my\s+(?:routine|comprehensive|thorough)\s+(?:security\s+)?(?:research|audit|assessment)/i, weight: 10, type: "ai_routine_claim" },
-  { pattern: /(?:As\s+per|According\s+to)\s+CWE-\d+/i, weight: 5, type: "ai_cwe_textbook" },
-  { pattern: /represents?\s+a\s+significant\s+security\s+(?:debt|risk|concern)/i, weight: 5, type: "ai_boilerplate" },
-  { pattern: /widely\s+known\s+in\s+the\s+security\s+community/i, weight: 6, type: "ai_appeal_authority" },
-  { pattern: /please\s+(?:don't\s+hesitate|feel\s+free)\s+to\s+(?:reach\s+out|contact)/i, weight: 6, type: "ai_closing" },
-  { pattern: /this\s+(?:could|can)\s+(?:potentially\s+)?(?:lead\s+to|result\s+in|allow|enable)\s+(?:unauthorized|complete|full)/i, weight: 8, type: "ai_impact_inflation" },
-  { pattern: /an?\s+(?:malicious\s+)?attacker\s+(?:could|can|may)\s+(?:potentially\s+)?(?:exploit|leverage|abuse|take\s+advantage)/i, weight: 7, type: "ai_attacker_could" },
-  { pattern: /(?:I|we)\s+(?:strongly\s+)?recommend\s+(?:implementing|adopting|using)/i, weight: 6, type: "ai_recommend" },
-  { pattern: /it\s+is\s+(?:highly\s+)?(?:recommended|advised|suggested)\s+(?:to|that)/i, weight: 7, type: "ai_passive_recommend" },
-  { pattern: /(?:ensure|make\s+sure)\s+that\s+(?:all|proper|adequate|appropriate)/i, weight: 6, type: "ai_ensure_proper" },
-  { pattern: /(?:critical|significant|severe)\s+(?:security\s+)?(?:vulnerability|flaw|weakness|issue)/i, weight: 4, type: "ai_severity_inflation" },
-  { pattern: /(?:compromise|impact)\s+the\s+(?:entire|whole|complete)\s+(?:system|application|infrastructure)/i, weight: 7, type: "ai_total_compromise" },
-  { pattern: /with\s+over\s+\d+\s+years?\s+of\s+experience/i, weight: 8, type: "ai_years_experience" },
-  { pattern: /i\s+(?:have\s+)?discovered\s+a\s+critical/i, weight: 5, type: "ai_discovered_critical" },
-  { pattern: /using\s+(?:industry-leading|advanced|comprehensive|cutting-edge)\s+(?:tools|methodologies|techniques)/i, weight: 10, type: "ai_industry_tools" },
-  { pattern: /i\s+look\s+forward\s+to\s+hearing\s+from/i, weight: 8, type: "ai_look_forward" },
-  { pattern: /i\s+am\s+a\s+(?:certified|professional)\s+(?:security|penetration|ethical)/i, weight: 8, type: "ai_certified_claim" },
-  { pattern: /during\s+(?:a\s+)?(?:recent\s+)?(?:security\s+)?(?:engagement|assessment|penetration\s+test)/i, weight: 6, type: "ai_engagement_claim" },
+  {
+    pattern: /I\s+(?:sincerely\s+)?apologize\s+for/i,
+    weight: 10,
+    type: "ai_apology",
+  },
+  {
+    pattern: /I\s+hope\s+this\s+(?:helps|message\s+finds)/i,
+    weight: 12,
+    type: "ai_pleasantry",
+  },
+  {
+    pattern: /(?:Certainly|Absolutely)!\s+(?:Let\s+me|I'll)/i,
+    weight: 15,
+    type: "ai_eager_response",
+  },
+  {
+    pattern: /Thank\s+you\s+for\s+your\s+(?:dedication|time|attention)/i,
+    weight: 8,
+    type: "ai_gratitude",
+  },
+  {
+    pattern: /(?:best|kind)\s+regards,?\s*\n\s*Security\s+Researcher/i,
+    weight: 10,
+    type: "ai_sign_off",
+  },
+  {
+    pattern: /I\s+(?:would\s+be|am)\s+happy\s+to\s+provide/i,
+    weight: 8,
+    type: "ai_offer",
+  },
+  {
+    pattern: /upon\s+further\s+(?:analysis|investigation|review)/i,
+    weight: 8,
+    type: "ai_hedge",
+  },
+  {
+    pattern: /my\s+(?:advanced|sophisticated)\s+(?:security\s+)?tools/i,
+    weight: 12,
+    type: "ai_self_aggrandize",
+  },
+  {
+    pattern: /maintain\s+a\s+(?:better|good)\s+relationship/i,
+    weight: 10,
+    type: "ai_relationship",
+  },
+  {
+    pattern: /(?:Dear|Hello)\s+Security\s+Team/i,
+    weight: 6,
+    type: "ai_formal_greeting",
+  },
+  {
+    pattern: /as\s+(?:a\s+)?(?:senior|experienced)\s+(?:security|penetration)/i,
+    weight: 8,
+    type: "ai_credential_claim",
+  },
+  {
+    pattern:
+      /during\s+my\s+(?:routine|comprehensive|thorough)\s+(?:security\s+)?(?:research|audit|assessment)/i,
+    weight: 10,
+    type: "ai_routine_claim",
+  },
+  {
+    pattern: /(?:As\s+per|According\s+to)\s+CWE-\d+/i,
+    weight: 5,
+    type: "ai_cwe_textbook",
+  },
+  {
+    pattern:
+      /represents?\s+a\s+significant\s+security\s+(?:debt|risk|concern)/i,
+    weight: 5,
+    type: "ai_boilerplate",
+  },
+  {
+    pattern: /widely\s+known\s+in\s+the\s+security\s+community/i,
+    weight: 6,
+    type: "ai_appeal_authority",
+  },
+  {
+    pattern:
+      /please\s+(?:don't\s+hesitate|feel\s+free)\s+to\s+(?:reach\s+out|contact)/i,
+    weight: 6,
+    type: "ai_closing",
+  },
+  {
+    pattern:
+      /this\s+(?:could|can)\s+(?:potentially\s+)?(?:lead\s+to|result\s+in|allow|enable)\s+(?:unauthorized|complete|full)/i,
+    weight: 8,
+    type: "ai_impact_inflation",
+  },
+  {
+    pattern:
+      /an?\s+(?:malicious\s+)?attacker\s+(?:could|can|may)\s+(?:potentially\s+)?(?:exploit|leverage|abuse|take\s+advantage)/i,
+    weight: 7,
+    type: "ai_attacker_could",
+  },
+  {
+    pattern:
+      /(?:I|we)\s+(?:strongly\s+)?recommend\s+(?:implementing|adopting|using)/i,
+    weight: 6,
+    type: "ai_recommend",
+  },
+  {
+    pattern:
+      /it\s+is\s+(?:highly\s+)?(?:recommended|advised|suggested)\s+(?:to|that)/i,
+    weight: 7,
+    type: "ai_passive_recommend",
+  },
+  {
+    pattern:
+      /(?:ensure|make\s+sure)\s+that\s+(?:all|proper|adequate|appropriate)/i,
+    weight: 6,
+    type: "ai_ensure_proper",
+  },
+  {
+    pattern:
+      /(?:critical|significant|severe)\s+(?:security\s+)?(?:vulnerability|flaw|weakness|issue)/i,
+    weight: 4,
+    type: "ai_severity_inflation",
+  },
+  {
+    pattern:
+      /(?:compromise|impact)\s+the\s+(?:entire|whole|complete)\s+(?:system|application|infrastructure)/i,
+    weight: 7,
+    type: "ai_total_compromise",
+  },
+  {
+    pattern: /with\s+over\s+\d+\s+years?\s+of\s+experience/i,
+    weight: 8,
+    type: "ai_years_experience",
+  },
+  {
+    pattern: /i\s+(?:have\s+)?discovered\s+a\s+critical/i,
+    weight: 5,
+    type: "ai_discovered_critical",
+  },
+  {
+    pattern:
+      /using\s+(?:industry-leading|advanced|comprehensive|cutting-edge)\s+(?:tools|methodologies|techniques)/i,
+    weight: 10,
+    type: "ai_industry_tools",
+  },
+  {
+    pattern: /i\s+look\s+forward\s+to\s+hearing\s+from/i,
+    weight: 8,
+    type: "ai_look_forward",
+  },
+  {
+    pattern:
+      /i\s+am\s+a\s+(?:certified|professional)\s+(?:security|penetration|ethical)/i,
+    weight: 8,
+    type: "ai_certified_claim",
+  },
+  {
+    pattern:
+      /during\s+(?:a\s+)?(?:recent\s+)?(?:security\s+)?(?:engagement|assessment|penetration\s+test)/i,
+    weight: 6,
+    type: "ai_engagement_claim",
+  },
 ];
 
 const SLOP_TEMPLATES = [
@@ -222,16 +351,16 @@ const SLOP_TEMPLATES = [
   },
   {
     name: "executive_summary_template",
-    patterns: [
-      /executive\s+summary\s*:/i,
-      /detailed\s+description\s*:/i,
-    ],
+    patterns: [/executive\s+summary\s*:/i, /detailed\s+description\s*:/i],
     requiredCount: 2,
     weight: 10,
   },
 ];
 
-function analyzeLexicalMarkers(text: string): { score: number; evidence: LinguisticEvidence[] } {
+function analyzeLexicalMarkers(text: string): {
+  score: number;
+  evidence: LinguisticEvidence[];
+} {
   const lowerText = text.toLowerCase();
   const evidence: LinguisticEvidence[] = [];
   let totalWeight = 0;
@@ -266,8 +395,10 @@ function analyzeLexicalMarkers(text: string): { score: number; evidence: Linguis
   }
 
   const COMPOUND_MULTIPLIERS = [1.0, 1.0, 1.3, 1.7, 2.2, 2.5, 2.8, 3.0];
-  const multiplier = formulaicCount < COMPOUND_MULTIPLIERS.length
-    ? COMPOUND_MULTIPLIERS[formulaicCount] : 3.0;
+  const multiplier =
+    formulaicCount < COMPOUND_MULTIPLIERS.length
+      ? COMPOUND_MULTIPLIERS[formulaicCount]
+      : 3.0;
   const compoundedFormulaic = Math.round(formulaicWeight * multiplier);
 
   totalWeight += compoundedFormulaic;
@@ -276,15 +407,19 @@ function analyzeLexicalMarkers(text: string): { score: number; evidence: Linguis
   return { score, evidence };
 }
 
-function analyzeStatisticalFeatures(text: string): { score: number; evidence: LinguisticEvidence[] } {
+function analyzeStatisticalFeatures(text: string): {
+  score: number;
+  evidence: LinguisticEvidence[];
+} {
   const evidence: LinguisticEvidence[] = [];
   const featureScores: { score: number; weight: number }[] = [];
 
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 10);
   if (sentences.length >= 5) {
-    const lengths = sentences.map(s => s.trim().split(/\s+/).length);
+    const lengths = sentences.map((s) => s.trim().split(/\s+/).length);
     const mean = lengths.reduce((a, b) => a + b, 0) / lengths.length;
-    const variance = lengths.reduce((a, l) => a + (l - mean) ** 2, 0) / lengths.length;
+    const variance =
+      lengths.reduce((a, l) => a + (l - mean) ** 2, 0) / lengths.length;
     const stddev = Math.sqrt(variance);
     const cv = mean > 0 ? stddev / mean : 0;
 
@@ -305,7 +440,7 @@ function analyzeStatisticalFeatures(text: string): { score: number; evidence: Li
     else if (cv < 0.5) cvScore = 45;
     else if (cv < 0.7) cvScore = 15;
     else cvScore = 5;
-    featureScores.push({ score: cvScore, weight: 0.20 });
+    featureScores.push({ score: cvScore, weight: 0.2 });
     if (cvScore >= 40) {
       evidence.push({
         type: "low_sentence_cv",
@@ -338,10 +473,13 @@ function analyzeStatisticalFeatures(text: string): { score: number; evidence: Li
     featureScores.push({ score: 0, weight: 0.15 });
   }
 
-  const contractionPatterns = /\b(?:don't|won't|can't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|doesn't|didn't|couldn't|wouldn't|shouldn't|it's|i'm|i've|i'll|we're|we've|they're|they've|that's|there's|here's|what's|who's|let's|ain't)\b/gi;
+  const contractionPatterns =
+    /\b(?:don't|won't|can't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|doesn't|didn't|couldn't|wouldn't|shouldn't|it's|i'm|i've|i'll|we're|we've|they're|they've|that's|there's|here's|what's|who's|let's|ain't)\b/gi;
   const contractionMatches = text.match(contractionPatterns);
   const contractionCount = contractionMatches ? contractionMatches.length : 0;
-  const formalWords = text.match(/\b(?:cannot|will not|do not|is not|are not|was not|were not|has not|have not|does not|did not|could not|would not|should not|it is|I am|I have|I will|we are|we have|they are|they have|that is|there is|here is|what is|who is|let us)\b/gi);
+  const formalWords = text.match(
+    /\b(?:cannot|will not|do not|is not|are not|was not|were not|has not|have not|does not|did not|could not|would not|should not|it is|I am|I have|I will|we are|we have|they are|they have|that is|there is|here is|what is|who is|let us)\b/gi,
+  );
   const formalCount = formalWords ? formalWords.length : 0;
 
   if (wordCount > 100 && contractionCount === 0 && formalCount >= 3) {
@@ -356,7 +494,10 @@ function analyzeStatisticalFeatures(text: string): { score: number; evidence: Li
     featureScores.push({ score: 0, weight: 0.15 });
   }
 
-  const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const words = text
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 2);
   if (words.length >= 50) {
     const bigrams: Map<string, number> = new Map();
     for (let i = 0; i < words.length - 1; i++) {
@@ -373,15 +514,17 @@ function analyzeStatisticalFeatures(text: string): { score: number; evidence: Li
     const normalizedEntropy = maxEntropy > 0 ? entropy / maxEntropy : 1;
 
     if (normalizedEntropy < 0.85) {
-      const entropyScore = Math.round(Math.min(100, (0.85 - normalizedEntropy) * 300));
-      featureScores.push({ score: entropyScore, weight: 0.10 });
+      const entropyScore = Math.round(
+        Math.min(100, (0.85 - normalizedEntropy) * 300),
+      );
+      featureScores.push({ score: entropyScore, weight: 0.1 });
       evidence.push({
         type: "low_entropy",
         description: `Low bigram entropy (${normalizedEntropy.toFixed(2)}) — repetitive phrasing patterns typical of AI generation`,
         weight: Math.round(entropyScore / 10),
       });
     } else {
-      featureScores.push({ score: 0, weight: 0.10 });
+      featureScores.push({ score: 0, weight: 0.1 });
     }
 
     let bigramEntropyScore: number;
@@ -389,7 +532,7 @@ function analyzeStatisticalFeatures(text: string): { score: number; evidence: Li
     else if (normalizedEntropy < 0.92) bigramEntropyScore = 35;
     else if (normalizedEntropy < 0.95) bigramEntropyScore = 15;
     else bigramEntropyScore = 5;
-    featureScores.push({ score: bigramEntropyScore, weight: 0.20 });
+    featureScores.push({ score: bigramEntropyScore, weight: 0.2 });
     if (bigramEntropyScore >= 30) {
       evidence.push({
         type: "bigram_entropy_low",
@@ -410,7 +553,10 @@ function analyzeStatisticalFeatures(text: string): { score: number; evidence: Li
   return { score: avgScore, evidence };
 }
 
-function analyzeTemplates(text: string): { score: number; evidence: LinguisticEvidence[] } {
+function analyzeTemplates(text: string): {
+  score: number;
+  evidence: LinguisticEvidence[];
+} {
   const evidence: LinguisticEvidence[] = [];
   let totalWeight = 0;
 
@@ -461,40 +607,123 @@ interface PromptInjectionPattern {
 
 const PROMPT_INJECTION_PATTERNS: PromptInjectionPattern[] = [
   // ignore-instructions family
-  { pattern: /ignore\s+(?:all\s+|the\s+|any\s+)?(?:previous|prior|above|earlier|preceding)\s+(?:instruction|prompt|rule|message|directive|context|system\s+message)s?/i, label: "ignore_previous_instructions" },
-  { pattern: /disregard\s+(?:all\s+|the\s+|any\s+)?(?:previous|prior|above|earlier)\s+(?:instruction|prompt|rule)s?/i, label: "disregard_previous" },
-  { pattern: /forget\s+(?:everything|all\s+(?:previous|prior)|what\s+(?:i|you)\s+(?:said|wrote)|your\s+(?:instructions|guidelines|training))/i, label: "forget_everything" },
-  { pattern: /(?:new|updated|revised|override|override:|the\s+real|actual)\s+(?:instructions?|prompt|rules?|directives?)\s*[:\-]/i, label: "instruction_override" },
+  {
+    pattern:
+      /ignore\s+(?:all\s+|the\s+|any\s+)?(?:previous|prior|above|earlier|preceding)\s+(?:instruction|prompt|rule|message|directive|context|system\s+message)s?/i,
+    label: "ignore_previous_instructions",
+  },
+  {
+    pattern:
+      /disregard\s+(?:all\s+|the\s+|any\s+)?(?:previous|prior|above|earlier)\s+(?:instruction|prompt|rule)s?/i,
+    label: "disregard_previous",
+  },
+  {
+    pattern:
+      /forget\s+(?:everything|all\s+(?:previous|prior)|what\s+(?:i|you)\s+(?:said|wrote)|your\s+(?:instructions|guidelines|training))/i,
+    label: "forget_everything",
+  },
+  {
+    pattern:
+      /(?:new|updated|revised|override|override:|the\s+real|actual)\s+(?:instructions?|prompt|rules?|directives?)\s*[:\-]/i,
+    label: "instruction_override",
+  },
   // role-flip family
-  { pattern: /you\s+are\s+(?:now|actually|in\s+fact)\s+(?:a|an)\s+\w+/i, label: "role_flip_you_are_now" },
-  { pattern: /(?:act|behave|respond|pretend\s+to\s+act)\s+as\s+(?:if\s+you\s+(?:are|were)|a|an)\s+/i, label: "role_flip_act_as" },
-  { pattern: /pretend\s+(?:to\s+be|you\s+(?:are|were))\s+/i, label: "role_flip_pretend" },
-  { pattern: /from\s+now\s+on(?:,|\s+you)\s+/i, label: "role_flip_from_now_on" },
+  {
+    pattern: /you\s+are\s+(?:now|actually|in\s+fact)\s+(?:a|an)\s+\w+/i,
+    label: "role_flip_you_are_now",
+  },
+  {
+    pattern:
+      /(?:act|behave|respond|pretend\s+to\s+act)\s+as\s+(?:if\s+you\s+(?:are|were)|a|an)\s+/i,
+    label: "role_flip_act_as",
+  },
+  {
+    pattern: /pretend\s+(?:to\s+be|you\s+(?:are|were))\s+/i,
+    label: "role_flip_pretend",
+  },
+  {
+    pattern: /from\s+now\s+on(?:,|\s+you)\s+/i,
+    label: "role_flip_from_now_on",
+  },
   // system-message spoof family
-  { pattern: /<\|?\s*(?:system|im_start|start_of_turn)\s*\|?>/i, label: "system_token_spoof" },
-  { pattern: /\[\s*(?:SYSTEM|INST|ASSISTANT|USER)\s*\]/i, label: "bracket_role_spoof" },
+  {
+    pattern: /<\|?\s*(?:system|im_start|start_of_turn)\s*\|?>/i,
+    label: "system_token_spoof",
+  },
+  {
+    pattern: /\[\s*(?:SYSTEM|INST|ASSISTANT|USER)\s*\]/i,
+    label: "bracket_role_spoof",
+  },
   { pattern: /^\s*(?:###?|---)\s*system\b/im, label: "markdown_system_spoof" },
   { pattern: /<system>[\s\S]*?<\/system>/i, label: "xml_system_spoof" },
   // verdict-coercion family ("return slop=0", "set score to 100", JSON spoofs)
-  { pattern: /(?:return|output|emit|respond\s+with|set|assign)\s+(?:the\s+)?(?:slop[_\s-]?score|score|verdict|tier|grade|rating)\s*(?:=|:|to|as|of)\s*[\d"'a-z]/i, label: "verdict_coercion" },
-  { pattern: /\{\s*["']?(?:score|verdict|tier|slop)["']?\s*:\s*["']?(?:0|100|GREEN|VALID|STRONG|LIKELY[_\s]VALID)["']?/i, label: "json_verdict_spoof" },
-  { pattern: /(?:always|just|simply|only)\s+(?:return|output|reply\s+with|respond\s+with)\s+["'`]?(?:0|100|GREEN|VALID|safe|legitimate)/i, label: "constant_output_coercion" },
+  {
+    pattern:
+      /(?:return|output|emit|respond\s+with|set|assign)\s+(?:the\s+)?(?:slop[_\s-]?score|score|verdict|tier|grade|rating)\s*(?:=|:|to|as|of)\s*[\d"'a-z]/i,
+    label: "verdict_coercion",
+  },
+  {
+    pattern:
+      /\{\s*["']?(?:score|verdict|tier|slop)["']?\s*:\s*["']?(?:0|100|GREEN|VALID|STRONG|LIKELY[_\s]VALID)["']?/i,
+    label: "json_verdict_spoof",
+  },
+  {
+    pattern:
+      /(?:always|just|simply|only)\s+(?:return|output|reply\s+with|respond\s+with)\s+["'`]?(?:0|100|GREEN|VALID|safe|legitimate)/i,
+    label: "constant_output_coercion",
+  },
   // jailbreak/dev-mode family
-  { pattern: /\b(?:DAN|developer|dev|jailbreak|god|admin|root)\s+mode\b/i, label: "jailbreak_mode" },
+  {
+    pattern: /\b(?:DAN|developer|dev|jailbreak|god|admin|root)\s+mode\b/i,
+    label: "jailbreak_mode",
+  },
   { pattern: /\bdo\s+anything\s+now\b/i, label: "dan_phrase" },
   // hidden-instruction-in-comment family (covers code-fence/code-comment hides)
-  { pattern: /(?:\/\/|\/\*|#|<!--)\s*(?:SYSTEM|INSTRUCTION|PROMPT|ASSISTANT)\s*[:\-]/i, label: "comment_injection" },
-  { pattern: /<!--[\s\S]*?(?:ignore|disregard|forget|return\s+slop|score\s*=\s*0)[\s\S]*?-->/i, label: "html_comment_injection" },
+  {
+    pattern:
+      /(?:\/\/|\/\*|#|<!--)\s*(?:SYSTEM|INSTRUCTION|PROMPT|ASSISTANT)\s*[:\-]/i,
+    label: "comment_injection",
+  },
+  {
+    pattern:
+      /<!--[\s\S]*?(?:ignore|disregard|forget|return\s+slop|score\s*=\s*0)[\s\S]*?-->/i,
+    label: "html_comment_injection",
+  },
   // multilingual injections (French / Spanish / German / Chinese / Japanese / Russian)
-  { pattern: /ignor(?:ez|e)\s+(?:les|toutes\s+les)\s+instructions?\s+pr[ée]c[ée]dentes/i, label: "multilingual_fr_ignore" },
-  { pattern: /ignor[ae]\s+(?:las|todas\s+las)\s+instrucciones\s+anteriores/i, label: "multilingual_es_ignore" },
-  { pattern: /ignorier(?:e|en\s+sie)\s+(?:alle\s+)?(?:vorherigen|vorigen)\s+anweisungen/i, label: "multilingual_de_ignore" },
-  { pattern: /忽略(?:之前|以前|上面|所有)(?:的)?(?:指令|指示|提示)/, label: "multilingual_zh_ignore" },
-  { pattern: /(?:以前の|前の|これまでの)(?:指示|命令|プロンプト)を無視/, label: "multilingual_ja_ignore" },
-  { pattern: /игнорируй(?:те)?\s+(?:все\s+)?(?:предыдущие|прежние)\s+инструкции/i, label: "multilingual_ru_ignore" },
+  {
+    pattern:
+      /ignor(?:ez|e)\s+(?:les|toutes\s+les)\s+instructions?\s+pr[ée]c[ée]dentes/i,
+    label: "multilingual_fr_ignore",
+  },
+  {
+    pattern: /ignor[ae]\s+(?:las|todas\s+las)\s+instrucciones\s+anteriores/i,
+    label: "multilingual_es_ignore",
+  },
+  {
+    pattern:
+      /ignorier(?:e|en\s+sie)\s+(?:alle\s+)?(?:vorherigen|vorigen)\s+anweisungen/i,
+    label: "multilingual_de_ignore",
+  },
+  {
+    pattern: /忽略(?:之前|以前|上面|所有)(?:的)?(?:指令|指示|提示)/,
+    label: "multilingual_zh_ignore",
+  },
+  {
+    pattern: /(?:以前の|前の|これまでの)(?:指示|命令|プロンプト)を無視/,
+    label: "multilingual_ja_ignore",
+  },
+  {
+    pattern:
+      /игнорируй(?:те)?\s+(?:все\s+)?(?:предыдущие|прежние)\s+инструкции/i,
+    label: "multilingual_ru_ignore",
+  },
 ];
 
-function analyzePromptInjection(text: string): { attempted: boolean; matches: string[]; evidence: LinguisticEvidence[] } {
+function analyzePromptInjection(text: string): {
+  attempted: boolean;
+  matches: string[];
+  evidence: LinguisticEvidence[];
+} {
   const evidence: LinguisticEvidence[] = [];
   const matches: string[] = [];
   const seenLabels = new Set<string>();
@@ -527,27 +756,49 @@ function safeDetector<T>(name: string, fn: () => T, fallback: T): T {
 
 export function analyzeLinguistic(text: string): LinguisticResult {
   const emptyResult = { score: 0, evidence: [] as LinguisticEvidence[] };
-  const lexical = safeDetector("lexical", () => analyzeLexicalMarkers(text), emptyResult);
-  const statistical = safeDetector("statistical", () => analyzeStatisticalFeatures(text), emptyResult);
-  const templates = safeDetector("templates", () => analyzeTemplates(text), emptyResult);
+  const lexical = safeDetector(
+    "lexical",
+    () => analyzeLexicalMarkers(text),
+    emptyResult,
+  );
+  const statistical = safeDetector(
+    "statistical",
+    () => analyzeStatisticalFeatures(text),
+    emptyResult,
+  );
+  const templates = safeDetector(
+    "templates",
+    () => analyzeTemplates(text),
+    emptyResult,
+  );
   const injection = safeDetector(
     "prompt_injection",
     () => analyzePromptInjection(text),
-    { attempted: false, matches: [] as string[], evidence: [] as LinguisticEvidence[] },
+    {
+      attempted: false,
+      matches: [] as string[],
+      evidence: [] as LinguisticEvidence[],
+    },
   );
 
-  const combinedScore = Math.min(100, Math.round(
-    lexical.score * 0.40 +
-    statistical.score * 0.35 +
-    templates.score * 0.25
-  ));
+  const combinedScore = Math.min(
+    100,
+    Math.round(
+      lexical.score * 0.4 + statistical.score * 0.35 + templates.score * 0.25,
+    ),
+  );
 
   return {
     score: combinedScore,
     lexicalScore: lexical.score,
     statisticalScore: statistical.score,
     templateScore: templates.score,
-    evidence: [...lexical.evidence, ...statistical.evidence, ...templates.evidence, ...injection.evidence],
+    evidence: [
+      ...lexical.evidence,
+      ...statistical.evidence,
+      ...templates.evidence,
+      ...injection.evidence,
+    ],
     promptInjectionAttempted: injection.attempted,
     promptInjectionMatches: injection.matches,
   };

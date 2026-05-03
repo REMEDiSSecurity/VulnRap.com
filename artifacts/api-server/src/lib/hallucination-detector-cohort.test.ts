@@ -121,7 +121,10 @@ describe("Task #267: per-fixture hallucination detector totalWeight is pinned", 
 describe("Task #383: T4 HallucinationDetector hint matches detector reality", () => {
   for (const f of TEST_FIXTURE_COHORTS.T4) {
     it(`T4 fixture ${f.id} declares which engine condemns it`, () => {
-      expect(f.condemnedBy, `T4 fixture ${f.id} is missing condemnedBy`).toBeDefined();
+      expect(
+        f.condemnedBy,
+        `T4 fixture ${f.id} is missing condemnedBy`,
+      ).toBeDefined();
     });
   }
 

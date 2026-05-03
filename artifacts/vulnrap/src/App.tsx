@@ -13,16 +13,21 @@ import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 
 function lazyRetry(importFn: () => Promise<{ default: React.ComponentType }>) {
   return lazy(() =>
-    importFn().catch(() =>
-      new Promise<{ default: React.ComponentType }>((resolve) => {
-        setTimeout(() => {
-          resolve(importFn().catch(() => ({ default: () => {
-            window.location.reload();
-            return null;
-          }})));
-        }, 1500);
-      })
-    )
+    importFn().catch(
+      () =>
+        new Promise<{ default: React.ComponentType }>((resolve) => {
+          setTimeout(() => {
+            resolve(
+              importFn().catch(() => ({
+                default: () => {
+                  window.location.reload();
+                  return null;
+                },
+              })),
+            );
+          }, 1500);
+        }),
+    ),
   );
 }
 
@@ -91,7 +96,10 @@ function AppRoutes() {
     <Layout>
       <ScrollToTop />
       <PageViewTracker />
-      <KeyboardShortcutsModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <KeyboardShortcutsModal
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+      />
       <ErrorBoundary>
         <Suspense fallback={<PageLoader />}>
           <Routes>
@@ -156,7 +164,9 @@ function App() {
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
-            <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <BrowserRouter
+              basename={import.meta.env.BASE_URL.replace(/\/$/, "")}
+            >
               <AppRoutes />
             </BrowserRouter>
             <Toaster />

@@ -7,10 +7,7 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, gte, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import {
-  reportShadowScoresTable,
-  reportsTable,
-} from "@workspace/db";
+import { reportShadowScoresTable, reportsTable } from "@workspace/db";
 import { requireCalibrationAuthStrict } from "../middlewares/require-calibration-auth";
 import { isShadowScoringEnabled } from "../lib/scoring-shadow";
 import { logger } from "../lib/logger";
@@ -33,7 +30,9 @@ router.get(
   requireCalibrationAuthStrict,
   async (req, res) => {
     try {
-      const lookbackDaysRaw = Number(req.query.lookbackDays ?? DEFAULT_LOOKBACK_DAYS);
+      const lookbackDaysRaw = Number(
+        req.query.lookbackDays ?? DEFAULT_LOOKBACK_DAYS,
+      );
       const lookbackDays =
         Number.isFinite(lookbackDaysRaw) && lookbackDaysRaw > 0
           ? Math.min(90, Math.trunc(lookbackDaysRaw))
@@ -125,9 +124,7 @@ router.get(
       });
     } catch (err) {
       logger.error({ err }, "[internal] /internal/shadow-drift failed");
-      res
-        .status(500)
-        .json({ error: "Failed to compute shadow drift report." });
+      res.status(500).json({ error: "Failed to compute shadow drift report." });
     }
   },
 );

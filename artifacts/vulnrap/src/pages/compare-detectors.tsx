@@ -6,7 +6,14 @@
 // prospective users who have asked "why not just use a generic LLM
 // detector?" Categories use generic labels (no competitor product names).
 import { Link } from "react-router-dom";
-import { GitCompare, Check, X, Minus, ArrowRight, BookOpen } from "lucide-react";
+import {
+  GitCompare,
+  Check,
+  X,
+  Minus,
+  ArrowRight,
+  BookOpen,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -29,7 +36,10 @@ interface Row {
 const ROWS: Row[] = [
   {
     capability: "Detects fabricated ASan/sanitizer traces",
-    vulnrap: { mark: "yes", note: "Structural validation of frames + offsets." },
+    vulnrap: {
+      mark: "yes",
+      note: "Structural validation of frames + offsets.",
+    },
     llm: { mark: "no", note: "Treats trace as opaque text." },
     plagiarism: { mark: "no", note: "Only flags copied text." },
     manual: { mark: "partial", note: "Possible but slow; reviewer-dependent." },
@@ -53,11 +63,17 @@ const ROWS: Row[] = [
     vulnrap: { mark: "yes", note: "Linguistic engine plus stylistic signals." },
     llm: { mark: "yes", note: "Core competence — but only this." },
     plagiarism: { mark: "partial", note: "Some bolt-on AI checks." },
-    manual: { mark: "partial", note: "Gut feel; not consistent across reviewers." },
+    manual: {
+      mark: "partial",
+      note: "Gut feel; not consistent across reviewers.",
+    },
   },
   {
     capability: "Technical substance density",
-    vulnrap: { mark: "yes", note: "Substance engine: code, refs, repro depth." },
+    vulnrap: {
+      mark: "yes",
+      note: "Substance engine: code, refs, repro depth.",
+    },
     llm: { mark: "no", note: "Word-shape only; no substance scoring." },
     plagiarism: { mark: "no", note: "Out of scope." },
     manual: { mark: "yes", note: "Subjective and slow." },
@@ -92,7 +108,10 @@ const ROWS: Row[] = [
   },
   {
     capability: "Reproducible scoring (same input → same output)",
-    vulnrap: { mark: "yes", note: "Deterministic engines + versioned weights." },
+    vulnrap: {
+      mark: "yes",
+      note: "Deterministic engines + versioned weights.",
+    },
     llm: { mark: "no", note: "Probabilistic; drifts across runs." },
     plagiarism: { mark: "yes", note: "Deterministic match." },
     manual: { mark: "no", note: "Reviewer-to-reviewer variance." },
@@ -123,19 +142,11 @@ const COLUMNS = [
 function MarkIcon({ mark }: { mark: Mark }) {
   if (mark === "yes") {
     return (
-      <Check
-        className="w-4 h-4 text-green-400 shrink-0"
-        aria-label="Yes"
-      />
+      <Check className="w-4 h-4 text-green-400 shrink-0" aria-label="Yes" />
     );
   }
   if (mark === "no") {
-    return (
-      <X
-        className="w-4 h-4 text-red-400/80 shrink-0"
-        aria-label="No"
-      />
-    );
+    return <X className="w-4 h-4 text-red-400/80 shrink-0" aria-label="No" />;
   }
   return (
     <Minus
@@ -160,14 +171,14 @@ function Cell({
         "flex items-start gap-2 p-3 rounded-md border h-full",
         emphasis
           ? "border-primary/30 bg-primary/5"
-          : "border-border/40 bg-muted/10"
+          : "border-border/40 bg-muted/10",
       )}
     >
       <MarkIcon mark={mark} />
       <span
         className={cn(
           "text-[11px] leading-snug",
-          emphasis ? "text-foreground/90" : "text-muted-foreground"
+          emphasis ? "text-foreground/90" : "text-muted-foreground",
         )}
       >
         {note}
@@ -185,14 +196,14 @@ export default function CompareDetectors() {
           Compare detectors
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground max-w-3xl leading-relaxed">
-          A common question: <em>"Why not just use a generic AI-text
-          detector?"</em> The short answer is that vulnerability reports are
-          a domain, not a writing style. Generic detectors look at prose
-          shape; plagiarism checkers look at copied text; reviewers look at
-          everything but don't scale. VulnRap is purpose-built for the
-          vuln-report shape — CWE coherence, fabricated sanitizer traces,
-          hallucinated function signatures, and substance density — on top
-          of the generic AI-text signals.
+          A common question:{" "}
+          <em>"Why not just use a generic AI-text detector?"</em> The short
+          answer is that vulnerability reports are a domain, not a writing
+          style. Generic detectors look at prose shape; plagiarism checkers look
+          at copied text; reviewers look at everything but don't scale. VulnRap
+          is purpose-built for the vuln-report shape — CWE coherence, fabricated
+          sanitizer traces, hallucinated function signatures, and substance
+          density — on top of the generic AI-text signals.
         </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-4" />
       </div>
@@ -227,7 +238,9 @@ export default function CompareDetectors() {
                     key={col.key}
                     className={cn(
                       "text-[11px] uppercase tracking-wider font-bold px-1",
-                      col.emphasis ? "text-primary glow-text-sm" : "text-muted-foreground"
+                      col.emphasis
+                        ? "text-primary glow-text-sm"
+                        : "text-muted-foreground",
                     )}
                   >
                     {col.label}

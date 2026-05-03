@@ -12,10 +12,10 @@
 // suite stays offline so it runs on every CI sweep regardless of
 // DATABASE_URL availability.
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   bucketForTier,
   flipDirection,
@@ -102,8 +102,13 @@ describe("dispatchScoreStabilityAlertIfNeeded", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function summaryWith(date: string, total: number, flips: number): ScoreStabilitySummary {
-    const flipRate = total > 0 ? Math.round((flips / total) * 10000) / 10000 : 0;
+  function summaryWith(
+    date: string,
+    total: number,
+    flips: number,
+  ): ScoreStabilitySummary {
+    const flipRate =
+      total > 0 ? Math.round((flips / total) * 10000) / 10000 : 0;
     return {
       generatedAt: "2026-05-03T00:00:00.000Z",
       lookbackDays: 7,
@@ -138,7 +143,8 @@ describe("dispatchScoreStabilityAlertIfNeeded", () => {
     dispatch: ScoreStabilityDispatcher;
     calls: Array<{ url: string; payload: ScoreStabilityAlertPayload }>;
   } {
-    const calls: Array<{ url: string; payload: ScoreStabilityAlertPayload }> = [];
+    const calls: Array<{ url: string; payload: ScoreStabilityAlertPayload }> =
+      [];
     return {
       calls,
       dispatch: async (url, payload) => {
@@ -173,7 +179,9 @@ describe("dispatchScoreStabilityAlertIfNeeded", () => {
     expect(outcome.alreadyAlerted).toBe(false);
     expect(rec.calls).toHaveLength(1);
     expect(rec.calls[0]!.url).toBe("https://example.com/hook");
-    expect(rec.calls[0]!.payload.event).toBe("score_stability_flip_rate_exceeded");
+    expect(rec.calls[0]!.payload.event).toBe(
+      "score_stability_flip_rate_exceeded",
+    );
     expect(rec.calls[0]!.payload.date).toBe("2026-05-02");
     expect(rec.calls[0]!.payload.flipRate).toBeCloseTo(0.03, 4);
     expect(rec.calls[0]!.payload.alertThreshold).toBe(0.02);
@@ -263,7 +271,8 @@ describe("__testing.readFlipRateThreshold", () => {
     delete process.env.SCORE_STABILITY_FLIP_RATE_THRESHOLD;
   });
   afterEach(() => {
-    if (original === undefined) delete process.env.SCORE_STABILITY_FLIP_RATE_THRESHOLD;
+    if (original === undefined)
+      delete process.env.SCORE_STABILITY_FLIP_RATE_THRESHOLD;
     else process.env.SCORE_STABILITY_FLIP_RATE_THRESHOLD = original;
   });
 

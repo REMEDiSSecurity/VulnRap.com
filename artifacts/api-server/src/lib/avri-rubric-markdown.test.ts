@@ -61,7 +61,11 @@ describe("buildAvriRubricMarkdown", () => {
           { id: "heap_keyword", description: "Heap keyword cited", points: 10 },
         ],
         goldMisses: [
-          { id: "minimal_repro", description: "Minimal reproducer", points: 12 },
+          {
+            id: "minimal_repro",
+            description: "Minimal reproducer",
+            points: 12,
+          },
         ],
         absencePenalty: -25,
         absencePenalties: [
@@ -108,9 +112,7 @@ describe("buildAvriRubricMarkdown", () => {
           teClBroken: 0,
           isFake: true,
           reason: "headers are placeholders, no CRLF separators",
-          revokedGoldHits: [
-            { id: "te_cl_conflict", points: 12 },
-          ],
+          revokedGoldHits: [{ id: "te_cl_conflict", points: 12 }],
           penalty: -12,
         },
       },
@@ -220,9 +222,7 @@ describe("buildAvriRubricMarkdown", () => {
           isFake: true,
           reason:
             "Raw HTTP response is fabricated (no Date header, suspiciously clean JSON body)",
-          revokedGoldHits: [
-            { id: "request_response_diff", points: 12 },
-          ],
+          revokedGoldHits: [{ id: "request_response_diff", points: 12 }],
           penalty: -12,
           response: {
             responsesAnalyzed: 1,
@@ -235,9 +235,7 @@ describe("buildAvriRubricMarkdown", () => {
             isFake: true,
             reason:
               "Raw HTTP response is fabricated (no Date header, suspiciously clean JSON body)",
-            revokedGoldHits: [
-              { id: "request_response_diff", points: 12 },
-            ],
+            revokedGoldHits: [{ id: "request_response_diff", points: 12 }],
           },
         },
       },
@@ -294,7 +292,9 @@ describe("buildAvriRubricMarkdown", () => {
         },
       },
     });
-    expect(lines).toContain("  - **Response Plausibility** (2/2 response blocks flagged):");
+    expect(lines).toContain(
+      "  - **Response Plausibility** (2/2 response blocks flagged):",
+    );
     expect(lines).toContain("    - Missing Date header: 2");
     expect(lines).toContain("    - Missing incidental headers: 2");
     // No "Response gold signals revoked" line when the field is absent.
@@ -457,9 +457,7 @@ describe("buildAvriRubricMarkdown", () => {
       },
     });
     // No bullet of the form "  - <something> (<id>)" should be emitted.
-    expect(
-      lines.some((l) => /^  - .+\([a-z_]+\)$/.test(l)),
-    ).toBe(false);
+    expect(lines.some((l) => /^ {2}- .+\([a-z_]+\)$/.test(l))).toBe(false);
   });
 
   it("renders the Sprint 13B-2 / Task #303 structural-fabrication markers when crashTrace.hasStructuralFabrication is true (Task #317)", () => {
@@ -642,9 +640,7 @@ describe("buildAvriRubricMarkdown", () => {
         },
       },
     });
-    expect(
-      lines.some((l) => l.includes("Structural fabrication")),
-    ).toBe(false);
+    expect(lines.some((l) => l.includes("Structural fabrication"))).toBe(false);
   });
 
   it("only emits the Composite overrides block when there is something to show", () => {
@@ -681,9 +677,9 @@ describe("buildAvriRubricMarkdown", () => {
     };
     for (const docsLink of [undefined, "", "   ", null]) {
       const lines = buildAvriRubricMarkdown({ ...baseInput, docsLink });
-      expect(lines.some((l) => l.startsWith("_Learn more about the AVRI"))).toBe(
-        false,
-      );
+      expect(
+        lines.some((l) => l.startsWith("_Learn more about the AVRI")),
+      ).toBe(false);
     }
   });
 });

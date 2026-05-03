@@ -172,7 +172,9 @@ describe("SignalHeatmapRenderer", () => {
     );
     const stacked = screen
       .getByTestId("heatmap-pre")
-      .querySelector<HTMLElement>("[data-signal-types*='hallucination_structural_fabrication']");
+      .querySelector<HTMLElement>(
+        "[data-signal-types*='hallucination_structural_fabrication']",
+      );
     expect(stacked).not.toBeNull();
     const types = stacked!.getAttribute("data-signal-types")!.split(",");
     expect(types).toContain("hallucination_structural_fabrication");
@@ -224,7 +226,9 @@ describe("SignalHeatmapRenderer", () => {
     const sources = tinted.map((el) => el.getAttribute("data-source"));
     expect(sources).toContain("range");
     expect(sources).toContain("match");
-    const matchSpan = tinted.find((el) => el.getAttribute("data-source") === "match");
+    const matchSpan = tinted.find(
+      (el) => el.getAttribute("data-source") === "match",
+    );
     expect(matchSpan?.textContent).toBe("REPEAT_FRAME");
   });
 
@@ -268,14 +272,19 @@ describe("SignalHeatmapRenderer", () => {
         typeLabels={TYPE_LABELS}
       />,
     );
-    expect(screen.getByTestId("heatmap-legend-hallucination_structural_fabrication"))
-      .toBeTruthy();
+    expect(
+      screen.getByTestId("heatmap-legend-hallucination_structural_fabrication"),
+    ).toBeTruthy();
     expect(screen.getByTestId("heatmap-legend-ai_phrase")).toBeTruthy();
-    expect(screen.getByTestId("heatmap-legend-human_contractions")).toBeTruthy();
+    expect(
+      screen.getByTestId("heatmap-legend-human_contractions"),
+    ).toBeTruthy();
 
     const fakeSpan = screen
       .getByTestId("heatmap-pre")
-      .querySelector<HTMLElement>("[data-signal-types='hallucination_structural_fabrication']");
+      .querySelector<HTMLElement>(
+        "[data-signal-types='hallucination_structural_fabrication']",
+      );
     expect(fakeSpan).not.toBeNull();
     fireEvent.mouseEnter(fakeSpan!);
     const hoverCard = screen.getByTestId("heatmap-hover-card");

@@ -16,7 +16,9 @@ import {
   resetReportSubmitCooldown,
 } from "./report-submit-cooldown";
 
-function makeNotice(overrides: { url?: string; status?: number; retryAfterSeconds?: number } = {}) {
+function makeNotice(
+  overrides: { url?: string; status?: number; retryAfterSeconds?: number } = {},
+) {
   const retrySec = overrides.retryAfterSeconds ?? 5;
   return {
     method: "POST",

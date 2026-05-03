@@ -1,13 +1,14 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { ChevronDown, ChevronUp, Activity, AlertCircle, Download, ClipboardCopy } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+import {
+  ChevronDown,
+  ChevronUp,
+  Activity,
+  AlertCircle,
+  Download,
+  ClipboardCopy,
+} from "lucide-react";
 import {
   AVRI_OVERRIDE_LABELS,
   buildAvriRubricMarkdown,
@@ -18,6 +19,18 @@ import {
   type AvriEngine2Block,
   type AvriHandwavyCategory,
 } from "@workspace/avri-rubric";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 /** Task #611: target marker in the AVRI structural-fabrication block for the
  * Evidence Signals card to scroll/flash. The `nonce` lets a caller request
@@ -30,7 +43,11 @@ export interface AvriMarkerScrollTarget {
 
 // Task 62: keep in sync with VerificationMode in
 // artifacts/api-server/src/lib/engines/avri/families.ts.
-type VerificationModeUI = "SOURCE_CODE" | "ENDPOINT" | "MANUAL_ONLY" | "GENERIC";
+type VerificationModeUI =
+  | "SOURCE_CODE"
+  | "ENDPOINT"
+  | "MANUAL_ONLY"
+  | "GENERIC";
 
 const VERIFICATION_MODE_DESCRIPTION: Record<VerificationModeUI, string> = {
   SOURCE_CODE:
@@ -73,7 +90,9 @@ interface EngineResult {
   verdict: "GREEN" | "YELLOW" | "RED" | "GREY";
   confidence?: "HIGH" | "MEDIUM" | "LOW";
   triggeredIndicators?: TriggeredIndicator[];
-  signalBreakdown?: Record<string, unknown> & { perplexity?: PerplexityBreakdown };
+  signalBreakdown?: Record<string, unknown> & {
+    perplexity?: PerplexityBreakdown;
+  };
   note?: string;
 }
 
@@ -146,7 +165,12 @@ export interface DiagnosticsResponse {
   } | null;
   engines: {
     engines?: EngineResult[];
-    compositeBreakdown?: { weightedSum: number; totalWeight: number; beforeOverride: number; afterOverride: number };
+    compositeBreakdown?: {
+      weightedSum: number;
+      totalWeight: number;
+      beforeOverride: number;
+      afterOverride: number;
+    };
     warnings?: string[];
     engineCount?: number;
   } | null;
@@ -174,11 +198,23 @@ export interface DiagnosticsResponse {
    * returned for short / generic prose and is rendered as such.
    */
   agentFingerprint?: {
-    likelyAgent: "gpt4" | "claude" | "gemini" | "cursor-agent" | "replit-agent" | "human" | "unknown";
+    likelyAgent:
+      | "gpt4"
+      | "claude"
+      | "gemini"
+      | "cursor-agent"
+      | "replit-agent"
+      | "human"
+      | "unknown";
     likelyAgentLabel: string;
     confidence: number;
     scores: Record<string, number>;
-    matches: Array<{ id: string; description: string; weight: number; excerpt?: string }>;
+    matches: Array<{
+      id: string;
+      description: string;
+      weight: number;
+      excerpt?: string;
+    }>;
     features: {
       wordCount: number;
       sentenceCount: number;
@@ -241,7 +277,9 @@ const VERDICT_COLOR: Record<string, string> = {
   GREY: "text-muted-foreground border-muted-foreground/30",
 };
 
-export async function fetchDiagnostics(reportId: number): Promise<DiagnosticsResponse> {
+export async function fetchDiagnostics(
+  reportId: number,
+): Promise<DiagnosticsResponse> {
   const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
   const res = await fetch(`${baseUrl}/api/reports/${reportId}/diagnostics`);
   if (!res.ok) {
@@ -311,7 +349,9 @@ export function DiagnosticsPanel({
 
   const exportJSON = () => {
     if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -326,35 +366,55 @@ export function DiagnosticsPanel({
     const md = buildMarkdownSummary(data);
     try {
       await navigator.clipboard.writeText(md);
-      toast({ title: "Copied", description: "Diagnostics markdown summary copied to clipboard." });
+      toast({
+        title: "Copied",
+        description: "Diagnostics markdown summary copied to clipboard.",
+      });
     } catch {
-      toast({ title: "Copy failed", description: "Could not copy to clipboard.", variant: "destructive" });
+      toast({
+        title: "Copy failed",
+        description: "Could not copy to clipboard.",
+        variant: "destructive",
+      });
     }
   };
 
   const perplexity: PerplexityBreakdown | undefined =
-    data?.engines?.engines?.find(e => !!e.signalBreakdown?.perplexity)?.signalBreakdown?.perplexity;
+    data?.engines?.engines?.find((e) => !!e.signalBreakdown?.perplexity)
+      ?.signalBreakdown?.perplexity;
   const stages = data?.trace?.stages ?? [];
   const totalMs = data?.trace?.totalDurationMs ?? data?.durationMs ?? null;
-  const overrides = data?.composite?.overridesApplied ?? data?.trace?.composite?.overridesApplied ?? [];
-  const warnings = data?.engines?.warnings ?? data?.trace?.composite?.warnings ?? [];
+  const overrides =
+    data?.composite?.overridesApplied ??
+    data?.trace?.composite?.overridesApplied ??
+    [];
+  const warnings =
+    data?.engines?.warnings ?? data?.trace?.composite?.warnings ?? [];
   const compositeBreakdown = data?.engines?.compositeBreakdown;
   const signalsSummary = data?.trace?.signalsSummary ?? null;
 
   return (
     <Card className="glass-card rounded-xl">
-      <CardHeader className="cursor-pointer select-none" onClick={() => setExpanded(v => !v)}>
+      <CardHeader
+        className="cursor-pointer select-none"
+        onClick={() => setExpanded((v) => !v)}
+      >
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1 min-w-0">
             <CardTitle className="flex items-center gap-2 text-base">
               <Activity className="w-5 h-5 text-primary" />
               Why this score?
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-mono normal-case text-muted-foreground border-muted-foreground/30">
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 h-4 font-mono normal-case text-muted-foreground border-muted-foreground/30"
+              >
                 Diagnostics
               </Badge>
             </CardTitle>
             <CardDescription className="mt-1">
-              Pipeline timings, per-engine breakdown, applied overrides, perplexity signals, and the legacy slop-score mapping for triage auditing.
+              Pipeline timings, per-engine breakdown, applied overrides,
+              perplexity signals, and the legacy slop-score mapping for triage
+              auditing.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -367,7 +427,10 @@ export function DiagnosticsPanel({
                   className="gap-1.5 h-8"
                   disabled={!data}
                   aria-label="Export diagnostics JSON"
-                  onClick={(e) => { e.stopPropagation(); exportJSON(); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    exportJSON();
+                  }}
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span className="text-xs">Export JSON</span>
@@ -379,7 +442,10 @@ export function DiagnosticsPanel({
                   className="gap-1.5 h-8"
                   disabled={!data}
                   aria-label="Copy diagnostics markdown summary"
-                  onClick={(e) => { e.stopPropagation(); void copyMarkdown(); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void copyMarkdown();
+                  }}
                 >
                   <ClipboardCopy className="w-3.5 h-3.5" />
                   <span className="text-xs">Copy Markdown</span>
@@ -392,9 +458,16 @@ export function DiagnosticsPanel({
               size="sm"
               aria-expanded={expanded}
               aria-controls={`diagnostics-body-${reportId}`}
-              onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded((v) => !v);
+              }}
             >
-              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              {expanded ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
               <span className="ml-1 text-xs">{expanded ? "Hide" : "Show"}</span>
             </Button>
           </div>
@@ -404,13 +477,19 @@ export function DiagnosticsPanel({
       {expanded && (
         <CardContent id={`diagnostics-body-${reportId}`} className="space-y-5">
           {isLoading && (
-            <div className="text-xs text-muted-foreground font-mono">Loading diagnostics…</div>
+            <div className="text-xs text-muted-foreground font-mono">
+              Loading diagnostics…
+            </div>
           )}
 
           {isError && (
             <div className="flex items-start gap-2 text-xs text-red-400">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error instanceof Error ? error.message : "Failed to load diagnostics."}</span>
+              <span>
+                {error instanceof Error
+                  ? error.message
+                  : "Failed to load diagnostics."}
+              </span>
             </div>
           )}
 
@@ -418,13 +497,25 @@ export function DiagnosticsPanel({
             <>
               {data.composite && (
                 <section className="space-y-2">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Composite Breakdown</div>
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Composite Breakdown
+                  </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <Stat label="Composite" value={`${data.composite.score}`} sub={data.composite.label} />
+                    <Stat
+                      label="Composite"
+                      value={`${data.composite.score}`}
+                      sub={data.composite.label}
+                    />
                     {compositeBreakdown && (
                       <>
-                        <Stat label="Weighted Sum" value={compositeBreakdown.weightedSum.toFixed(2)} />
-                        <Stat label="Total Weight" value={compositeBreakdown.totalWeight.toFixed(2)} />
+                        <Stat
+                          label="Weighted Sum"
+                          value={compositeBreakdown.weightedSum.toFixed(2)}
+                        />
+                        <Stat
+                          label="Total Weight"
+                          value={compositeBreakdown.totalWeight.toFixed(2)}
+                        />
                         <Stat
                           label="Before → After Override"
                           value={`${compositeBreakdown.beforeOverride} → ${compositeBreakdown.afterOverride}`}
@@ -446,7 +537,9 @@ export function DiagnosticsPanel({
                 <>
                   <Separator className="bg-border/30" />
                   <section className="space-y-2">
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Per-Engine Scores</div>
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Per-Engine Scores
+                    </div>
                     <div className="space-y-1.5">
                       {data.engines.engines.map((eng) => (
                         <EngineRow key={eng.engine} eng={eng} />
@@ -474,11 +567,22 @@ export function DiagnosticsPanel({
                 <>
                   <Separator className="bg-border/30" />
                   <section className="space-y-2">
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Input Signals</div>
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Input Signals
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                      <Stat label="Word Count" value={`${signalsSummary.wordCount}`} />
-                      <Stat label="Code Blocks" value={`${signalsSummary.codeBlockCount}`} />
-                      <Stat label="Real URLs" value={`${signalsSummary.realUrlCount}`} />
+                      <Stat
+                        label="Word Count"
+                        value={`${signalsSummary.wordCount}`}
+                      />
+                      <Stat
+                        label="Code Blocks"
+                        value={`${signalsSummary.codeBlockCount}`}
+                      />
+                      <Stat
+                        label="Real URLs"
+                        value={`${signalsSummary.realUrlCount}`}
+                      />
                       <Stat
                         label="Completeness"
                         value={signalsSummary.completenessScore.toFixed(2)}
@@ -515,7 +619,9 @@ export function DiagnosticsPanel({
               {data.agentFingerprint && (
                 <>
                   <Separator className="bg-border/30" />
-                  <AgentFingerprintSection fingerprint={data.agentFingerprint} />
+                  <AgentFingerprintSection
+                    fingerprint={data.agentFingerprint}
+                  />
                 </>
               )}
 
@@ -525,20 +631,34 @@ export function DiagnosticsPanel({
                   <section className="space-y-2">
                     {overrides.length > 0 && (
                       <div>
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Overrides Applied</div>
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+                          Overrides Applied
+                        </div>
                         <ul className="space-y-0.5">
                           {overrides.map((rule, i) => (
-                            <li key={i} className="text-[11px] font-mono text-orange-400/90">· {rule}</li>
+                            <li
+                              key={i}
+                              className="text-[11px] font-mono text-orange-400/90"
+                            >
+                              · {rule}
+                            </li>
                           ))}
                         </ul>
                       </div>
                     )}
                     {warnings.length > 0 && (
                       <div>
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Warnings</div>
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+                          Warnings
+                        </div>
                         <ul className="space-y-0.5">
                           {warnings.map((w, i) => (
-                            <li key={i} className="text-[11px] font-mono text-yellow-400/90">· {w}</li>
+                            <li
+                              key={i}
+                              className="text-[11px] font-mono text-yellow-400/90"
+                            >
+                              · {w}
+                            </li>
                           ))}
                         </ul>
                       </div>
@@ -551,26 +671,49 @@ export function DiagnosticsPanel({
                 <>
                   <Separator className="bg-border/30" />
                   <section className="space-y-2">
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Perplexity Signals (Engine 1)</div>
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Perplexity Signals (Engine 1)
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {typeof perplexity.bigramEntropy === "number" && (
-                        <Stat label="Bigram Entropy" value={perplexity.bigramEntropy.toFixed(3)} sub="bits (lower = more AI-like)" />
+                        <Stat
+                          label="Bigram Entropy"
+                          value={perplexity.bigramEntropy.toFixed(3)}
+                          sub="bits (lower = more AI-like)"
+                        />
                       )}
                       {typeof perplexity.functionWordRate === "number" && (
-                        <Stat label="Function-Word Rate" value={perplexity.functionWordRate.toFixed(2)} sub="per 1k tokens" />
+                        <Stat
+                          label="Function-Word Rate"
+                          value={perplexity.functionWordRate.toFixed(2)}
+                          sub="per 1k tokens"
+                        />
                       )}
                       {typeof perplexity.syntaxValidityScore === "number" && (
-                        <Stat label="Syntax Validity" value={perplexity.syntaxValidityScore.toFixed(2)} />
+                        <Stat
+                          label="Syntax Validity"
+                          value={perplexity.syntaxValidityScore.toFixed(2)}
+                        />
                       )}
                       {typeof perplexity.combinedScore === "number" && (
-                        <Stat label="Combined AI-ness" value={perplexity.combinedScore.toFixed(1)} />
+                        <Stat
+                          label="Combined AI-ness"
+                          value={perplexity.combinedScore.toFixed(1)}
+                        />
                       )}
                     </div>
-                    {(typeof perplexity.rawEngine1Score === "number" || perplexity.rawEngine1Verdict) && (
+                    {(typeof perplexity.rawEngine1Score === "number" ||
+                      perplexity.rawEngine1Verdict) && (
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        Raw Engine 1: <span className="font-mono">{perplexity.rawEngine1Score ?? "—"}</span>
-                        {perplexity.rawEngine1Verdict ? ` (${perplexity.rawEngine1Verdict})` : ""} — blended with
-                        the perplexity signals above to produce the final Engine 1 score.
+                        Raw Engine 1:{" "}
+                        <span className="font-mono">
+                          {perplexity.rawEngine1Score ?? "—"}
+                        </span>
+                        {perplexity.rawEngine1Verdict
+                          ? ` (${perplexity.rawEngine1Verdict})`
+                          : ""}{" "}
+                        — blended with the perplexity signals above to produce
+                        the final Engine 1 score.
                       </p>
                     )}
                   </section>
@@ -580,25 +723,40 @@ export function DiagnosticsPanel({
               <Separator className="bg-border/30" />
               <section className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Pipeline Timings</div>
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Pipeline Timings
+                  </div>
                   {totalMs != null && (
-                    <span className="text-[11px] font-mono text-muted-foreground">total {Math.round(totalMs)} ms</span>
+                    <span className="text-[11px] font-mono text-muted-foreground">
+                      total {Math.round(totalMs)} ms
+                    </span>
                   )}
                 </div>
                 {stages.length > 0 ? (
                   <div className="space-y-1">
                     {stages.map((s, i) => {
-                      const max = Math.max(1, ...stages.map(x => x.durationMs));
+                      const max = Math.max(
+                        1,
+                        ...stages.map((x) => x.durationMs),
+                      );
                       const pct = Math.min(100, (s.durationMs / max) * 100);
                       return (
-                        <div key={`${s.stage}-${i}`} className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                        <div
+                          key={`${s.stage}-${i}`}
+                          className="grid grid-cols-[1fr_auto] gap-2 items-center"
+                        >
                           <div>
                             <div className="flex items-center justify-between text-[11px] font-mono">
                               <span className="truncate">{s.stage}</span>
-                              <span className="text-muted-foreground">{s.durationMs} ms</span>
+                              <span className="text-muted-foreground">
+                                {s.durationMs} ms
+                              </span>
                             </div>
                             <div className="h-1 bg-muted/30 rounded overflow-hidden">
-                              <div className="h-full bg-primary/60" style={{ width: `${pct}%` }} />
+                              <div
+                                className="h-full bg-primary/60"
+                                style={{ width: `${pct}%` }}
+                              />
                             </div>
                           </div>
                         </div>
@@ -606,10 +764,14 @@ export function DiagnosticsPanel({
                     })}
                   </div>
                 ) : (
-                  <div className="text-[11px] text-muted-foreground">No stage timings recorded for this report.</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    No stage timings recorded for this report.
+                  </div>
                 )}
                 {data.correlationId && (
-                  <div className="text-[10px] font-mono text-muted-foreground pt-1">correlation: {data.correlationId}</div>
+                  <div className="text-[10px] font-mono text-muted-foreground pt-1">
+                    correlation: {data.correlationId}
+                  </div>
                 )}
               </section>
 
@@ -617,16 +779,29 @@ export function DiagnosticsPanel({
                 <>
                   <Separator className="bg-border/30" />
                   <section className="space-y-2">
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Legacy Slop-Score Mapping</div>
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Legacy Slop-Score Mapping
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      <Stat label="Legacy Slop Score" value={`${data.legacyMapping.slopScore}`} sub="0 = clean · 100 = pure slop" />
-                      <Stat label="Display Mode" value={data.legacyMapping.displayMode} />
+                      <Stat
+                        label="Legacy Slop Score"
+                        value={`${data.legacyMapping.slopScore}`}
+                        sub="0 = clean · 100 = pure slop"
+                      />
+                      <Stat
+                        label="Display Mode"
+                        value={data.legacyMapping.displayMode}
+                      />
                       <Stat
                         label="VULNRAP_USE_NEW_COMPOSITE"
-                        value={String(data.featureFlags?.VULNRAP_USE_NEW_COMPOSITE ?? "—")}
+                        value={String(
+                          data.featureFlags?.VULNRAP_USE_NEW_COMPOSITE ?? "—",
+                        )}
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">{data.legacyMapping.note}</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      {data.legacyMapping.note}
+                    </p>
                   </section>
                 </>
               )}
@@ -643,8 +818,7 @@ export function DiagnosticsPanel({
                     data-testid="diagnostics-engine-versions"
                     className="text-[10px] font-mono text-muted-foreground leading-relaxed"
                   >
-                    engines:{" "}
-                    linguistic v{data.engineVersions.linguistic}
+                    engines: linguistic v{data.engineVersions.linguistic}
                     {" · "}substance v{data.engineVersions.substance}
                     {" · "}cwe v{data.engineVersions.cwe}
                     {" · "}avri v{data.engineVersions.avri}
@@ -678,7 +852,7 @@ const HANDWAVY_CATEGORY_HELP: Record<AvriHandwavyCategory | "other", string> = {
   absence:
     "Reporter explicitly admits they have no runnable reproducer, PoC, or enumeration — the bug is asserted, not observed.",
   hedging:
-    "Generic \"may / appears / likely\" language that signals zero direct observation of the claimed behavior.",
+    'Generic "may / appears / likely" language that signals zero direct observation of the claimed behavior.',
   buzzword:
     "Marketing-style framings (zero-trust, modern threat landscape, defense-in-depth) with no project-specific specifics — likely AI-generated prose.",
   other:
@@ -846,7 +1020,6 @@ function AvriFamilySection({
     if (flashMarkerId === null) return;
     const t = window.setTimeout(() => setFlashMarkerId(null), 1600);
     return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flashMarkerId, avriMarkerScrollTarget?.nonce]);
 
   // Nothing to show if AVRI didn't run *and* we don't have a cached family on
@@ -876,8 +1049,9 @@ function AvriFamilySection({
               </Badge>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Cached family from <code className="text-primary/80">reports.avri_family</code>.
-              The full AVRI rubric breakdown isn&apos;t available for this report
+              Cached family from{" "}
+              <code className="text-primary/80">reports.avri_family</code>. The
+              full AVRI rubric breakdown isn&apos;t available for this report
               (analyzed before AVRI scoring was enabled).
             </p>
           </section>
@@ -887,7 +1061,12 @@ function AvriFamilySection({
     return null;
   }
 
-  const familyName = avri?.familyName ?? e2Avri?.familyName ?? avri?.family ?? e2Avri?.family ?? "—";
+  const familyName =
+    avri?.familyName ??
+    e2Avri?.familyName ??
+    avri?.family ??
+    e2Avri?.family ??
+    "—";
   const familyId = avri?.family ?? e2Avri?.family ?? "—";
   const isFlat = familyId === "FLAT";
   const goldHits = e2Avri?.goldHits ?? [];
@@ -895,7 +1074,8 @@ function AvriFamilySection({
   const absencePenalties = e2Avri?.absencePenalties ?? [];
   const contradictions = e2Avri?.contradictions ?? [];
   const goldHitCount = e2Avri?.goldHitCount ?? avri?.goldHitCount ?? 0;
-  const goldTotalCount = e2Avri?.goldTotalCount ?? goldHits.length + goldMisses.length;
+  const goldTotalCount =
+    e2Avri?.goldTotalCount ?? goldHits.length + goldMisses.length;
   const crashTrace = e2Avri?.crashTrace ?? null;
   const rawHttp = e2Avri?.rawHttp ?? null;
 
@@ -910,7 +1090,11 @@ function AvriFamilySection({
   // produced the downgrade so reviewers see "race trace" / "tool trace"
   // instead of "crash trace" on a race report.
   const traceKindLabel =
-    familyId === "RACE_CONCURRENCY" ? "race trace" : familyId === "MEMORY_CORRUPTION" ? "crash trace" : "tool trace";
+    familyId === "RACE_CONCURRENCY"
+      ? "race trace"
+      : familyId === "MEMORY_CORRUPTION"
+        ? "crash trace"
+        : "tool trace";
   const matchingOverrides = overrides
     .map((rule) => {
       const meta = AVRI_OVERRIDE_LABELS.find((m) => rule.startsWith(m.token));
@@ -918,7 +1102,10 @@ function AvriFamilySection({
       const tone = AVRI_OVERRIDE_TONES[meta.token] ?? "text-orange-400";
       return { rule, token: meta.token, label: meta.label, tone };
     })
-    .filter((x): x is { rule: string; token: string; label: string; tone: string } => x !== null);
+    .filter(
+      (x): x is { rule: string; token: string; label: string; tone: string } =>
+        x !== null,
+    );
 
   return (
     <>
@@ -952,21 +1139,25 @@ function AvriFamilySection({
         {avri?.classification?.reason && (
           <p className="text-[11px] text-muted-foreground leading-relaxed">
             {avri.classification.reason}
-            {avri.classification.technology ? ` · stack: ${avri.classification.technology}` : ""}
+            {avri.classification.technology
+              ? ` · stack: ${avri.classification.technology}`
+              : ""}
           </p>
         )}
 
         {isFlat ? (
           <div className="space-y-2">
             <div className="text-[11px] text-muted-foreground">
-              No specific CWE family detected — generic substance scoring used (no family rubric applied).
+              No specific CWE family detected — generic substance scoring used
+              (no family rubric applied).
             </div>
             {absencePenalties.length > 0 && (
               <div className="space-y-2">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
                   Hand-wavy Phrases Triggering Slop Haircut
                   <span className="ml-1 text-muted-foreground/70 normal-case">
-                    (applied haircut: {e2Avri?.absencePenalty ?? 0}; per-hit markers shown, total capped at −24)
+                    (applied haircut: {e2Avri?.absencePenalty ?? 0}; per-hit
+                    markers shown, total capped at −24)
                   </span>
                 </div>
                 {(() => {
@@ -975,9 +1166,13 @@ function AvriFamilySection({
                   // hedging / buzzword) rather than one flat scroll. Markers
                   // missing a category (e.g. older cached payloads) fall back
                   // into an "Other" bucket rendered last.
-                  const groups = new Map<AvriHandwavyCategory | "other", typeof absencePenalties>();
+                  const groups = new Map<
+                    AvriHandwavyCategory | "other",
+                    typeof absencePenalties
+                  >();
                   for (const a of absencePenalties) {
-                    const key: AvriHandwavyCategory | "other" = a.flatHandwavyCategory ?? "other";
+                    const key: AvriHandwavyCategory | "other" =
+                      a.flatHandwavyCategory ?? "other";
                     const arr = groups.get(key) ?? [];
                     arr.push(a);
                     groups.set(key, arr);
@@ -991,15 +1186,22 @@ function AvriFamilySection({
                       {orderedKeys.map((key) => {
                         const items = groups.get(key) ?? [];
                         const label =
-                          key === "other" ? "Other" : HANDWAVY_CATEGORY_LABELS[key];
-                        const subtotal = items.reduce((s, a) => s + a.points, 0);
+                          key === "other"
+                            ? "Other"
+                            : HANDWAVY_CATEGORY_LABELS[key];
+                        const subtotal = items.reduce(
+                          (s, a) => s + a.points,
+                          0,
+                        );
                         const help = HANDWAVY_CATEGORY_HELP[key];
                         return (
                           <div key={key}>
                             <div className="text-[10px] uppercase tracking-wide text-muted-foreground/80 mb-0.5 flex items-baseline gap-1">
                               <span>{label}</span>
                               <span className="text-muted-foreground/60 normal-case">
-                                ({items.length} phrase{items.length === 1 ? "" : "s"}, −{subtotal} raw)
+                                ({items.length} phrase
+                                {items.length === 1 ? "" : "s"}, −{subtotal}{" "}
+                                raw)
                               </span>
                             </div>
                             {help && (
@@ -1014,8 +1216,12 @@ function AvriFamilySection({
                                   className="text-[11px] font-mono text-orange-400/90 flex items-baseline gap-1"
                                 >
                                   <span>−{a.points}</span>
-                                  <span className="text-foreground/80">{a.description}</span>
-                                  <span className="text-muted-foreground">({a.id})</span>
+                                  <span className="text-foreground/80">
+                                    {a.description}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    ({a.id})
+                                  </span>
                                 </li>
                               ))}
                             </ul>
@@ -1031,8 +1237,16 @@ function AvriFamilySection({
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <Stat label="Gold Signals" value={`${goldHitCount}/${goldTotalCount}`} sub="hit / expected" />
-              <Stat label="Base Score" value={`${e2Avri?.baseScore ?? "—"}`} sub="from gold signals" />
+              <Stat
+                label="Gold Signals"
+                value={`${goldHitCount}/${goldTotalCount}`}
+                sub="hit / expected"
+              />
+              <Stat
+                label="Base Score"
+                value={`${e2Avri?.baseScore ?? "—"}`}
+                sub="from gold signals"
+              />
               <Stat
                 label="Absence Penalty"
                 value={`${e2Avri?.absencePenalty ?? 0}`}
@@ -1041,7 +1255,11 @@ function AvriFamilySection({
               <Stat
                 label="Contradiction Penalty"
                 value={`${e2Avri?.contradictionPenalty ?? 0}`}
-                sub={contradictions.length > 0 ? `${contradictions.length} phrase(s)` : "none"}
+                sub={
+                  contradictions.length > 0
+                    ? `${contradictions.length} phrase(s)`
+                    : "none"
+                }
               />
             </div>
 
@@ -1054,10 +1272,17 @@ function AvriFamilySection({
                     </div>
                     <ul className="space-y-0.5">
                       {goldHits.map((g) => (
-                        <li key={g.id} className="text-[11px] font-mono text-green-400/90 flex items-baseline gap-1">
+                        <li
+                          key={g.id}
+                          className="text-[11px] font-mono text-green-400/90 flex items-baseline gap-1"
+                        >
                           <span>+{g.points}</span>
-                          <span className="text-foreground/80">{g.description}</span>
-                          <span className="text-muted-foreground">({g.id})</span>
+                          <span className="text-foreground/80">
+                            {g.description}
+                          </span>
+                          <span className="text-muted-foreground">
+                            ({g.id})
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -1070,7 +1295,10 @@ function AvriFamilySection({
                     </div>
                     <ul className="space-y-0.5">
                       {goldMisses.map((g) => (
-                        <li key={g.id} className="text-[11px] font-mono text-muted-foreground flex items-baseline gap-1">
+                        <li
+                          key={g.id}
+                          className="text-[11px] font-mono text-muted-foreground flex items-baseline gap-1"
+                        >
                           <span className="text-red-400/80">−{g.points}</span>
                           <span>{g.description}</span>
                           <span>({g.id})</span>
@@ -1089,9 +1317,14 @@ function AvriFamilySection({
                 </div>
                 <ul className="space-y-0.5">
                   {absencePenalties.map((a) => (
-                    <li key={a.id} className="text-[11px] font-mono text-orange-400/90 flex items-baseline gap-1">
+                    <li
+                      key={a.id}
+                      className="text-[11px] font-mono text-orange-400/90 flex items-baseline gap-1"
+                    >
                       <span>−{a.points}</span>
-                      <span className="text-foreground/80">{a.description}</span>
+                      <span className="text-foreground/80">
+                        {a.description}
+                      </span>
                       <span className="text-muted-foreground">({a.id})</span>
                     </li>
                   ))}
@@ -1138,8 +1371,12 @@ function AvriFamilySection({
                 )}
                 <div className="flex flex-wrap gap-3 text-[11px] font-mono text-muted-foreground">
                   <span>frames: {crashTrace.framesAnalyzed}</span>
-                  <span className="text-green-400/80">good: {crashTrace.goodFrames}</span>
-                  <span className="text-red-400/80">placeholder: {crashTrace.placeholderFrames}</span>
+                  <span className="text-green-400/80">
+                    good: {crashTrace.goodFrames}
+                  </span>
+                  <span className="text-red-400/80">
+                    placeholder: {crashTrace.placeholderFrames}
+                  </span>
                 </div>
                 {crashTrace.revokedGoldHits.length > 0 && (
                   <div>
@@ -1200,9 +1437,9 @@ function AvriFamilySection({
                   </div>
                   <p className="text-[11px] text-red-300/90 leading-relaxed">
                     {crashTrace.structuralMarkers!.length} structural marker
-                    {crashTrace.structuralMarkers!.length === 1 ? "" : "s"} fired
-                    against this {traceKindLabel}; real sanitizer output never
-                    hits this combination.
+                    {crashTrace.structuralMarkers!.length === 1 ? "" : "s"}{" "}
+                    fired against this {traceKindLabel}; real sanitizer output
+                    never hits this combination.
                   </p>
                   <ul className="space-y-1.5">
                     {crashTrace.structuralMarkers!.map((m) => {
@@ -1318,14 +1555,28 @@ function AvriFamilySection({
                 <div className="flex flex-wrap gap-3 text-[11px] font-mono text-muted-foreground">
                   <span>requests: {rawHttp.requestsAnalyzed}</span>
                   <span className="text-green-400/80">
-                    headers: {Math.max(0, rawHttp.totalHeaders - rawHttp.placeholderHeaders)}/{rawHttp.totalHeaders} good
+                    headers:{" "}
+                    {Math.max(
+                      0,
+                      rawHttp.totalHeaders - rawHttp.placeholderHeaders,
+                    )}
+                    /{rawHttp.totalHeaders} good
                   </span>
-                  <span className="text-red-400/80">placeholder: {rawHttp.placeholderHeaders}</span>
-                  <span className={rawHttp.crlfPresent ? "text-green-400/80" : "text-red-400/80"}>
+                  <span className="text-red-400/80">
+                    placeholder: {rawHttp.placeholderHeaders}
+                  </span>
+                  <span
+                    className={
+                      rawHttp.crlfPresent
+                        ? "text-green-400/80"
+                        : "text-red-400/80"
+                    }
+                  >
                     CRLF: {rawHttp.crlfPresent ? "yes" : "no"}
                   </span>
                   <span className="text-red-400/80">
-                    TE/CL conflicts: {rawHttp.teClConflicts} (broken {rawHttp.teClBroken})
+                    TE/CL conflicts: {rawHttp.teClConflicts} (broken{" "}
+                    {rawHttp.teClBroken})
                   </span>
                 </div>
                 {/*
@@ -1379,7 +1630,9 @@ function AvriFamilySection({
                         FAKE_RAW_HTTP_RESPONSE
                       </Badge>
                       <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {rawHttp.response.responsesFlagged}/{rawHttp.response.responsesAnalyzed} response block(s) flagged
+                        {rawHttp.response.responsesFlagged}/
+                        {rawHttp.response.responsesAnalyzed} response block(s)
+                        flagged
                       </span>
                     </div>
                     {rawHttp.response.reason && (
@@ -1388,17 +1641,44 @@ function AvriFamilySection({
                       </p>
                     )}
                     <div className="flex flex-wrap gap-3 text-[11px] font-mono text-muted-foreground">
-                      <span className={rawHttp.response.responsesMissingDate > 0 ? "text-red-400/80" : ""}>
+                      <span
+                        className={
+                          rawHttp.response.responsesMissingDate > 0
+                            ? "text-red-400/80"
+                            : ""
+                        }
+                      >
                         missing Date: {rawHttp.response.responsesMissingDate}
                       </span>
-                      <span className={rawHttp.response.responsesMissingServer > 0 ? "text-red-400/80" : ""}>
-                        missing Server: {rawHttp.response.responsesMissingServer}
+                      <span
+                        className={
+                          rawHttp.response.responsesMissingServer > 0
+                            ? "text-red-400/80"
+                            : ""
+                        }
+                      >
+                        missing Server:{" "}
+                        {rawHttp.response.responsesMissingServer}
                       </span>
-                      <span className={rawHttp.response.responsesWithSuspiciousJsonBody > 0 ? "text-red-400/80" : ""}>
-                        suspicious JSON: {rawHttp.response.responsesWithSuspiciousJsonBody}
+                      <span
+                        className={
+                          rawHttp.response.responsesWithSuspiciousJsonBody > 0
+                            ? "text-red-400/80"
+                            : ""
+                        }
+                      >
+                        suspicious JSON:{" "}
+                        {rawHttp.response.responsesWithSuspiciousJsonBody}
                       </span>
-                      <span className={rawHttp.response.responsesMissingIncidentals > 0 ? "text-red-400/80" : ""}>
-                        no incidentals: {rawHttp.response.responsesMissingIncidentals}
+                      <span
+                        className={
+                          rawHttp.response.responsesMissingIncidentals > 0
+                            ? "text-red-400/80"
+                            : ""
+                        }
+                      >
+                        no incidentals:{" "}
+                        {rawHttp.response.responsesMissingIncidentals}
                       </span>
                     </div>
                     {/*
@@ -1522,9 +1802,9 @@ function AvriFamilySection({
             <p className="text-[11px] text-amber-300/90 leading-relaxed">
               {aiSelfDisclosure.matches.length} phrase
               {aiSelfDisclosure.matches.length === 1 ? "" : "s"} openly
-              attributing this report to an AI assistant fired against the
-              body. The penalty is bounded — see the engine note for the
-              applied amount.
+              attributing this report to an AI assistant fired against the body.
+              The penalty is bounded — see the engine note for the applied
+              amount.
             </p>
             <ul className="space-y-1.5">
               {aiSelfDisclosure.matches.map((m, i) => (
@@ -1555,22 +1835,33 @@ function AvriFamilySection({
                   <span className="text-muted-foreground"> — {o.rule}</span>
                 </li>
               ))}
-              {avri && avri.velocityPenalty < 0 && !matchingOverrides.some((o) => o.token === "AVRI_VELOCITY") && (
-                <li className="text-[11px] font-mono text-orange-400">
-                  · Submission-velocity penalty applied: {avri.velocityPenalty}
-                </li>
-              )}
-              {avri && avri.templatePenalty < 0 && !matchingOverrides.some((o) => o.token === "AVRI_TEMPLATE_CAMPAIGN") && (
-                <li className="text-[11px] font-mono text-orange-400">
-                  · Template-fingerprint penalty applied: {avri.templatePenalty}
-                </li>
-              )}
+              {avri &&
+                avri.velocityPenalty < 0 &&
+                !matchingOverrides.some((o) => o.token === "AVRI_VELOCITY") && (
+                  <li className="text-[11px] font-mono text-orange-400">
+                    · Submission-velocity penalty applied:{" "}
+                    {avri.velocityPenalty}
+                  </li>
+                )}
+              {avri &&
+                avri.templatePenalty < 0 &&
+                !matchingOverrides.some(
+                  (o) => o.token === "AVRI_TEMPLATE_CAMPAIGN",
+                ) && (
+                  <li className="text-[11px] font-mono text-orange-400">
+                    · Template-fingerprint penalty applied:{" "}
+                    {avri.templatePenalty}
+                  </li>
+                )}
             </ul>
-            {avri && typeof avri.rawCompositeBeforeBehavioralPenalties === "number" && (
-              <p className="text-[10px] text-muted-foreground mt-1 font-mono">
-                composite before behavioural penalties: {avri.rawCompositeBeforeBehavioralPenalties}
-              </p>
-            )}
+            {avri &&
+              typeof avri.rawCompositeBeforeBehavioralPenalties ===
+                "number" && (
+                <p className="text-[10px] text-muted-foreground mt-1 font-mono">
+                  composite before behavioural penalties:{" "}
+                  {avri.rawCompositeBeforeBehavioralPenalties}
+                </p>
+              )}
           </div>
         )}
       </section>
@@ -1662,9 +1953,10 @@ function AuditTelemetrySection({ audit }: { audit: AuditTelemetryBlock }) {
   // at /api/test/run?withLlm=1&runs=N (Task #445) is what reviewers
   // should consult to see the across-run distribution of those
   // variable numbers — this per-report panel only shows one draw.
-  const stabilityNote = validityFusion.llmRaw === null
-    ? "LLM gate + heuristic numbers are stable across re-renders (no LLM draw)."
-    : "LLM gate + heuristic numbers are stable across re-renders. LLM-derived numbers (Δ, llmRaw, blended, finalApplied, and the floor verdict) come from a single LLM draw and may differ between runs on borderline scores.";
+  const stabilityNote =
+    validityFusion.llmRaw === null
+      ? "LLM gate + heuristic numbers are stable across re-renders (no LLM draw)."
+      : "LLM gate + heuristic numbers are stable across re-renders. LLM-derived numbers (Δ, llmRaw, blended, finalApplied, and the floor verdict) come from a single LLM draw and may differ between runs on borderline scores.";
 
   return (
     <section className="space-y-2" data-testid="audit-telemetry-section">
@@ -1679,7 +1971,10 @@ function AuditTelemetrySection({ audit }: { audit: AuditTelemetryBlock }) {
           >
             LLM gate
           </Badge>
-          <span className="text-foreground/90">{gateSummary}{userOverride}</span>
+          <span className="text-foreground/90">
+            {gateSummary}
+            {userOverride}
+          </span>
         </div>
         <div className="flex flex-wrap items-baseline gap-2 text-[11px] font-mono">
           <Badge
@@ -1704,19 +1999,33 @@ function AuditTelemetrySection({ audit }: { audit: AuditTelemetryBlock }) {
 // v3.6.0 §9: Surface Engine 2 evidence-type signals (multipliers) and active
 // verification source breakdown when present in signalBreakdown.
 function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
-  const e2 = engines.find(e => /Technical Substance/i.test(e.engine));
+  const e2 = engines.find((e) => /Technical Substance/i.test(e.engine));
   const sb = (e2?.signalBreakdown ?? {}) as Record<string, unknown>;
   const ev = sb.evidenceStrength as
-    | { bonus?: number; strongCount?: number; signalCount?: number; signals?: Array<{ type: string; weight?: number; multiplier?: number }> }
+    | {
+        bonus?: number;
+        strongCount?: number;
+        signalCount?: number;
+        signals?: Array<{ type: string; weight?: number; multiplier?: number }>;
+      }
     | undefined;
   const verifyBreakdown = sb.verificationSources as
-    | { referenced?: number; fallback?: number; verified?: number; total?: number }
+    | {
+        referenced?: number;
+        fallback?: number;
+        verified?: number;
+        total?: number;
+      }
     | undefined;
   // Task 62: routing decision recorded by performActiveVerification — which
   // verification mode ran (SOURCE_CODE / ENDPOINT / MANUAL_ONLY / GENERIC)
   // and the AVRI family that drove it.
   const activeVerif = sb.activeVerification as
-    | { mode?: VerificationModeUI; familyName?: string | null; skipReason?: string | null }
+    | {
+        mode?: VerificationModeUI;
+        familyName?: string | null;
+        skipReason?: string | null;
+      }
     | undefined;
   if (!ev && !verifyBreakdown && !activeVerif) return null;
   return (
@@ -1729,7 +2038,9 @@ function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
         {activeVerif?.mode && (
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
-              <span className="text-muted-foreground">Active verification mode:</span>
+              <span className="text-muted-foreground">
+                Active verification mode:
+              </span>
               <Badge
                 variant="outline"
                 className={`text-[10px] px-1.5 py-0 h-5 font-mono ${VERIFICATION_MODE_TONE[activeVerif.mode]}`}
@@ -1737,7 +2048,9 @@ function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
                 {activeVerif.mode}
               </Badge>
               {activeVerif.familyName && (
-                <span className="text-muted-foreground">— {activeVerif.familyName}</span>
+                <span className="text-muted-foreground">
+                  — {activeVerif.familyName}
+                </span>
               )}
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -1753,7 +2066,9 @@ function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
         {ev && (
           <div className="space-y-1.5">
             <div className="flex items-center gap-3 text-[11px] font-mono">
-              <span>bonus: <span className="font-bold">+{ev.bonus ?? 0}</span></span>
+              <span>
+                bonus: <span className="font-bold">+{ev.bonus ?? 0}</span>
+              </span>
               <span className="text-muted-foreground">
                 strong: {ev.strongCount ?? 0}/{ev.signalCount ?? 0}
               </span>
@@ -1767,7 +2082,9 @@ function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
                     className="text-[10px] px-1.5 py-0 h-5 font-mono"
                   >
                     {s.type}
-                    {typeof s.multiplier === "number" ? ` ×${s.multiplier}` : ""}
+                    {typeof s.multiplier === "number"
+                      ? ` ×${s.multiplier}`
+                      : ""}
                   </Badge>
                 ))}
               </div>
@@ -1776,7 +2093,8 @@ function EvidenceStrengthSection({ engines }: { engines: EngineResult[] }) {
         )}
         {verifyBreakdown && (
           <div className="text-[11px] font-mono text-muted-foreground">
-            verified {verifyBreakdown.verified ?? 0}/{verifyBreakdown.total ?? 0}
+            verified {verifyBreakdown.verified ?? 0}/
+            {verifyBreakdown.total ?? 0}
             {" · "}referenced: {verifyBreakdown.referenced ?? 0}
             {" · "}search-fallback: {verifyBreakdown.fallback ?? 0}
           </div>
@@ -1796,7 +2114,9 @@ type GoldSignalBonusBlock = {
   signals?: Array<{ id: string; weight: number }>;
 };
 
-function readGoldSignalBonus(engines: EngineResult[]): GoldSignalBonusBlock | null {
+function readGoldSignalBonus(
+  engines: EngineResult[],
+): GoldSignalBonusBlock | null {
   const e2 = engines.find((e) => /Technical Substance/i.test(e.engine));
   const sb = (e2?.signalBreakdown ?? {}) as Record<string, unknown>;
   const gb = sb.goldSignalBonus as GoldSignalBonusBlock | undefined;
@@ -1825,7 +2145,8 @@ function GoldSignalBonusSection({ engines }: { engines: EngineResult[] }) {
         </div>
         <div className="flex flex-wrap items-baseline gap-3 text-[11px] font-mono">
           <span>
-            applied: <span className="font-bold text-green-400/90">+{bonus}</span>
+            applied:{" "}
+            <span className="font-bold text-green-400/90">+{bonus}</span>
           </span>
           {capped ? (
             <span className="text-orange-400/90">
@@ -1884,7 +2205,8 @@ function buildAvriDocsLink(): string {
 export function buildMarkdownSummary(data: DiagnosticsResponse): string {
   const lines: string[] = [];
   lines.push(`# VulnRap Diagnostics — Report ${data.reportId}`);
-  if (data.correlationId) lines.push(`_Correlation: \`${data.correlationId}\`_`);
+  if (data.correlationId)
+    lines.push(`_Correlation: \`${data.correlationId}\`_`);
   lines.push("");
 
   const totalMs = data.trace?.totalDurationMs ?? data.durationMs;
@@ -1895,11 +2217,17 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
 
   if (data.composite) {
     lines.push("## Composite");
-    lines.push(`- Score: **${data.composite.score}** (${data.composite.label})`);
+    lines.push(
+      `- Score: **${data.composite.score}** (${data.composite.label})`,
+    );
     const cb = data.engines?.compositeBreakdown;
     if (cb) {
-      lines.push(`- Weighted Sum: ${cb.weightedSum.toFixed(2)} / Total Weight: ${cb.totalWeight.toFixed(2)}`);
-      lines.push(`- Before → After Override: ${cb.beforeOverride} → ${cb.afterOverride}`);
+      lines.push(
+        `- Weighted Sum: ${cb.weightedSum.toFixed(2)} / Total Weight: ${cb.totalWeight.toFixed(2)}`,
+      );
+      lines.push(
+        `- Before → After Override: ${cb.beforeOverride} → ${cb.afterOverride}`,
+      );
     }
     lines.push("");
   }
@@ -1910,7 +2238,9 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
     lines.push("| Engine | Score | Verdict | Confidence |");
     lines.push("| --- | --- | --- | --- |");
     for (const e of engines) {
-      lines.push(`| ${e.engine} | ${e.score} | ${e.verdict} | ${e.confidence ?? "—"} |`);
+      lines.push(
+        `| ${e.engine} | ${e.score} | ${e.verdict} | ${e.confidence ?? "—"} |`,
+      );
     }
     lines.push("");
     for (const e of engines) {
@@ -1925,13 +2255,19 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
           const valueStr = formatIndicatorValue(ind.value);
           const parts: string[] = [];
           if (valueStr !== null) parts.push(`value: ${valueStr}`);
-          if (typeof ind.threshold === "number") parts.push(`threshold: ${ind.threshold}`);
+          if (typeof ind.threshold === "number")
+            parts.push(`threshold: ${ind.threshold}`);
           const meta = parts.length > 0 ? ` (${parts.join(", ")})` : "";
-          lines.push(`  - \`${ind.signal ?? "—"}\`${meta}${ind.explanation ? ` — ${ind.explanation}` : ""}`);
+          lines.push(
+            `  - \`${ind.signal ?? "—"}\`${meta}${ind.explanation ? ` — ${ind.explanation}` : ""}`,
+          );
         }
       }
       const unspecified = indicators.filter(
-        (i) => i.strength !== "HIGH" && i.strength !== "MEDIUM" && i.strength !== "LOW",
+        (i) =>
+          i.strength !== "HIGH" &&
+          i.strength !== "MEDIUM" &&
+          i.strength !== "LOW",
       );
       if (unspecified.length > 0) {
         lines.push(`- **UNSPECIFIED**`);
@@ -1939,16 +2275,22 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
           const valueStr = formatIndicatorValue(ind.value);
           const parts: string[] = [];
           if (valueStr !== null) parts.push(`value: ${valueStr}`);
-          if (typeof ind.threshold === "number") parts.push(`threshold: ${ind.threshold}`);
+          if (typeof ind.threshold === "number")
+            parts.push(`threshold: ${ind.threshold}`);
           const meta = parts.length > 0 ? ` (${parts.join(", ")})` : "";
-          lines.push(`  - \`${ind.signal ?? "—"}\`${meta}${ind.explanation ? ` — ${ind.explanation}` : ""}`);
+          lines.push(
+            `  - \`${ind.signal ?? "—"}\`${meta}${ind.explanation ? ` — ${ind.explanation}` : ""}`,
+          );
         }
       }
       lines.push("");
     }
   }
 
-  const overrides = data.composite?.overridesApplied ?? data.trace?.composite?.overridesApplied ?? [];
+  const overrides =
+    data.composite?.overridesApplied ??
+    data.trace?.composite?.overridesApplied ??
+    [];
   if (overrides.length > 0) {
     lines.push("## Overrides Applied");
     for (const o of overrides) lines.push(`- ${o}`);
@@ -1959,10 +2301,16 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
   // `@workspace/avri-rubric` so this export and the server-side
   // `/reports/:id/triage-report` endpoint stay in lock-step. See that
   // package for the canonical formatting and snapshot test.
-  const e2EngineForAvri = data.engines?.engines?.find((e) => /Technical Substance/i.test(e.engine));
-  const e2Avri = (e2EngineForAvri?.signalBreakdown?.avri ?? null) as AvriEngine2Block | null;
+  const e2EngineForAvri = data.engines?.engines?.find((e) =>
+    /Technical Substance/i.test(e.engine),
+  );
+  const e2Avri = (e2EngineForAvri?.signalBreakdown?.avri ??
+    null) as AvriEngine2Block | null;
   const avriComposite = (data.avri ?? null) as AvriCompositeBlock | null;
-  const avriOverrides = data.composite?.overridesApplied ?? data.trace?.composite?.overridesApplied ?? [];
+  const avriOverrides =
+    data.composite?.overridesApplied ??
+    data.trace?.composite?.overridesApplied ??
+    [];
   lines.push(
     ...buildAvriRubricMarkdown({
       composite: avriComposite,
@@ -1972,17 +2320,27 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
     }),
   );
 
-  const warnings = data.engines?.warnings ?? data.trace?.composite?.warnings ?? [];
+  const warnings =
+    data.engines?.warnings ?? data.trace?.composite?.warnings ?? [];
   if (warnings.length > 0) {
     lines.push("## Warnings");
     for (const w of warnings) lines.push(`- ${w}`);
     lines.push("");
   }
 
-  const e2Engine = engines.find(e => /Technical Substance/i.test(e.engine));
+  const e2Engine = engines.find((e) => /Technical Substance/i.test(e.engine));
   const verifyBreakdown = (e2Engine?.signalBreakdown ?? {}) as {
-    verificationSources?: { verified?: number; total?: number; referenced?: number; fallback?: number };
-    activeVerification?: { mode?: VerificationModeUI; familyName?: string | null; skipReason?: string | null };
+    verificationSources?: {
+      verified?: number;
+      total?: number;
+      referenced?: number;
+      fallback?: number;
+    };
+    activeVerification?: {
+      mode?: VerificationModeUI;
+      familyName?: string | null;
+      skipReason?: string | null;
+    };
   };
 
   // Mirror the panel's Strong-Evidence Bonus section in the markdown export
@@ -1993,9 +2351,10 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
     const rawSum = goldBonus.rawSum ?? bonus;
     const cap = goldBonus.cap ?? bonus;
     const signals = goldBonus.signals ?? [];
-    const capNote = rawSum > cap
-      ? `raw +${rawSum} capped at +${cap}`
-      : `raw +${rawSum} (under cap +${cap})`;
+    const capNote =
+      rawSum > cap
+        ? `raw +${rawSum} capped at +${cap}`
+        : `raw +${rawSum} (under cap +${cap})`;
     lines.push("## Strong-Evidence Bonus (Gold Categories)");
     lines.push(
       `- Applied: **+${bonus}** — ${capNote}; ${signals.length} categor${signals.length === 1 ? "y" : "ies"} fired`,
@@ -2013,7 +2372,9 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
   if (verifySources || activeVerif?.mode) {
     lines.push("## Active Verification");
     if (activeVerif?.mode) {
-      const familySuffix = activeVerif.familyName ? ` — ${activeVerif.familyName}` : "";
+      const familySuffix = activeVerif.familyName
+        ? ` — ${activeVerif.familyName}`
+        : "";
       lines.push(`- Mode: **${activeVerif.mode}**${familySuffix}`);
       lines.push(`- ${VERIFICATION_MODE_DESCRIPTION[activeVerif.mode]}`);
       if (activeVerif.mode === "MANUAL_ONLY" && activeVerif.skipReason) {
@@ -2028,23 +2389,42 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
     lines.push("");
   }
 
-  const perplexityEngine = engines.find(e => !!e.signalBreakdown?.perplexity);
+  const perplexityEngine = engines.find((e) => !!e.signalBreakdown?.perplexity);
   const perplexity = perplexityEngine?.signalBreakdown?.perplexity;
   if (perplexity) {
-    lines.push(`## Perplexity Signals (${perplexityEngine?.engine ?? "Engine 1"})`);
-    if (typeof perplexity.bigramEntropy === "number") lines.push(`- Bigram Entropy: ${perplexity.bigramEntropy.toFixed(3)} bits`);
-    if (typeof perplexity.functionWordRate === "number") lines.push(`- Function-Word Rate: ${perplexity.functionWordRate.toFixed(2)} per 1k tokens`);
-    if (typeof perplexity.syntaxValidityScore === "number") lines.push(`- Syntax Validity: ${perplexity.syntaxValidityScore.toFixed(2)}`);
-    if (typeof perplexity.combinedScore === "number") lines.push(`- Combined AI-ness: ${perplexity.combinedScore.toFixed(1)}`);
-    if (typeof perplexity.rawEngine1Score === "number" || perplexity.rawEngine1Verdict) {
-      lines.push(`- Raw Engine 1: ${perplexity.rawEngine1Score ?? "—"}${perplexity.rawEngine1Verdict ? ` (${perplexity.rawEngine1Verdict})` : ""}`);
+    lines.push(
+      `## Perplexity Signals (${perplexityEngine?.engine ?? "Engine 1"})`,
+    );
+    if (typeof perplexity.bigramEntropy === "number")
+      lines.push(
+        `- Bigram Entropy: ${perplexity.bigramEntropy.toFixed(3)} bits`,
+      );
+    if (typeof perplexity.functionWordRate === "number")
+      lines.push(
+        `- Function-Word Rate: ${perplexity.functionWordRate.toFixed(2)} per 1k tokens`,
+      );
+    if (typeof perplexity.syntaxValidityScore === "number")
+      lines.push(
+        `- Syntax Validity: ${perplexity.syntaxValidityScore.toFixed(2)}`,
+      );
+    if (typeof perplexity.combinedScore === "number")
+      lines.push(`- Combined AI-ness: ${perplexity.combinedScore.toFixed(1)}`);
+    if (
+      typeof perplexity.rawEngine1Score === "number" ||
+      perplexity.rawEngine1Verdict
+    ) {
+      lines.push(
+        `- Raw Engine 1: ${perplexity.rawEngine1Score ?? "—"}${perplexity.rawEngine1Verdict ? ` (${perplexity.rawEngine1Verdict})` : ""}`,
+      );
     }
     lines.push("");
   }
 
   if (data.legacyMapping) {
     lines.push("## Legacy Slop-Score Mapping");
-    lines.push(`- Legacy Slop Score: ${data.legacyMapping.slopScore} (0 = clean, 100 = pure slop)`);
+    lines.push(
+      `- Legacy Slop Score: ${data.legacyMapping.slopScore} (0 = clean, 100 = pure slop)`,
+    );
     lines.push(`- Display Mode: ${data.legacyMapping.displayMode}`);
     lines.push(`- Note: ${data.legacyMapping.note}`);
     lines.push("");
@@ -2068,7 +2448,9 @@ export function buildMarkdownSummary(data: DiagnosticsResponse): string {
         `(heuristic ${llmGating.heuristicScore}${compositeStr}, confidence ${llmGating.confidenceUsed.toFixed(2)}, ` +
         `cost guard ${llmGating.costGuard.low}–${llmGating.costGuard.high})` +
         (llmGating.userSkipped ? " · user opted out" : "") +
-        (llmGating.shouldCall && !llmGating.actuallyFired ? " · LLM call did not return" : ""),
+        (llmGating.shouldCall && !llmGating.actuallyFired
+          ? " · LLM call did not return"
+          : ""),
     );
     if (validityFusion.llmRaw === null) {
       lines.push(
@@ -2114,12 +2496,17 @@ const STRENGTH_TONE: Record<"HIGH" | "MEDIUM" | "LOW", string> = {
   LOW: "text-muted-foreground border-muted-foreground/30 bg-muted/10",
 };
 
-const STRENGTH_ORDER: Array<"HIGH" | "MEDIUM" | "LOW"> = ["HIGH", "MEDIUM", "LOW"];
+const STRENGTH_ORDER: Array<"HIGH" | "MEDIUM" | "LOW"> = [
+  "HIGH",
+  "MEDIUM",
+  "LOW",
+];
 
 function formatIndicatorValue(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value);
   try {
     return JSON.stringify(value);
   } catch {
@@ -2153,14 +2540,13 @@ function EngineRow({ eng }: { eng: EngineResult }) {
       });
     }
   };
-  const grouped = STRENGTH_ORDER
-    .map((s) => ({
-      strength: s,
-      items: indicators.filter((i) => i.strength === s),
-    }))
-    .filter((g) => g.items.length > 0);
+  const grouped = STRENGTH_ORDER.map((s) => ({
+    strength: s,
+    items: indicators.filter((i) => i.strength === s),
+  })).filter((g) => g.items.length > 0);
   const unspecified = indicators.filter(
-    (i) => i.strength !== "HIGH" && i.strength !== "MEDIUM" && i.strength !== "LOW",
+    (i) =>
+      i.strength !== "HIGH" && i.strength !== "MEDIUM" && i.strength !== "LOW",
   );
   return (
     <div className="rounded-md border border-border/30 bg-muted/5">
@@ -2172,22 +2558,31 @@ function EngineRow({ eng }: { eng: EngineResult }) {
         className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-xs font-mono ${hasIndicators ? "cursor-pointer hover:bg-muted/10" : "cursor-default"}`}
       >
         <span className="flex items-center gap-1.5 truncate min-w-0">
-          {hasIndicators && (
-            open ? <ChevronUp className="w-3 h-3 shrink-0" /> : <ChevronDown className="w-3 h-3 shrink-0" />
-          )}
+          {hasIndicators &&
+            (open ? (
+              <ChevronUp className="w-3 h-3 shrink-0" />
+            ) : (
+              <ChevronDown className="w-3 h-3 shrink-0" />
+            ))}
           <span className="truncate">{eng.engine}</span>
           {hasIndicators && (
             <span className="text-[10px] text-muted-foreground shrink-0">
-              ({indicators.length} indicator{indicators.length === 1 ? "" : "s"})
+              ({indicators.length} indicator{indicators.length === 1 ? "" : "s"}
+              )
             </span>
           )}
         </span>
         <div className="flex items-center gap-2 shrink-0">
-          <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 ${VERDICT_COLOR[eng.verdict] || ""}`}>
+          <Badge
+            variant="outline"
+            className={`text-[9px] px-1 py-0 h-4 ${VERDICT_COLOR[eng.verdict] || ""}`}
+          >
             {eng.verdict}
           </Badge>
           {eng.confidence && (
-            <span className="text-[10px] text-muted-foreground uppercase">conf: {eng.confidence}</span>
+            <span className="text-[10px] text-muted-foreground uppercase">
+              conf: {eng.confidence}
+            </span>
           )}
           <span className="font-bold w-8 text-right">{eng.score}</span>
         </div>
@@ -2211,13 +2606,19 @@ function EngineRow({ eng }: { eng: EngineResult }) {
                       className={`rounded border px-2 py-1.5 text-[11px] font-mono ${STRENGTH_TONE[g.strength]}`}
                     >
                       <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="font-semibold">{ind.signal ?? "—"}</span>
+                        <span className="font-semibold">
+                          {ind.signal ?? "—"}
+                        </span>
                         <div className="flex items-center gap-2">
                           {valueStr !== null && (
-                            <span className="text-foreground/80">value: {valueStr}</span>
+                            <span className="text-foreground/80">
+                              value: {valueStr}
+                            </span>
                           )}
                           {typeof ind.threshold === "number" && (
-                            <span className="text-muted-foreground">thr: {ind.threshold}</span>
+                            <span className="text-muted-foreground">
+                              thr: {ind.threshold}
+                            </span>
                           )}
                           <Badge
                             variant="outline"
@@ -2263,10 +2664,14 @@ function EngineRow({ eng }: { eng: EngineResult }) {
                       className="rounded border border-muted-foreground/30 bg-muted/10 px-2 py-1.5 text-[11px] font-mono"
                     >
                       <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="font-semibold">{ind.signal ?? "—"}</span>
+                        <span className="font-semibold">
+                          {ind.signal ?? "—"}
+                        </span>
                         <div className="flex items-center gap-2">
                           {valueStr !== null && (
-                            <span className="text-muted-foreground">value: {valueStr}</span>
+                            <span className="text-muted-foreground">
+                              value: {valueStr}
+                            </span>
                           )}
                           <Button
                             type="button"
@@ -2325,8 +2730,8 @@ function AgentFingerprintSection({
   const tone = isUnknown
     ? "text-muted-foreground border-muted-foreground/30"
     : fingerprint.likelyAgent === "human"
-    ? "text-green-400 border-green-500/40"
-    : "text-purple-400 border-purple-500/40";
+      ? "text-green-400 border-green-500/40"
+      : "text-purple-400 border-purple-500/40";
 
   // Sort the raw per-candidate scores high → low so the runner-up sits
   // right under the winner for at-a-glance disambiguation.
@@ -2348,7 +2753,10 @@ function AgentFingerprintSection({
         </Badge>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        <Badge variant="outline" className={cn("text-[11px] px-2 py-0.5 font-mono", tone)}>
+        <Badge
+          variant="outline"
+          className={cn("text-[11px] px-2 py-0.5 font-mono", tone)}
+        >
           {fingerprint.likelyAgentLabel}
         </Badge>
         {!isUnknown && (
@@ -2359,8 +2767,9 @@ function AgentFingerprintSection({
       </div>
       {isUnknown && (
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Not enough stylistic evidence in the report body to point to a specific
-          agent. Short or generic prose collapses to <span className="font-mono">Unknown</span> by design.
+          Not enough stylistic evidence in the report body to point to a
+          specific agent. Short or generic prose collapses to{" "}
+          <span className="font-mono">Unknown</span> by design.
         </p>
       )}
       {sortedScores.length > 0 && (
@@ -2370,7 +2779,9 @@ function AgentFingerprintSection({
               key={agent}
               className="flex items-center justify-between rounded-md border border-border/40 bg-muted/10 px-2 py-1"
             >
-              <span className="text-[11px] truncate">{AGENT_LABEL[agent] ?? agent}</span>
+              <span className="text-[11px] truncate">
+                {AGENT_LABEL[agent] ?? agent}
+              </span>
               <span className="text-[11px] font-mono text-muted-foreground ml-2">
                 {score}
               </span>
@@ -2385,10 +2796,17 @@ function AgentFingerprintSection({
           </div>
           <ul className="space-y-0.5">
             {fingerprint.matches.map((m) => (
-              <li key={m.id} className="text-[11px] font-mono text-muted-foreground leading-snug">
-                · <span className="text-foreground">+{m.weight}</span> {m.description}
+              <li
+                key={m.id}
+                className="text-[11px] font-mono text-muted-foreground leading-snug"
+              >
+                · <span className="text-foreground">+{m.weight}</span>{" "}
+                {m.description}
                 {m.excerpt && (
-                  <span className="text-muted-foreground/80"> — “{m.excerpt}”</span>
+                  <span className="text-muted-foreground/80">
+                    {" "}
+                    — “{m.excerpt}”
+                  </span>
                 )}
               </li>
             ))}
@@ -2403,20 +2821,42 @@ function AgentFingerprintSection({
           sub="words"
         />
         <Stat label="Em-dashes" value={`${fingerprint.features.emDashCount}`} />
-        <Stat label="Bold headers" value={`${fingerprint.features.boldHeaderCount}`} />
+        <Stat
+          label="Bold headers"
+          value={`${fingerprint.features.boldHeaderCount}`}
+        />
         <Stat label="Bullets" value={`${fingerprint.features.bulletCount}`} />
-        <Stat label="Sentences" value={`${fingerprint.features.sentenceCount}`} />
+        <Stat
+          label="Sentences"
+          value={`${fingerprint.features.sentenceCount}`}
+        />
       </div>
     </section>
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Stat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
   return (
     <div className="rounded-md border border-border/40 bg-muted/10 px-2.5 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">{label}</div>
-      <div className="font-mono text-sm font-semibold truncate" title={value}>{value}</div>
-      {sub && <div className="text-[10px] text-muted-foreground truncate" title={sub}>{sub}</div>}
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
+        {label}
+      </div>
+      <div className="font-mono text-sm font-semibold truncate" title={value}>
+        {value}
+      </div>
+      {sub && (
+        <div className="text-[10px] text-muted-foreground truncate" title={sub}>
+          {sub}
+        </div>
+      )}
     </div>
   );
 }

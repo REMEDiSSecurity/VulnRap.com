@@ -170,7 +170,11 @@ describe("backfill reconstruction path drops composite for fabricated reports", 
 });
 
 describe("parseArgs (rescore flags)", () => {
-  const argv = (...flags: string[]) => ["node", "backfill-vulnrap.mjs", ...flags];
+  const argv = (...flags: string[]) => [
+    "node",
+    "backfill-vulnrap.mjs",
+    ...flags,
+  ];
 
   it("defaults rescore=false and onlyWithCachedHallucination=false", () => {
     const opts = parseArgs(argv());
@@ -188,16 +192,26 @@ describe("parseArgs (rescore flags)", () => {
 
   it("--rescore and --only-with-cached-hallucination flip independently", () => {
     expect(parseArgs(argv("--rescore")).rescore).toBe(true);
-    expect(parseArgs(argv("--rescore")).onlyWithCachedHallucination).toBe(false);
-    expect(parseArgs(argv("--only-with-cached-hallucination")).rescore).toBe(false);
+    expect(parseArgs(argv("--rescore")).onlyWithCachedHallucination).toBe(
+      false,
+    );
+    expect(parseArgs(argv("--only-with-cached-hallucination")).rescore).toBe(
+      false,
+    );
     expect(
-      parseArgs(argv("--only-with-cached-hallucination")).onlyWithCachedHallucination,
+      parseArgs(argv("--only-with-cached-hallucination"))
+        .onlyWithCachedHallucination,
     ).toBe(true);
   });
 
   it("accepts both new flags alongside dry-run / limit", () => {
     const opts = parseArgs(
-      argv("--dry-run", "--rescore", "--only-with-cached-hallucination", "--limit=25"),
+      argv(
+        "--dry-run",
+        "--rescore",
+        "--only-with-cached-hallucination",
+        "--limit=25",
+      ),
     );
     expect(opts).toEqual({
       dryRun: true,
@@ -237,7 +251,9 @@ describe("parseArgs (rescore flags)", () => {
     } catch (e) {
       expect((e as CliExit).code).toBe(0);
       expect((e as CliExit).message).toContain("--rescore");
-      expect((e as CliExit).message).toContain("--only-with-cached-hallucination");
+      expect((e as CliExit).message).toContain(
+        "--only-with-cached-hallucination",
+      );
       expect((e as CliExit).message).toContain("--max-runtime-ms");
     }
 
@@ -312,7 +328,9 @@ describe("buildBackfillRescoreAuditEntry (Task #389)", () => {
 });
 
 describe("appendRescoreHistory (Task #389)", () => {
-  const sampleEntry = (overrides: Partial<BackfillRescoreAuditEntry> = {}): BackfillRescoreAuditEntry => ({
+  const sampleEntry = (
+    overrides: Partial<BackfillRescoreAuditEntry> = {},
+  ): BackfillRescoreAuditEntry => ({
     source: "backfill-rescore",
     mode: "engine",
     rescoredAt: "2026-04-30T01:02:03.000Z",
@@ -329,7 +347,9 @@ describe("appendRescoreHistory (Task #389)", () => {
     const entry = sampleEntry();
     expect(appendRescoreHistory(undefined, entry)).toEqual([entry]);
     expect(appendRescoreHistory(null, entry)).toEqual([entry]);
-    expect(appendRescoreHistory({ engines: [], engineCount: 3 }, entry)).toEqual([entry]);
+    expect(
+      appendRescoreHistory({ engines: [], engineCount: 3 }, entry),
+    ).toEqual([entry]);
   });
 
   it("preserves prior valid entries in chronological order (oldest first, new last)", () => {
@@ -370,18 +390,26 @@ describe("appendRescoreHistory (Task #389)", () => {
 
   it("treats a non-array rescoreHistory as missing without throwing", () => {
     const entry = sampleEntry();
-    expect(appendRescoreHistory({ rescoreHistory: "oops" }, entry)).toEqual([entry]);
-    expect(appendRescoreHistory({ rescoreHistory: { 0: entry } }, entry)).toEqual([entry]);
+    expect(appendRescoreHistory({ rescoreHistory: "oops" }, entry)).toEqual([
+      entry,
+    ]);
+    expect(
+      appendRescoreHistory({ rescoreHistory: { 0: entry } }, entry),
+    ).toEqual([entry]);
   });
 });
 
 describe("chooseConcurrencyGuard", () => {
   it("returns isNullComposite when the row was never scored", () => {
-    expect(chooseConcurrencyGuard(null, null)).toEqual({ kind: "isNullComposite" });
+    expect(chooseConcurrencyGuard(null, null)).toEqual({
+      kind: "isNullComposite",
+    });
     // Even if a stale correlation id happens to be present, the score
     // being NULL is the source of truth: keep the original NULL-only
     // guard so we don't clobber a concurrent first-time write.
-    expect(chooseConcurrencyGuard(null, "stale-id")).toEqual({ kind: "isNullComposite" });
+    expect(chooseConcurrencyGuard(null, "stale-id")).toEqual({
+      kind: "isNullComposite",
+    });
   });
 
   it("pins to the captured correlation id when both score and id are present", () => {

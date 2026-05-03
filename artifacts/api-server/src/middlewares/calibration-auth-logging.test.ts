@@ -8,10 +8,10 @@
 // bucket's configured windowMs/max. The presented (wrong) token value
 // MUST never appear anywhere in the log payload — that's the security
 // guarantee that lets us safely emit these logs at warn level.
-import express from "express";
 import http from "node:http";
-import type { AddressInfo } from "node:net";
+import express from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AddressInfo } from "node:net";
 
 const warnSpy = vi.fn();
 
@@ -37,10 +37,14 @@ function request<T>(
   body?: unknown,
 ): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const baseHeaders: Record<string, string> = data
-      ? { "Content-Type": "application/json", "Content-Length": String(data.length) }
+      ? {
+          "Content-Type": "application/json",
+          "Content-Length": String(data.length),
+        }
       : {};
     const req = http.request(
       {
@@ -85,13 +89,15 @@ let restoreAlerter: (() => void) | null = null;
 async function startHarness(opts: { max?: number } = {}): Promise<Harness> {
   process.env.CALIBRATION_TOKEN = TOKEN;
 
-  const { requireCalibrationAuth, requireCalibrationAuthStrict, __setCalibrationAuthLimiterForTests } = await import(
-    "./require-calibration-auth"
-  );
-  const { createCalibrationAuthLimiter } = await import("./calibration-auth-rate-limit");
-  const { createBruteForceAlerter, __setBruteForceAlerterForTests } = await import(
-    "./calibration-auth-brute-force-alert"
-  );
+  const {
+    requireCalibrationAuth,
+    requireCalibrationAuthStrict,
+    __setCalibrationAuthLimiterForTests,
+  } = await import("./require-calibration-auth");
+  const { createCalibrationAuthLimiter } =
+    await import("./calibration-auth-rate-limit");
+  const { createBruteForceAlerter, __setBruteForceAlerterForTests } =
+    await import("./calibration-auth-brute-force-alert");
 
   const limiter = createCalibrationAuthLimiter({
     windowMs: 60_000,
@@ -117,15 +123,27 @@ async function startHarness(opts: { max?: number } = {}): Promise<Harness> {
   const app = express();
   app.set("trust proxy", 1);
   app.use(express.json());
-  app.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (_req, res) => {
-    res.status(200).json({ ok: true });
-  });
-  app.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (_req, res) => {
-    res.status(200).json({ ok: true });
-  });
-  app.get("/feedback/calibration/handwavy-phrases", requireCalibrationAuthStrict, (_req, res) => {
-    res.status(200).json({ ok: true });
-  });
+  app.post(
+    "/feedback/calibration/handwavy-phrases",
+    requireCalibrationAuth,
+    (_req, res) => {
+      res.status(200).json({ ok: true });
+    },
+  );
+  app.delete(
+    "/feedback/calibration/handwavy-phrases",
+    requireCalibrationAuth,
+    (_req, res) => {
+      res.status(200).json({ ok: true });
+    },
+  );
+  app.get(
+    "/feedback/calibration/handwavy-phrases",
+    requireCalibrationAuthStrict,
+    (_req, res) => {
+      res.status(200).json({ ok: true });
+    },
+  );
 
   const server = await new Promise<http.Server>((resolve) => {
     const s = app.listen(0, "127.0.0.1", () => resolve(s));
@@ -296,7 +314,10 @@ describe("Task #213 — the presented (wrong) token value is NEVER logged", () =
         activeHarness.baseUrl,
         "POST",
         "/feedback/calibration/handwavy-phrases",
-        { "X-Calibration-Token": WRONG_TOKEN, Authorization: `Bearer ${WRONG_TOKEN}` },
+        {
+          "X-Calibration-Token": WRONG_TOKEN,
+          Authorization: `Bearer ${WRONG_TOKEN}`,
+        },
         { phrase: `bad ${i}` },
       );
     }

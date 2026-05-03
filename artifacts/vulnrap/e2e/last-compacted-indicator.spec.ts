@@ -65,35 +65,32 @@ test.describe("EmergingArchetypesSection — Last compacted indicator (Task #211
       });
     });
 
-    await page.route(
-      "**/api/test/archetype-history/config",
-      async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            effectiveDays: 30,
-            source: "default",
-            envOverride: null,
-            persistedDays: null,
-            defaultDays: 30,
-            min: 7,
-            max: 365,
-            // The Task #211 block under test. lastRemovedCount > 1
-            // picks the plural "snapshots" branch of the JSX ternary.
-            lastCompaction: {
-              lastCompactedAt: compactedAt,
-              lastRemovedCount: REMOVED_COUNT,
-              // Required by CompactionStats; the Task #289 render block
-              // reads `recentRuns.length` without an optional chain, so
-              // omitting it crashes the page. Empty keeps that block
-              // hidden (gated on length >= 2) for this spec.
-              recentRuns: [],
-            },
-          }),
-        });
-      },
-    );
+    await page.route("**/api/test/archetype-history/config", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          effectiveDays: 30,
+          source: "default",
+          envOverride: null,
+          persistedDays: null,
+          defaultDays: 30,
+          min: 7,
+          max: 365,
+          // The Task #211 block under test. lastRemovedCount > 1
+          // picks the plural "snapshots" branch of the JSX ternary.
+          lastCompaction: {
+            lastCompactedAt: compactedAt,
+            lastRemovedCount: REMOVED_COUNT,
+            // Required by CompactionStats; the Task #289 render block
+            // reads `recentRuns.length` without an optional chain, so
+            // omitting it crashes the page. Empty keeps that block
+            // hidden (gated on length >= 2) for this spec.
+            recentRuns: [],
+          },
+        }),
+      });
+    });
 
     await page.route("**/api/test/archetype-history", async (route) => {
       await route.fulfill({
@@ -108,8 +105,9 @@ test.describe("EmergingArchetypesSection — Last compacted indicator (Task #211
     // Anchor selector the task explicitly calls out as the stable
     // refactor handle. Asserting it visible first surfaces a clearer
     // failure if the row itself was removed during a refactor.
-    await expect(page.getByLabel("Compaction window in days"))
-      .toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel("Compaction window in days")).toBeVisible({
+      timeout: 15_000,
+    });
 
     // The JSX hangs the full ISO timestamp on the span's `title`
     // attribute (so reviewers can hover for an exact value when the

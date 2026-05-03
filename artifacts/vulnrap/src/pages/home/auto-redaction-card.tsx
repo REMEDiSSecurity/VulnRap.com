@@ -7,7 +7,9 @@ export function AutoRedactionCard() {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className={`feature-card rounded-xl glass-card transition-all duration-300 ${expanded ? "sm:col-span-3" : ""}`}>
+    <div
+      className={`feature-card rounded-xl glass-card transition-all duration-300 ${expanded ? "sm:col-span-3" : ""}`}
+    >
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -20,9 +22,14 @@ export function AutoRedactionCard() {
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold mb-1 flex items-center gap-2">
             Auto-Redaction
-            <ChevronDown className={`w-5 h-5 text-green-400/60 group-hover/card:text-green-400 transition-all duration-200 ${expanded ? "rotate-180 text-green-400" : ""}`} />
+            <ChevronDown
+              className={`w-5 h-5 text-green-400/60 group-hover/card:text-green-400 transition-all duration-200 ${expanded ? "rotate-180 text-green-400" : ""}`}
+            />
           </h3>
-          <p className="text-xs text-muted-foreground leading-relaxed">PII, secrets, and company names are scrubbed from submitted reports before storage or comparison. Tap to see exactly what gets caught.</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            PII, secrets, and company names are scrubbed from submitted reports
+            before storage or comparison. Tap to see exactly what gets caught.
+          </p>
         </div>
       </button>
 
@@ -31,20 +38,40 @@ export function AutoRedactionCard() {
           <div className="rounded-lg bg-yellow-500/5 border border-yellow-500/20 px-3 py-2 flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 mt-0.5 flex-shrink-0" />
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Redaction is regex-based, not AI-powered. It catches common patterns but <strong className="text-foreground">cannot guarantee</strong> every sensitive value is removed. Unusual formats, obfuscated data, or context-dependent secrets may slip through. If a report contains highly sensitive details, consider pre-sanitizing before uploading.
+              Redaction is regex-based, not AI-powered. It catches common
+              patterns but{" "}
+              <strong className="text-foreground">cannot guarantee</strong>{" "}
+              every sensitive value is removed. Unusual formats, obfuscated
+              data, or context-dependent secrets may slip through. If a report
+              contains highly sensitive details, consider pre-sanitizing before
+              uploading.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {redactionCategories.map((cat) => (
               <div key={cat.label} className="space-y-2">
-                <h4 className={`text-xs font-bold ${cat.color}`}>{cat.label}</h4>
+                <h4 className={`text-xs font-bold ${cat.color}`}>
+                  {cat.label}
+                </h4>
                 <div className="space-y-1.5">
                   {cat.items.map((item) => (
-                    <div key={item.what} className="rounded-md bg-muted/30 px-2.5 py-1.5">
-                      <p className="text-xs font-medium text-foreground">{item.what}</p>
-                      <p className="text-[10px] text-muted-foreground font-mono truncate mt-0.5" title={item.example}>{item.example}</p>
-                      <p className="text-[10px] text-green-400/80 font-mono mt-0.5">→ {item.replacement}</p>
+                    <div
+                      key={item.what}
+                      className="rounded-md bg-muted/30 px-2.5 py-1.5"
+                    >
+                      <p className="text-xs font-medium text-foreground">
+                        {item.what}
+                      </p>
+                      <p
+                        className="text-[10px] text-muted-foreground font-mono truncate mt-0.5"
+                        title={item.example}
+                      >
+                        {item.example}
+                      </p>
+                      <p className="text-[10px] text-green-400/80 font-mono mt-0.5">
+                        → {item.replacement}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -53,7 +80,18 @@ export function AutoRedactionCard() {
           </div>
 
           <p className="text-[11px] text-muted-foreground leading-relaxed border-t border-border/50 pt-3">
-            All patterns are applied in order. Company names are detected by suffix (Inc, Corp, LLC, Ltd, etc.). Usernames are caught in key-value pairs (<code className="text-[10px] bg-muted/50 px-1 rounded">username: jdoe</code>) and attribution lines (<code className="text-[10px] bg-muted/50 px-1 rounded">reported by: Jane</code>). Redaction happens server-side before any text is stored or compared.
+            All patterns are applied in order. Company names are detected by
+            suffix (Inc, Corp, LLC, Ltd, etc.). Usernames are caught in
+            key-value pairs (
+            <code className="text-[10px] bg-muted/50 px-1 rounded">
+              username: jdoe
+            </code>
+            ) and attribution lines (
+            <code className="text-[10px] bg-muted/50 px-1 rounded">
+              reported by: Jane
+            </code>
+            ). Redaction happens server-side before any text is stored or
+            compared.
           </p>
           <MethodologySuggestionFooter topic="Auto-Redaction" />
         </div>

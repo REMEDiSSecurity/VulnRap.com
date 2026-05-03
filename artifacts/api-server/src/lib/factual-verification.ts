@@ -54,19 +54,41 @@ const PLACEHOLDER_PATHS = [
   "/search?q=",
 ];
 
-function analyzeSeverityInflation(text: string): { score: number; evidence: FactualEvidence[] } {
+function analyzeSeverityInflation(text: string): {
+  score: number;
+  evidence: FactualEvidence[];
+} {
   const evidence: FactualEvidence[] = [];
   let totalWeight = 0;
 
-  const criticalClaims = text.match(/(?:cvss\s*(?:score\s*)?(?::|of|=)\s*(?:9\.[0-9]|10\.0)|critical\s+(?:severity|vulnerability)|(?:remote\s+code\s+execution|rce)\s+vulnerability)/gi);
+  const criticalClaims = text.match(
+    /(?:cvss\s*(?:score\s*)?(?::|of|=)\s*(?:9\.[0-9]|10\.0)|critical\s+(?:severity|vulnerability)|(?:remote\s+code\s+execution|rce)\s+vulnerability)/gi,
+  );
 
   if (criticalClaims && criticalClaims.length > 0) {
-    const hasRceEvidence = /(?:exec\(|system\(|eval\(|spawn\(|popen|subprocess|os\.system|Runtime\.exec|ProcessBuilder|shell_exec|passthru|`[^`]*\$)/i.test(text);
-    const hasAuthBypassEvidence = /(?:(?:bypass|skip|circumvent)\s+(?:auth|authentication|authorization)|(?:jwt|token|session)\s+(?:forge|tamper|manipulat))/i.test(text);
-    const hasSqliEvidence = /(?:(?:union\s+select|or\s+1\s*=\s*1|'\s*(?:or|and)\s*'|sqlmap|injection\s+point)\s)/i.test(text);
-    const hasWorkingExploit = /```[\s\S]*?(?:curl|wget|python|ruby|perl|bash|sh|nc|ncat)[\s\S]*?```/i.test(text);
+    const hasRceEvidence =
+      /(?:exec\(|system\(|eval\(|spawn\(|popen|subprocess|os\.system|Runtime\.exec|ProcessBuilder|shell_exec|passthru|`[^`]*\$)/i.test(
+        text,
+      );
+    const hasAuthBypassEvidence =
+      /(?:(?:bypass|skip|circumvent)\s+(?:auth|authentication|authorization)|(?:jwt|token|session)\s+(?:forge|tamper|manipulat))/i.test(
+        text,
+      );
+    const hasSqliEvidence =
+      /(?:(?:union\s+select|or\s+1\s*=\s*1|'\s*(?:or|and)\s*'|sqlmap|injection\s+point)\s)/i.test(
+        text,
+      );
+    const hasWorkingExploit =
+      /```[\s\S]*?(?:curl|wget|python|ruby|perl|bash|sh|nc|ncat)[\s\S]*?```/i.test(
+        text,
+      );
 
-    if (!hasRceEvidence && !hasAuthBypassEvidence && !hasSqliEvidence && !hasWorkingExploit) {
+    if (
+      !hasRceEvidence &&
+      !hasAuthBypassEvidence &&
+      !hasSqliEvidence &&
+      !hasWorkingExploit
+    ) {
       totalWeight += 15;
       evidence.push({
         type: "severity_inflation",
@@ -77,7 +99,8 @@ function analyzeSeverityInflation(text: string): { score: number; evidence: Fact
     }
   }
 
-  const cvssPattern = /cvss\s*(?:v?3(?:\.1)?)?[\s:]*(?:score\s*)?(?::|of|=|is)?\s*(\d+\.?\d*)/gi;
+  const cvssPattern =
+    /cvss\s*(?:v?3(?:\.1)?)?[\s:]*(?:score\s*)?(?::|of|=|is)?\s*(\d+\.?\d*)/gi;
   let match;
   while ((match = cvssPattern.exec(text)) !== null) {
     const score = parseFloat(match[1]);
@@ -94,7 +117,10 @@ function analyzeSeverityInflation(text: string): { score: number; evidence: Fact
 
   const cweReferences = text.match(/cwe-?\d+/gi) || [];
   const owasp = /owasp\s+top\s+(?:10|ten)/gi.test(text);
-  const hasSpecificVulnClass = /(?:(?:cross-site\s+scripting|xss|sql\s+injection|sqli|buffer\s+overflow|heap\s+overflow|use[\s-]after[\s-]free|double[\s-]free|race\s+condition|toctou|ssrf|csrf|xxe|deserialization|prototype\s+pollution))/i.test(text);
+  const hasSpecificVulnClass =
+    /(?:(?:cross-site\s+scripting|xss|sql\s+injection|sqli|buffer\s+overflow|heap\s+overflow|use[\s-]after[\s-]free|double[\s-]free|race\s+condition|toctou|ssrf|csrf|xxe|deserialization|prototype\s+pollution))/i.test(
+      text,
+    );
 
   if (cweReferences.length >= 5 && !hasSpecificVulnClass) {
     totalWeight += 8;
@@ -109,7 +135,8 @@ function analyzeSeverityInflation(text: string): { score: number; evidence: Fact
     totalWeight += 6;
     evidence.push({
       type: "taxonomy_padding",
-      description: "OWASP Top 10 reference combined with multiple CWEs but no specific technical vulnerability evidence",
+      description:
+        "OWASP Top 10 reference combined with multiple CWEs but no specific technical vulnerability evidence",
       weight: 6,
     });
   }
@@ -118,18 +145,30 @@ function analyzeSeverityInflation(text: string): { score: number; evidence: Fact
   return { score, evidence };
 }
 
-function analyzePlaceholderUrls(text: string): { score: number; evidence: FactualEvidence[] } {
+function analyzePlaceholderUrls(text: string): {
+  score: number;
+  evidence: FactualEvidence[];
+} {
   const evidence: FactualEvidence[] = [];
   let totalWeight = 0;
 
   const lowerText = text.toLowerCase();
 
-  const hasPreRedacted = /\[REDACTED\]|\[REMOVED\]|\[CENSORED\]|\[MASKED\]|\[HIDDEN\]|__PLACEHOLDER__/i.test(text);
-  const RFC_EXAMPLE_DOMAINS = new Set(["example.com", "example.org", "example.net"]);
+  const hasPreRedacted =
+    /\[REDACTED\]|\[REMOVED\]|\[CENSORED\]|\[MASKED\]|\[HIDDEN\]|__PLACEHOLDER__/i.test(
+      text,
+    );
+  const RFC_EXAMPLE_DOMAINS = new Set([
+    "example.com",
+    "example.org",
+    "example.net",
+  ]);
 
   for (const domain of PLACEHOLDER_DOMAINS) {
     if (lowerText.includes(domain)) {
-      const isInCodeBlock = new RegExp("```[\\s\\S]*?" + domain.replace(/\./g, "\\.") + "[\\s\\S]*?```").test(text);
+      const isInCodeBlock = new RegExp(
+        "```[\\s\\S]*?" + domain.replace(/\./g, "\\.") + "[\\s\\S]*?```",
+      ).test(text);
       const isRfcExample = RFC_EXAMPLE_DOMAINS.has(domain);
 
       if (isRfcExample || hasPreRedacted) {
@@ -152,9 +191,14 @@ function analyzePlaceholderUrls(text: string): { score: number; evidence: Factua
     }
   }
 
-  const nonInfoPlaceholders = evidence.filter(e => e.type === "placeholder_url").length;
+  const nonInfoPlaceholders = evidence.filter(
+    (e) => e.type === "placeholder_url",
+  ).length;
   for (const path of PLACEHOLDER_PATHS) {
-    const pathRegex = new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    const pathRegex = new RegExp(
+      path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      "i",
+    );
     if (pathRegex.test(text)) {
       if (nonInfoPlaceholders > 0) {
         totalWeight += 2;
@@ -172,7 +216,10 @@ function analyzePlaceholderUrls(text: string): { score: number; evidence: Factua
   return { score, evidence };
 }
 
-function analyzeFabricatedOutput(text: string): { score: number; evidence: FactualEvidence[] } {
+function analyzeFabricatedOutput(text: string): {
+  score: number;
+  evidence: FactualEvidence[];
+} {
   const evidence: FactualEvidence[] = [];
   let totalWeight = 0;
 
@@ -192,7 +239,7 @@ function analyzeFabricatedOutput(text: string): { score: number; evidence: Factu
 
   const stackFrames = text.match(/#\d+\s+0x[0-9a-f]+\s+in\s+\w+/gi) || [];
   if (stackFrames.length >= 3) {
-    const functions = stackFrames.map(f => {
+    const functions = stackFrames.map((f) => {
       const m = f.match(/in\s+(\w+)/i);
       return m ? m[1] : "";
     });
@@ -207,13 +254,15 @@ function analyzeFabricatedOutput(text: string): { score: number; evidence: Factu
     }
   }
 
-  const gdbRegisters = text.match(/(?:rax|rbx|rcx|rdx|rsi|rdi|rsp|rbp|rip|eax|ebx|ecx|edx|esi|edi|esp|ebp|eip)\s*(?:=|:)\s*0x[0-9a-f]+/gi);
+  const gdbRegisters = text.match(
+    /(?:rax|rbx|rcx|rdx|rsi|rdi|rsp|rbp|rip|eax|ebx|ecx|edx|esi|edi|esp|ebp|eip)\s*(?:=|:)\s*0x[0-9a-f]+/gi,
+  );
   if (gdbRegisters && gdbRegisters.length >= 4) {
-    const values = gdbRegisters.map(r => {
+    const values = gdbRegisters.map((r) => {
       const m = r.match(/0x([0-9a-f]+)/i);
       return m ? m[1] : "";
     });
-    const allSameLength = values.every(v => v.length === values[0].length);
+    const allSameLength = values.every((v) => v.length === values[0].length);
     const sequentialPattern = values.every((v, i) => {
       if (i === 0) return true;
       const prev = parseInt(values[i - 1], 16);
@@ -225,7 +274,8 @@ function analyzeFabricatedOutput(text: string): { score: number; evidence: Factu
       totalWeight += 12;
       evidence.push({
         type: "fake_registers",
-        description: "GDB register dump with suspiciously sequential/uniform values — real register dumps show varied values",
+        description:
+          "GDB register dump with suspiciously sequential/uniform values — real register dumps show varied values",
         weight: 12,
       });
     }
@@ -233,13 +283,14 @@ function analyzeFabricatedOutput(text: string): { score: number; evidence: Factu
 
   const httpResponses = text.match(/HTTP\/[\d.]+\s+\d{3}/g);
   if (httpResponses && httpResponses.length >= 3) {
-    const statusCodes = httpResponses.map(r => r.match(/\d{3}/)?.[0] || "");
-    const allSame = statusCodes.every(c => c === statusCodes[0]);
+    const statusCodes = httpResponses.map((r) => r.match(/\d{3}/)?.[0] || "");
+    const allSame = statusCodes.every((c) => c === statusCodes[0]);
     if (allSame && statusCodes[0] === "200") {
       totalWeight += 5;
       evidence.push({
         type: "uniform_http",
-        description: "Multiple HTTP responses all showing 200 OK — real testing typically shows varied responses",
+        description:
+          "Multiple HTTP responses all showing 200 OK — real testing typically shows varied responses",
         weight: 5,
       });
     }
@@ -249,7 +300,10 @@ function analyzeFabricatedOutput(text: string): { score: number; evidence: Factu
   return { score, evidence };
 }
 
-function analyzeCveReferences(text: string): { score: number; evidence: FactualEvidence[] } {
+function analyzeCveReferences(text: string): {
+  score: number;
+  evidence: FactualEvidence[];
+} {
   const evidence: FactualEvidence[] = [];
   let totalWeight = 0;
 
@@ -289,7 +343,7 @@ function analyzeCveReferences(text: string): { score: number; evidence: FactualE
   }
 
   if (cves.length >= 5) {
-    const years = cves.map(c => c.year);
+    const years = cves.map((c) => c.year);
     const uniqueYears = new Set(years);
     if (uniqueYears.size === 1 && cves.length >= 5) {
       totalWeight += 8;
@@ -305,7 +359,10 @@ function analyzeCveReferences(text: string): { score: number; evidence: FactualE
   return { score, evidence };
 }
 
-function analyzeFabricatedCves(text: string): { score: number; evidence: FactualEvidence[] } {
+function analyzeFabricatedCves(text: string): {
+  score: number;
+  evidence: FactualEvidence[];
+} {
   const evidence: FactualEvidence[] = [];
   let totalWeight = 0;
 
@@ -314,34 +371,57 @@ function analyzeFabricatedCves(text: string): { score: number; evidence: Factual
   const cveIds: Array<{ full: string; year: number; id: number }> = [];
 
   while ((match = cvePattern.exec(text)) !== null) {
-    cveIds.push({ full: match[0], year: parseInt(match[1]), id: parseInt(match[2]) });
+    cveIds.push({
+      full: match[0],
+      year: parseInt(match[1]),
+      id: parseInt(match[2]),
+    });
   }
 
   if (cveIds.length >= 2) {
-    const ids = cveIds.map(c => c.id).sort((a, b) => a - b);
+    const ids = cveIds.map((c) => c.id).sort((a, b) => a - b);
     let sequentialCount = 0;
     for (let i = 1; i < ids.length; i++) {
       if (ids[i] - ids[i - 1] === 1) sequentialCount++;
     }
     if (sequentialCount >= 2) {
       const currentYear = new Date().getFullYear();
-      const allRecent = cveIds.every(c => currentYear - c.year <= 1);
-      const hasNamedResearcher = /(?:reported|discovered|found|credited)\s+(?:by|to)\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?/i.test(text)
-        || /(?:X41|Trail of Bits|Google Project Zero|Qualys|Rapid7|Tenable|Snyk|Synopsys|Checkmarx|HackerOne|Bugcrowd)/i.test(text);
-      const hasTemplateMarkers = /(?:dear\s+(?:security|sir|team)|i\s+(?:hope|would like)|best\s+regards|sincerely)/i.test(text);
+      const allRecent = cveIds.every((c) => currentYear - c.year <= 1);
+      const hasNamedResearcher =
+        /(?:reported|discovered|found|credited)\s+(?:by|to)\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?/i.test(
+          text,
+        ) ||
+        /(?:X41|Trail of Bits|Google Project Zero|Qualys|Rapid7|Tenable|Snyk|Synopsys|Checkmarx|HackerOne|Bugcrowd)/i.test(
+          text,
+        );
+      const hasTemplateMarkers =
+        /(?:dear\s+(?:security|sir|team)|i\s+(?:hope|would like)|best\s+regards|sincerely)/i.test(
+          text,
+        );
 
       let seqWeight: number;
       let seqDesc: string;
 
       if (hasNamedResearcher && allRecent) {
         seqWeight = 0;
-        seqDesc = `${sequentialCount + 1} sequential CVE IDs detected (${cveIds.slice(0, 3).map(c => c.full).join(", ")}) — consistent with coordinated multi-vuln disclosure from named researcher`;
+        seqDesc = `${sequentialCount + 1} sequential CVE IDs detected (${cveIds
+          .slice(0, 3)
+          .map((c) => c.full)
+          .join(
+            ", ",
+          )}) — consistent with coordinated multi-vuln disclosure from named researcher`;
       } else if (hasTemplateMarkers) {
         seqWeight = 12;
-        seqDesc = `${sequentialCount + 1} CVE IDs with sequential numbering (${cveIds.slice(0, 3).map(c => c.full).join(", ")}) in templated report — suspicious`;
+        seqDesc = `${sequentialCount + 1} CVE IDs with sequential numbering (${cveIds
+          .slice(0, 3)
+          .map((c) => c.full)
+          .join(", ")}) in templated report — suspicious`;
       } else {
         seqWeight = 5;
-        seqDesc = `${sequentialCount + 1} sequential CVE IDs detected (${cveIds.slice(0, 3).map(c => c.full).join(", ")}) — may indicate coordinated disclosure or fabrication`;
+        seqDesc = `${sequentialCount + 1} sequential CVE IDs detected (${cveIds
+          .slice(0, 3)
+          .map((c) => c.full)
+          .join(", ")}) — may indicate coordinated disclosure or fabrication`;
       }
 
       totalWeight += seqWeight;
@@ -352,12 +432,12 @@ function analyzeFabricatedCves(text: string): { score: number; evidence: Factual
       });
     }
 
-    const roundIds = cveIds.filter(c => c.id % 1000 === 0);
+    const roundIds = cveIds.filter((c) => c.id % 1000 === 0);
     if (roundIds.length >= 2) {
       totalWeight += 10;
       evidence.push({
         type: "fabricated_cve",
-        description: `Multiple CVE IDs with suspiciously round numbers (${roundIds.map(c => c.full).join(", ")})`,
+        description: `Multiple CVE IDs with suspiciously round numbers (${roundIds.map((c) => c.full).join(", ")})`,
         weight: 10,
       });
     }
@@ -380,15 +460,32 @@ function analyzeFabricatedCves(text: string): { score: number; evidence: Factual
 }
 
 const KNOWN_NONEXISTENT_FUNCTIONS: Record<string, string[]> = {
-  curl: ["curl_parse_header_secure", "curl_http_validate_request", "curl_safe_header", "curl_validate_host", "curl_validate_input", "curl_validate_response", "curl_validate_cert", "curl_secure_connect"],
+  curl: [
+    "curl_parse_header_secure",
+    "curl_http_validate_request",
+    "curl_safe_header",
+    "curl_validate_host",
+    "curl_validate_input",
+    "curl_validate_response",
+    "curl_validate_cert",
+    "curl_secure_connect",
+  ],
   nginx: ["ngx_secure_filter", "ngx_safe_concat", "ngx_validate_input"],
   apache: ["ap_safe_copy", "ap_validate_header", "ap_secure_handler"],
   openssl: ["SSL_validate_chain_secure", "EVP_encrypt_safe"],
-  websocket: ["ws_frame_handshake", "ws_process_frame", "ws_validate_frame", "ws_secure_handshake"],
+  websocket: [
+    "ws_frame_handshake",
+    "ws_process_frame",
+    "ws_validate_frame",
+    "ws_secure_handshake",
+  ],
   http3: ["h3_process_priority", "h3_resolve_deps", "h3_validate_frame"],
 };
 
-function analyzeHallucinatedFunctions(text: string): { score: number; evidence: FactualEvidence[] } {
+function analyzeHallucinatedFunctions(text: string): {
+  score: number;
+  evidence: FactualEvidence[];
+} {
   const evidence: FactualEvidence[] = [];
   let totalWeight = 0;
 
@@ -409,7 +506,8 @@ function analyzeHallucinatedFunctions(text: string): { score: number; evidence: 
     }
   }
 
-  const stackFuncPattern = /(?:in|at|from)\s+([a-zA-Z_][a-zA-Z0-9_]{2,}(?:::[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\(/g;
+  const stackFuncPattern =
+    /(?:in|at|from)\s+([a-zA-Z_][a-zA-Z0-9_]{2,}(?:::[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\(/g;
   let match;
   const extractedFunctions: string[] = [];
 
@@ -417,7 +515,8 @@ function analyzeHallucinatedFunctions(text: string): { score: number; evidence: 
     extractedFunctions.push(match[1]);
   }
 
-  const codeRefPattern = /(?:function|method|routine|handler)\s+`?([a-zA-Z_][a-zA-Z0-9_:]*)`?/gi;
+  const codeRefPattern =
+    /(?:function|method|routine|handler)\s+`?([a-zA-Z_][a-zA-Z0-9_:]*)`?/gi;
   while ((match = codeRefPattern.exec(text)) !== null) {
     extractedFunctions.push(match[1]);
   }
@@ -427,8 +526,16 @@ function analyzeHallucinatedFunctions(text: string): { score: number; evidence: 
   for (const fn of unique) {
     const parts = fn.split(/(?=[A-Z])|_/).filter(Boolean);
     if (parts.length >= 5) {
-      const hasNonsense = parts.some(p => /^(?:process|handle|execute|validate|check|verify|parse|manage|init|create|update|delete|get|set|do|run|perform|ensure|apply)$/i.test(p));
-      const genericCount = parts.filter(p => /^(?:data|input|output|request|response|buffer|stream|object|item|value|result|context|state|config|info|util|helper|service|manager|handler|controller|processor|validator|factory|builder|wrapper|adapter|decorator|observer|listener|callback|resolver|provider|consumer|producer|dispatcher|scheduler|executor|coordinator|orchestrator)$/i.test(p)).length;
+      const hasNonsense = parts.some((p) =>
+        /^(?:process|handle|execute|validate|check|verify|parse|manage|init|create|update|delete|get|set|do|run|perform|ensure|apply)$/i.test(
+          p,
+        ),
+      );
+      const genericCount = parts.filter((p) =>
+        /^(?:data|input|output|request|response|buffer|stream|object|item|value|result|context|state|config|info|util|helper|service|manager|handler|controller|processor|validator|factory|builder|wrapper|adapter|decorator|observer|listener|callback|resolver|provider|consumer|producer|dispatcher|scheduler|executor|coordinator|orchestrator)$/i.test(
+          p,
+        ),
+      ).length;
 
       if (hasNonsense && genericCount >= 2) {
         totalWeight += 10;
@@ -443,13 +550,18 @@ function analyzeHallucinatedFunctions(text: string): { score: number; evidence: 
   }
 
   if (unique.length >= 5) {
-    const camelCaseCount = unique.filter(fn => /^[a-z]+(?:[A-Z][a-z]+){3,}$/.test(fn)).length;
-    const snakeCaseCount = unique.filter(fn => /^[a-z]+(?:_[a-z]+){3,}$/.test(fn)).length;
+    const camelCaseCount = unique.filter((fn) =>
+      /^[a-z]+(?:[A-Z][a-z]+){3,}$/.test(fn),
+    ).length;
+    const snakeCaseCount = unique.filter((fn) =>
+      /^[a-z]+(?:_[a-z]+){3,}$/.test(fn),
+    ).length;
     if (camelCaseCount >= 3 && snakeCaseCount >= 3) {
       totalWeight += 8;
       evidence.push({
         type: "hallucinated_function",
-        description: "Function names mix camelCase and snake_case conventions inconsistently — suggests fabricated rather than observed function names",
+        description:
+          "Function names mix camelCase and snake_case conventions inconsistently — suggests fabricated rather than observed function names",
         weight: 8,
       });
     }
@@ -469,25 +581,60 @@ function safeDetector<T>(name: string, fn: () => T, fallback: T): T {
 
 export function analyzeFactual(text: string): FactualResult {
   const empty = { score: 0, evidence: [] as FactualEvidence[] };
-  const severity = safeDetector("severity", () => analyzeSeverityInflation(text), empty);
-  const placeholders = safeDetector("placeholders", () => analyzePlaceholderUrls(text), empty);
-  const fabricated = safeDetector("fabricated", () => analyzeFabricatedOutput(text), empty);
-  const cveCheck = safeDetector("cveCheck", () => analyzeCveReferences(text), empty);
-  const fabricatedCves = safeDetector("fabricatedCves", () => analyzeFabricatedCves(text), empty);
-  const hallucinatedFuncs = safeDetector("hallucinatedFuncs", () => analyzeHallucinatedFunctions(text), empty);
-  const fakeFilePaths = safeDetector("fakeFilePaths", () => analyzeFakeFilePaths(text), empty);
-  const testCertAbuse = safeDetector("testCertAbuse", () => analyzeTestCertAbuse(text), empty);
+  const severity = safeDetector(
+    "severity",
+    () => analyzeSeverityInflation(text),
+    empty,
+  );
+  const placeholders = safeDetector(
+    "placeholders",
+    () => analyzePlaceholderUrls(text),
+    empty,
+  );
+  const fabricated = safeDetector(
+    "fabricated",
+    () => analyzeFabricatedOutput(text),
+    empty,
+  );
+  const cveCheck = safeDetector(
+    "cveCheck",
+    () => analyzeCveReferences(text),
+    empty,
+  );
+  const fabricatedCves = safeDetector(
+    "fabricatedCves",
+    () => analyzeFabricatedCves(text),
+    empty,
+  );
+  const hallucinatedFuncs = safeDetector(
+    "hallucinatedFuncs",
+    () => analyzeHallucinatedFunctions(text),
+    empty,
+  );
+  const fakeFilePaths = safeDetector(
+    "fakeFilePaths",
+    () => analyzeFakeFilePaths(text),
+    empty,
+  );
+  const testCertAbuse = safeDetector(
+    "testCertAbuse",
+    () => analyzeTestCertAbuse(text),
+    empty,
+  );
 
-  const combinedScore = Math.min(100, Math.round(
-    severity.score * 0.20 +
-    placeholders.score * 0.15 +
-    fabricated.score * 0.15 +
-    cveCheck.score * 0.15 +
-    fabricatedCves.score * 0.10 +
-    hallucinatedFuncs.score * 0.15 +
-    fakeFilePaths.score * 0.05 +
-    testCertAbuse.score * 0.05
-  ));
+  const combinedScore = Math.min(
+    100,
+    Math.round(
+      severity.score * 0.2 +
+        placeholders.score * 0.15 +
+        fabricated.score * 0.15 +
+        cveCheck.score * 0.15 +
+        fabricatedCves.score * 0.1 +
+        hallucinatedFuncs.score * 0.15 +
+        fakeFilePaths.score * 0.05 +
+        testCertAbuse.score * 0.05,
+    ),
+  );
 
   return {
     score: combinedScore,
@@ -507,7 +654,10 @@ export function analyzeFactual(text: string): FactualResult {
   };
 }
 
-function analyzeFakeFilePaths(text: string): { score: number; evidence: FactualEvidence[] } {
+function analyzeFakeFilePaths(text: string): {
+  score: number;
+  evidence: FactualEvidence[];
+} {
   const evidence: FactualEvidence[] = [];
   let totalWeight = 0;
 
@@ -515,7 +665,8 @@ function analyzeFakeFilePaths(text: string): { score: number; evidence: FactualE
     totalWeight += 15;
     evidence.push({
       type: "fake_file_path",
-      description: "References lib/header_parser.c in curl — this file does not exist in the curl source tree",
+      description:
+        "References lib/header_parser.c in curl — this file does not exist in the curl source tree",
       weight: 15,
       matched: "lib/header_parser.c",
     });
@@ -525,7 +676,8 @@ function analyzeFakeFilePaths(text: string): { score: number; evidence: FactualE
     totalWeight += 10;
     evidence.push({
       type: "fake_file_path",
-      description: "References lib/http3.c in curl — curl uses lib/vquic/ for HTTP/3 code, not lib/http3.c",
+      description:
+        "References lib/http3.c in curl — curl uses lib/vquic/ for HTTP/3 code, not lib/http3.c",
       weight: 10,
       matched: "lib/http3.c",
     });
@@ -537,7 +689,8 @@ function analyzeFakeFilePaths(text: string): { score: number; evidence: FactualE
       totalWeight += 8;
       evidence.push({
         type: "fake_file_path",
-        description: "References a generic src/core/ path that doesn't match known project directory structures",
+        description:
+          "References a generic src/core/ path that doesn't match known project directory structures",
         weight: 8,
       });
     }
@@ -547,24 +700,35 @@ function analyzeFakeFilePaths(text: string): { score: number; evidence: FactualE
   return { score, evidence };
 }
 
-function analyzeTestCertAbuse(text: string): { score: number; evidence: FactualEvidence[] } {
+function analyzeTestCertAbuse(text: string): {
+  score: number;
+  evidence: FactualEvidence[];
+} {
   const evidence: FactualEvidence[] = [];
   let totalWeight = 0;
 
-  if (/tests\/certs\/.*\.pem/i.test(text) && /(?:credential|private\s+key|security\s+risk|sensitive|exposed)/i.test(text)) {
+  if (
+    /tests\/certs\/.*\.pem/i.test(text) &&
+    /(?:credential|private\s+key|security\s+risk|sensitive|exposed)/i.test(text)
+  ) {
     totalWeight += 15;
     evidence.push({
       type: "test_cert_abuse",
-      description: "Claims test certificates (tests/certs/*.pem) are credentials or security risks — test certs are intentionally public fixtures",
+      description:
+        "Claims test certificates (tests/certs/*.pem) are credentials or security risks — test certs are intentionally public fixtures",
       weight: 15,
     });
   }
 
-  if (/(?:test|example|sample|demo)[\s_-]?(?:key|cert|certificate)/i.test(text) && /(?:leaked|exposed|hardcoded|credential)/i.test(text)) {
+  if (
+    /(?:test|example|sample|demo)[\s_-]?(?:key|cert|certificate)/i.test(text) &&
+    /(?:leaked|exposed|hardcoded|credential)/i.test(text)
+  ) {
     totalWeight += 10;
     evidence.push({
       type: "test_cert_abuse",
-      description: "Claims test/example certificates are leaked credentials — these are typically intentional fixtures",
+      description:
+        "Claims test/example certificates are leaked credentials — these are typically intentional fixtures",
       weight: 10,
     });
   }

@@ -124,7 +124,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function readHeader(init: RequestInit | undefined, name: string): string | null {
+function readHeader(
+  init: RequestInit | undefined,
+  name: string,
+): string | null {
   if (!init?.headers) return null;
   const headers = new Headers(init.headers);
   return headers.get(name);

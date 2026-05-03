@@ -14,9 +14,9 @@
 // cred, cookie) are blanked out of the persisted body and query so
 // rotating CALIBRATION_TOKEN does not leave plaintext copies on disk.
 
-import type { Request, Response, NextFunction } from "express";
 import { db, auditLogTable, type InsertAuditLogEntry } from "@workspace/db";
 import { logger } from "../lib/logger";
+import type { Request, Response, NextFunction } from "express";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const SECRET_KEY_RE = /(token|secret|password|api[_-]?key|auth|cred|cookie)/i;
@@ -34,8 +34,11 @@ function redactPayload(value: unknown, depth = 0): unknown {
   }
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (Array.isArray(value)) {
-    const trimmed = value.slice(0, MAX_ARRAY_LEN).map((v) => redactPayload(v, depth + 1));
-    if (value.length > MAX_ARRAY_LEN) trimmed.push(`[truncated:${value.length - MAX_ARRAY_LEN} more]`);
+    const trimmed = value
+      .slice(0, MAX_ARRAY_LEN)
+      .map((v) => redactPayload(v, depth + 1));
+    if (value.length > MAX_ARRAY_LEN)
+      trimmed.push(`[truncated:${value.length - MAX_ARRAY_LEN} more]`);
     return trimmed;
   }
   if (typeof value === "object") {
@@ -60,7 +63,8 @@ export function extractActor(req: Request): string {
   const body = (req.body ?? null) as Record<string, unknown> | null;
   if (body && typeof body === "object") {
     const r = body.reviewer;
-    if (typeof r === "string" && r.trim().length > 0) return r.trim().slice(0, 200);
+    if (typeof r === "string" && r.trim().length > 0)
+      return r.trim().slice(0, 200);
   }
   const headerVal = req.header("x-reviewer-name");
   if (typeof headerVal === "string" && headerVal.trim().length > 0) {
@@ -72,7 +76,9 @@ export function extractActor(req: Request): string {
 // Insertion is exposed so tests can await the write deterministically
 // instead of polling the table; the production path just fires the
 // promise and logs failures.
-export async function writeAuditLogEntry(entry: InsertAuditLogEntry): Promise<void> {
+export async function writeAuditLogEntry(
+  entry: InsertAuditLogEntry,
+): Promise<void> {
   await db.insert(auditLogTable).values(entry);
 }
 
@@ -89,16 +95,21 @@ export function auditLogMutationMiddleware(
   // Snapshot inputs at request time — body is parsed by express.json() before
   // reaching us. Keep the redacted payload pinned in closure so res.on("finish")
   // doesn't observe a downstream handler mutating req.body.
-  const requestPayload = req.body && typeof req.body === "object" && Object.keys(req.body).length > 0
-    ? redactPayload(req.body)
-    : null;
-  const query = req.query && Object.keys(req.query).length > 0
-    ? redactPayload(req.query)
-    : null;
+  const requestPayload =
+    req.body && typeof req.body === "object" && Object.keys(req.body).length > 0
+      ? redactPayload(req.body)
+      : null;
+  const query =
+    req.query && Object.keys(req.query).length > 0
+      ? redactPayload(req.query)
+      : null;
   const actor = extractActor(req);
   const endpoint = req.originalUrl.split("?")[0];
   const method = req.method.toUpperCase();
-  const ip = typeof req.ip === "string" && req.ip.length > 0 ? req.ip.slice(0, 64) : null;
+  const ip =
+    typeof req.ip === "string" && req.ip.length > 0
+      ? req.ip.slice(0, 64)
+      : null;
 
   res.on("finish", () => {
     const entry: InsertAuditLogEntry = {
@@ -113,7 +124,11 @@ export function auditLogMutationMiddleware(
     };
     writeAuditLogEntry(entry).catch((err) => {
       logger.error(
-        { err: err instanceof Error ? err.message : String(err), endpoint, method },
+        {
+          err: err instanceof Error ? err.message : String(err),
+          endpoint,
+          method,
+        },
         "audit-log: failed to persist mutation entry",
       );
     });
@@ -176,7 +191,10 @@ const REVERT_HINTS: Array<{
   },
 ];
 
-export function lookupRevertHint(method: string, endpoint: string): AuditRevertHint | null {
+export function lookupRevertHint(
+  method: string,
+  endpoint: string,
+): AuditRevertHint | null {
   const upper = method.toUpperCase();
   for (const candidate of REVERT_HINTS) {
     if (candidate.method === upper && candidate.pattern.test(endpoint)) {

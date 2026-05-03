@@ -7,8 +7,16 @@
 process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
 
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import http from "node:http";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  beforeAll,
+  afterAll,
+} from "vitest";
 import type { AddressInfo } from "node:net";
 
 interface FakeRow extends Record<string, unknown> {}
@@ -23,8 +31,9 @@ function freshState(): DbState {
 }
 
 const dbState: DbState = freshState();
-(globalThis as unknown as { __fakeDbStateFeedFab: DbState }).__fakeDbStateFeedFab =
-  dbState;
+(
+  globalThis as unknown as { __fakeDbStateFeedFab: DbState }
+).__fakeDbStateFeedFab = dbState;
 
 vi.mock("drizzle-orm", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("drizzle-orm");
@@ -41,9 +50,8 @@ vi.mock("@workspace/db", async () => {
   const schema = await vi.importActual<Record<string, unknown>>(
     "@workspace/db/schema",
   );
-  const state = (
-    globalThis as unknown as { __fakeDbStateFeedFab: DbState }
-  ).__fakeDbStateFeedFab;
+  const state = (globalThis as unknown as { __fakeDbStateFeedFab: DbState })
+    .__fakeDbStateFeedFab;
 
   type Cond =
     | { __op: "eq"; col: unknown; val: unknown }
@@ -72,8 +80,8 @@ vi.mock("@workspace/db", async () => {
     }
     if ((cond as { __op?: string }).__op === "or") {
       const c = cond as { conds: Cond[] };
-      return rows.filter(
-        (r) => c.conds.some((sub) => applyCond([r], sub, table).length > 0),
+      return rows.filter((r) =>
+        c.conds.some((sub) => applyCond([r], sub, table).length > 0),
       );
     }
     if ((cond as { __op?: string }).__op === "and") {
@@ -176,8 +184,7 @@ vi.mock("@workspace/db", async () => {
                   ) / rows.length;
             const out: Record<string, unknown> = {};
             if (projKeys.includes("count")) out.count = totalPublic;
-            if (projKeys.includes("totalPublic"))
-              out.totalPublic = totalPublic;
+            if (projKeys.includes("totalPublic")) out.totalPublic = totalPublic;
             if (projKeys.includes("avgScore")) out.avgScore = avgScore;
             resolve([out]);
             return;
@@ -272,17 +279,20 @@ function deriveSeedFlags(blob: unknown): {
   fakeRawHttp: boolean;
   strippedCrashTrace: boolean;
 } {
-  const engines = ((blob ?? {}) as {
-    engines?: Array<{
-      engine?: string;
-      signalBreakdown?: {
-        avri?: {
-          rawHttp?: { isFake?: boolean } | null;
-          crashTrace?: { isStripped?: boolean } | null;
-        };
-      };
-    }>;
-  }).engines ?? [];
+  const engines =
+    (
+      (blob ?? {}) as {
+        engines?: Array<{
+          engine?: string;
+          signalBreakdown?: {
+            avri?: {
+              rawHttp?: { isFake?: boolean } | null;
+              crashTrace?: { isStripped?: boolean } | null;
+            };
+          };
+        }>;
+      }
+    ).engines ?? [];
   const e2 = engines.find((e) => /Technical Substance/i.test(e?.engine ?? ""))
     ?.signalBreakdown?.avri;
   return {

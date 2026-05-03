@@ -124,7 +124,10 @@ const STEPS: Step[] = [
     request: async () => {
       const fd = new FormData();
       fd.append("rawText", SAMPLE_REPORT);
-      const res = await fetch("/api/reports/check", { method: "POST", body: fd });
+      const res = await fetch("/api/reports/check", {
+        method: "POST",
+        body: fd,
+      });
       const body = await safeJson(res);
       return { status: res.status, ok: res.ok, body };
     },
@@ -246,7 +249,11 @@ function CopyButton({ value }: { value: string }) {
       aria-label="Copy to clipboard"
       data-testid="quickstart-copy"
     >
-      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? (
+        <Check className="w-3.5 h-3.5" />
+      ) : (
+        <Copy className="w-3.5 h-3.5" />
+      )}
     </button>
   );
 }
@@ -366,7 +373,12 @@ export default function Quickstart() {
 
   // Re-clear ctx if a delete succeeds so the user can run the flow again.
   function handleResult(kind: StepKind, result: TryResult) {
-    if (kind === "submit" && result.ok && result.body && typeof result.body === "object") {
+    if (
+      kind === "submit" &&
+      result.ok &&
+      result.body &&
+      typeof result.body === "object"
+    ) {
       const body = result.body as Record<string, unknown>;
       const id =
         typeof body.id === "number"
@@ -418,10 +430,16 @@ export default function Quickstart() {
           <Badge variant="outline" className="border-primary/40 text-primary">
             Public API
           </Badge>
-          <Badge variant="outline" className="border-muted text-muted-foreground">
+          <Badge
+            variant="outline"
+            className="border-muted text-muted-foreground"
+          >
             No key required
           </Badge>
-          <Badge variant="outline" className="border-muted text-muted-foreground">
+          <Badge
+            variant="outline"
+            className="border-muted text-muted-foreground"
+          >
             ~5 min
           </Badge>
         </div>
@@ -432,16 +450,12 @@ export default function Quickstart() {
         <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-xs font-mono text-muted-foreground flex flex-wrap gap-x-6 gap-y-1">
           <span>
             <span className="text-primary">reportId</span> ={" "}
-            <span className="text-foreground/90">
-              {ctx.reportId ?? "—"}
-            </span>
+            <span className="text-foreground/90">{ctx.reportId ?? "—"}</span>
           </span>
           <span>
             <span className="text-primary">deleteToken</span> ={" "}
             <span className="text-foreground/90">
-              {ctx.deleteToken
-                ? `${ctx.deleteToken.slice(0, 10)}…`
-                : "—"}
+              {ctx.deleteToken ? `${ctx.deleteToken.slice(0, 10)}…` : "—"}
             </span>
           </span>
           <span className="text-muted-foreground/70">
@@ -506,7 +520,10 @@ export default function Quickstart() {
               architecture diagram
             </Link>{" "}
             shows how a request flows through the scoring pipeline, and the{" "}
-            <Link to="/docs/good-report" className="text-primary hover:underline">
+            <Link
+              to="/docs/good-report"
+              className="text-primary hover:underline"
+            >
               "what makes a good report" guide
             </Link>{" "}
             explains what the scorers are looking for.

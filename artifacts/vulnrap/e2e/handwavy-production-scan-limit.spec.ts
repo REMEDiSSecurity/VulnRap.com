@@ -1,9 +1,4 @@
-import {
-  test,
-  expect,
-  type Page,
-  type Route,
-} from "@playwright/test";
+import { test, expect, type Page, type Route } from "@playwright/test";
 import {
   injectCalibrationTokenIntoPage,
   uniquePhrase,
@@ -180,15 +175,16 @@ test.describe("Hand-wavy production-scan-window control (Task #231)", () => {
     await expect(panel).toBeVisible({ timeout: 15_000 });
 
     // 1. The dry-run POST body must carry the reviewer-chosen limit.
-    expect(captured.value, "intercept did not capture a dryRun POST").not.toBeNull();
+    expect(
+      captured.value,
+      "intercept did not capture a dryRun POST",
+    ).not.toBeNull();
     expect(captured.value!.hasField).toBe(true);
     expect(captured.value!.productionScanLimit).toBe(customLimit);
 
     // 2. The production-block subtitle must surface the chosen window
     //    in the documented "of up to N reports" copy.
-    const productionBlock = panel.getByTestId(
-      "handwavy-preview-production",
-    );
+    const productionBlock = panel.getByTestId("handwavy-preview-production");
     await expect(productionBlock).toBeVisible();
     await expect(productionBlock).toContainText(
       `of up to ${customLimit} reports`,
@@ -214,9 +210,7 @@ test.describe("Hand-wavy production-scan-window control (Task #231)", () => {
 
     const limitInput = page.getByTestId("handwavy-production-scan-limit");
     await expect(limitInput).toBeVisible();
-    const warning = page.getByTestId(
-      "handwavy-production-scan-limit-warning",
-    );
+    const warning = page.getByTestId("handwavy-production-scan-limit-warning");
 
     // Below the minimum.
     await limitInput.fill(String(SCAN_LIMIT_MIN - 1));
@@ -277,9 +271,7 @@ test.describe("Hand-wavy production-scan-window control (Task #231)", () => {
     await injectCalibrationTokenIntoPage(page);
     await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
-    const limitInputBefore = page.getByTestId(
-      "handwavy-production-scan-limit",
-    );
+    const limitInputBefore = page.getByTestId("handwavy-production-scan-limit");
     await expect(limitInputBefore).toHaveValue(String(SCAN_LIMIT_DEFAULT));
     await limitInputBefore.fill(String(persistedLimit));
 
@@ -289,10 +281,7 @@ test.describe("Hand-wavy production-scan-window control (Task #231)", () => {
     await expect
       .poll(
         async () =>
-          page.evaluate(
-            (key) => window.localStorage.getItem(key),
-            STORAGE_KEY,
-          ),
+          page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY),
         { timeout: 5_000 },
       )
       .toBe(String(persistedLimit));
@@ -300,9 +289,7 @@ test.describe("Hand-wavy production-scan-window control (Task #231)", () => {
     // Reload — the persisted value must repopulate the input on mount.
     await page.reload({ waitUntil: "networkidle" });
 
-    const limitInputAfter = page.getByTestId(
-      "handwavy-production-scan-limit",
-    );
+    const limitInputAfter = page.getByTestId("handwavy-production-scan-limit");
     await expect(limitInputAfter).toBeVisible();
     await expect(limitInputAfter).toHaveValue(String(persistedLimit));
 
@@ -319,7 +306,10 @@ test.describe("Hand-wavy production-scan-window control (Task #231)", () => {
     const panel = page.getByTestId("handwavy-preview");
     await expect(panel).toBeVisible({ timeout: 15_000 });
 
-    expect(captured.value, "intercept did not capture a dryRun POST after reload").not.toBeNull();
+    expect(
+      captured.value,
+      "intercept did not capture a dryRun POST after reload",
+    ).not.toBeNull();
     expect(captured.value!.productionScanLimit).toBe(persistedLimit);
     await expect(
       panel.getByTestId("handwavy-preview-production"),

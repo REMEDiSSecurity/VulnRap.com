@@ -9,7 +9,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import { CohortBaselineRibbon, percentileFromBins } from "./cohort-baseline-ribbon";
+import {
+  CohortBaselineRibbon,
+  percentileFromBins,
+} from "./cohort-baseline-ribbon";
 
 const useGetCohortBaselineMock = vi.fn();
 
@@ -28,12 +31,14 @@ interface QueryReturn {
 
 function setQueryReturns(platform: QueryReturn, family?: QueryReturn) {
   useGetCohortBaselineMock.mockReset();
-  useGetCohortBaselineMock.mockImplementation((params: { cwe?: string } | undefined) => {
-    if (params && params.cwe) {
-      return family ?? { data: undefined, isLoading: false, isError: false };
-    }
-    return platform;
-  });
+  useGetCohortBaselineMock.mockImplementation(
+    (params: { cwe?: string } | undefined) => {
+      if (params && params.cwe) {
+        return family ?? { data: undefined, isLoading: false, isError: false };
+      }
+      return platform;
+    },
+  );
 }
 
 function makeBins(counts: number[]) {
@@ -42,7 +47,9 @@ function makeBins(counts: number[]) {
 
 describe("percentileFromBins", () => {
   it("returns 0 for an empty cohort", () => {
-    expect(percentileFromBins(50, makeBins([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toBe(0);
+    expect(
+      percentileFromBins(50, makeBins([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])),
+    ).toBe(0);
   });
 
   it("uses mid-rank: a tied bucket of 4 reports sits at 50% by convention", () => {
@@ -107,7 +114,9 @@ describe("CohortBaselineRibbon", () => {
     expect(screen.getByTestId("cohort-baseline-ribbon-sparkline")).toBeTruthy();
     // 10 bars in the sparkline, one per bucket.
     for (let i = 0; i < 10; i++) {
-      expect(screen.getByTestId(`cohort-baseline-ribbon-bar-${i}`)).toBeTruthy();
+      expect(
+        screen.getByTestId(`cohort-baseline-ribbon-bar-${i}`),
+      ).toBeTruthy();
     }
     const marker = screen.getByTestId("cohort-baseline-ribbon-marker");
     // Marker position is left=score% so a 65 score sits at 65%.

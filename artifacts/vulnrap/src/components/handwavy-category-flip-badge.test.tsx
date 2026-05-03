@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { HandwavyEditEntry } from "@workspace/api-client-react";
 import {
   HandwavyCategoryFlipBadge,
   HANDWAVY_CATEGORY_FLIP_MIN,
   getCategoryFlips,
 } from "./handwavy-category-flip-badge";
+import type { HandwavyEditEntry } from "@workspace/api-client-react";
 
 // Task #338 pulled the FLAT hand-wavy phrase panel's "N category flips"
 // badge into a shared component + a single `getCategoryFlips` helper. The
@@ -164,9 +164,7 @@ describe("HandwavyCategoryFlipBadge", () => {
   async function openTooltip(prefix: string) {
     const user = userEvent.setup();
     await user.hover(screen.getByTestId(`${prefix}-category-flip-badge`));
-    return waitFor(() =>
-      screen.getByTestId(`${prefix}-category-flip-tooltip`),
-    );
+    return waitFor(() => screen.getByTestId(`${prefix}-category-flip-tooltip`));
   }
 
   it("renders each transition in the tooltip with the editor and the formatted timestamp injected via `formatTimestamp`", async () => {

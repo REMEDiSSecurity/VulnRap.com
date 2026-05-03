@@ -102,10 +102,14 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
 
       // Original row vanishes; the renamed row shows up.
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: original }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: original }),
       ).toHaveCount(0, { timeout: 15_000 });
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: renamed }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: renamed }),
       ).toHaveCount(1, { timeout: 15_000 });
       await observer;
 
@@ -128,7 +132,9 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
         `Expected exactly one PATCH with newPhrase for the zero-impact one-click path, saw ${ownPatch.length}`,
       ).toBe(1);
     } finally {
-      await cleanup(apiCtx, [original, renamed], { reviewer: CLEANUP_REVIEWER });
+      await cleanup(apiCtx, [original, renamed], {
+        reviewer: CLEANUP_REVIEWER,
+      });
       await apiCtx.dispose();
     }
   });
@@ -290,11 +296,9 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       // the inline block — Task #491 deleted the legacy default-true
       // branch once all three callers wired the inline renderer in.
       await expect(
-        panel
-          .getByTestId("handwavy-bulk-preview-curated")
-          .locator("details", {
-            hasText: "fixtures that would lose their flag",
-          }),
+        panel.getByTestId("handwavy-bulk-preview-curated").locator("details", {
+          hasText: "fixtures that would lose their flag",
+        }),
       ).toHaveCount(0);
 
       // Acknowledgment checkbox is present, unchecked, and the
@@ -320,10 +324,14 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       await confirmBtn.click();
       await expect(panel).toHaveCount(0, { timeout: 15_000 });
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: original }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: original }),
       ).toHaveCount(0, { timeout: 15_000 });
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: renamed }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: renamed }),
       ).toHaveCount(1, { timeout: 15_000 });
 
       expect(
@@ -339,7 +347,9 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
         "Expected the live PATCH body to carry newPhrase to perform the rename",
       ).toBe(true);
     } finally {
-      await cleanup(apiCtx, [original, renamed], { reviewer: CLEANUP_REVIEWER });
+      await cleanup(apiCtx, [original, renamed], {
+        reviewer: CLEANUP_REVIEWER,
+      });
       await apiCtx.dispose();
     }
   });
@@ -500,7 +510,9 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
         panel.getByTestId("handwavy-bulk-preview-curated-range"),
       ).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, [original, renamed], { reviewer: CLEANUP_REVIEWER });
+      await cleanup(apiCtx, [original, renamed], {
+        reviewer: CLEANUP_REVIEWER,
+      });
       await apiCtx.dispose();
     }
   });
@@ -731,11 +743,9 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       // shared `BulkRemovalImpactBlock` MUST no longer render — its
       // snippet rendering migrated to the inline block above.
       await expect(
-        panel
-          .getByTestId("handwavy-bulk-preview-curated")
-          .locator("details", {
-            hasText: "fixtures that would lose their flag",
-          }),
+        panel.getByTestId("handwavy-bulk-preview-curated").locator("details", {
+          hasText: "fixtures that would lose their flag",
+        }),
       ).toHaveCount(0);
       await expect(
         panel
@@ -825,9 +835,7 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
             }
           }
           if (req.method() === "PATCH") {
-            const body = req.postDataJSON() as
-              | { phrase?: string }
-              | undefined;
+            const body = req.postDataJSON() as { phrase?: string } | undefined;
             if (body?.phrase === original) {
               patchCalls += 1;
             }
@@ -859,17 +867,20 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
       await expect(panel).toHaveCount(0);
       // Original row remains on the active list — no PATCH fired.
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: original }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: original }),
       ).toHaveCount(1);
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: renamed }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: renamed }),
       ).toHaveCount(0);
-      expect(
-        patchCalls,
-        "Back out must not fire a live PATCH",
-      ).toBe(0);
+      expect(patchCalls, "Back out must not fire a live PATCH").toBe(0);
     } finally {
-      await cleanup(apiCtx, [original, renamed], { reviewer: CLEANUP_REVIEWER });
+      await cleanup(apiCtx, [original, renamed], {
+        reviewer: CLEANUP_REVIEWER,
+      });
       await apiCtx.dispose();
     }
   });

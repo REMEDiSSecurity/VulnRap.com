@@ -8,11 +8,6 @@ import {
   ApiError,
   type PhraseSuggestion,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
 import {
   ChevronDown,
   ChevronRight,
@@ -22,6 +17,17 @@ import {
   Inbox,
   Clock,
 } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 // Task #634 — Reviewer-only queue of user-suggested phrases. Mounted as a
@@ -53,7 +59,9 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
-export default function PhraseSuggestionsQueue({ mutationsAllowed }: PhraseSuggestionsQueueProps) {
+export default function PhraseSuggestionsQueue({
+  mutationsAllowed,
+}: PhraseSuggestionsQueueProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [open, setOpen] = useState(true);
@@ -62,7 +70,8 @@ export default function PhraseSuggestionsQueue({ mutationsAllowed }: PhraseSugge
   const queryKey = getListPhraseSuggestionsQueryKey({ status: "pending" });
   const { data, isLoading, isError } = useQuery({
     queryKey,
-    queryFn: ({ signal }) => listPhraseSuggestions({ status: "pending" }, { signal }),
+    queryFn: ({ signal }) =>
+      listPhraseSuggestions({ status: "pending" }, { signal }),
     refetchInterval: 60_000,
   });
 
@@ -87,7 +96,10 @@ export default function PhraseSuggestionsQueue({ mutationsAllowed }: PhraseSugge
               const body = (err.data ?? {}) as Record<string, unknown>;
               toast({
                 title: "Couldn't add the phrase",
-                description: typeof body.error === "string" ? body.error : "Validation failed.",
+                description:
+                  typeof body.error === "string"
+                    ? body.error
+                    : "Validation failed.",
                 variant: "destructive",
               });
               return;
@@ -109,7 +121,11 @@ export default function PhraseSuggestionsQueue({ mutationsAllowed }: PhraseSugge
           err instanceof ApiError && err.status === 401
             ? "Reviewer token rejected — see the calibration auth banner."
             : "Failed to approve. Try again.";
-        toast({ title: "Approval failed", description, variant: "destructive" });
+        toast({
+          title: "Approval failed",
+          description,
+          variant: "destructive",
+        });
       } finally {
         setBusyId(null);
       }
@@ -123,14 +139,21 @@ export default function PhraseSuggestionsQueue({ mutationsAllowed }: PhraseSugge
       setBusyId(s.id);
       try {
         await updatePhraseSuggestionStatus(s.id, { status: "rejected" });
-        toast({ title: "Suggestion rejected", description: "Removed from the queue." });
+        toast({
+          title: "Suggestion rejected",
+          description: "Removed from the queue.",
+        });
         refetch();
       } catch (err) {
         const description =
           err instanceof ApiError && err.status === 401
             ? "Reviewer token rejected — see the calibration auth banner."
             : "Failed to reject. Try again.";
-        toast({ title: "Rejection failed", description, variant: "destructive" });
+        toast({
+          title: "Rejection failed",
+          description,
+          variant: "destructive",
+        });
       } finally {
         setBusyId(null);
       }
@@ -142,7 +165,10 @@ export default function PhraseSuggestionsQueue({ mutationsAllowed }: PhraseSugge
   const total = suggestions.length;
 
   return (
-    <Card className="glass-card rounded-xl" data-testid="phrase-suggestions-queue">
+    <Card
+      className="glass-card rounded-xl"
+      data-testid="phrase-suggestions-queue"
+    >
       <CardHeader className="pb-3">
         <button
           type="button"
@@ -199,7 +225,9 @@ export default function PhraseSuggestionsQueue({ mutationsAllowed }: PhraseSugge
                 >
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm break-words">"{s.text}"</div>
+                      <div className="font-medium text-sm break-words">
+                        "{s.text}"
+                      </div>
                       {s.context && (
                         <div className="text-xs text-muted-foreground mt-1 italic border-l-2 border-primary/30 pl-2">
                           {s.context}
@@ -252,7 +280,9 @@ export default function PhraseSuggestionsQueue({ mutationsAllowed }: PhraseSugge
                       }
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      {s.category === "handwavy" ? "Approve & add" : "Mark approved"}
+                      {s.category === "handwavy"
+                        ? "Approve & add"
+                        : "Mark approved"}
                     </Button>
                   </div>
                 </li>

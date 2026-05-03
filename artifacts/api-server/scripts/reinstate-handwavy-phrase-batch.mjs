@@ -178,7 +178,11 @@ async function request(method, url, body, token) {
   let payload = null;
   const text = await res.text();
   if (text) {
-    try { payload = JSON.parse(text); } catch { payload = text; }
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = text;
+    }
   }
   return { status: res.status, ok: res.ok, payload };
 }
@@ -211,49 +215,82 @@ async function pickRemovedAtInteractively(baseUrl, token, limit) {
   console.log(color("dim", `→ GET ${listUrl} ...`));
   const resp = await request("GET", listUrl, undefined, token);
   if (resp.status === 401 || resp.status === 403) {
-    const err = new Error(`Picker rejected as unauthorized (HTTP ${resp.status}). Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.`);
+    const err = new Error(
+      `Picker rejected as unauthorized (HTTP ${resp.status}). Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.`,
+    );
     err.code = "auth";
     throw err;
   }
   if (!resp.ok) {
-    const msg = resp.payload && typeof resp.payload === "object" && "error" in resp.payload
-      ? resp.payload.error
-      : `HTTP ${resp.status}`;
+    const msg =
+      resp.payload &&
+      typeof resp.payload === "object" &&
+      "error" in resp.payload
+        ? resp.payload.error
+        : `HTTP ${resp.status}`;
     throw new Error(`Picker failed: ${msg}`);
   }
-  const batches = Array.isArray(resp.payload?.batches) ? resp.payload.batches : [];
+  const batches = Array.isArray(resp.payload?.batches)
+    ? resp.payload.batches
+    : [];
   if (batches.length === 0) {
-    console.log(color("yellow", "No batch removals found in the history log — nothing to reinstate."));
+    console.log(
+      color(
+        "yellow",
+        "No batch removals found in the history log — nothing to reinstate.",
+      ),
+    );
     return null;
   }
   console.log("");
-  console.log(color("bold", `Recent batch removals (newest first, showing ${batches.length}):`));
+  console.log(
+    color(
+      "bold",
+      `Recent batch removals (newest first, showing ${batches.length}):`,
+    ),
+  );
   batches.forEach((b, i) => {
     const idx = String(i + 1).padStart(2, " ");
     const ts = b.removedAt ?? "(unknown)";
     const reviewer = b.removedBy ? ` by ${b.removedBy}` : "";
-    const count = typeof b.phraseCount === "number" ? `${b.phraseCount} phrase${b.phraseCount === 1 ? "" : "s"}` : "? phrases";
-    const flag = b.reinstated === true ? color("yellow", " [already reinstated]") : "";
-    const sample = Array.isArray(b.samplePhrases) && b.samplePhrases.length > 0
-      ? `\n      ${color("dim", "→ " + b.samplePhrases.map((p) => JSON.stringify(p)).join(", ") + (b.phraseCount > b.samplePhrases.length ? ", ..." : ""))}`
-      : "";
-    console.log(`  ${color("cyan", idx)}) ${ts}${reviewer} — ${count}${flag}${sample}`);
+    const count =
+      typeof b.phraseCount === "number"
+        ? `${b.phraseCount} phrase${b.phraseCount === 1 ? "" : "s"}`
+        : "? phrases";
+    const flag =
+      b.reinstated === true ? color("yellow", " [already reinstated]") : "";
+    const sample =
+      Array.isArray(b.samplePhrases) && b.samplePhrases.length > 0
+        ? `\n      ${color("dim", "→ " + b.samplePhrases.map((p) => JSON.stringify(p)).join(", ") + (b.phraseCount > b.samplePhrases.length ? ", ..." : ""))}`
+        : "";
+    console.log(
+      `  ${color("cyan", idx)}) ${ts}${reviewer} — ${count}${flag}${sample}`,
+    );
   });
   console.log("");
-  const ans = await promptForChoice(color("yellow", `Pick a batch [1-${batches.length}] or q to abort: `));
+  const ans = await promptForChoice(
+    color("yellow", `Pick a batch [1-${batches.length}] or q to abort: `),
+  );
   if (!ans || ans.toLowerCase() === "q" || ans.toLowerCase() === "quit") {
     return null;
   }
   const choice = Number.parseInt(ans, 10);
   if (!Number.isFinite(choice) || choice < 1 || choice > batches.length) {
-    throw new Error(`Invalid selection "${ans}" — expected a number between 1 and ${batches.length}.`);
+    throw new Error(
+      `Invalid selection "${ans}" — expected a number between 1 and ${batches.length}.`,
+    );
   }
   const picked = batches[choice - 1];
   if (typeof picked.removedAt !== "string" || picked.removedAt.length === 0) {
     throw new Error("Selected batch is missing a removedAt timestamp.");
   }
   if (picked.reinstated === true) {
-    console.log(color("yellow", `Note: this batch has already been fully reinstated. Proceeding will be a no-op (every inner phrase will be skipped).`));
+    console.log(
+      color(
+        "yellow",
+        `Note: this batch has already been fully reinstated. Proceeding will be a no-op (every inner phrase will be skipped).`,
+      ),
+    );
   }
   return picked.removedAt;
 }
@@ -276,23 +313,34 @@ async function fetchBatchDetail(baseUrl, token, removedAt) {
   console.log(color("dim", `→ GET ${detailUrl} ...`));
   const resp = await request("GET", detailUrl, undefined, token);
   if (resp.status === 401 || resp.status === 403) {
-    const err = new Error(`Batch detail rejected as unauthorized (HTTP ${resp.status}). Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.`);
+    const err = new Error(
+      `Batch detail rejected as unauthorized (HTTP ${resp.status}). Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.`,
+    );
     err.code = "auth";
     throw err;
   }
   if (resp.status === 404) {
-    const reason = resp.payload && typeof resp.payload === "object" ? resp.payload.reason : null;
-    const msg = resp.payload && typeof resp.payload === "object" && "error" in resp.payload
-      ? resp.payload.error
-      : `HTTP ${resp.status}`;
+    const reason =
+      resp.payload && typeof resp.payload === "object"
+        ? resp.payload.reason
+        : null;
+    const msg =
+      resp.payload &&
+      typeof resp.payload === "object" &&
+      "error" in resp.payload
+        ? resp.payload.error
+        : `HTTP ${resp.status}`;
     const err = new Error(`Batch detail failed: ${msg}`);
     err.code = reason === "not-a-batch" ? "not-a-batch" : "history-not-found";
     throw err;
   }
   if (!resp.ok) {
-    const msg = resp.payload && typeof resp.payload === "object" && "error" in resp.payload
-      ? resp.payload.error
-      : `HTTP ${resp.status}`;
+    const msg =
+      resp.payload &&
+      typeof resp.payload === "object" &&
+      "error" in resp.payload
+        ? resp.payload.error
+        : `HTTP ${resp.status}`;
     throw new Error(`Batch detail failed: ${msg}`);
   }
   return resp.payload;
@@ -305,30 +353,50 @@ async function fetchBatchDetail(baseUrl, token, removedAt) {
 // quickly so a reviewer can spot the wrong batch before pressing y.
 function printBatchPreview(detail) {
   const phrases = Array.isArray(detail.phrases) ? detail.phrases : [];
-  const reinstatedCount = typeof detail.reinstatedCount === "number"
-    ? detail.reinstatedCount
-    : phrases.filter((p) => p && p.reinstated === true).length;
+  const reinstatedCount =
+    typeof detail.reinstatedCount === "number"
+      ? detail.reinstatedCount
+      : phrases.filter((p) => p && p.reinstated === true).length;
   const remaining = phrases.length - reinstatedCount;
   console.log("");
-  console.log(color("bold", `Batch removed at ${detail.removedAt ?? "(unknown)"}${detail.removedBy ? ` by ${detail.removedBy}` : ""}`));
+  console.log(
+    color(
+      "bold",
+      `Batch removed at ${detail.removedAt ?? "(unknown)"}${detail.removedBy ? ` by ${detail.removedBy}` : ""}`,
+    ),
+  );
   console.log(`  Total phrases:        ${phrases.length}`);
   console.log(`  Already reinstated:   ${reinstatedCount}`);
   console.log(`  Would be reinstated:  ${color("green", remaining)}`);
   if (detail.reinstated === true) {
-    console.log(color("yellow", "  (this batch is already fully flagged reinstated — proceeding would be a no-op)"));
+    console.log(
+      color(
+        "yellow",
+        "  (this batch is already fully flagged reinstated — proceeding would be a no-op)",
+      ),
+    );
   }
   if (phrases.length > 0) {
     console.log("");
-    console.log(color("bold", `All ${phrases.length} phrase${phrases.length === 1 ? "" : "s"} in this batch:`));
+    console.log(
+      color(
+        "bold",
+        `All ${phrases.length} phrase${phrases.length === 1 ? "" : "s"} in this batch:`,
+      ),
+    );
     const width = String(phrases.length).length;
     phrases.forEach((p, i) => {
       const idx = String(i + 1).padStart(width, " ");
       const phraseStr = typeof p?.phrase === "string" ? p.phrase : "(unknown)";
-      const cat = typeof p?.category === "string" ? color("dim", `[${p.category}]`) : "";
-      const flag = p && p.reinstated === true
-        ? color("yellow", " [already reinstated]")
-        : "";
-      console.log(`  ${color("cyan", idx)}. ${JSON.stringify(phraseStr)} ${cat}${flag}`);
+      const cat =
+        typeof p?.category === "string" ? color("dim", `[${p.category}]`) : "";
+      const flag =
+        p && p.reinstated === true
+          ? color("yellow", " [already reinstated]")
+          : "";
+      console.log(
+        `  ${color("cyan", idx)}. ${JSON.stringify(phraseStr)} ${cat}${flag}`,
+      );
     });
   }
   console.log("");
@@ -336,9 +404,16 @@ function printBatchPreview(detail) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args.help) { printHelp(); process.exit(0); }
+  if (args.help) {
+    printHelp();
+    process.exit(0);
+  }
 
-  const baseUrl = (args.apiUrl ?? process.env.API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+  const baseUrl = (
+    args.apiUrl ??
+    process.env.API_URL ??
+    "http://localhost:3001"
+  ).replace(/\/+$/, "");
   const endpoint = `${baseUrl}/api/feedback/calibration/handwavy-phrases/reinstate-batch`;
   const token = args.token ?? process.env.CALIBRATION_TOKEN ?? null;
 
@@ -346,7 +421,8 @@ async function main() {
   // opt-in via --pick OR auto-engaged when --removed-at is missing AND
   // stdin is a TTY. Non-TTY invocations without --removed-at still get the
   // existing exit-2 error so scripts don't silently hang on a hidden prompt.
-  const removedAtFlag = typeof args.removedAt === "string" ? args.removedAt.trim() : "";
+  const removedAtFlag =
+    typeof args.removedAt === "string" ? args.removedAt.trim() : "";
   const hasRemovedAt = removedAtFlag.length > 0;
   const stdinIsTty = Boolean(process.stdin.isTTY);
   const shouldPick = args.pick === true || (!hasRemovedAt && stdinIsTty);
@@ -400,9 +476,19 @@ async function main() {
     } catch (err) {
       console.error(color("red", err.message));
       if (err.code === "not-a-batch") {
-        console.error(color("dim", "  (the matched history entry is a single-phrase removal — use the per-phrase /reinstate endpoint instead)"));
+        console.error(
+          color(
+            "dim",
+            "  (the matched history entry is a single-phrase removal — use the per-phrase /reinstate endpoint instead)",
+          ),
+        );
       } else if (err.code === "history-not-found") {
-        console.error(color("dim", "  (no removal-history entry matched that --removed-at value)"));
+        console.error(
+          color(
+            "dim",
+            "  (no removal-history entry matched that --removed-at value)",
+          ),
+        );
       }
       process.exit(1);
     }
@@ -419,7 +505,12 @@ async function main() {
   if (!args.dryRun) {
     let proceed = args.yes;
     if (!proceed) {
-      proceed = await confirm(color("yellow", `Reinstate every not-yet-reinstated phrase from the batch removed at ${removedAt}? [y/N] `));
+      proceed = await confirm(
+        color(
+          "yellow",
+          `Reinstate every not-yet-reinstated phrase from the batch removed at ${removedAt}? [y/N] `,
+        ),
+      );
     }
     if (!proceed) {
       console.log(color("yellow", "Aborted — no changes were made."));
@@ -432,7 +523,12 @@ async function main() {
   if (args.dryRun) body.dryRun = true;
 
   const action = args.dryRun ? "dry-run" : "reinstate";
-  console.log(color("dim", `→ POST ${endpoint} (removedAt=${removedAt}${args.dryRun ? ", dryRun=true" : ""}) ...`));
+  console.log(
+    color(
+      "dim",
+      `→ POST ${endpoint} (removedAt=${removedAt}${args.dryRun ? ", dryRun=true" : ""}) ...`,
+    ),
+  );
   let resp;
   try {
     resp = await request("POST", endpoint, body, token);
@@ -442,23 +538,44 @@ async function main() {
   }
 
   if (resp.status === 401 || resp.status === 403) {
-    console.error(color("red", `Batch ${action} rejected as unauthorized (HTTP ${resp.status}). Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.`));
+    console.error(
+      color(
+        "red",
+        `Batch ${action} rejected as unauthorized (HTTP ${resp.status}). Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.`,
+      ),
+    );
     process.exit(1);
   }
   if (resp.status === 404) {
-    const msg = resp.payload && typeof resp.payload === "object" && "error" in resp.payload
-      ? resp.payload.error
-      : `HTTP ${resp.status}`;
+    const msg =
+      resp.payload &&
+      typeof resp.payload === "object" &&
+      "error" in resp.payload
+        ? resp.payload.error
+        : `HTTP ${resp.status}`;
     console.error(color("red", `Batch ${action} failed: ${msg}`));
-    console.error(color("dim", "  (no removal-history entry matched that --removed-at value)"));
+    console.error(
+      color(
+        "dim",
+        "  (no removal-history entry matched that --removed-at value)",
+      ),
+    );
     process.exit(1);
   }
   if (resp.status === 409) {
-    const msg = resp.payload && typeof resp.payload === "object" && "error" in resp.payload
-      ? resp.payload.error
-      : `HTTP ${resp.status}`;
+    const msg =
+      resp.payload &&
+      typeof resp.payload === "object" &&
+      "error" in resp.payload
+        ? resp.payload.error
+        : `HTTP ${resp.status}`;
     console.error(color("red", `Batch ${action} failed: ${msg}`));
-    console.error(color("dim", "  (the matched history entry is a single-phrase removal — use the per-phrase /reinstate endpoint instead)"));
+    console.error(
+      color(
+        "dim",
+        "  (the matched history entry is a single-phrase removal — use the per-phrase /reinstate endpoint instead)",
+      ),
+    );
     process.exit(1);
   }
   // Mutating path returns 200 + `batch:true`; dry-run path returns 200 +
@@ -467,47 +584,94 @@ async function main() {
   // wrong shape still surfaces as a transport failure rather than a
   // success.
   const okShape = args.dryRun
-    ? resp.ok && resp.payload && resp.payload.dryRun === true && resp.payload.batch === true
+    ? resp.ok &&
+      resp.payload &&
+      resp.payload.dryRun === true &&
+      resp.payload.batch === true
     : resp.ok && resp.payload && resp.payload.batch === true;
   if (!okShape) {
-    const msg = resp.payload && typeof resp.payload === "object" && "error" in resp.payload
-      ? resp.payload.error
-      : `HTTP ${resp.status}`;
+    const msg =
+      resp.payload &&
+      typeof resp.payload === "object" &&
+      "error" in resp.payload
+        ? resp.payload.error
+        : `HTTP ${resp.status}`;
     console.error(color("red", `Batch ${action} failed: ${msg}`));
     process.exit(1);
   }
 
   const p = resp.payload;
   const results = Array.isArray(p.results) ? p.results : [];
-  const reinstatedCount = typeof p.reinstatedCount === "number" ? p.reinstatedCount : 0;
+  const reinstatedCount =
+    typeof p.reinstatedCount === "number" ? p.reinstatedCount : 0;
   const skipped = typeof p.skipped === "number" ? p.skipped : 0;
 
   console.log("");
   if (args.dryRun) {
-    console.log(color("bold", `Batch reinstate preview (removedAt=${p.removedAt ?? removedAt}):`));
+    console.log(
+      color(
+        "bold",
+        `Batch reinstate preview (removedAt=${p.removedAt ?? removedAt}):`,
+      ),
+    );
     console.log(`  Inner phrases:           ${results.length}`);
-    console.log(`  Would reinstate:         ${color("green", reinstatedCount)}`);
+    console.log(
+      `  Would reinstate:         ${color("green", reinstatedCount)}`,
+    );
     console.log(`  Would skip:              ${color("yellow", skipped)}`);
     if (typeof p.total === "number") {
       console.log(`  Projected active total:  ${p.total}`);
     }
-    if (p.historyEntry && typeof p.historyEntry === "object" && p.historyEntry.reinstated === true) {
-      console.log(color("dim", "  (aggregate history entry would flip to reinstated:true)"));
+    if (
+      p.historyEntry &&
+      typeof p.historyEntry === "object" &&
+      p.historyEntry.reinstated === true
+    ) {
+      console.log(
+        color(
+          "dim",
+          "  (aggregate history entry would flip to reinstated:true)",
+        ),
+      );
     } else if (p.historyEntry && typeof p.historyEntry === "object") {
-      console.log(color("dim", "  (aggregate history entry would NOT yet be fully reinstated — some inner phrases remain active or are still removed)"));
+      console.log(
+        color(
+          "dim",
+          "  (aggregate history entry would NOT yet be fully reinstated — some inner phrases remain active or are still removed)",
+        ),
+      );
     }
   } else {
-    console.log(color("bold", `Batch reinstate processed (removedAt=${p.removedAt ?? removedAt}):`));
+    console.log(
+      color(
+        "bold",
+        `Batch reinstate processed (removedAt=${p.removedAt ?? removedAt}):`,
+      ),
+    );
     console.log(`  Inner phrases:        ${results.length}`);
     console.log(`  Reinstated:           ${color("green", reinstatedCount)}`);
     console.log(`  Skipped:              ${color("yellow", skipped)}`);
     if (typeof p.total === "number") {
       console.log(`  Active list size now: ${p.total}`);
     }
-    if (p.historyEntry && typeof p.historyEntry === "object" && p.historyEntry.reinstated === true) {
-      console.log(color("dim", "  (aggregate history entry is now flagged reinstated:true)"));
+    if (
+      p.historyEntry &&
+      typeof p.historyEntry === "object" &&
+      p.historyEntry.reinstated === true
+    ) {
+      console.log(
+        color(
+          "dim",
+          "  (aggregate history entry is now flagged reinstated:true)",
+        ),
+      );
     } else if (p.historyEntry && typeof p.historyEntry === "object") {
-      console.log(color("dim", "  (aggregate history entry not yet fully reinstated — some inner phrases remain active or are still removed)"));
+      console.log(
+        color(
+          "dim",
+          "  (aggregate history entry not yet fully reinstated — some inner phrases remain active or are still removed)",
+        ),
+      );
     }
   }
 
@@ -517,19 +681,38 @@ async function main() {
     // Skip-reason suffix: present tense for the mutating path ("was left
     // untouched"), conditional for dry-run ("would be left untouched") so
     // the preview reads like a forecast.
-    const skipSuffix = args.dryRun ? "would be left untouched" : "was left untouched";
+    const skipSuffix = args.dryRun
+      ? "would be left untouched"
+      : "was left untouched";
     for (const r of results) {
       if (r && r.reinstated === true) {
         const verb = args.dryRun ? "would reinstate   " : "reinstated        ";
         console.log(color("green", `  ✓ ${verb} "${r.phrase}"`));
       } else if (r && r.reason === "already-reinstated") {
-        console.log(color("yellow", `  ! already-reinstated "${r.phrase}" — ${skipSuffix}`));
+        console.log(
+          color(
+            "yellow",
+            `  ! already-reinstated "${r.phrase}" — ${skipSuffix}`,
+          ),
+        );
       } else if (r && r.reason === "already-active") {
-        console.log(color("yellow", `  ! already-active     "${r.phrase}" — ${skipSuffix}`));
+        console.log(
+          color(
+            "yellow",
+            `  ! already-active     "${r.phrase}" — ${skipSuffix}`,
+          ),
+        );
       } else if (r && r.reason) {
-        console.log(color("yellow", `  ! skipped            "${r.phrase}" — ${r.reason}`));
+        console.log(
+          color("yellow", `  ! skipped            "${r.phrase}" — ${r.reason}`),
+        );
       } else {
-        console.log(color("yellow", `  ! skipped            "${r?.phrase ?? "(unknown)"}"`));
+        console.log(
+          color(
+            "yellow",
+            `  ! skipped            "${r?.phrase ?? "(unknown)"}"`,
+          ),
+        );
       }
     }
   }
@@ -543,6 +726,8 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(color("red", `Unexpected error: ${err && err.message ? err.message : err}`));
+  console.error(
+    color("red", `Unexpected error: ${err && err.message ? err.message : err}`),
+  );
   process.exit(1);
 });

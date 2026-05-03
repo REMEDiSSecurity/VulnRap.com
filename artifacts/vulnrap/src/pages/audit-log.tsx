@@ -6,19 +6,36 @@
 // final response status; entries whose endpoint has a known reverse
 // operation surface a "Revert" link that pre-fills the next mutation.
 
-import { useMemo, useState, type FormEvent, type InputHTMLAttributes } from "react";
+import {
+  useMemo,
+  useState,
+  type FormEvent,
+  type InputHTMLAttributes,
+} from "react";
 import {
   useGetAuditLog,
   getGetAuditLogQueryKey,
   type AuditLogEntry,
   type GetAuditLogMethod,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  RotateCcw,
+  Shield,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, ChevronRight, Filter, RotateCcw, Shield } from "lucide-react";
 import { formatAuditTimestamp } from "@/lib/audit-format";
 import { cn } from "@/lib/utils";
 
@@ -68,16 +85,22 @@ function methodBadgeClass(method: string): string {
 }
 
 function statusBadgeClass(status: number): string {
-  if (status >= 200 && status < 300) return "bg-emerald-500/15 text-emerald-300 border-emerald-500/40";
-  if (status >= 300 && status < 400) return "bg-blue-500/15 text-blue-300 border-blue-500/40";
-  if (status === 401 || status === 403) return "bg-amber-500/15 text-amber-300 border-amber-500/40";
-  if (status >= 400 && status < 500) return "bg-orange-500/15 text-orange-300 border-orange-500/40";
+  if (status >= 200 && status < 300)
+    return "bg-emerald-500/15 text-emerald-300 border-emerald-500/40";
+  if (status >= 300 && status < 400)
+    return "bg-blue-500/15 text-blue-300 border-blue-500/40";
+  if (status === 401 || status === 403)
+    return "bg-amber-500/15 text-amber-300 border-amber-500/40";
+  if (status >= 400 && status < 500)
+    return "bg-orange-500/15 text-orange-300 border-orange-500/40";
   return "bg-red-500/15 text-red-300 border-red-500/40";
 }
 
 function PayloadView({ value }: { value: unknown }) {
   if (value == null) {
-    return <span className="text-xs text-muted-foreground italic">(empty)</span>;
+    return (
+      <span className="text-xs text-muted-foreground italic">(empty)</span>
+    );
   }
   let text: string;
   try {
@@ -100,7 +123,10 @@ function AuditEntryRow({ entry }: { entry: AuditLogEntry }) {
         <Badge variant="outline" className={methodBadgeClass(entry.method)}>
           {entry.method}
         </Badge>
-        <Badge variant="outline" className={statusBadgeClass(entry.responseStatus)}>
+        <Badge
+          variant="outline"
+          className={statusBadgeClass(entry.responseStatus)}
+        >
           {entry.responseStatus}
         </Badge>
         <code className="text-xs text-foreground/90 break-all flex-1 min-w-0">
@@ -145,7 +171,8 @@ function AuditEntryRow({ entry }: { entry: AuditLogEntry }) {
               rel="noopener noreferrer"
             >
               <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
-              Revert ({entry.revertHint.method} {entry.revertHint.endpoint.replace(/^\/api/, "")})
+              Revert ({entry.revertHint.method}{" "}
+              {entry.revertHint.endpoint.replace(/^\/api/, "")})
             </a>
           </Button>
         )}
@@ -153,12 +180,16 @@ function AuditEntryRow({ entry }: { entry: AuditLogEntry }) {
       {expanded && (
         <div className="mt-3 grid gap-2">
           <div>
-            <div className="text-xs font-semibold text-muted-foreground mb-1">Request payload</div>
+            <div className="text-xs font-semibold text-muted-foreground mb-1">
+              Request payload
+            </div>
             <PayloadView value={entry.requestPayload} />
           </div>
           {entry.queryParams != null && (
             <div>
-              <div className="text-xs font-semibold text-muted-foreground mb-1">Query parameters</div>
+              <div className="text-xs font-semibold text-muted-foreground mb-1">
+                Query parameters
+              </div>
               <PayloadView value={entry.queryParams} />
             </div>
           )}
@@ -174,7 +205,10 @@ export default function AuditLogPage() {
   const [page, setPage] = useState(0);
 
   const params = useMemo(() => {
-    const out: Record<string, unknown> = { limit: PAGE_SIZE, offset: page * PAGE_SIZE };
+    const out: Record<string, unknown> = {
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    };
     if (applied.actor.trim()) out.actor = applied.actor.trim();
     if (applied.method) out.method = applied.method as GetAuditLogMethod;
     if (applied.endpoint.trim()) out.endpoint = applied.endpoint.trim();
@@ -219,10 +253,11 @@ export default function AuditLogPage() {
         <h1 className="text-2xl font-bold">Reviewer Audit Log</h1>
       </div>
       <p className="text-sm text-muted-foreground mb-6">
-        Every reviewer-gated mutation (config changes, hand-wavy phrase add/remove,
-        threshold tweaks, fixture compaction settings) is recorded here with actor,
-        endpoint, redacted payload, and final response status. This page is gated
-        by the same reviewer token as the rest of the calibration surface.
+        Every reviewer-gated mutation (config changes, hand-wavy phrase
+        add/remove, threshold tweaks, fixture compaction settings) is recorded
+        here with actor, endpoint, redacted payload, and final response status.
+        This page is gated by the same reviewer token as the rest of the
+        calibration surface.
       </p>
 
       <Card className="mb-6">
@@ -232,17 +267,23 @@ export default function AuditLogPage() {
             Filters
           </CardTitle>
           <CardDescription>
-            Narrow the log by reviewer, method, endpoint substring, or date range.
+            Narrow the log by reviewer, method, endpoint substring, or date
+            range.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={applyFilters} className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <form
+            onSubmit={applyFilters}
+            className="grid gap-3 md:grid-cols-2 lg:grid-cols-3"
+          >
             <div className="space-y-1">
               <Label htmlFor="audit-actor">Actor</Label>
               <Input
                 id="audit-actor"
                 value={draft.actor}
-                onChange={(e) => setDraft((d) => ({ ...d, actor: e.target.value }))}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, actor: e.target.value }))
+                }
                 placeholder="alice@example.com"
               />
             </div>
@@ -251,7 +292,9 @@ export default function AuditLogPage() {
               <select
                 id="audit-method"
                 value={draft.method}
-                onChange={(e) => setDraft((d) => ({ ...d, method: e.target.value }))}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, method: e.target.value }))
+                }
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
               >
                 <option value="">(any)</option>
@@ -266,7 +309,9 @@ export default function AuditLogPage() {
               <Input
                 id="audit-endpoint"
                 value={draft.endpoint}
-                onChange={(e) => setDraft((d) => ({ ...d, endpoint: e.target.value }))}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, endpoint: e.target.value }))
+                }
                 placeholder="handwavy"
               />
             </div>
@@ -276,7 +321,9 @@ export default function AuditLogPage() {
                 id="audit-from"
                 type="datetime-local"
                 value={draft.from}
-                onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, from: e.target.value }))
+                }
               />
             </div>
             <div className="space-y-1">
@@ -285,11 +332,15 @@ export default function AuditLogPage() {
                 id="audit-to"
                 type="datetime-local"
                 value={draft.to}
-                onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, to: e.target.value }))
+                }
               />
             </div>
             <div className="flex items-end gap-2">
-              <Button type="submit" className="flex-1">Apply</Button>
+              <Button type="submit" className="flex-1">
+                Apply
+              </Button>
               <Button type="button" variant="outline" onClick={resetFilters}>
                 Reset
               </Button>
@@ -332,8 +383,8 @@ export default function AuditLogPage() {
         <CardContent>
           {query.error && (
             <div className="text-sm text-red-400 mb-3">
-              Failed to load audit log. The reviewer token may be missing or invalid —
-              calibration mutations and this page share the same gate.
+              Failed to load audit log. The reviewer token may be missing or
+              invalid — calibration mutations and this page share the same gate.
             </div>
           )}
           {query.isLoading ? (

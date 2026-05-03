@@ -18,13 +18,15 @@ import {
   type RateLimitCooldownState,
 } from "./rate-limit-cooldown";
 
-function makeNotice(overrides: {
-  url?: string;
-  status?: number;
-  retryAfterSeconds?: number;
-  body?: unknown;
-  limit?: number | null;
-} = {}) {
+function makeNotice(
+  overrides: {
+    url?: string;
+    status?: number;
+    retryAfterSeconds?: number;
+    body?: unknown;
+    limit?: number | null;
+  } = {},
+) {
   const retrySec = overrides.retryAfterSeconds ?? 5;
   const headers = new Headers();
   if (overrides.limit != null) {

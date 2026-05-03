@@ -1,5 +1,4 @@
 import { ArrowLeftRight } from "lucide-react";
-import type { HandwavyEditEntry } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -8,6 +7,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatAuditTimestamp } from "@/lib/audit-format";
+import type { HandwavyEditEntry } from "@workspace/api-client-react";
 
 // Task #338 — single source of truth for the FLAT hand-wavy phrase panel's
 // "N category flips" badge. Both the active-phrase rows (Task #149) and the

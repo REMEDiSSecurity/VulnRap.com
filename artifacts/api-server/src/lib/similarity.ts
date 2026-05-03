@@ -30,8 +30,14 @@ function hashShingle(shingle: string): number {
 function generateDeterministicCoefficients(): Array<{ a: number; b: number }> {
   const coefficients: Array<{ a: number; b: number }> = [];
   for (let i = 0; i < NUM_HASHES; i++) {
-    const seedA = crypto.createHash("sha256").update(`vulnrap-minhash-a-${i}`).digest();
-    const seedB = crypto.createHash("sha256").update(`vulnrap-minhash-b-${i}`).digest();
+    const seedA = crypto
+      .createHash("sha256")
+      .update(`vulnrap-minhash-a-${i}`)
+      .digest();
+    const seedB = crypto
+      .createHash("sha256")
+      .update(`vulnrap-minhash-b-${i}`)
+      .digest();
     const a = (seedA.readUInt32BE(0) % (LARGE_PRIME - 1)) + 1;
     const b = (seedB.readUInt32BE(0) % (LARGE_PRIME - 1)) + 1;
     coefficients.push({ a, b });
@@ -55,7 +61,9 @@ export function computeMinHash(text: string): number[] {
     const sh = BigInt(shingleHash);
     for (let i = 0; i < NUM_HASHES; i++) {
       const { a, b } = hashCoefficients[i];
-      const hashVal = Number((BigInt(a) * sh + BigInt(b)) % BigInt(LARGE_PRIME));
+      const hashVal = Number(
+        (BigInt(a) * sh + BigInt(b)) % BigInt(LARGE_PRIME),
+      );
       if (hashVal < signature[i]) {
         signature[i] = hashVal;
       }
@@ -145,7 +153,12 @@ export function findSimilarReports(
   newMinHash: number[],
   newSimhash: string,
   newLSHBuckets: string[],
-  existingReports: Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
+  existingReports: Array<{
+    id: number;
+    minhashSignature: number[];
+    simhash: string;
+    lshBuckets: string[];
+  }>,
   topN: number = 10,
   threshold: number = 0.15,
 ): SimilarityResult[] {
@@ -161,9 +174,10 @@ export function findSimilarReports(
     }
   }
 
-  const candidates = lshCandidateIds.size > 0
-    ? existingReports.filter(r => lshCandidateIds.has(r.id))
-    : existingReports;
+  const candidates =
+    lshCandidateIds.size > 0
+      ? existingReports.filter((r) => lshCandidateIds.has(r.id))
+      : existingReports;
 
   const results: SimilarityResult[] = [];
 

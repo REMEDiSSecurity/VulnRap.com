@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPT_PATH = resolve(__dirname, "..", "remove-handwavy-phrase.mjs");
@@ -30,7 +30,11 @@ beforeAll(async () => {
       const token = req.headers["x-calibration-token"] ?? null;
       let parsedBody = null;
       if (body) {
-        try { parsedBody = JSON.parse(body); } catch { parsedBody = body; }
+        try {
+          parsedBody = JSON.parse(body);
+        } catch {
+          parsedBody = body;
+        }
       }
       state.requests.push({
         method: req.method,
@@ -126,7 +130,11 @@ describe("remove-handwavy-phrase CLI", () => {
           batch: true,
           total: 1,
           results: [
-            { raw: "As Far As I Can Tell", phrase: "as far as i can tell", removed: true },
+            {
+              raw: "As Far As I Can Tell",
+              phrase: "as far as i can tell",
+              removed: true,
+            },
           ],
           phrases: [],
         },
@@ -134,8 +142,10 @@ describe("remove-handwavy-phrase CLI", () => {
     ];
 
     const res = await runScript([
-      "--phrase", "As Far As I Can Tell",
-      "--phrase", "never seen this",
+      "--phrase",
+      "As Far As I Can Tell",
+      "--phrase",
+      "never seen this",
       "--yes",
     ]);
 
@@ -201,8 +211,10 @@ describe("remove-handwavy-phrase CLI", () => {
   it("exits 1 when none of the requested phrases are in the active list", async () => {
     state.phrases = [entry("something else")];
     const res = await runScript([
-      "--phrase", "ghost one",
-      "--phrase", "ghost two",
+      "--phrase",
+      "ghost one",
+      "--phrase",
+      "ghost two",
       "--yes",
     ]);
     expect(res.code).toBe(1);
@@ -220,9 +232,12 @@ describe("remove-handwavy-phrase CLI", () => {
     ];
 
     const res = await runScript([
-      "--phrase", "one",
-      "--phrase", "two",
-      "--phrase", "three",
+      "--phrase",
+      "one",
+      "--phrase",
+      "two",
+      "--phrase",
+      "three",
       "--yes",
     ]);
 
@@ -282,13 +297,28 @@ describe("remove-handwavy-phrase CLI", () => {
           results: [
             { raw: "alpha", phrase: "alpha", removed: true },
             { raw: "beta", phrase: "beta", removed: true },
-            { raw: "Alpha", phrase: "alpha", removed: false, reason: "duplicate-in-batch" },
-            { raw: "ghost", phrase: "ghost", removed: false, reason: "not-found" },
+            {
+              raw: "Alpha",
+              phrase: "alpha",
+              removed: false,
+              reason: "duplicate-in-batch",
+            },
+            {
+              raw: "ghost",
+              phrase: "ghost",
+              removed: false,
+              reason: "not-found",
+            },
           ],
           dryRunImpact: {
             corpus: {
               total: 0,
-              byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+              byTier: {
+                t1Legit: 0,
+                t2Borderline: 0,
+                t3Slop: 0,
+                t4Hallucinated: 0,
+              },
               validDetectionsLost: 0,
               falsePositivesDropped: 0,
               corpusSize: 12,
@@ -305,10 +335,14 @@ describe("remove-handwavy-phrase CLI", () => {
     ];
 
     const res = await runScript([
-      "--phrase", "alpha",
-      "--phrase", "beta",
-      "--phrase", "Alpha", // duplicate after normalization
-      "--phrase", "ghost", // not on active list
+      "--phrase",
+      "alpha",
+      "--phrase",
+      "beta",
+      "--phrase",
+      "Alpha", // duplicate after normalization
+      "--phrase",
+      "ghost", // not on active list
       "--dry-run",
       "--yes",
     ]);
@@ -320,7 +354,12 @@ describe("remove-handwavy-phrase CLI", () => {
     expect(deletes[0].body.dryRun).toBe(true);
     // The full submitted list reaches the server in the original order
     // and WITH the duplicate retained.
-    expect(deletes[0].body.phrases).toEqual(["alpha", "beta", "Alpha", "ghost"]);
+    expect(deletes[0].body.phrases).toEqual([
+      "alpha",
+      "beta",
+      "Alpha",
+      "ghost",
+    ]);
     // Reviewer-facing summary includes the requested count and the
     // duplicate-in-batch tally.
     expect(res.stdout).toMatch(/Requested:\s+4/);

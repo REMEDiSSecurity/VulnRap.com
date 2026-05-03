@@ -1,9 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import {
-  ImpossibleHttpMarkers,
-  __testables,
-} from "./impossible-http-markers";
+import { ImpossibleHttpMarkers, __testables } from "./impossible-http-markers";
 
 // Coverage for the per-marker badge component used by the triage UI to
 // render each impossible_http_response marker as its own chip with a
@@ -23,7 +20,9 @@ describe("lookupMarkerInfo", () => {
       const info = lookupMarkerInfo(id);
       expect(info.label.length).toBeGreaterThan(0);
       expect(info.label).not.toEqual(id);
-      expect(info.explanation).toMatch(/Content-Length|body|payload|framing|RFC/i);
+      expect(info.explanation).toMatch(
+        /Content-Length|body|payload|framing|RFC/i,
+      );
     }
   });
 
@@ -53,11 +52,15 @@ describe("lookupMarkerInfo", () => {
     expect(reqOnly.label).toContain("Cookie");
     expect(reqOnly.explanation).toMatch(/request header|RFC 6265|RFC 7231/i);
 
-    const respOnly = lookupMarkerInfo("request_carries_response_only_set-cookie");
+    const respOnly = lookupMarkerInfo(
+      "request_carries_response_only_set-cookie",
+    );
     expect(respOnly.label).toContain("Set-Cookie");
     expect(respOnly.explanation).toMatch(/response header/i);
 
-    const ifNoneMatch = lookupMarkerInfo("response_carries_request_only_if-none-match");
+    const ifNoneMatch = lookupMarkerInfo(
+      "response_carries_request_only_if-none-match",
+    );
     expect(ifNoneMatch.label).toContain("If-None-Match");
   });
 
@@ -94,18 +97,27 @@ describe("<ImpossibleHttpMarkers />", () => {
       />,
     );
 
-    expect(screen.getByText(/204 response carries a body/i)).toBeInTheDocument();
-    expect(screen.getByText(/Response carries request-only header: Cookie/i))
-      .toBeInTheDocument();
-    expect(screen.getByText(/Content-Length: 0 but body present/i))
-      .toBeInTheDocument();
-    expect(screen.getByText(/\(status_204_must_have_no_body\)/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/204 response carries a body/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Response carries request-only header: Cookie/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Content-Length: 0 but body present/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/\(status_204_must_have_no_body\)/),
+    ).toBeInTheDocument();
   });
 
   it("attaches an aria-label summarising the marker count for screen readers", () => {
     render(
       <ImpossibleHttpMarkers
-        markers={["status_204_must_have_no_body", "content_length_zero_but_body_present"]}
+        markers={[
+          "status_204_must_have_no_body",
+          "content_length_zero_but_body_present",
+        ]}
       />,
     );
     expect(
@@ -136,9 +148,7 @@ describe("<ImpossibleHttpMarkers />", () => {
         testIdPrefix="evidence-3-marker"
       />,
     );
-    expect(
-      screen.getByTestId("evidence-3-marker-list"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("evidence-3-marker-list")).toBeInTheDocument();
     expect(
       screen.getByTestId("evidence-3-marker-status_204_must_have_no_body"),
     ).toBeInTheDocument();

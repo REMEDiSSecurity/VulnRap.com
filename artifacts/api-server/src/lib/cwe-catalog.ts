@@ -13,8 +13,16 @@
 
 import { sql } from "drizzle-orm";
 import { db, reportsTable } from "@workspace/db";
-import { CWE_FINGERPRINTS, HIGH_REJECTION_CWES } from "./engines/cwe-fingerprints";
-import { FAMILIES_BY_ID, FLAT_FAMILY, familyForCweNumber, type FamilyId } from "./engines/avri/families";
+import {
+  CWE_FINGERPRINTS,
+  HIGH_REJECTION_CWES,
+} from "./engines/cwe-fingerprints";
+import {
+  FAMILIES_BY_ID,
+  FLAT_FAMILY,
+  familyForCweNumber,
+  type FamilyId,
+} from "./engines/avri/families";
 
 export interface CweCatalogEntry {
   cweId: string;
@@ -62,12 +70,20 @@ function mitreUrl(cweId: string): string {
   return `https://cwe.mitre.org/data/definitions/${num}.html`;
 }
 
-function highQualityReportText(cweId: string, fingerprint: typeof CWE_FINGERPRINTS[string], familyId: FamilyId): string {
+function highQualityReportText(
+  cweId: string,
+  fingerprint: (typeof CWE_FINGERPRINTS)[string],
+  familyId: FamilyId,
+): string {
   const fam = FAMILIES_BY_ID[familyId];
   const wantedTerms = fingerprint.expectedTerms.slice(0, 6).join(", ");
-  const familyHint = fam.id !== "FLAT" && fam.goldSignals.length > 0
-    ? ` ${fam.displayName} reports score highest when they include ${fam.goldSignals.slice(0, 3).map((g) => g.description.toLowerCase()).join("; ")}.`
-    : "";
+  const familyHint =
+    fam.id !== "FLAT" && fam.goldSignals.length > 0
+      ? ` ${fam.displayName} reports score highest when they include ${fam.goldSignals
+          .slice(0, 3)
+          .map((g) => g.description.toLowerCase())
+          .join("; ")}.`
+      : "";
   return `Name ${cweId} (or its aliases) and back the claim with concrete evidence — terms like ${wantedTerms} should appear naturally in the writeup.${familyHint}`;
 }
 
@@ -77,7 +93,9 @@ interface InferredCweRow extends Record<string, unknown> {
   avg_score: number | null;
 }
 
-async function fetchInferredCweStats(): Promise<Map<string, { count: number; avgScore: number | null }>> {
+async function fetchInferredCweStats(): Promise<
+  Map<string, { count: number; avgScore: number | null }>
+> {
   // Unwrap the per-engine signalBreakdown blocks from vulnrap_engine_results.
   // Prefer the AVRI-emitted softCitation (newer pipeline) then fall back to
   // the legacy top-level softCitation — same precedence as
@@ -116,7 +134,10 @@ async function fetchInferredCweStats(): Promise<Map<string, { count: number; avg
     if (!r.inferred_cwe) continue;
     map.set(r.inferred_cwe, {
       count: Number(r.count) || 0,
-      avgScore: r.avg_score === null || r.avg_score === undefined ? null : Number(r.avg_score),
+      avgScore:
+        r.avg_score === null || r.avg_score === undefined
+          ? null
+          : Number(r.avg_score),
     });
   }
   return map;
@@ -140,7 +161,8 @@ export async function buildCweCatalog(): Promise<CweCatalogResponse> {
     const familyId = familyForCweNumber(num) ?? FLAT_FAMILY.id;
     const fam = FAMILIES_BY_ID[familyId];
     const stat = stats.get(cweId);
-    const rejectionRate = HIGH_REJECTION_CWES[cweId] ?? fingerprint.rejectionRate;
+    const rejectionRate =
+      HIGH_REJECTION_CWES[cweId] ?? fingerprint.rejectionRate;
 
     const entry: CweCatalogEntry = {
       cweId,
@@ -154,10 +176,10 @@ export async function buildCweCatalog(): Promise<CweCatalogResponse> {
       reproductionExpectation: fam.reproductionExpectation,
       rejectionRate,
       reportCount: stat?.count ?? 0,
-      avgCompositeScore: stat?.avgScore !== undefined ? stat?.avgScore ?? null : null,
-      reportsLink: familyId === "FLAT"
-        ? "/reports"
-        : `/reports?avriFamily=${familyId}`,
+      avgCompositeScore:
+        stat?.avgScore !== undefined ? (stat?.avgScore ?? null) : null,
+      reportsLink:
+        familyId === "FLAT" ? "/reports" : `/reports?avriFamily=${familyId}`,
     };
 
     const existing = grouped.get(familyId) ?? [];
@@ -165,22 +187,22 @@ export async function buildCweCatalog(): Promise<CweCatalogResponse> {
     grouped.set(familyId, existing);
   }
 
-  const families: CweCatalogFamily[] = FAMILY_ORDER
-    .filter((f) => grouped.has(f))
-    .map((familyId) => {
-      const fam = FAMILIES_BY_ID[familyId];
-      const entries = (grouped.get(familyId) ?? []).sort((a, b) => {
-        // Most-used first within a family, then by CWE id ascending.
-        if (b.reportCount !== a.reportCount) return b.reportCount - a.reportCount;
-        return a.cweId.localeCompare(b.cweId, undefined, { numeric: true });
-      });
-      return {
-        family: familyId,
-        familyName: fam.displayName,
-        reproductionExpectation: fam.reproductionExpectation,
-        entries,
-      };
+  const families: CweCatalogFamily[] = FAMILY_ORDER.filter((f) =>
+    grouped.has(f),
+  ).map((familyId) => {
+    const fam = FAMILIES_BY_ID[familyId];
+    const entries = (grouped.get(familyId) ?? []).sort((a, b) => {
+      // Most-used first within a family, then by CWE id ascending.
+      if (b.reportCount !== a.reportCount) return b.reportCount - a.reportCount;
+      return a.cweId.localeCompare(b.cweId, undefined, { numeric: true });
     });
+    return {
+      family: familyId,
+      familyName: fam.displayName,
+      reproductionExpectation: fam.reproductionExpectation,
+      entries,
+    };
+  });
 
   // Catch any CWE whose family wasn't in FAMILY_ORDER (defensive).
   for (const [familyId, entries] of grouped.entries()) {
@@ -188,7 +210,8 @@ export async function buildCweCatalog(): Promise<CweCatalogResponse> {
       families.push({
         family: familyId,
         familyName: FAMILIES_BY_ID[familyId]?.displayName ?? String(familyId),
-        reproductionExpectation: FAMILIES_BY_ID[familyId]?.reproductionExpectation ?? "",
+        reproductionExpectation:
+          FAMILIES_BY_ID[familyId]?.reproductionExpectation ?? "",
         entries,
       });
     }

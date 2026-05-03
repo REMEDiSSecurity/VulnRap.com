@@ -30,23 +30,32 @@ Tested on Chrome 122. Fix: HTML-escape on render.`;
   });
 
   it("forceAvri produces deterministic, isolated results across repeated calls", () => {
-    const onA = analyzeWithEnginesTraced(sampleText, { forceAvri: true }).composite.overallScore;
-    const offA = analyzeWithEnginesTraced(sampleText, { forceAvri: false }).composite.overallScore;
-    const onB = analyzeWithEnginesTraced(sampleText, { forceAvri: true }).composite.overallScore;
-    const offB = analyzeWithEnginesTraced(sampleText, { forceAvri: false }).composite.overallScore;
+    const onA = analyzeWithEnginesTraced(sampleText, { forceAvri: true })
+      .composite.overallScore;
+    const offA = analyzeWithEnginesTraced(sampleText, { forceAvri: false })
+      .composite.overallScore;
+    const onB = analyzeWithEnginesTraced(sampleText, { forceAvri: true })
+      .composite.overallScore;
+    const offB = analyzeWithEnginesTraced(sampleText, { forceAvri: false })
+      .composite.overallScore;
     expect(onA).toBe(onB);
     expect(offA).toBe(offB);
   });
 
   it("forceAvri overrides the env flag without persisting the override", () => {
     process.env.VULNRAP_USE_AVRI = "false";
-    const forcedOn = analyzeWithEnginesTraced(sampleText, { forceAvri: true }).composite.overallScore;
+    const forcedOn = analyzeWithEnginesTraced(sampleText, { forceAvri: true })
+      .composite.overallScore;
     expect(process.env.VULNRAP_USE_AVRI).toBe("false");
-    const defaultRun = analyzeWithEnginesTraced(sampleText).composite.overallScore;
-    const forcedOnAgain = analyzeWithEnginesTraced(sampleText, { forceAvri: true }).composite.overallScore;
+    const defaultRun =
+      analyzeWithEnginesTraced(sampleText).composite.overallScore;
+    const forcedOnAgain = analyzeWithEnginesTraced(sampleText, {
+      forceAvri: true,
+    }).composite.overallScore;
     expect(forcedOnAgain).toBe(forcedOn);
     // env flag still says off, so default-mode score should equal forceAvri=false score
-    const forcedOff = analyzeWithEnginesTraced(sampleText, { forceAvri: false }).composite.overallScore;
+    const forcedOff = analyzeWithEnginesTraced(sampleText, { forceAvri: false })
+      .composite.overallScore;
     expect(defaultRun).toBe(forcedOff);
   });
 });

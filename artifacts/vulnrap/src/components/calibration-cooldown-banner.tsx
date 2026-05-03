@@ -131,10 +131,7 @@ export function CalibrationCooldownBannerProvider({
     setTopmostId(bestId ?? registered[0] ?? null);
   }, [registered]);
 
-  const isTopmost = useCallback(
-    (id: string) => topmostId === id,
-    [topmostId],
-  );
+  const isTopmost = useCallback((id: string) => topmostId === id, [topmostId]);
 
   const value = useMemo<CalibrationCooldownBannerCoordinator>(
     () => ({ register, unregister, isTopmost }),
@@ -165,8 +162,8 @@ function CalibrationCooldownBannerView({
       hint={
         <>
           Confirm the reviewer token (
-          <code className="font-mono text-[11px]">VITE_CALIBRATION_TOKEN</code>
-          ) matches the server's{" "}
+          <code className="font-mono text-[11px]">VITE_CALIBRATION_TOKEN</code>)
+          matches the server's{" "}
           <code className="font-mono text-[11px]">CALIBRATION_TOKEN</code>{" "}
           before retrying — every wrong-token attempt extends the bucket.
         </>

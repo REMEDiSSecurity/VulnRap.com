@@ -50,8 +50,10 @@ test.describe("DiagnosticsPanel — live api-server smoke test", () => {
         showInFeed: "true",
       },
     });
-    expect(submitRes.ok(), `POST /api/reports failed: ${submitRes.status()}`)
-      .toBeTruthy();
+    expect(
+      submitRes.ok(),
+      `POST /api/reports failed: ${submitRes.status()}`,
+    ).toBeTruthy();
     const submitted = (await submitRes.json()) as SubmitResponse;
     expect(typeof submitted.id).toBe("number");
 
@@ -63,8 +65,10 @@ test.describe("DiagnosticsPanel — live api-server smoke test", () => {
     expect(diagRes.ok()).toBeTruthy();
     const diag = (await diagRes.json()) as DiagnosticsResponse;
     expect(diag.reportId).toBe(submitted.id);
-    expect(diag.composite, "composite must be populated when the new pipeline is enabled")
-      .not.toBeNull();
+    expect(
+      diag.composite,
+      "composite must be populated when the new pipeline is enabled",
+    ).not.toBeNull();
     expect(diag.legacyMapping).not.toBeNull();
     expect(diag.featureFlags?.VULNRAP_USE_NEW_COMPOSITE).toBe(true);
     expect(diag.trace?.stages?.length ?? 0).toBeGreaterThan(0);
@@ -93,7 +97,9 @@ test.describe("DiagnosticsPanel — live api-server smoke test", () => {
       timeout: 15_000,
     });
     await expect(
-      panelBody.getByText(String(diag.composite!.score), { exact: true }).first(),
+      panelBody
+        .getByText(String(diag.composite!.score), { exact: true })
+        .first(),
     ).toBeVisible();
     await expect(
       panelBody.getByText(diag.composite!.label, { exact: true }).first(),
@@ -110,7 +116,9 @@ test.describe("DiagnosticsPanel — live api-server smoke test", () => {
         .first(),
     ).toBeVisible();
     await expect(
-      panelBody.getByText(diag.legacyMapping!.displayMode, { exact: true }).first(),
+      panelBody
+        .getByText(diag.legacyMapping!.displayMode, { exact: true })
+        .first(),
     ).toBeVisible();
 
     // 5. Feature-flag indicator.

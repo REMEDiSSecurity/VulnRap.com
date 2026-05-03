@@ -30,11 +30,15 @@ export interface VisitorAttribution {
  * usable identifier is available. The result includes the UTC day so it
  * automatically rotates at midnight UTC.
  */
-export function visitorHash(attr: VisitorAttribution | null | undefined): string | null {
+export function visitorHash(
+  attr: VisitorAttribution | null | undefined,
+): string | null {
   if (!attr) return null;
   const ip = (attr.ip ?? "").trim();
   const ua = (attr.userAgent ?? "").trim();
   if (!ip && !ua) return null;
   const utcDay = new Date().toISOString().slice(0, 10);
-  return createHmac("sha256", KEY).update(`${utcDay}::${ip}::${ua}`).digest("hex");
+  return createHmac("sha256", KEY)
+    .update(`${utcDay}::${ip}::${ua}`)
+    .digest("hex");
 }

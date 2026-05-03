@@ -70,7 +70,9 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
       // The reinstate restored the phrase to the active list — the
       // reviewer never had to open the removal-history panel.
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(1, { timeout: 15_000 });
     } finally {
       await cleanup(apiCtx, phrase, { reviewer: CLEANUP_REVIEWER });
@@ -101,7 +103,9 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
       // list because the row is already gone, and explicitly does NOT
       // reinstate.
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(0, { timeout: 5_000 });
     } finally {
       await cleanup(apiCtx, phrase, { reviewer: CLEANUP_REVIEWER });
@@ -131,7 +135,9 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
       // Pre-#332 the second Trash REPLACED the banner; with the stack
       // model both entries persist until each is undone or dismissed.
       await trashRow(page, second);
-      await expect(stack).toHaveAttribute("data-count", "2", { timeout: 15_000 });
+      await expect(stack).toHaveAttribute("data-count", "2", {
+        timeout: 15_000,
+      });
 
       // Each phrase has its own row + Undo button keyed by `removedAt`
       // so the reviewer can't roll back the wrong removal.
@@ -181,7 +187,9 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
       // when the "Undo all" header surfaces.
       await trashRow(page, second);
       await trashRow(page, third);
-      await expect(stack).toHaveAttribute("data-count", "3", { timeout: 15_000 });
+      await expect(stack).toHaveAttribute("data-count", "3", {
+        timeout: 15_000,
+      });
 
       const undoAllBtn = page.getByTestId("handwavy-single-undo-all");
       await expect(undoAllBtn).toBeVisible();
@@ -208,7 +216,9 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
         page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: first }),
       ).toHaveCount(1, { timeout: 15_000 });
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: second }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: second }),
       ).toHaveCount(1, { timeout: 15_000 });
       await expect(
         page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: third }),
@@ -239,7 +249,9 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
       await trashRow(page, second);
 
       const stack = page.getByTestId("handwavy-single-undo-stack");
-      await expect(stack).toHaveAttribute("data-count", "2", { timeout: 15_000 });
+      await expect(stack).toHaveAttribute("data-count", "2", {
+        timeout: 15_000,
+      });
       const max = await stack.getAttribute("data-max");
       expect(max).toBe("5");
 
@@ -256,12 +268,12 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
 
       await expect(firstEntry).toHaveAttribute("data-slot-position", "1");
       await expect(secondEntry).toHaveAttribute("data-slot-position", "2");
-      await expect(firstEntry.getByTestId("handwavy-single-undo-slot")).toContainText(
-        `Slot 1 of ${max}`,
-      );
-      await expect(secondEntry.getByTestId("handwavy-single-undo-slot")).toContainText(
-        `Slot 2 of ${max}`,
-      );
+      await expect(
+        firstEntry.getByTestId("handwavy-single-undo-slot"),
+      ).toContainText(`Slot 1 of ${max}`);
+      await expect(
+        secondEntry.getByTestId("handwavy-single-undo-slot"),
+      ).toContainText(`Slot 2 of ${max}`);
 
       // Below cap → no entry is flagged as next-to-evict.
       await expect(firstEntry).toHaveAttribute("data-next-to-evict", "false");
@@ -299,7 +311,9 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
       }
 
       const stack = page.getByTestId("handwavy-single-undo-stack");
-      await expect(stack).toHaveAttribute("data-count", "5", { timeout: 15_000 });
+      await expect(stack).toHaveAttribute("data-count", "5", {
+        timeout: 15_000,
+      });
       await expect(stack).toHaveAttribute("data-max", "5");
 
       const oldestEntry = stack
@@ -351,7 +365,9 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
       await trashRow(page, newer);
 
       const stack = page.getByTestId("handwavy-single-undo-stack");
-      await expect(stack).toHaveAttribute("data-count", "2", { timeout: 15_000 });
+      await expect(stack).toHaveAttribute("data-count", "2", {
+        timeout: 15_000,
+      });
 
       // Click Undo on the OLDER entry — the gap pre-#332 forced the
       // reviewer into the removal-history panel for.

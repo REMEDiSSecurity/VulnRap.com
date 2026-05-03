@@ -25,9 +25,17 @@ const ENGINE_DEFINITIONS: ReadonlyArray<{
   label: string;
   stages: ReadonlyArray<string>;
 }> = [
-  { id: "linguistic", label: "Linguistic Engine", stages: ["engine1_ai_authorship"] },
+  {
+    id: "linguistic",
+    label: "Linguistic Engine",
+    stages: ["engine1_ai_authorship"],
+  },
   { id: "substance", label: "Substance Engine", stages: ["engine2_substance"] },
-  { id: "cwe", label: "CWE Coherence Engine", stages: ["engine3_cwe_coherence"] },
+  {
+    id: "cwe",
+    label: "CWE Coherence Engine",
+    stages: ["engine3_cwe_coherence"],
+  },
   { id: "avri", label: "AVRI Engine", stages: ["avri_composite"] },
   { id: "llm_gate", label: "LLM Gate", stages: ["perplexity"] },
 ];

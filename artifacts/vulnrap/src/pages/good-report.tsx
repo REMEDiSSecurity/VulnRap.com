@@ -63,17 +63,16 @@ export default function GoodReport() {
             title="A fenced code block"
           >
             Show the request, the payload, the affected snippet, or the crash
-            output — fenced in <code>```</code> so it survives copy-paste.
-            Two or more inline <code>`snippets`</code> count, but a fence is
+            output — fenced in <code>```</code> so it survives copy-paste. Two
+            or more inline <code>`snippets`</code> count, but a fence is
             stronger.
           </Item>
           <Item
             icon={<Link2 className="w-4 h-4 text-primary" />}
             title="At least one URL"
           >
-            A CVE, a vendor advisory, a commit, or a documentation link. Two
-            or more is better. Links anchor your claims to something
-            verifiable.
+            A CVE, a vendor advisory, a commit, or a documentation link. Two or
+            more is better. Links anchor your claims to something verifiable.
           </Item>
           <Item
             icon={<ListOrdered className="w-4 h-4 text-primary" />}
@@ -95,18 +94,18 @@ export default function GoodReport() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm leading-relaxed text-muted-foreground">
           <p>
-            <strong className="text-foreground">All-caps prose.</strong> If
-            more than 10% of letters are uppercase, the report reads like a
-            marketing blurb, not a bug report.
+            <strong className="text-foreground">All-caps prose.</strong> If more
+            than 10% of letters are uppercase, the report reads like a marketing
+            blurb, not a bug report.
           </p>
           <p>
-            <strong className="text-foreground">No reproduction.</strong> A
-            wall of impact claims with no steps is the single most common
-            shape of low-quality submissions.
+            <strong className="text-foreground">No reproduction.</strong> A wall
+            of impact claims with no steps is the single most common shape of
+            low-quality submissions.
           </p>
           <p>
-            <strong className="text-foreground">Stock AI phrasing.</strong>{" "}
-            "It is important to note that…", "In conclusion…", and similar
+            <strong className="text-foreground">Stock AI phrasing.</strong> "It
+            is important to note that…", "In conclusion…", and similar
             connective tissue is the most reliable AI tell our scoring engines
             see. Cut it.
           </p>
@@ -114,10 +113,10 @@ export default function GoodReport() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        The pre-submit checklist runs entirely in your browser — nothing is
-        sent to our servers until you actually submit. The estimated quality
-        score is a rough approximation of our server-side substance engine,
-        not the final score.
+        The pre-submit checklist runs entirely in your browser — nothing is sent
+        to our servers until you actually submit. The estimated quality score is
+        a rough approximation of our server-side substance engine, not the final
+        score.
       </p>
     </div>
   );

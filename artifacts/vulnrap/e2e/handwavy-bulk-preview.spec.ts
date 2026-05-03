@@ -1,5 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { test, expect, type Page } from "@playwright/test";
 import {
   addPhrase,
   cleanup,
@@ -53,7 +53,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     const realPhrases = uniquePhrases(3, "task154 preview real");
 
     try {
-      for (const p of realPhrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of realPhrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -86,9 +87,9 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
 
       // No legitimate detections would be lost → no acknowledgment checkbox
       // and the confirm button is enabled immediately.
-      await expect(
-        panel.getByTestId("handwavy-bulk-preview-ack"),
-      ).toHaveCount(0);
+      await expect(panel.getByTestId("handwavy-bulk-preview-ack")).toHaveCount(
+        0,
+      );
       const confirmBtn = panel.getByTestId("handwavy-bulk-preview-confirm");
       await expect(confirmBtn).toBeEnabled();
       await expect(confirmBtn).toHaveText(
@@ -118,7 +119,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     const phrases = uniquePhrases(2, "task154 preview backout");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -146,7 +148,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     const phrases = uniquePhrases(2, "task154 preview ack");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       // Intercept the dryRun DELETE to inject a synthetic "valid
       // detections lost" response. This lets us verify the UI gating
@@ -266,7 +269,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     const phrases = uniquePhrases(2, "task344 batch matches");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       // Inject a synthetic dryRun response that includes per-tier
       // `sampleMatches` on both the curated and production blocks so we
@@ -431,11 +435,9 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       // the same IDs don't appear twice — once inline above and once
       // hidden behind a <summary> click below.
       await expect(
-        panel
-          .getByTestId("handwavy-bulk-preview-curated")
-          .locator("details", {
-            hasText: "fixtures that would lose their flag",
-          }),
+        panel.getByTestId("handwavy-bulk-preview-curated").locator("details", {
+          hasText: "fixtures that would lose their flag",
+        }),
       ).toHaveCount(0);
       await expect(
         panel
@@ -480,7 +482,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     const phrases = uniquePhrases(2, "task496 batch snippets");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await page.route(
         "**/api/feedback/calibration/handwavy-phrases",
@@ -629,11 +632,9 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       // <summary> click below. The Task #496 testids the legacy block
       // would emit must NOT exist anywhere in the panel.
       await expect(
-        panel
-          .getByTestId("handwavy-bulk-preview-curated")
-          .locator("details", {
-            hasText: "fixtures that would lose their flag",
-          }),
+        panel.getByTestId("handwavy-bulk-preview-curated").locator("details", {
+          hasText: "fixtures that would lose their flag",
+        }),
       ).toHaveCount(0);
       await expect(
         panel
@@ -670,7 +671,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     const phrases = uniquePhrases(2, "task344 batch nomatches");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -713,7 +715,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     const phrases = uniquePhrases(2, "task415 batch scan-range");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       // Inject a synthetic dryRun response that carries createdAt
       // timestamps on the production block (and none on the curated
@@ -853,7 +856,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     const phantomPhrase = `task154 phantom ${randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
     try {
-      for (const p of realPhrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of realPhrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -949,7 +953,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     const phrases = uniquePhrases(3, "task154 preview drop");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -1000,7 +1005,9 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
         .locator(`[data-testid="handwavy-row"]`)
         .filter({ hasText: droppedPhrase });
       await expect(droppedRow.getByTestId("handwavy-select")).not.toBeChecked();
-      await expect(panel.getByTestId("handwavy-bulk-preview-stale")).toHaveCount(0);
+      await expect(
+        panel.getByTestId("handwavy-bulk-preview-stale"),
+      ).toHaveCount(0);
 
       // Drop a second phrase — count + label keep tracking.
       await panel
@@ -1017,7 +1024,9 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       await confirmBtn.click();
       await expect(panel).toHaveCount(0, { timeout: 15_000 });
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrases[2] }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrases[2] }),
       ).toHaveCount(0, { timeout: 15_000 });
       for (const survivor of [phrases[0], phrases[1]]) {
         await expect(
@@ -1042,7 +1051,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     const phrases = uniquePhrases(2, "task154 preview droplast");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -1215,8 +1225,7 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
                 rowBottom: r.bottom,
                 containerTop: c.top,
                 containerBottom: c.bottom,
-                inView:
-                  r.top >= c.top - 1 && r.bottom <= c.bottom + 1,
+                inView: r.top >= c.top - 1 && r.bottom <= c.bottom + 1,
               };
             }),
           {
@@ -1315,7 +1324,9 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
         .click();
       // One row left (the thrashy phrase).
       await expect(
-        panel.locator(`[data-testid="handwavy-bulk-preview-result-row-thrash"]`),
+        panel.locator(
+          `[data-testid="handwavy-bulk-preview-result-row-thrash"]`,
+        ),
       ).toHaveCount(1);
       // Now collapse manually and verify it stays collapsed.
       await details.locator("summary").click();
@@ -1478,9 +1489,10 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       // checkbox stops rendering (validDetectionsLost is now 0), the red
       // ack section is replaced by the green "safe to proceed" copy, and
       // the confirm button is enabled without any acknowledgement.
-      await expect(
-        panel.getByTestId("handwavy-bulk-preview-ack"),
-      ).toHaveCount(0, { timeout: 5_000 });
+      await expect(panel.getByTestId("handwavy-bulk-preview-ack")).toHaveCount(
+        0,
+        { timeout: 5_000 },
+      );
       await expect(panel).toContainText(
         "No legitimate hand-wavy detections would be lost",
       );
@@ -1663,7 +1675,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     ];
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       // Mock the dry-run DELETE so we can deterministically control the
       // pass/fail outcome of each call:
@@ -1783,9 +1796,7 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       );
       await expect(refetchFailed).toBeVisible({ timeout: 5_000 });
       await expect(refetchFailed).toContainText(/couldn't refresh impact/i);
-      const retryBtn = panel.getByTestId(
-        "handwavy-bulk-preview-refetch-retry",
-      );
+      const retryBtn = panel.getByTestId("handwavy-bulk-preview-refetch-retry");
       await expect(retryBtn).toBeVisible();
 
       // Critical: the previous response's impact figures stay in place
@@ -1845,7 +1856,8 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
     const phrases = uniquePhrases(3, "task502 bulk repreview");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       // Mock the GET handwavy-phrases response so the active list is
       // reduced to JUST our 3 phrases (plus an empty history). This is
@@ -1885,9 +1897,10 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
       // Sanity: only our 3 phrases render in the active list.
-      await expect(
-        page.locator('[data-testid="handwavy-row"]'),
-      ).toHaveCount(phrases.length, { timeout: 15_000 });
+      await expect(page.locator('[data-testid="handwavy-row"]')).toHaveCount(
+        phrases.length,
+        { timeout: 15_000 },
+      );
 
       // Tick only the FIRST TWO phrases, then open the bulk-remove
       // preview. The dry-run is scored against [phrases[0], phrases[1]]

@@ -161,7 +161,9 @@ test.describe("Pre-preview 'Previously removed' history hint — jump-to-row (Ta
       for (const p of phrases) {
         await addPhrase(api, p, { reviewer: REVIEWER, category: "hedging" });
       }
-      const batchResult = await batchRemove(api, phrases, { reviewer: REVIEWER });
+      const batchResult = await batchRemove(api, phrases, {
+        reviewer: REVIEWER,
+      });
       const batchRemovedAt = batchResult.historyEntry?.removedAt;
       expect(
         typeof batchRemovedAt,

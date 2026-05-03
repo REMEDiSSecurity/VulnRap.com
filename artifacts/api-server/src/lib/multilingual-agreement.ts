@@ -33,7 +33,13 @@ function classifyTier(text: string): string {
   const linguistic = analyzeLinguistic(text);
   const factual = analyzeFactual(text);
   const heuristic = analyzeSloppiness(text);
-  const fusion = fuseScores(linguistic, factual, null, heuristic.qualityScore, text);
+  const fusion = fuseScores(
+    linguistic,
+    factual,
+    null,
+    heuristic.qualityScore,
+    text,
+  );
   return fusion.slopTier;
 }
 
@@ -42,7 +48,7 @@ export function classifyTierForText(text: string): string {
 }
 
 export function computePerLanguageAgreement(
-  toleranceTiers = 1
+  toleranceTiers = 1,
 ): PerLanguageAgreementReport {
   const englishLegitTier = classifyTier(ENGLISH_LEGIT);
   const englishSlopTier = classifyTier(ENGLISH_SLOP);

@@ -19,28 +19,28 @@ persist the report to the public feed.
 
 ## Inputs
 
-| Name             | Required | Default              | Description |
-| ---------------- | -------- | -------------------- | ----------- |
-| `report-text`    | one of   | —                    | Inline report text. |
-| `report-file`    | one of   | —                    | Path to a report file inside the workspace (`.txt`, `.md`, `.pdf`). |
-| `api-base-url`   | no       | `https://vulnrap.com`| Override for self-hosted deployments. |
-| `fail-threshold` | no       | `70`                 | Slop score (0-100) at which the action exits non-zero. Set to `999` to never fail. |
-| `skip-llm`       | no       | `false`              | Skip LLM analysis — heuristics only. |
-| `skip-redaction` | no       | `false`              | Skip PII auto-redaction (forces `skip-llm=true` server-side). |
+| Name             | Required | Default               | Description                                                                        |
+| ---------------- | -------- | --------------------- | ---------------------------------------------------------------------------------- |
+| `report-text`    | one of   | —                     | Inline report text.                                                                |
+| `report-file`    | one of   | —                     | Path to a report file inside the workspace (`.txt`, `.md`, `.pdf`).                |
+| `api-base-url`   | no       | `https://vulnrap.com` | Override for self-hosted deployments.                                              |
+| `fail-threshold` | no       | `70`                  | Slop score (0-100) at which the action exits non-zero. Set to `999` to never fail. |
+| `skip-llm`       | no       | `false`               | Skip LLM analysis — heuristics only.                                               |
+| `skip-redaction` | no       | `false`               | Skip PII auto-redaction (forces `skip-llm=true` server-side).                      |
 
 Exactly one of `report-text` or `report-file` must be provided.
 
 ## Outputs
 
-| Name                     | Description |
-| ------------------------ | ----------- |
-| `slop-score`             | Composite slop score 0-100 (higher = more likely AI slop). |
-| `slop-tier`              | Human-readable slop tier name. |
+| Name                     | Description                                                                                          |
+| ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `slop-score`             | Composite slop score 0-100 (higher = more likely AI slop).                                           |
+| `slop-tier`              | Human-readable slop tier name.                                                                       |
 | `verdict`                | Triage archetype — one of `AUTO_CLOSE`, `REQUEST_DETAILS`, `PRIORITIZE_REVIEW`, `ACCEPT`, `UNKNOWN`. |
-| `quality-score`          | Report quality / completeness 0-100. |
-| `confidence`             | Confidence in the slop score (0.0-1.0). |
-| `similarity-match-count` | Near-duplicate count from the public corpus. |
-| `raw-json`               | Path under `$RUNNER_TEMP` to the full JSON response for downstream steps. |
+| `quality-score`          | Report quality / completeness 0-100.                                                                 |
+| `confidence`             | Confidence in the slop score (0.0-1.0).                                                              |
+| `similarity-match-count` | Near-duplicate count from the public corpus.                                                         |
+| `raw-json`               | Path under `$RUNNER_TEMP` to the full JSON response for downstream steps.                            |
 
 ## Usage
 
@@ -80,7 +80,7 @@ jobs:
         uses: vulnrap/vulnrap/sdks/github-action@main
         with:
           report-file: ${{ steps.pick.outputs.file }}
-          fail-threshold: 80   # block the PR if it scores 80+
+          fail-threshold: 80 # block the PR if it scores 80+
 
       - name: Comment on the PR
         if: steps.pick.outputs.file != ''
@@ -123,7 +123,7 @@ jobs:
         uses: vulnrap/vulnrap/sdks/github-action@main
         with:
           report-text: ${{ github.event.issue.body }}
-          fail-threshold: 999    # informational only — never fail the workflow
+          fail-threshold: 999 # informational only — never fail the workflow
 
       - name: Auto-label low-quality reports
         if: steps.vulnrap.outputs.verdict == 'AUTO_CLOSE'

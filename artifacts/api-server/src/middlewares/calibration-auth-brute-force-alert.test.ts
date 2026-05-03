@@ -1,10 +1,10 @@
-import express from "express";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import http from "node:http";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import express from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AddressInfo } from "node:net";
 
 const warnSpy = vi.fn();
 const infoSpy = vi.fn();
@@ -31,10 +31,14 @@ function request<T>(
   body?: unknown,
 ): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const baseHeaders: Record<string, string> = data
-      ? { "Content-Type": "application/json", "Content-Length": String(data.length) }
+      ? {
+          "Content-Type": "application/json",
+          "Content-Length": String(data.length),
+        }
       : {};
     const req = http.request(
       {
@@ -99,13 +103,15 @@ interface HarnessHandles {
 async function startHarness(opts: HarnessOpts = {}): Promise<HarnessHandles> {
   process.env.CALIBRATION_TOKEN = TOKEN;
 
-  const { requireCalibrationAuth, requireCalibrationAuthStrict, __setCalibrationAuthLimiterForTests } = await import(
-    "./require-calibration-auth"
-  );
-  const { createCalibrationAuthLimiter } = await import("./calibration-auth-rate-limit");
-  const { createBruteForceAlerter, __setBruteForceAlerterForTests } = await import(
-    "./calibration-auth-brute-force-alert"
-  );
+  const {
+    requireCalibrationAuth,
+    requireCalibrationAuthStrict,
+    __setCalibrationAuthLimiterForTests,
+  } = await import("./require-calibration-auth");
+  const { createCalibrationAuthLimiter } =
+    await import("./calibration-auth-rate-limit");
+  const { createBruteForceAlerter, __setBruteForceAlerterForTests } =
+    await import("./calibration-auth-brute-force-alert");
 
   const limiter = createCalibrationAuthLimiter({
     windowMs: 60_000,
@@ -132,15 +138,27 @@ async function startHarness(opts: HarnessOpts = {}): Promise<HarnessHandles> {
   const app = express();
   app.set("trust proxy", 1);
   app.use(express.json());
-  app.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (_req, res) => {
-    res.status(200).json({ ok: true });
-  });
-  app.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (_req, res) => {
-    res.status(200).json({ ok: true });
-  });
-  app.get("/feedback/calibration/handwavy-phrases", requireCalibrationAuthStrict, (_req, res) => {
-    res.status(200).json({ ok: true });
-  });
+  app.post(
+    "/feedback/calibration/handwavy-phrases",
+    requireCalibrationAuth,
+    (_req, res) => {
+      res.status(200).json({ ok: true });
+    },
+  );
+  app.delete(
+    "/feedback/calibration/handwavy-phrases",
+    requireCalibrationAuth,
+    (_req, res) => {
+      res.status(200).json({ ok: true });
+    },
+  );
+  app.get(
+    "/feedback/calibration/handwavy-phrases",
+    requireCalibrationAuthStrict,
+    (_req, res) => {
+      res.status(200).json({ ok: true });
+    },
+  );
 
   const server = await new Promise<http.Server>((resolve) => {
     const s = app.listen(0, "127.0.0.1", () => resolve(s));
@@ -149,7 +167,8 @@ async function startHarness(opts: HarnessOpts = {}): Promise<HarnessHandles> {
   return {
     base: {
       baseUrl: `http://127.0.0.1:${addr.port}`,
-      close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+      close: () =>
+        new Promise<void>((resolve) => server.close(() => resolve())),
     },
     dispatchCalls,
     flushAlerter: () => alerter.flushPending(),
@@ -242,7 +261,9 @@ describe("threshold crossing dispatches a webhook", () => {
     expect(call.payload.wrongTokenCount).toBe(3);
     expect(call.payload.rejectionsByStatus).toEqual({ "401": 3, "429": 0 });
     expect(call.payload.rejectionsByGate.mutation).toBe(3);
-    expect(call.payload.lastRoute).toBe("/feedback/calibration/handwavy-phrases");
+    expect(call.payload.lastRoute).toBe(
+      "/feedback/calibration/handwavy-phrases",
+    );
     expect(call.payload.lastMethod).toBe("POST");
     expect(call.payload.runbookUrl).toBe("https://example.test/runbook");
     const actionsBlob = call.payload.recommendedActions.join("\n");
@@ -256,11 +277,29 @@ describe("threshold crossing dispatches a webhook", () => {
     const h = await startHarness({ limiterMax: 2, alertThreshold: 3 });
     activeHarness = h.base;
 
-    const r1 = await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN }, { phrase: "1" });
+    const r1 = await request(
+      h.base.baseUrl,
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      { "X-Calibration-Token": WRONG_TOKEN },
+      { phrase: "1" },
+    );
     expect(r1.status).toBe(401);
-    const r2 = await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN }, { phrase: "2" });
+    const r2 = await request(
+      h.base.baseUrl,
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      { "X-Calibration-Token": WRONG_TOKEN },
+      { phrase: "2" },
+    );
     expect(r2.status).toBe(401);
-    const r3 = await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN }, { phrase: "3" });
+    const r3 = await request(
+      h.base.baseUrl,
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      { "X-Calibration-Token": WRONG_TOKEN },
+      { phrase: "3" },
+    );
     expect(r3.status).toBe(429);
 
     await h.flushAlerter();
@@ -274,7 +313,13 @@ describe("threshold crossing dispatches a webhook", () => {
     const h = await startHarness({ alertThreshold: 1 });
     activeHarness = h.base;
 
-    const r = await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": TOKEN }, { phrase: "x" });
+    const r = await request(
+      h.base.baseUrl,
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      { "X-Calibration-Token": TOKEN },
+      { phrase: "x" },
+    );
     expect(r.status).toBe(200);
     await h.flushAlerter();
     expect(h.dispatchCalls.length).toBe(0);
@@ -286,16 +331,30 @@ describe("strict-read 401s also count toward the per-IP threshold", () => {
     const h = await startHarness({ alertThreshold: 2 });
     activeHarness = h.base;
 
-    const r1 = await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN }, { phrase: "x" });
+    const r1 = await request(
+      h.base.baseUrl,
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      { "X-Calibration-Token": WRONG_TOKEN },
+      { phrase: "x" },
+    );
     expect(r1.status).toBe(401);
-    const r2 = await request(h.base.baseUrl, "GET", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN });
+    const r2 = await request(
+      h.base.baseUrl,
+      "GET",
+      "/feedback/calibration/handwavy-phrases",
+      { "X-Calibration-Token": WRONG_TOKEN },
+    );
     expect(r2.status).toBe(401);
 
     await h.flushAlerter();
     expect(h.dispatchCalls.length).toBe(1);
     const payload = h.dispatchCalls[0]!.payload;
     expect(payload.wrongTokenCount).toBe(2);
-    expect(payload.rejectionsByGate).toMatchObject({ mutation: 1, "strict-read": 1 });
+    expect(payload.rejectionsByGate).toMatchObject({
+      mutation: 1,
+      "strict-read": 1,
+    });
   });
 });
 
@@ -305,7 +364,13 @@ describe("per-IP dedup within the alert window", () => {
     activeHarness = h.base;
 
     for (let i = 0; i < 5; i++) {
-      await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN }, { phrase: `i=${i}` });
+      await request(
+        h.base.baseUrl,
+        "POST",
+        "/feedback/calibration/handwavy-phrases",
+        { "X-Calibration-Token": WRONG_TOKEN },
+        { phrase: `i=${i}` },
+      );
     }
     await h.flushAlerter();
     expect(h.dispatchCalls.length).toBe(1);
@@ -323,19 +388,49 @@ describe("per-IP dedup within the alert window", () => {
     });
     activeHarness = h.base;
 
-    await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN }, { phrase: "a" });
-    await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN }, { phrase: "b" });
+    await request(
+      h.base.baseUrl,
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      { "X-Calibration-Token": WRONG_TOKEN },
+      { phrase: "a" },
+    );
+    await request(
+      h.base.baseUrl,
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      { "X-Calibration-Token": WRONG_TOKEN },
+      { phrase: "b" },
+    );
     await h.flushAlerter();
     expect(h.dispatchCalls.length).toBe(1);
 
-    await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN }, { phrase: "c" });
+    await request(
+      h.base.baseUrl,
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      { "X-Calibration-Token": WRONG_TOKEN },
+      { phrase: "c" },
+    );
     await h.flushAlerter();
     expect(h.dispatchCalls.length).toBe(1);
 
     tickClock(2_000);
 
-    await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN }, { phrase: "d" });
-    await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN }, { phrase: "e" });
+    await request(
+      h.base.baseUrl,
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      { "X-Calibration-Token": WRONG_TOKEN },
+      { phrase: "d" },
+    );
+    await request(
+      h.base.baseUrl,
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      { "X-Calibration-Token": WRONG_TOKEN },
+      { phrase: "e" },
+    );
     await h.flushAlerter();
     expect(h.dispatchCalls.length).toBe(2);
   });
@@ -347,7 +442,13 @@ describe("webhook URL is optional", () => {
     activeHarness = h.base;
 
     for (let i = 0; i < 2; i++) {
-      await request(h.base.baseUrl, "POST", "/feedback/calibration/handwavy-phrases", { "X-Calibration-Token": WRONG_TOKEN }, { phrase: `i=${i}` });
+      await request(
+        h.base.baseUrl,
+        "POST",
+        "/feedback/calibration/handwavy-phrases",
+        { "X-Calibration-Token": WRONG_TOKEN },
+        { phrase: `i=${i}` },
+      );
     }
     await h.flushAlerter();
     expect(h.dispatchCalls.length).toBe(0);
@@ -370,9 +471,8 @@ describe("env var defaults inherit the limiter knobs", () => {
     process.env.CALIBRATION_AUTH_RATE_LIMIT_WINDOW_MS = "30000";
     process.env.CALIBRATION_AUTH_RATE_LIMIT_MAX_FAILURES = "7";
 
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
 
     let captured: { url: string; payload: unknown } | null = null;
     const alerter = createBruteForceAlerter({
@@ -396,7 +496,11 @@ describe("env var defaults inherit the limiter knobs", () => {
     await alerter.flushPending();
 
     expect(captured).not.toBeNull();
-    const payload = captured!.payload as { windowMs: number; threshold: number; ip: string };
+    const payload = captured!.payload as {
+      windowMs: number;
+      threshold: number;
+      ip: string;
+    };
     expect(payload.windowMs).toBe(30_000);
     expect(payload.threshold).toBe(7);
     expect(payload.ip).toBe("203.0.113.99");
@@ -408,11 +512,11 @@ describe("env var defaults inherit the limiter knobs", () => {
     process.env.CALIBRATION_AUTH_BRUTE_FORCE_ALERT_WINDOW_MS = "120000";
     process.env.CALIBRATION_AUTH_BRUTE_FORCE_ALERT_THRESHOLD = "20";
 
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
 
-    let captured: { payload: { windowMs: number; threshold: number } } | null = null;
+    let captured: { payload: { windowMs: number; threshold: number } } | null =
+      null;
     const alerter = createBruteForceAlerter({
       webhookUrl: "https://example.test/hook",
       runbookUrl: "https://example.test/runbook",
@@ -439,9 +543,8 @@ describe("env var defaults inherit the limiter knobs", () => {
   });
 
   it("re-reads the webhook URL env on every alert decision", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
     const calls: string[] = [];
     let mockNow = 1_000_000;
     const tickClock = (deltaMs: number) => {
@@ -476,7 +579,8 @@ describe("env var defaults inherit the limiter knobs", () => {
     // Operator now sets the env. The very next alert (after cooldown lapses)
     // must dispatch without restarting the process.
     tickClock(5_000);
-    process.env.CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL = "https://example.test/late-hook";
+    process.env.CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL =
+      "https://example.test/late-hook";
     for (let i = 0; i < 2; i++) {
       alerter.recordWrongTokenEvent({
         status: 401,
@@ -493,9 +597,8 @@ describe("env var defaults inherit the limiter knobs", () => {
 
 describe("different IPs get independent counters", () => {
   it("two IPs that each cross the threshold each get their own alert", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
     const calls: Array<{ ip: string; count: number }> = [];
     const alerter = createBruteForceAlerter({
       threshold: 2,
@@ -527,9 +630,8 @@ describe("different IPs get independent counters", () => {
   });
 
   it("ignores events with no source IP", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
     const calls: unknown[] = [];
     const alerter = createBruteForceAlerter({
       threshold: 1,
@@ -540,8 +642,20 @@ describe("different IPs get independent counters", () => {
         return { ok: true, status: 200 };
       },
     });
-    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: null });
-    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "" });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: null,
+    });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "",
+    });
     await alerter.flushPending();
     expect(calls.length).toBe(0);
   });
@@ -574,9 +688,8 @@ describe("the presented (wrong) token never appears in the dispatched payload", 
 
 describe("a thrown dispatcher does not crash the request", () => {
   it("catches the throw and leaves the IP in cooldown so it isn't re-tried for this window", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
     let dispatchCount = 0;
     const alerter = createBruteForceAlerter({
       threshold: 1,
@@ -589,8 +702,20 @@ describe("a thrown dispatcher does not crash the request", () => {
       },
     });
 
-    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "192.0.2.7" });
-    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "192.0.2.7" });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "192.0.2.7",
+    });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "192.0.2.7",
+    });
     await alerter.flushPending();
     expect(dispatchCount).toBe(1);
   });
@@ -598,9 +723,8 @@ describe("a thrown dispatcher does not crash the request", () => {
 
 describe("per-IP cooldown is persisted across process restarts (Task #400)", () => {
   it("a fresh alerter rebuilt with the same state path does not re-fire for an IP still inside its cooldown window", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
 
     let mockNow = 1_000_000;
     const tick = (deltaMs: number) => {
@@ -673,9 +797,8 @@ describe("per-IP cooldown is persisted across process restarts (Task #400)", () 
   });
 
   it("once the cooldown window has elapsed after a restart, the same IP can re-fire", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
 
     let mockNow = 2_000_000;
     const tick = (deltaMs: number) => {
@@ -736,9 +859,8 @@ describe("per-IP cooldown is persisted across process restarts (Task #400)", () 
   });
 
   it("statePath: null disables persistence (memory-only alerter)", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
 
     const calls: string[] = [];
     const alerter = createBruteForceAlerter({
@@ -768,9 +890,8 @@ describe("per-IP cooldown is persisted across process restarts (Task #400)", () 
   });
 
   it("per-IP cooldown records are capped on disk by persistHistoryLimit (oldest dropped first)", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
 
     let mockNow = 5_000_000;
     const tick = (deltaMs: number) => {
@@ -815,9 +936,8 @@ describe("per-IP cooldown is persisted across process restarts (Task #400)", () 
 // tripped" without scraping pino logs.
 describe("recentAlerts() ring buffer", () => {
   it("returns an empty list before any threshold has been crossed", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
     const alerter = createBruteForceAlerter({
       threshold: 3,
       windowMs: 60_000,
@@ -828,17 +948,28 @@ describe("recentAlerts() ring buffer", () => {
 
     expect(alerter.recentAlerts()).toEqual([]);
 
-    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "192.0.2.10" });
-    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "192.0.2.10" });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "192.0.2.10",
+    });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "192.0.2.10",
+    });
     await alerter.flushPending();
     // Two events with threshold=3 should still be empty.
     expect(alerter.recentAlerts()).toEqual([]);
   });
 
   it("records each dispatched alert with the same fields the webhook payload carries", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
     let mockNow = 5_000_000;
     const alerter = createBruteForceAlerter({
       threshold: 2,
@@ -849,9 +980,21 @@ describe("recentAlerts() ring buffer", () => {
       dispatch: async () => ({ ok: true, status: 200 }),
     });
 
-    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/feedback/calibration/handwavy-phrases", method: "POST", ip: "203.0.113.42" });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/feedback/calibration/handwavy-phrases",
+      method: "POST",
+      ip: "203.0.113.42",
+    });
     mockNow += 100;
-    alerter.recordWrongTokenEvent({ status: 429, gate: "strict-read", route: "/feedback/calibration/handwavy-phrases", method: "GET", ip: "203.0.113.42" });
+    alerter.recordWrongTokenEvent({
+      status: 429,
+      gate: "strict-read",
+      route: "/feedback/calibration/handwavy-phrases",
+      method: "GET",
+      ip: "203.0.113.42",
+    });
     await alerter.flushPending();
 
     const alerts = alerter.recentAlerts();
@@ -872,9 +1015,8 @@ describe("recentAlerts() ring buffer", () => {
   });
 
   it("records the alert even when no webhook is configured (so the UI panel still shows it)", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
     const alerter = createBruteForceAlerter({
       threshold: 1,
       windowMs: 60_000,
@@ -883,7 +1025,13 @@ describe("recentAlerts() ring buffer", () => {
       dispatch: async () => ({ ok: true, status: 200 }),
     });
 
-    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "203.0.113.50" });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "203.0.113.50",
+    });
     await alerter.flushPending();
 
     const alerts = alerter.recentAlerts();
@@ -892,9 +1040,8 @@ describe("recentAlerts() ring buffer", () => {
   });
 
   it("returns alerts newest-first regardless of the order they fired", async () => {
-    const { createBruteForceAlerter } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
     let mockNow = 1_000_000;
     const alerter = createBruteForceAlerter({
       threshold: 1,
@@ -905,21 +1052,42 @@ describe("recentAlerts() ring buffer", () => {
       dispatch: async () => ({ ok: true, status: 200 }),
     });
 
-    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "203.0.113.1" });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "203.0.113.1",
+    });
     mockNow += 1_000;
-    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "203.0.113.2" });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "203.0.113.2",
+    });
     mockNow += 1_000;
-    alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: "203.0.113.3" });
+    alerter.recordWrongTokenEvent({
+      status: 401,
+      gate: "mutation",
+      route: "/x",
+      method: "POST",
+      ip: "203.0.113.3",
+    });
     await alerter.flushPending();
 
     const alerts = alerter.recentAlerts();
-    expect(alerts.map((a) => a.ip)).toEqual(["203.0.113.3", "203.0.113.2", "203.0.113.1"]);
+    expect(alerts.map((a) => a.ip)).toEqual([
+      "203.0.113.3",
+      "203.0.113.2",
+      "203.0.113.1",
+    ]);
   });
 
   it("honors the limit argument and clamps it to the buffer size", async () => {
-    const { createBruteForceAlerter, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS } =
+      await import("./calibration-auth-brute-force-alert");
     let mockNow = 1_000_000;
     const alerter = createBruteForceAlerter({
       threshold: 1,
@@ -931,7 +1099,13 @@ describe("recentAlerts() ring buffer", () => {
     });
 
     for (let i = 0; i < 5; i++) {
-      alerter.recordWrongTokenEvent({ status: 401, gate: "mutation", route: "/x", method: "POST", ip: `203.0.113.${i + 1}` });
+      alerter.recordWrongTokenEvent({
+        status: 401,
+        gate: "mutation",
+        route: "/x",
+        method: "POST",
+        ip: `203.0.113.${i + 1}`,
+      });
       mockNow += 1_000;
     }
     await alerter.flushPending();
@@ -939,7 +1113,10 @@ describe("recentAlerts() ring buffer", () => {
     expect(alerter.recentAlerts(3).length).toBe(3);
     // Default limit (no arg) returns the configured default cap.
     expect(alerter.recentAlerts().length).toBe(
-      Math.min(5, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsDefaultLimit),
+      Math.min(
+        5,
+        __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsDefaultLimit,
+      ),
     );
     // Asking for more than what's in the buffer returns whatever is available
     // (capped by the configured buffer size).
@@ -950,17 +1127,22 @@ describe("recentAlerts() ring buffer", () => {
     expect(huge.length).toBe(5);
     // Bad limits (zero/negative/NaN) fall back to the default.
     expect(alerter.recentAlerts(0).length).toBe(
-      Math.min(5, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsDefaultLimit),
+      Math.min(
+        5,
+        __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsDefaultLimit,
+      ),
     );
     expect(alerter.recentAlerts(-3).length).toBe(
-      Math.min(5, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsDefaultLimit),
+      Math.min(
+        5,
+        __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS.recentAlertsDefaultLimit,
+      ),
     );
   });
 
   it("evicts the oldest entry once the buffer fills up (FIFO)", async () => {
-    const { createBruteForceAlerter, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS } = await import(
-      "./calibration-auth-brute-force-alert"
-    );
+    const { createBruteForceAlerter, __CALIBRATION_AUTH_BRUTE_FORCE_DEFAULTS } =
+      await import("./calibration-auth-brute-force-alert");
     let mockNow = 1_000_000;
     const alerter = createBruteForceAlerter({
       threshold: 1,

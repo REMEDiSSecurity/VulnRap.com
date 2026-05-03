@@ -53,7 +53,10 @@ export const DEFAULT_FLIP_RATE_THRESHOLD = 0.02; // 2 %
 const ALERT_STATE_CANDIDATES = [
   path.resolve(__dirname, "../../data/score-stability-alerts.json"),
   path.resolve(process.cwd(), "data/score-stability-alerts.json"),
-  path.resolve(process.cwd(), "artifacts/api-server/data/score-stability-alerts.json"),
+  path.resolve(
+    process.cwd(),
+    "artifacts/api-server/data/score-stability-alerts.json",
+  ),
 ];
 
 let RESOLVED_ALERT_PATH: string | null = null;
@@ -217,7 +220,9 @@ export async function runScoreStabilityRescorePass(
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const remaining =
-      explicitLimit !== undefined ? explicitLimit - scanned : Number.POSITIVE_INFINITY;
+      explicitLimit !== undefined
+        ? explicitLimit - scanned
+        : Number.POSITIVE_INFINITY;
     if (remaining <= 0) break;
     const pageSize = Math.min(BATCH_SIZE, remaining);
 
@@ -342,10 +347,7 @@ export type FlipDirection =
   | "none";
 
 /** Direction label for a single re-score row. */
-export function flipDirection(
-  oldTier: string,
-  newTier: string,
-): FlipDirection {
+export function flipDirection(oldTier: string, newTier: string): FlipDirection {
   if (oldTier === newTier) return "none";
   const o = bucketForTier(oldTier);
   const n = bucketForTier(newTier);
@@ -486,9 +488,8 @@ export async function computeScoreStabilitySummary(
       tightened: acc.tightened,
       loosened: acc.loosened,
       lateral: acc.lateral,
-      flipRate: acc.total > 0
-        ? Math.round((acc.flips / acc.total) * 10000) / 10000
-        : 0,
+      flipRate:
+        acc.total > 0 ? Math.round((acc.flips / acc.total) * 10000) / 10000 : 0,
     }));
 
   const totals = daily.reduce(
@@ -569,10 +570,14 @@ const defaultDispatcher: ScoreStabilityDispatcher = async (url, payload) => {
       },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) return { ok: false, status: res.status, error: `HTTP ${res.status}` };
+    if (!res.ok)
+      return { ok: false, status: res.status, error: `HTTP ${res.status}` };
     return { ok: true, status: res.status };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 };
 
@@ -581,7 +586,11 @@ const CALIBRATION_PATH = "/feedback-analytics";
 
 function buildLinks(publicUrlOverride?: string, runbookOverride?: string) {
   const base = buildPublicUrl({ override: publicUrlOverride });
-  const runbook = (runbookOverride ?? process.env.SCORE_STABILITY_RUNBOOK_URL ?? "").trim();
+  const runbook = (
+    runbookOverride ??
+    process.env.SCORE_STABILITY_RUNBOOK_URL ??
+    ""
+  ).trim();
   return {
     calibrationUrl: `${base}${CALIBRATION_PATH}`,
     runbookUrl: runbook.length > 0 ? runbook : `${base}/${RUNBOOK_PATH}`,
@@ -637,8 +646,9 @@ export async function dispatchScoreStabilityAlertIfNeeded(
   const alertThreshold =
     opts.alertThreshold ?? readFlipRateThreshold(DEFAULT_FLIP_RATE_THRESHOLD);
 
-  const summary = opts.summary
-    ?? (await computeScoreStabilitySummary({
+  const summary =
+    opts.summary ??
+    (await computeScoreStabilitySummary({
       lookbackDays: DEFAULT_LOOKBACK_DAYS,
       alertThreshold,
       now: () => now,
@@ -696,8 +706,11 @@ export async function dispatchScoreStabilityAlertIfNeeded(
     runbookUrl: links.runbookUrl,
   };
 
-  const webhookUrl =
-    (opts.webhookUrl ?? process.env.AVRI_DRIFT_WEBHOOK_URL ?? "").trim();
+  const webhookUrl = (
+    opts.webhookUrl ??
+    process.env.AVRI_DRIFT_WEBHOOK_URL ??
+    ""
+  ).trim();
 
   if (webhookUrl.length === 0) {
     // No webhook configured — record the day as alerted so wiring up a
@@ -740,7 +753,12 @@ export async function dispatchScoreStabilityAlertIfNeeded(
 
   writeAlertState({ alertedDays: [...state.alertedDays, date] });
   logger.info(
-    { date, flipRate: day.flipRate, alertThreshold, status: dispatchResult.status },
+    {
+      date,
+      flipRate: day.flipRate,
+      alertThreshold,
+      status: dispatchResult.status,
+    },
     "[score-stability] Flip-rate alert dispatched.",
   );
   return {
@@ -769,4 +787,3 @@ export const __testing = {
   BATCH_SIZE,
   MAX_PAGES,
 };
-

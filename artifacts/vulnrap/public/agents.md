@@ -9,7 +9,7 @@
 VulnRap is a free, anonymous, no-account-required service that scores vulnerability reports for
 **slop** (low-effort, AI-generated, copy-paste, hand-wavy, fabricated) vs. **substance** (real
 evidence, working PoC, reproducible impact). It is run by REMEDiSSecurity for the public good; the
-codebase is open source. The point of this file is to make it trivial for *your* system to share
+codebase is open source. The point of this file is to make it trivial for _your_ system to share
 reports for a second opinion and to feed your verdict back into the platform so it gets better
 over time.
 
@@ -40,16 +40,16 @@ That's the whole loop. The rest of this file is the details.
 
 When you submit a vulnerability report, VulnRap runs three engines on it:
 
-| Engine | What it measures | What it returns |
-|---|---|---|
-| **Slop detector** | Copy-paste, AI boilerplate, hand-wavy phrasing, missing PoC, overconfident vibes | `slopScore` 0–100 (higher = sloppier), plus `slopTier` and human-readable `feedback[]` |
+| Engine                        | What it measures                                                                                                          | What it returns                                                                                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Slop detector**             | Copy-paste, AI boilerplate, hand-wavy phrasing, missing PoC, overconfident vibes                                          | `slopScore` 0–100 (higher = sloppier), plus `slopTier` and human-readable `feedback[]`                                                                                                 |
 | **Quality / validity scorer** | Reproducible steps, working PoC, concrete impact, strong-evidence "gold signals", claim specificity, internal consistency | `qualityScore` 0–100, `validityScore` 0–100, plus a structured `substance` object with `pocValidity` / `claimSpecificity` / `domainCoherence` / `coherenceScore` when LLM analysis ran |
-| **Section hashing** | SHA-256 of normalized sections; finds reports that recycle the same PoC, intro, or impact text across submissions | `sectionHashes`, `sectionMatches[]`, `similarityMatches[]` |
+| **Section hashing**           | SHA-256 of normalized sections; finds reports that recycle the same PoC, intro, or impact text across submissions         | `sectionHashes`, `sectionMatches[]`, `similarityMatches[]`                                                                                                                             |
 
 You also get back an integer `id` (use it to build `/verify/{id}` and `/results/{id}` URLs
 yourself), a `redactedText` payload, an `evidence[]` array of specific signals the rule engine
 flagged with their weights, and (when LLM analysis runs) `llmSlopScore` / `llmFeedback` /
-`llmBreakdown` so you can explain *why* the score is what it is.
+`llmBreakdown` so you can explain _why_ the score is what it is.
 
 The lightweight `GET /api/reports/{id}/verify` endpoint additionally returns a short
 human-readable `reportCode` (e.g. `VR-7K3M`) and a server-built `verifyUrl` if you want a clean
@@ -62,14 +62,14 @@ shareable handle without constructing the URL yourself.
 These are the defaults VulnRap is tuned for. Use them unless your user has a specific reason to
 opt out — and if they do, document why in your own logs.
 
-| Setting | Default | Why |
-|---|---|---|
-| `showInFeed` | `"true"` | Lets the community learn from every report. Anonymized: only the redacted text and scores are shown, never reporter identity. |
-| `contentMode` | `"full"` | Stores the redacted text so the substance/slop engines can give a complete diagnostic. `"similarity_only"` stores hashes only and skips most of the diagnostics. |
-| `skipLlm` | `"false"` | Letting the LLM-backed analysis run gives you the enriched feedback the human will actually want to read. |
-| `skipRedaction` | `"false"` | PII / secret scrubbing happens in the browser/API before storage. Don't disable it. |
-| `file` vs. `rawText` vs. `reportUrl` | Pick whichever you already have | All three are first-class. PDFs are extracted server-side. |
-| **Feedback after every report** | **Always** | Skipping this is the single biggest reason VulnRap can't get better. One short feedback call per report is the price of admission. |
+| Setting                              | Default                         | Why                                                                                                                                                              |
+| ------------------------------------ | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `showInFeed`                         | `"true"`                        | Lets the community learn from every report. Anonymized: only the redacted text and scores are shown, never reporter identity.                                    |
+| `contentMode`                        | `"full"`                        | Stores the redacted text so the substance/slop engines can give a complete diagnostic. `"similarity_only"` stores hashes only and skips most of the diagnostics. |
+| `skipLlm`                            | `"false"`                       | Letting the LLM-backed analysis run gives you the enriched feedback the human will actually want to read.                                                        |
+| `skipRedaction`                      | `"false"`                       | PII / secret scrubbing happens in the browser/API before storage. Don't disable it.                                                                              |
+| `file` vs. `rawText` vs. `reportUrl` | Pick whichever you already have | All three are first-class. PDFs are extracted server-side.                                                                                                       |
+| **Feedback after every report**      | **Always**                      | Skipping this is the single biggest reason VulnRap can't get better. One short feedback call per report is the price of admission.                               |
 
 If your user has explicitly asked for privacy (e.g. customer NDA, embargoed CVE), set
 `showInFeed=false` and `contentMode=similarity_only`. You'll still get a `slopScore` and a match
@@ -157,7 +157,7 @@ Response (truncated, real field names):
 ```
 
 **Save `id` and `deleteToken`.** The `id` is what you pass to Step 3 (feedback). The
-`deleteToken` is the *only* credential that can ever delete this report — there's no admin
+`deleteToken` is the _only_ credential that can ever delete this report — there's no admin
 override, store it.
 
 To build the public verify URL for the human, use `https://vulnrap.com/verify/{id}`. To get the
@@ -199,7 +199,9 @@ import { createHash } from "node:crypto";
 
 async function submitFeedback({ reportId, rating, helpful, comment }) {
   // 1. Fetch the challenge
-  const ch = await fetch("https://vulnrap.com/api/feedback/challenge").then(r => r.json());
+  const ch = await fetch("https://vulnrap.com/api/feedback/challenge").then(
+    (r) => r.json(),
+  );
   // ch = { challengeId, nonce, difficulty, prefix, expiresAt }
 
   // 2. Solve the proof-of-work
@@ -221,10 +223,10 @@ async function submitFeedback({ reportId, rating, helpful, comment }) {
     body: JSON.stringify({
       challengeId: ch.challengeId,
       challengeSolution: solution.toString(16),
-      reportId,         // integer from Step 1
-      rating,           // 1–5
-      helpful,          // boolean
-      comment,          // ≤ 1000 chars
+      reportId, // integer from Step 1
+      rating, // 1–5
+      helpful, // boolean
+      comment, // ≤ 1000 chars
     }),
   });
   return res.json();
@@ -274,12 +276,12 @@ Each challenge is single-use, expires after 5 minutes, and is rate-limited per I
 403 with "Invalid solution", recompute against the latest `nonce`/`prefix` from a fresh
 `/feedback/challenge` call.
 
-**What to put in `comment`:** one short, factual sentence about *what actually happened* with this
+**What to put in `comment`:** one short, factual sentence about _what actually happened_ with this
 report. "Fabricated — function doesn't exist in the codebase." "Real but already known (dup of
 CVE-2024-1234)." "Real, novel, paid $500." This is the ground-truth label VulnRap uses to recompute
 its scoring weights, so don't editorialize and don't skip it.
 
-`rating` (1–5) and `helpful` (bool) are about whether *VulnRap's analysis* helped you, not about
+`rating` (1–5) and `helpful` (bool) are about whether _VulnRap's analysis_ helped you, not about
 the report itself. A fabricated report that VulnRap correctly flagged with `slopScore: 90` is a
 5/5, helpful=true.
 
@@ -292,7 +294,7 @@ A good agent integration shows, at minimum:
 - The `slopScore` and `substanceScore` (with the color thresholds: green <30, amber 30–69, red ≥70 for slop; inverted for substance).
 - The `matchCount` if > 0, plus a link to `/compare/{id}/{matchId}` so the human can see the duplication.
 - The `verifyUrl` so the human (or anyone they forward the ticket to) can click through and see the public badge.
-- Your *own* assessment alongside it. VulnRap is a second opinion, not an oracle.
+- Your _own_ assessment alongside it. VulnRap is a second opinion, not an oracle.
 
 Don't auto-close tickets purely on `slopScore`. Use it as a strong signal, not a verdict.
 
@@ -303,7 +305,7 @@ Don't auto-close tickets purely on `slopScore`. Use it as a strong signal, not a
 - **PII redaction** runs in the browser/API before any text touches the database. Emails, phone
   numbers, IPs, common token formats, and a long denylist of secret patterns are scrubbed.
 - **`contentMode=full`** stores the redacted text so the diagnostics page can show the human
-  *why* a section scored the way it did. This is the default and what we recommend.
+  _why_ a section scored the way it did. This is the default and what we recommend.
 - **`contentMode=similarity_only`** stores per-section SHA-256 hashes only. Use this if the
   report contents are sensitive (NDA, embargoed CVE, customer data your scrubber missed).
   You'll still get a slop/substance score and a match count, but the diagnostics block will be
@@ -322,12 +324,12 @@ Read the full policy at [`/privacy`](https://vulnrap.com/privacy).
 ## What not to do
 
 - **Don't strip the redaction step** by setting `skipRedaction=true` for routine traffic. It's
-  there to protect *your user's* secrets, not just VulnRap.
+  there to protect _your user's_ secrets, not just VulnRap.
 - **Don't submit the same report on a tight loop** to "watch the score change." The score is
   deterministic per submission; resubmitting the same content just spends rate limit and
   pollutes the duplicate-detection signal for everyone else.
 - **Don't claim VulnRap "validated" a report** when all you got back was a low slop score. A low
-  slop score means the report doesn't *look* like AI slop — it does not mean the vulnerability
+  slop score means the report doesn't _look_ like AI slop — it does not mean the vulnerability
   is real. Always run the actual reproduction.
 - **Don't drop the feedback step** because "the report wasn't interesting." Boring reports are
   exactly the ones VulnRap most needs ground truth on.

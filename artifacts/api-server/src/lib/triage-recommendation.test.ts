@@ -57,7 +57,7 @@ function storedRowFor(composite: CompositeResult) {
   return {
     vulnrapCompositeScore: composite.overallScore,
     vulnrapEngineResults: {
-      engines: composite.engineResults.map(e => ({
+      engines: composite.engineResults.map((e) => ({
         engine: e.engine,
         score: e.score,
         signalBreakdown: e.signalBreakdown,
@@ -74,10 +74,21 @@ describe("v3.6.0 triage matrix consolidation", () => {
   // decision; otherwise re-checking an existing report would silently flip
   // its recommendation.
   const verification: VerificationResult | null = null;
-  const evidence: Array<{ type: string; description: string; weight: number }> = [];
+  const evidence: Array<{ type: string; description: string; weight: number }> =
+    [];
 
-  const cases: Array<{ label: string; composite: number; e2: number; strong: number }> = [
-    { label: "high-quality (PRIORITIZE band)", composite: 78, e2: 70, strong: 3 },
+  const cases: Array<{
+    label: string;
+    composite: number;
+    e2: number;
+    strong: number;
+  }> = [
+    {
+      label: "high-quality (PRIORITIZE band)",
+      composite: 78,
+      e2: 70,
+      strong: 3,
+    },
     { label: "standard band", composite: 65, e2: 55, strong: 1 },
     { label: "mid band needing review", composite: 50, e2: 45, strong: 0 },
     { label: "low-mid band", composite: 35, e2: 30, strong: 0 },
@@ -89,14 +100,29 @@ describe("v3.6.0 triage matrix consolidation", () => {
       const composite = makeComposite(c.composite, c.e2, c.strong);
       const stored = storedRowFor(composite);
 
-      const liveCtx = buildV36TriageContextFromComposite(composite, verification);
+      const liveCtx = buildV36TriageContextFromComposite(
+        composite,
+        verification,
+      );
       const cachedCtx = buildV36TriageContext(stored, verification);
 
       expect(cachedCtx).toEqual(liveCtx);
 
       const slopScore = Math.max(0, 100 - c.composite);
-      const live = generateTriageRecommendation(slopScore, 0.7, verification, evidence, liveCtx);
-      const cached = generateTriageRecommendation(slopScore, 0.7, verification, evidence, cachedCtx);
+      const live = generateTriageRecommendation(
+        slopScore,
+        0.7,
+        verification,
+        evidence,
+        liveCtx,
+      );
+      const cached = generateTriageRecommendation(
+        slopScore,
+        0.7,
+        verification,
+        evidence,
+        cachedCtx,
+      );
 
       expect(cached.action).toBe(live.action);
       expect(cached.reason).toBe(live.reason);

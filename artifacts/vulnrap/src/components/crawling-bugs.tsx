@@ -97,7 +97,9 @@ export function CrawlingBugs() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    );
     if (prefersReducedMotion.matches) return;
 
     const resize = () => {
@@ -108,7 +110,7 @@ export function CrawlingBugs() {
     window.addEventListener("resize", resize);
 
     bugsRef.current = Array.from({ length: BUG_COUNT }, () =>
-      createBug(canvas.width, canvas.height)
+      createBug(canvas.width, canvas.height),
     );
 
     const animate = () => {
@@ -130,7 +132,10 @@ export function CrawlingBugs() {
           }
 
           const angleDiff = bug.targetAngle - bug.angle;
-          const normalizedDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+          const normalizedDiff = Math.atan2(
+            Math.sin(angleDiff),
+            Math.cos(angleDiff),
+          );
           bug.angle += normalizedDiff * bug.turnSpeed;
 
           bug.x += Math.cos(bug.angle) * bug.speed;

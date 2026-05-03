@@ -1,8 +1,8 @@
-import { test, expect, type Route } from "@playwright/test";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { test, expect, type Route } from "@playwright/test";
 
 // Task #216 — UI smoke test for the Task #117 reviewer-token indicator
 // (badge + red rejection banner) on /feedback-analytics.
@@ -65,7 +65,10 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-async function waitForHealth(baseUrl: string, timeoutMs: number): Promise<void> {
+async function waitForHealth(
+  baseUrl: string,
+  timeoutMs: number,
+): Promise<void> {
   const start = Date.now();
   let lastErr: unknown = null;
   while (Date.now() - start < timeoutMs) {
@@ -123,13 +126,11 @@ test.describe("Feedback Analytics — reviewer-token indicator (Task #117)", () 
     openSidecar.stderr.on("data", (chunk) => {
       const text = chunk.toString();
       if (/error|fatal|throw/i.test(text)) {
-        // eslint-disable-next-line no-console
         console.error(`[open-mode side-car stderr] ${text}`);
       }
     });
     openSidecar.on("exit", (code, signal) => {
       if (code !== 0 && signal !== "SIGTERM" && signal !== "SIGKILL") {
-        // eslint-disable-next-line no-console
         console.error(
           `[open-mode side-car] exited unexpectedly code=${code} signal=${signal}`,
         );
@@ -185,7 +186,10 @@ test.describe("Feedback Analytics — reviewer-token indicator (Task #117)", () 
   // turns a "missing" probe into a "configured" one. Node fetch carries no
   // such defaults, so the forwarded request is exactly the headers we
   // pass and nothing else.
-  async function forwardAuthStatus(route: Route, upstream: string): Promise<void> {
+  async function forwardAuthStatus(
+    route: Route,
+    upstream: string,
+  ): Promise<void> {
     // Build a header set that drops every credential the test environment
     // might inject (the X-Calibration-Token from playwright config, plus a
     // Bearer fallback). What's left is everything the page would send if
@@ -227,13 +231,11 @@ test.describe("Feedback Analytics — reviewer-token indicator (Task #117)", () 
     // other /api/* request continues to hit the default api-server (with
     // its seed data, calibration report, feedback rows, etc.) so the page
     // still reaches its CalibrationSection render path.
-    await page.route(
-      "**/api/feedback/calibration/auth-status",
-      (route) =>
-        forwardAuthStatus(
-          route,
-          `${openSidecarBase}/api/feedback/calibration/auth-status`,
-        ),
+    await page.route("**/api/feedback/calibration/auth-status", (route) =>
+      forwardAuthStatus(
+        route,
+        `${openSidecarBase}/api/feedback/calibration/auth-status`,
+      ),
     );
 
     await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -241,9 +243,9 @@ test.describe("Feedback Analytics — reviewer-token indicator (Task #117)", () 
     // The badge text is the cross-component contract — exercising it via
     // visible text rather than an internal data-testid keeps the spec
     // honest about what a reviewer actually sees on the page.
-    await expect(
-      page.getByText("Reviewer token: not required"),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Reviewer token: not required")).toBeVisible({
+      timeout: 15_000,
+    });
 
     // The red rejection banner must NOT appear in open mode. Asserting
     // count==0 (instead of just "not visible") catches a regression where
@@ -253,7 +255,7 @@ test.describe("Feedback Analytics — reviewer-token indicator (Task #117)", () 
     ).toHaveCount(0);
   });
 
-  test('red banner appears when api-server has CALIBRATION_TOKEN but the UI build lacks VITE_CALIBRATION_TOKEN', async ({
+  test("red banner appears when api-server has CALIBRATION_TOKEN but the UI build lacks VITE_CALIBRATION_TOKEN", async ({
     page,
   }) => {
     // Route the auth-status probe through the DEFAULT (playwright-managed)
@@ -264,20 +266,18 @@ test.describe("Feedback Analytics — reviewer-token indicator (Task #117)", () 
     // the header, and playwright.config.ts's extraHTTPHeaders (which the
     // runtime build can't influence) is the only reason the browser would
     // otherwise send one. The forward helper drops it for us.
-    await page.route(
-      "**/api/feedback/calibration/auth-status",
-      (route) =>
-        forwardAuthStatus(
-          route,
-          `${DEFAULT_API_BASE}/api/feedback/calibration/auth-status`,
-        ),
+    await page.route("**/api/feedback/calibration/auth-status", (route) =>
+      forwardAuthStatus(
+        route,
+        `${DEFAULT_API_BASE}/api/feedback/calibration/auth-status`,
+      ),
     );
 
     await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
 
-    await expect(
-      page.getByText("Reviewer token: missing"),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Reviewer token: missing")).toBeVisible({
+      timeout: 15_000,
+    });
 
     // The red banner is the operator-facing escalation — its headline plus
     // the VITE_CALIBRATION_TOKEN guidance copy must both be visible so a

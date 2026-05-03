@@ -1,14 +1,34 @@
 import { useState, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { UploadCloud, Loader2, CheckCircle, XCircle, FileText, AlertTriangle, Trash2, ExternalLink } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import {
+  UploadCloud,
+  Loader2,
+  CheckCircle,
+  XCircle,
+  FileText,
+  AlertTriangle,
+  Trash2,
+  ExternalLink,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { addHistoryEntry } from "@/lib/history";
-import { getSettings, getSlopColorCustom, getSlopProgressColorCustom } from "@/lib/settings";
+import {
+  getSettings,
+  getSlopColorCustom,
+  getSlopProgressColorCustom,
+} from "@/lib/settings";
 import { anonymizeId } from "@/lib/utils";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -48,30 +68,33 @@ export default function Batch() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
 
-  const addFiles = useCallback((fileList: FileList) => {
-    const newFiles: BatchFile[] = [];
-    for (let i = 0; i < fileList.length; i++) {
-      const f = fileList[i];
-      const err = validateFile(f);
-      if (err) {
-        newFiles.push({ file: f, status: "error", error: err });
-      } else {
-        newFiles.push({ file: f, status: "pending" });
+  const addFiles = useCallback(
+    (fileList: FileList) => {
+      const newFiles: BatchFile[] = [];
+      for (let i = 0; i < fileList.length; i++) {
+        const f = fileList[i];
+        const err = validateFile(f);
+        if (err) {
+          newFiles.push({ file: f, status: "error", error: err });
+        } else {
+          newFiles.push({ file: f, status: "pending" });
+        }
       }
-    }
-    setFiles((prev) => {
-      const combined = [...prev, ...newFiles];
-      if (combined.length > MAX_FILES) {
-        toast({
-          title: "Too many files",
-          description: `Maximum ${MAX_FILES} files at once. Only the first ${MAX_FILES} were kept.`,
-          variant: "destructive",
-        });
-        return combined.slice(0, MAX_FILES);
-      }
-      return combined;
-    });
-  }, [toast]);
+      setFiles((prev) => {
+        const combined = [...prev, ...newFiles];
+        if (combined.length > MAX_FILES) {
+          toast({
+            title: "Too many files",
+            description: `Maximum ${MAX_FILES} files at once. Only the first ${MAX_FILES} were kept.`,
+            variant: "destructive",
+          });
+          return combined.slice(0, MAX_FILES);
+        }
+        return combined;
+      });
+    },
+    [toast],
+  );
 
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -95,7 +118,7 @@ export default function Batch() {
       if (abortRef.current) break;
 
       setFiles((prev) =>
-        prev.map((f, i) => (i === idx ? { ...f, status: "uploading" } : f))
+        prev.map((f, i) => (i === idx ? { ...f, status: "uploading" } : f)),
       );
 
       try {
@@ -111,7 +134,9 @@ export default function Batch() {
         });
 
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({ error: "Upload failed" }));
+          const errData = await res
+            .json()
+            .catch(() => ({ error: "Upload failed" }));
           throw new Error(errData.error || `HTTP ${res.status}`);
         }
 
@@ -119,14 +144,20 @@ export default function Batch() {
 
         if (data.deleteToken) {
           try {
-            const tokens = JSON.parse(sessionStorage.getItem("vulnrap_delete_tokens") || "{}");
+            const tokens = JSON.parse(
+              sessionStorage.getItem("vulnrap_delete_tokens") || "{}",
+            );
             tokens[data.id] = data.deleteToken;
-            sessionStorage.setItem("vulnrap_delete_tokens", JSON.stringify(tokens));
+            sessionStorage.setItem(
+              "vulnrap_delete_tokens",
+              JSON.stringify(tokens),
+            );
           } catch {}
         }
 
         const reconstructed =
-          (data.vulnrap as { reconstructed?: boolean } | null | undefined)?.reconstructed === true;
+          (data.vulnrap as { reconstructed?: boolean } | null | undefined)
+            ?.reconstructed === true;
 
         addHistoryEntry({
           id: data.id,
@@ -157,22 +188,25 @@ export default function Batch() {
                     reconstructed,
                   },
                 }
-              : f
-          )
+              : f,
+          ),
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : "Upload failed";
         setFiles((prev) =>
           prev.map((f, i) =>
-            i === idx ? { ...f, status: "error", error: message } : f
-          )
+            i === idx ? { ...f, status: "error", error: message } : f,
+          ),
         );
       }
     }
 
     setIsProcessing(false);
     if (!abortRef.current) {
-      toast({ title: "Batch complete", description: "All files have been processed." });
+      toast({
+        title: "Batch complete",
+        description: "All files have been processed.",
+      });
     }
   };
 
@@ -189,7 +223,8 @@ export default function Batch() {
           Batch Upload
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-          Drop multiple report files to analyze them all at once. Each file is submitted, analyzed, and stored individually.
+          Drop multiple report files to analyze them all at once. Each file is
+          submitted, analyzed, and stored individually.
         </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-4" />
       </div>
@@ -202,7 +237,7 @@ export default function Batch() {
               isDragging
                 ? "border-primary bg-primary/5"
                 : "border-muted-foreground/20 hover:border-primary/40",
-              isProcessing && "pointer-events-none opacity-50"
+              isProcessing && "pointer-events-none opacity-50",
             )}
             onDrop={(e) => {
               e.preventDefault();
@@ -242,7 +277,9 @@ export default function Batch() {
         <>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3 text-sm">
-              <span className="text-muted-foreground">{totalCount} file{totalCount !== 1 ? "s" : ""}</span>
+              <span className="text-muted-foreground">
+                {totalCount} file{totalCount !== 1 ? "s" : ""}
+              </span>
               {doneCount > 0 && (
                 <Badge variant="secondary" className="gap-1">
                   <CheckCircle className="w-3 h-3 text-green-400" />
@@ -279,9 +316,14 @@ export default function Batch() {
                   className="gap-2 glow-button"
                 >
                   {isProcessing ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Processing...
+                    </>
                   ) : (
-                    <><UploadCloud className="w-4 h-4" /> Analyze {pendingCount} File{pendingCount !== 1 ? "s" : ""}</>
+                    <>
+                      <UploadCloud className="w-4 h-4" /> Analyze {pendingCount}{" "}
+                      File{pendingCount !== 1 ? "s" : ""}
+                    </>
                   )}
                 </Button>
               )}
@@ -299,10 +341,18 @@ export default function Batch() {
           <div className="space-y-2">
             {files.map((entry, index) => {
               const slopColor = entry.result
-                ? getSlopColorCustom(entry.result.slopScore, settings.slopThresholdLow, settings.slopThresholdHigh)
+                ? getSlopColorCustom(
+                    entry.result.slopScore,
+                    settings.slopThresholdLow,
+                    settings.slopThresholdHigh,
+                  )
                 : "";
               const progressColor = entry.result
-                ? getSlopProgressColorCustom(entry.result.slopScore, settings.slopThresholdLow, settings.slopThresholdHigh)
+                ? getSlopProgressColorCustom(
+                    entry.result.slopScore,
+                    settings.slopThresholdLow,
+                    settings.slopThresholdHigh,
+                  )
                 : "";
               return (
                 <Card key={index} className="glass-card rounded-xl">
@@ -334,12 +384,16 @@ export default function Batch() {
                         </div>
 
                         {entry.status === "error" && entry.error && (
-                          <p className="text-xs text-destructive mt-1">{entry.error}</p>
+                          <p className="text-xs text-destructive mt-1">
+                            {entry.error}
+                          </p>
                         )}
 
                         {entry.status === "done" && entry.result && (
                           <div className="flex items-center gap-3 mt-1.5">
-                            <span className={`font-mono text-sm font-bold ${slopColor}`}>
+                            <span
+                              className={`font-mono text-sm font-bold ${slopColor}`}
+                            >
                               {entry.result.slopScore}
                             </span>
                             <Progress
@@ -351,8 +405,12 @@ export default function Batch() {
                               {entry.result.slopTier}
                             </span>
                             {entry.result.matchCount > 0 && (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                                {entry.result.matchCount} match{entry.result.matchCount !== 1 ? "es" : ""}
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] px-1.5 py-0 h-4"
+                              >
+                                {entry.result.matchCount} match
+                                {entry.result.matchCount !== 1 ? "es" : ""}
                               </Badge>
                             )}
                             {entry.result.reconstructed && (
@@ -369,7 +427,9 @@ export default function Batch() {
                                   recon
                                 </Badge>
                                 <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 rounded-md glass-card px-3 py-2 text-[11px] text-popover-foreground opacity-0 group-hover/recon:opacity-100 group-focus-within/recon:opacity-100 transition-opacity z-50 glow-border text-left font-normal normal-case leading-relaxed">
-                                  Composite was rebuilt from cached signals rather than a fresh pipeline run. Treat this score as approximate.
+                                  Composite was rebuilt from cached signals
+                                  rather than a fresh pipeline run. Treat this
+                                  score as approximate.
                                 </span>
                               </span>
                             )}
@@ -379,21 +439,28 @@ export default function Batch() {
 
                       <div className="flex items-center gap-2 shrink-0">
                         {entry.status === "done" && entry.result && (
-                          <Button asChild variant="ghost" size="icon" className="h-8 w-8">
+                          <Button
+                            asChild
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                          >
                             <Link to={`/results/${entry.result.id}`}>
                               <ExternalLink className="w-4 h-4" />
                             </Link>
                           </Button>
                         )}
-                        {(entry.status === "pending" || entry.status === "error") && !isProcessing && (
-                          <button
-                            type="button"
-                            onClick={() => removeFile(index)}
-                            className="p-1.5 rounded-md text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </button>
-                        )}
+                        {(entry.status === "pending" ||
+                          entry.status === "error") &&
+                          !isProcessing && (
+                            <button
+                              type="button"
+                              onClick={() => removeFile(index)}
+                              className="p-1.5 rounded-md text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          )}
                       </div>
                     </div>
                   </CardContent>

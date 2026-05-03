@@ -12,11 +12,15 @@
 //  - Five visual styles via `style=`: default, flat, plastic, social, square.
 //  - ETag based on `id|slopScore|tier|createdAtMs|style` so repeat embedders
 //    get cheap 304s. `Cache-Control: max-age=300`.
-import { Router, type IRouter } from "express";
 import crypto from "crypto";
+import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, reportsTable } from "@workspace/db";
-import { renderBadgeSvg, type BadgeStyle, BADGE_STYLES } from "../lib/badge-svg";
+import {
+  renderBadgeSvg,
+  type BadgeStyle,
+  BADGE_STYLES,
+} from "../lib/badge-svg";
 
 const router: IRouter = Router();
 
@@ -46,7 +50,9 @@ export function parseReportId(raw: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function buildEtag(parts: ReadonlyArray<string | number | null | undefined>): string {
+function buildEtag(
+  parts: ReadonlyArray<string | number | null | undefined>,
+): string {
   const h = crypto
     .createHash("sha256")
     .update(parts.map((p) => String(p ?? "")).join("|"))
@@ -74,15 +80,23 @@ function sendSvg(
 
 router.get("/embed/badge.svg", async (req, res): Promise<void> => {
   const idRaw = typeof req.query.id === "string" ? req.query.id : "";
-  const styleRaw = typeof req.query.style === "string" ? req.query.style : "default";
-  const style: BadgeStyle = (BADGE_STYLES as readonly string[]).includes(styleRaw)
+  const styleRaw =
+    typeof req.query.style === "string" ? req.query.style : "default";
+  const style: BadgeStyle = (BADGE_STYLES as readonly string[]).includes(
+    styleRaw,
+  )
     ? (styleRaw as BadgeStyle)
     : "default";
 
   const numericId = parseReportId(idRaw);
 
   if (numericId === null) {
-    const svg = renderBadgeSvg({ label: "vulnrap", value: "unknown", color: UNKNOWN_COLOR, style });
+    const svg = renderBadgeSvg({
+      label: "vulnrap",
+      value: "unknown",
+      color: UNKNOWN_COLOR,
+      style,
+    });
     sendSvg(res, req, svg, buildEtag(["unknown", idRaw, style]));
     return;
   }
@@ -99,7 +113,12 @@ router.get("/embed/badge.svg", async (req, res): Promise<void> => {
     .where(eq(reportsTable.id, numericId));
 
   if (!report || !report.showInFeed) {
-    const svg = renderBadgeSvg({ label: "vulnrap", value: "unknown", color: UNKNOWN_COLOR, style });
+    const svg = renderBadgeSvg({
+      label: "vulnrap",
+      value: "unknown",
+      color: UNKNOWN_COLOR,
+      style,
+    });
     sendSvg(res, req, svg, buildEtag(["unknown", idRaw, style]));
     return;
   }
@@ -108,7 +127,8 @@ router.get("/embed/badge.svg", async (req, res): Promise<void> => {
   const tier = report.slopTier ?? "unscored";
   const color = tierColor(tier);
   const value = `${tier} (${score})`;
-  const createdAtMs = report.createdAt instanceof Date ? report.createdAt.getTime() : 0;
+  const createdAtMs =
+    report.createdAt instanceof Date ? report.createdAt.getTime() : 0;
   const etag = buildEtag([report.id, score, tier, createdAtMs, style]);
   const svg = renderBadgeSvg({ label: "vulnrap", value, color, style });
   sendSvg(res, req, svg, etag);

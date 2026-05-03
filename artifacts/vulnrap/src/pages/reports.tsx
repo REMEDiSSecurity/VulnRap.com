@@ -1,14 +1,31 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useGetReportFeed, getGetReportFeedQueryKey } from "@workspace/api-client-react";
+import {
+  useGetReportFeed,
+  getGetReportFeedQueryKey,
+} from "@workspace/api-client-react";
+import {
+  Activity,
+  ArrowUpDown,
+  ChevronDown,
+  Database,
+  ExternalLink,
+  Filter,
+  Search,
+  TrendingUp,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { getSettings, getSlopColorCustom, getSlopProgressColorCustom } from "@/lib/settings";
+import {
+  getSettings,
+  getSlopColorCustom,
+  getSlopProgressColorCustom,
+} from "@/lib/settings";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
-import { Activity, ArrowUpDown, ChevronDown, Database, ExternalLink, Filter, Search, TrendingUp, X } from "lucide-react";
 
 const PAGE_SIZE = 20;
 
@@ -19,7 +36,11 @@ function getSlopColor(score: number) {
 
 function getSlopProgressColor(score: number) {
   const s = getSettings();
-  return getSlopProgressColorCustom(score, s.slopThresholdLow, s.slopThresholdHigh);
+  return getSlopProgressColorCustom(
+    score,
+    s.slopThresholdLow,
+    s.slopThresholdHigh,
+  );
 }
 
 function timeAgo(date: string): string {
@@ -69,7 +90,9 @@ const AVRI_FAMILY_OPTIONS: Array<{ value: string; label: string }> = [
 
 function familyLabel(familyId: string | null | undefined): string | null {
   if (!familyId) return null;
-  return AVRI_FAMILY_OPTIONS.find((o) => o.value === familyId)?.label ?? familyId;
+  return (
+    AVRI_FAMILY_OPTIONS.find((o) => o.value === familyId)?.label ?? familyId
+  );
 }
 
 function getTierBadgeColor(tier: string) {
@@ -108,10 +131,22 @@ const VALID_SORTS = new Set<string>(SORT_OPTIONS.map((s) => s.value));
 const VALID_FAMILIES = new Set<string>(AVRI_FAMILY_OPTIONS.map((o) => o.value));
 const VALID_TIERS = new Set<string>(["All", ...TIER_ORDER]);
 
-const FABRICATED_EVIDENCE_OPTIONS: Array<{ value: string; label: string; short: string }> = [
+const FABRICATED_EVIDENCE_OPTIONS: Array<{
+  value: string;
+  label: string;
+  short: string;
+}> = [
   { value: "All", label: "All evidence", short: "All evidence" },
-  { value: "fake_raw_http", label: "Fake raw HTTP only", short: "Fake raw HTTP" },
-  { value: "stripped_trace", label: "Stripped crash trace only", short: "Stripped trace" },
+  {
+    value: "fake_raw_http",
+    label: "Fake raw HTTP only",
+    short: "Fake raw HTTP",
+  },
+  {
+    value: "stripped_trace",
+    label: "Stripped crash trace only",
+    short: "Stripped trace",
+  },
   { value: "either", label: "Either fabricated flag", short: "Either flag" },
 ];
 const VALID_FABRICATED = new Set<string>(
@@ -148,7 +183,13 @@ export default function Reports() {
       (prev) => {
         const next = new URLSearchParams(prev);
         for (const [key, value] of Object.entries(updates)) {
-          if (value === null || value === "" || value === "All" || (key === "sort" && value === "newest") || (key === "offset" && value === "0")) {
+          if (
+            value === null ||
+            value === "" ||
+            value === "All" ||
+            (key === "sort" && value === "newest") ||
+            (key === "offset" && value === "0")
+          ) {
             next.delete(key);
           } else {
             next.set(key, value);
@@ -161,8 +202,10 @@ export default function Reports() {
   };
 
   const setSort = (value: string) => updateParams({ sort: value, offset: "0" });
-  const setTierFilter = (value: string) => updateParams({ tier: value, offset: "0" });
-  const setFamilyFilter = (value: string) => updateParams({ avriFamily: value, offset: "0" });
+  const setTierFilter = (value: string) =>
+    updateParams({ tier: value, offset: "0" });
+  const setFamilyFilter = (value: string) =>
+    updateParams({ avriFamily: value, offset: "0" });
   const setFabricatedFilter = (value: string) =>
     updateParams({ fabricatedEvidence: value, offset: "0" });
   const setOffset = (value: number) => updateParams({ offset: String(value) });
@@ -220,7 +263,11 @@ export default function Reports() {
       : {}),
   };
 
-  const { data: feedData, isLoading: feedLoading, isError: feedError } = useGetReportFeed(feedParams, {
+  const {
+    data: feedData,
+    isLoading: feedLoading,
+    isError: feedError,
+  } = useGetReportFeed(feedParams, {
     query: {
       queryKey: getGetReportFeedQueryKey(feedParams),
       staleTime: 30_000,
@@ -253,7 +300,9 @@ export default function Reports() {
             Reports Explorer
           </h1>
         </div>
-        <p className="text-muted-foreground mt-2 text-sm">Browse all public vulnerability report validations.</p>
+        <p className="text-muted-foreground mt-2 text-sm">
+          Browse all public vulnerability report validations.
+        </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-4" />
       </div>
 
@@ -261,31 +310,41 @@ export default function Reports() {
         <div className="glass-card rounded-xl p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-2">
             <Database className="w-4 h-4 text-cyan-400" />
-            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Public Reports</span>
+            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
+              Public Reports
+            </span>
           </div>
           {feedLoading ? (
             <Skeleton className="h-8 w-20" />
           ) : (
-            <div className="text-2xl font-mono font-bold glow-text-sm">{summary?.totalPublic ?? 0}</div>
+            <div className="text-2xl font-mono font-bold glow-text-sm">
+              {summary?.totalPublic ?? 0}
+            </div>
           )}
         </div>
 
         <div className="glass-card rounded-xl p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-2">
             <TrendingUp className="w-4 h-4 text-amber-400" />
-            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Avg Slop Score</span>
+            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
+              Avg Slop Score
+            </span>
           </div>
           {feedLoading ? (
             <Skeleton className="h-8 w-20" />
           ) : (
-            <div className="text-2xl font-mono font-bold text-amber-400">{Math.round(summary?.avgScore ?? 0)}</div>
+            <div className="text-2xl font-mono font-bold text-amber-400">
+              {Math.round(summary?.avgScore ?? 0)}
+            </div>
           )}
         </div>
 
         <div className="glass-card rounded-xl p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-2">
             <Activity className="w-4 h-4 text-violet-400" />
-            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Tier Breakdown</span>
+            <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
+              Tier Breakdown
+            </span>
           </div>
           {feedLoading ? (
             <Skeleton className="h-8 w-full" />
@@ -297,7 +356,10 @@ export default function Reports() {
                 return (
                   <div
                     key={tier}
-                    className={cn("flex-1 rounded-t-sm transition-all opacity-70", getTierBarColor(tier))}
+                    className={cn(
+                      "flex-1 rounded-t-sm transition-all opacity-70",
+                      getTierBarColor(tier),
+                    )}
                     style={{ height: `${Math.max(pct, 8)}%` }}
                     title={`${tier}: ${count}`}
                   />
@@ -315,7 +377,12 @@ export default function Reports() {
           <div className="relative">
             <button
               type="button"
-              onClick={() => { setShowTierMenu(!showTierMenu); setShowSortMenu(false); setShowFamilyMenu(false); setShowFabricatedMenu(false); }}
+              onClick={() => {
+                setShowTierMenu(!showTierMenu);
+                setShowSortMenu(false);
+                setShowFamilyMenu(false);
+                setShowFabricatedMenu(false);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
             >
               <Filter className="w-3.5 h-3.5 text-muted-foreground" />
@@ -328,13 +395,18 @@ export default function Reports() {
                   <button
                     key={tier}
                     type="button"
-                    onClick={() => { setTierFilter(tier); setShowTierMenu(false); }}
+                    onClick={() => {
+                      setTierFilter(tier);
+                      setShowTierMenu(false);
+                    }}
                     className={cn(
                       "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
-                      tierFilter === tier && "text-primary font-medium"
+                      tierFilter === tier && "text-primary font-medium",
                     )}
                   >
-                    {tier === "All" ? "All tiers" : `${tier} (${tierCounts[tier] ?? 0})`}
+                    {tier === "All"
+                      ? "All tiers"
+                      : `${tier} (${tierCounts[tier] ?? 0})`}
                   </button>
                 ))}
               </div>
@@ -348,7 +420,12 @@ export default function Reports() {
           <div className="relative">
             <button
               type="button"
-              onClick={() => { setShowFamilyMenu(!showFamilyMenu); setShowTierMenu(false); setShowSortMenu(false); setShowFabricatedMenu(false); }}
+              onClick={() => {
+                setShowFamilyMenu(!showFamilyMenu);
+                setShowTierMenu(false);
+                setShowSortMenu(false);
+                setShowFabricatedMenu(false);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
             >
               <Filter className="w-3.5 h-3.5 text-muted-foreground" />
@@ -361,12 +438,12 @@ export default function Reports() {
             </button>
             {showFamilyMenu && (
               <div className="absolute top-full mt-1 left-0 z-50 glass-card rounded-lg border border-border/50 shadow-xl py-1 min-w-[260px] max-h-[320px] overflow-y-auto">
-                {AVRI_FAMILY_OPTIONS
-                  .filter((opt) =>
+                {AVRI_FAMILY_OPTIONS.filter(
+                  (opt) =>
                     opt.value === "All" ||
                     opt.value === familyFilter ||
                     (familyCounts[opt.value] ?? 0) > 0,
-                  )
+                )
                   .map((opt, idx) => ({ opt, idx }))
                   .sort((a, b) => {
                     if (a.opt.value === "All") return -1;
@@ -383,10 +460,14 @@ export default function Reports() {
                       <button
                         key={opt.value}
                         type="button"
-                        onClick={() => { setFamilyFilter(opt.value); setShowFamilyMenu(false); }}
+                        onClick={() => {
+                          setFamilyFilter(opt.value);
+                          setShowFamilyMenu(false);
+                        }}
                         className={cn(
                           "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
-                          familyFilter === opt.value && "text-primary font-medium",
+                          familyFilter === opt.value &&
+                            "text-primary font-medium",
                           isZero && "opacity-50",
                         )}
                       >
@@ -404,7 +485,12 @@ export default function Reports() {
             <button
               type="button"
               data-testid="fabricated-evidence-trigger"
-              onClick={() => { setShowFabricatedMenu(!showFabricatedMenu); setShowTierMenu(false); setShowFamilyMenu(false); setShowSortMenu(false); }}
+              onClick={() => {
+                setShowFabricatedMenu(!showFabricatedMenu);
+                setShowTierMenu(false);
+                setShowFamilyMenu(false);
+                setShowSortMenu(false);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
             >
               <Filter className="w-3.5 h-3.5 text-muted-foreground" />
@@ -421,10 +507,14 @@ export default function Reports() {
                     key={opt.value}
                     type="button"
                     data-testid={`fabricated-evidence-option-${opt.value}`}
-                    onClick={() => { setFabricatedFilter(opt.value); setShowFabricatedMenu(false); }}
+                    onClick={() => {
+                      setFabricatedFilter(opt.value);
+                      setShowFabricatedMenu(false);
+                    }}
                     className={cn(
                       "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
-                      fabricatedFilter === opt.value && "text-primary font-medium",
+                      fabricatedFilter === opt.value &&
+                        "text-primary font-medium",
                     )}
                   >
                     {opt.label}
@@ -437,7 +527,12 @@ export default function Reports() {
           <div className="relative">
             <button
               type="button"
-              onClick={() => { setShowSortMenu(!showSortMenu); setShowTierMenu(false); setShowFamilyMenu(false); setShowFabricatedMenu(false); }}
+              onClick={() => {
+                setShowSortMenu(!showSortMenu);
+                setShowTierMenu(false);
+                setShowFamilyMenu(false);
+                setShowFabricatedMenu(false);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
             >
               <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
@@ -450,10 +545,13 @@ export default function Reports() {
                   <button
                     key={s.value}
                     type="button"
-                    onClick={() => { setSort(s.value); setShowSortMenu(false); }}
+                    onClick={() => {
+                      setSort(s.value);
+                      setShowSortMenu(false);
+                    }}
                     className={cn(
                       "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
-                      sort === s.value && "text-primary font-medium"
+                      sort === s.value && "text-primary font-medium",
                     )}
                   >
                     {s.label}
@@ -479,7 +577,9 @@ export default function Reports() {
         </div>
 
         <span className="text-xs text-muted-foreground">
-          {total > 0 ? `Showing ${offset + 1}–${Math.min(offset + PAGE_SIZE, total)} of ${total}` : "No reports found"}
+          {total > 0
+            ? `Showing ${offset + 1}–${Math.min(offset + PAGE_SIZE, total)} of ${total}`
+            : "No reports found"}
         </span>
       </div>
 
@@ -509,7 +609,9 @@ export default function Reports() {
               className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full glass-card text-xs font-medium border border-border/50 hover:border-primary/40 transition-all group"
             >
               <span className="text-muted-foreground">Family:</span>
-              <span className="text-foreground">{familyLabel(familyFilter) ?? familyFilter}</span>
+              <span className="text-foreground">
+                {familyLabel(familyFilter) ?? familyFilter}
+              </span>
               <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
             </button>
           )}
@@ -522,7 +624,9 @@ export default function Reports() {
               className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full glass-card text-xs font-medium border border-border/50 hover:border-primary/40 transition-all group"
             >
               <span className="text-muted-foreground">Evidence:</span>
-              <span className="text-foreground">{fabricatedEvidenceShort(fabricatedFilter)}</span>
+              <span className="text-foreground">
+                {fabricatedEvidenceShort(fabricatedFilter)}
+              </span>
               <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
             </button>
           )}
@@ -534,7 +638,9 @@ export default function Reports() {
               className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full glass-card text-xs font-medium border border-border/50 hover:border-primary/40 transition-all group"
             >
               <span className="text-muted-foreground">Sort:</span>
-              <span className="text-foreground">{SORT_OPTIONS.find((s) => s.value === sort)?.label}</span>
+              <span className="text-foreground">
+                {SORT_OPTIONS.find((s) => s.value === sort)?.label}
+              </span>
               <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
             </button>
           )}
@@ -544,15 +650,22 @@ export default function Reports() {
       <div className="space-y-2">
         {feedLoading ? (
           Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 rounded-lg bg-muted/10 animate-pulse" />
+            <div
+              key={i}
+              className="h-16 rounded-lg bg-muted/10 animate-pulse"
+            />
           ))
         ) : feedError ? (
           <div className="glass-card rounded-xl p-8 text-center">
-            <p className="text-destructive font-medium">Failed to load reports. Please try again later.</p>
+            <p className="text-destructive font-medium">
+              Failed to load reports. Please try again later.
+            </p>
           </div>
         ) : reports.length === 0 ? (
           <div className="glass-card rounded-xl p-8 text-center">
-            <p className="text-muted-foreground">No reports match the current filters.</p>
+            <p className="text-muted-foreground">
+              No reports match the current filters.
+            </p>
           </div>
         ) : (
           reports.map((report) => (
@@ -562,26 +675,42 @@ export default function Reports() {
               className="flex items-center justify-between gap-3 p-3 sm:p-4 rounded-lg glass-card hover:border-primary/20 transition-all group"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <span className="font-mono text-sm text-primary font-medium glow-text-sm">{report.reportCode}</span>
-                <Badge variant="outline" className={cn("text-[10px] hidden sm:inline-flex", getTierBadgeColor(report.slopTier))}>
+                <span className="font-mono text-sm text-primary font-medium glow-text-sm">
+                  {report.reportCode}
+                </span>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[10px] hidden sm:inline-flex",
+                    getTierBadgeColor(report.slopTier),
+                  )}
+                >
                   {report.slopTier}
                 </Badge>
-                {report.avriFamily && (() => {
-                  const famCount = familyCounts[report.avriFamily] ?? 0;
-                  const label = familyLabel(report.avriFamily) ?? report.avriFamily;
-                  return (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] hidden md:inline-flex border-primary/30 text-primary/80 font-mono normal-case"
-                      title={famCount > 0 ? `${label} — ${famCount} report${famCount === 1 ? "" : "s"} in corpus` : label}
-                    >
-                      {report.avriFamily}
-                      {famCount > 0 && (
-                        <span className="ml-1 text-primary/60">· {famCount}</span>
-                      )}
-                    </Badge>
-                  );
-                })()}
+                {report.avriFamily &&
+                  (() => {
+                    const famCount = familyCounts[report.avriFamily] ?? 0;
+                    const label =
+                      familyLabel(report.avriFamily) ?? report.avriFamily;
+                    return (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] hidden md:inline-flex border-primary/30 text-primary/80 font-mono normal-case"
+                        title={
+                          famCount > 0
+                            ? `${label} — ${famCount} report${famCount === 1 ? "" : "s"} in corpus`
+                            : label
+                        }
+                      >
+                        {report.avriFamily}
+                        {famCount > 0 && (
+                          <span className="ml-1 text-primary/60">
+                            · {famCount}
+                          </span>
+                        )}
+                      </Badge>
+                    );
+                  })()}
                 {/* Task #198 — Surface AVRI Engine 2's revoke-trigger blocks
                     on the feed row so reviewers triaging the queue can spot
                     fabricated-raw-HTTP and stripped-trace reports without
@@ -629,15 +758,32 @@ export default function Reports() {
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
                 <div className="flex items-center gap-2">
-                  <Progress value={report.slopScore} className="w-16 h-1.5 hidden sm:block" indicatorClassName={getSlopProgressColor(report.slopScore)} />
-                  <span className={cn("font-mono text-sm font-medium w-7 text-right", getSlopColor(report.slopScore))}>{report.slopScore}</span>
+                  <Progress
+                    value={report.slopScore}
+                    className="w-16 h-1.5 hidden sm:block"
+                    indicatorClassName={getSlopProgressColor(report.slopScore)}
+                  />
+                  <span
+                    className={cn(
+                      "font-mono text-sm font-medium w-7 text-right",
+                      getSlopColor(report.slopScore),
+                    )}
+                  >
+                    {report.slopScore}
+                  </span>
                 </div>
                 {report.matchCount > 0 && (
-                  <Badge variant="outline" className="text-[10px] gap-1 hidden md:inline-flex">
-                    <Search className="w-2.5 h-2.5" />{report.matchCount}
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 hidden md:inline-flex"
+                  >
+                    <Search className="w-2.5 h-2.5" />
+                    {report.matchCount}
                   </Badge>
                 )}
-                <span className="text-xs text-muted-foreground w-16 text-right hidden sm:block">{timeAgo(report.createdAt)}</span>
+                <span className="text-xs text-muted-foreground w-16 text-right hidden sm:block">
+                  {timeAgo(report.createdAt)}
+                </span>
                 <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/0 group-hover:text-primary transition-colors" />
               </div>
             </Link>
@@ -677,7 +823,7 @@ export default function Reports() {
                     "w-8 h-8 rounded-md text-xs font-mono font-medium transition-all",
                     currentPage === page
                       ? "bg-primary text-primary-foreground glow-text-sm"
-                      : "glass-card hover:border-primary/30 text-muted-foreground hover:text-primary"
+                      : "glass-card hover:border-primary/30 text-muted-foreground hover:text-primary",
                   )}
                 >
                   {page}

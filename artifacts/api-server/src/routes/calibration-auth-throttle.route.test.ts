@@ -12,9 +12,9 @@ import http from "node:http";
 import path from "node:path";
 import os from "node:os";
 import { promises as fs } from "node:fs";
-import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { AddressInfo } from "node:net";
 
 const TOKEN = "s3cret-throttle-token";
 
@@ -32,10 +32,14 @@ function request<T>(
   headers: Record<string, string> = {},
 ): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const baseHeaders: Record<string, string> = data
-      ? { "Content-Type": "application/json", "Content-Length": String(data.length) }
+      ? {
+          "Content-Type": "application/json",
+          "Content-Length": String(data.length),
+        }
       : {};
     const req = http.request(
       {
@@ -89,7 +93,9 @@ let activeHarness: Harness | null = null;
 let restoreLimiter: (() => void) | null = null;
 
 async function startHarness(opts: HarnessOptions = {}): Promise<Harness> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "calibration-throttle-"));
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "calibration-throttle-"),
+  );
   const phrasesPath = path.join(tmpDir, "handwavy-phrases.json");
   const seed = JSON.stringify(
     {
@@ -107,12 +113,10 @@ async function startHarness(opts: HarnessOptions = {}): Promise<Harness> {
   const calibrationRouter = (await import("./calibration")).default;
   const handwavy = await import("../lib/engines/avri/handwavy-phrases");
   handwavy.__resetHandwavyPhrasesForTests();
-  const { createCalibrationAuthLimiter } = await import(
-    "../middlewares/calibration-auth-rate-limit"
-  );
-  const { __setCalibrationAuthLimiterForTests } = await import(
-    "../middlewares/require-calibration-auth"
-  );
+  const { createCalibrationAuthLimiter } =
+    await import("../middlewares/calibration-auth-rate-limit");
+  const { __setCalibrationAuthLimiterForTests } =
+    await import("../middlewares/require-calibration-auth");
 
   // Inject a fresh limiter into the auth middleware so its in-memory hit
   // store is isolated from every other test. Without this, the lazy
@@ -120,7 +124,10 @@ async function startHarness(opts: HarnessOptions = {}): Promise<Harness> {
   // between tests.
   const limiter = opts.useEnvDefaults
     ? createCalibrationAuthLimiter()
-    : createCalibrationAuthLimiter({ windowMs: opts.windowMs ?? 60_000, max: opts.max ?? 3 });
+    : createCalibrationAuthLimiter({
+        windowMs: opts.windowMs ?? 60_000,
+        max: opts.max ?? 3,
+      });
   __setCalibrationAuthLimiterForTests(limiter);
   restoreLimiter = () => __setCalibrationAuthLimiterForTests(null);
 
@@ -136,7 +143,11 @@ async function startHarness(opts: HarnessOptions = {}): Promise<Harness> {
 
   const close = async (): Promise<void> => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   };
 
   return { baseUrl, close };

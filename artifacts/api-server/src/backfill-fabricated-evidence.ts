@@ -27,7 +27,9 @@ interface CliOpts {
 function parsePositiveInt(raw: string, flag: string): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n <= 0) {
-    console.error(`[backfill-fabricated-evidence] ${flag} must be a positive integer, got: ${raw}`);
+    console.error(
+      `[backfill-fabricated-evidence] ${flag} must be a positive integer, got: ${raw}`,
+    );
     process.exit(2);
   }
   return n;
@@ -38,10 +40,17 @@ function parseArgs(argv: string[]): CliOpts {
   for (const arg of argv.slice(2)) {
     if (arg === "--" || arg === "") continue;
     if (arg === "--dry-run") opts.dryRun = true;
-    else if (arg.startsWith("--limit=")) opts.limit = parsePositiveInt(arg.slice("--limit=".length), "--limit");
-    else if (arg.startsWith("--batch-size=")) opts.batchSize = parsePositiveInt(arg.slice("--batch-size=".length), "--batch-size");
+    else if (arg.startsWith("--limit="))
+      opts.limit = parsePositiveInt(arg.slice("--limit=".length), "--limit");
+    else if (arg.startsWith("--batch-size="))
+      opts.batchSize = parsePositiveInt(
+        arg.slice("--batch-size=".length),
+        "--batch-size",
+      );
     else if (arg === "--help" || arg === "-h") {
-      console.log("Usage: backfill-fabricated-evidence [--dry-run] [--limit=N] [--batch-size=N]");
+      console.log(
+        "Usage: backfill-fabricated-evidence [--dry-run] [--limit=N] [--batch-size=N]",
+      );
       process.exit(0);
     } else {
       console.error(`[backfill-fabricated-evidence] unknown argument: ${arg}`);
@@ -58,8 +67,13 @@ async function backfill(opts: CliOpts): Promise<void> {
     .select({ n: sql<number>`count(*)::int` })
     .from(reportsTable);
   const totalRows = totalRow[0]?.n ?? 0;
-  console.log(`[backfill-fabricated-evidence] reports table size: ${totalRows}`);
-  if (opts.dryRun) console.log("[backfill-fabricated-evidence] dry-run mode: no writes will be performed");
+  console.log(
+    `[backfill-fabricated-evidence] reports table size: ${totalRows}`,
+  );
+  if (opts.dryRun)
+    console.log(
+      "[backfill-fabricated-evidence] dry-run mode: no writes will be performed",
+    );
 
   let processed = 0;
   let setFakeRawHttp = 0;
@@ -69,7 +83,8 @@ async function backfill(opts: CliOpts): Promise<void> {
 
   while (true) {
     if (opts.limit !== null && processed >= opts.limit) break;
-    const remaining = opts.limit !== null ? opts.limit - processed : opts.batchSize;
+    const remaining =
+      opts.limit !== null ? opts.limit - processed : opts.batchSize;
     const pageSize = Math.min(opts.batchSize, remaining);
 
     const rows = await db

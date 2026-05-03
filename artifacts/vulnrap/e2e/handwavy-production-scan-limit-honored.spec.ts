@@ -1,5 +1,5 @@
-import { test, expect, type APIRequestContext } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { test, expect, type APIRequestContext } from "@playwright/test";
 import { newApiContext } from "./helpers/handwavy";
 
 // Task #325 — End-to-end coverage for the *server-side* contract that the
@@ -85,18 +85,15 @@ async function dryRunWithLimit(
   phrase: string,
   productionScanLimit: number,
 ): Promise<DryRunResponse> {
-  const res = await api.post(
-    "/api/feedback/calibration/handwavy-phrases",
-    {
-      data: {
-        phrase,
-        category: "absence",
-        dryRun: true,
-        productionScanLimit,
-        reviewer: "e2e-task325",
-      },
+  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
+    data: {
+      phrase,
+      category: "absence",
+      dryRun: true,
+      productionScanLimit,
+      reviewer: "e2e-task325",
     },
-  );
+  });
   expect(
     res.ok(),
     `dry-run POST with productionScanLimit=${productionScanLimit} failed: ${res.status()} ${await res.text()}`,

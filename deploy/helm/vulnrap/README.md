@@ -83,47 +83,47 @@ curl http://localhost:8080/api/health
 
 ## Resources Created
 
-| Resource | Purpose |
-|---|---|
-| `Deployment` | Runs `replicaCount` copies of the API server container. |
-| `Service` (ClusterIP by default) | In-cluster endpoint on port `service.port`. |
-| `Ingress` (optional) | External HTTP/HTTPS entry point. |
-| `ConfigMap` | Non-sensitive env vars (`PORT`, `PUBLIC_URL`, `ALLOWED_ORIGINS`, …). |
-| `Secret` (stub, optional) | Holds `DATABASE_URL`, `OPENAI_API_KEY`. **Do not commit real values.** |
-| `ServiceAccount` (optional) | Dedicated identity for the workload. |
-| `HorizontalPodAutoscaler` (optional) | CPU-based autoscaling. |
+| Resource                             | Purpose                                                                |
+| ------------------------------------ | ---------------------------------------------------------------------- |
+| `Deployment`                         | Runs `replicaCount` copies of the API server container.                |
+| `Service` (ClusterIP by default)     | In-cluster endpoint on port `service.port`.                            |
+| `Ingress` (optional)                 | External HTTP/HTTPS entry point.                                       |
+| `ConfigMap`                          | Non-sensitive env vars (`PORT`, `PUBLIC_URL`, `ALLOWED_ORIGINS`, …).   |
+| `Secret` (stub, optional)            | Holds `DATABASE_URL`, `OPENAI_API_KEY`. **Do not commit real values.** |
+| `ServiceAccount` (optional)          | Dedicated identity for the workload.                                   |
+| `HorizontalPodAutoscaler` (optional) | CPU-based autoscaling.                                                 |
 
 ## Values
 
-| Key | Default | Description |
-|---|---|---|
-| `image.repository` | `ghcr.io/vulnrap/vulnrap` | Container image. **Override.** |
-| `image.tag` | `""` (chart appVersion) | Image tag. |
-| `image.pullPolicy` | `IfNotPresent` | Image pull policy. |
-| `imagePullSecrets` | `[]` | Pull secrets for private registries. |
-| `replicaCount` | `2` | Number of API server pods (ignored when autoscaling). |
-| `service.type` | `ClusterIP` | Service type. |
-| `service.port` | `80` | Service port. |
-| `service.targetPort` | `8080` | Container port (matches `env.PORT`). |
-| `ingress.enabled` | `false` | Enable Ingress. |
-| `ingress.className` | `""` | IngressClass. |
-| `ingress.hosts` | `[{host: vulnrap.local, …}]` | Host/path rules. |
-| `ingress.tls` | `[]` | TLS configuration. |
-| `resources` | `100m/256Mi → 1000m/1Gi` | CPU/memory requests & limits. |
-| `autoscaling.enabled` | `false` | Enable HPA. |
-| `autoscaling.minReplicas` | `2` | HPA min. |
-| `autoscaling.maxReplicas` | `10` | HPA max. |
-| `autoscaling.targetCPUUtilizationPercentage` | `75` | HPA target CPU %. |
-| `livenessProbe` / `readinessProbe` | HTTP `/api/health` | Probe configuration. Set `enabled: false` to disable. |
-| `podSecurityContext` | non-root, fsGroup 1000 | Pod security context. |
-| `securityContext` | drop ALL caps, RO root FS, no privilege escalation | Container security context. |
-| `serviceAccount.create` | `true` | Create a dedicated ServiceAccount. |
-| `env` | see `values.yaml` | Non-sensitive env vars (ConfigMap). |
-| `extraEnv` | `[]` | Extra env vars (raw `[].name/value`). |
-| `secrets.create` | `true` | Create the Secret stub. Set `false` to use `existingSecret`. |
-| `secrets.existingSecret` | `""` | Name of a pre-existing Secret to mount instead. |
-| `secrets.data.DATABASE_URL` | placeholder | Postgres connection string. **Override.** |
-| `secrets.data.OPENAI_API_KEY` | `""` | Optional LLM key. |
+| Key                                          | Default                                            | Description                                                  |
+| -------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------ |
+| `image.repository`                           | `ghcr.io/vulnrap/vulnrap`                          | Container image. **Override.**                               |
+| `image.tag`                                  | `""` (chart appVersion)                            | Image tag.                                                   |
+| `image.pullPolicy`                           | `IfNotPresent`                                     | Image pull policy.                                           |
+| `imagePullSecrets`                           | `[]`                                               | Pull secrets for private registries.                         |
+| `replicaCount`                               | `2`                                                | Number of API server pods (ignored when autoscaling).        |
+| `service.type`                               | `ClusterIP`                                        | Service type.                                                |
+| `service.port`                               | `80`                                               | Service port.                                                |
+| `service.targetPort`                         | `8080`                                             | Container port (matches `env.PORT`).                         |
+| `ingress.enabled`                            | `false`                                            | Enable Ingress.                                              |
+| `ingress.className`                          | `""`                                               | IngressClass.                                                |
+| `ingress.hosts`                              | `[{host: vulnrap.local, …}]`                       | Host/path rules.                                             |
+| `ingress.tls`                                | `[]`                                               | TLS configuration.                                           |
+| `resources`                                  | `100m/256Mi → 1000m/1Gi`                           | CPU/memory requests & limits.                                |
+| `autoscaling.enabled`                        | `false`                                            | Enable HPA.                                                  |
+| `autoscaling.minReplicas`                    | `2`                                                | HPA min.                                                     |
+| `autoscaling.maxReplicas`                    | `10`                                               | HPA max.                                                     |
+| `autoscaling.targetCPUUtilizationPercentage` | `75`                                               | HPA target CPU %.                                            |
+| `livenessProbe` / `readinessProbe`           | HTTP `/api/health`                                 | Probe configuration. Set `enabled: false` to disable.        |
+| `podSecurityContext`                         | non-root, fsGroup 1000                             | Pod security context.                                        |
+| `securityContext`                            | drop ALL caps, RO root FS, no privilege escalation | Container security context.                                  |
+| `serviceAccount.create`                      | `true`                                             | Create a dedicated ServiceAccount.                           |
+| `env`                                        | see `values.yaml`                                  | Non-sensitive env vars (ConfigMap).                          |
+| `extraEnv`                                   | `[]`                                               | Extra env vars (raw `[].name/value`).                        |
+| `secrets.create`                             | `true`                                             | Create the Secret stub. Set `false` to use `existingSecret`. |
+| `secrets.existingSecret`                     | `""`                                               | Name of a pre-existing Secret to mount instead.              |
+| `secrets.data.DATABASE_URL`                  | placeholder                                        | Postgres connection string. **Override.**                    |
+| `secrets.data.OPENAI_API_KEY`                | `""`                                               | Optional LLM key.                                            |
 
 See [`values.yaml`](./values.yaml) for the authoritative, commented list.
 

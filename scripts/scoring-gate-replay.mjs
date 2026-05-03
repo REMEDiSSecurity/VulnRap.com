@@ -23,11 +23,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
-const testFile = path.join(
-  "test",
-  "regression",
-  "scoring-replay.test.ts",
-);
+const testFile = path.join("test", "regression", "scoring-replay.test.ts");
 const apiServerDir = path.join(repoRoot, "artifacts", "api-server");
 const absoluteTestPath = path.join(apiServerDir, testFile);
 
@@ -43,9 +39,7 @@ const env = {
   SCORING_GATE_REPLAY: "1",
 };
 
-console.log(
-  `[scoring-gate-replay] running replay test (${testFile})...`,
-);
+console.log(`[scoring-gate-replay] running replay test (${testFile})...`);
 const result = spawnSync(
   "pnpm",
   [

@@ -1,9 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import {
-  ArchetypeRowView,
-  type ArchetypeRow,
-} from "./feedback-analytics";
+import { ArchetypeRowView, type ArchetypeRow } from "./feedback-analytics";
 import type { ArchetypeHistorySnapshot } from "@/lib/archetype-history";
 
 // Task #508 — guard the red "Tight headroom" badge that `ArchetypeRowView`

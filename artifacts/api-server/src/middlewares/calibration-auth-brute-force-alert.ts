@@ -356,7 +356,10 @@ function buildPayload(
     threshold: cfg.threshold,
     wrongTokenCount: events.length,
     rejectionsByStatus: { "401": count401, "429": count429 },
-    rejectionsByGate: { mutation: countMutation, "strict-read": countStrictRead },
+    rejectionsByGate: {
+      mutation: countMutation,
+      "strict-read": countStrictRead,
+    },
     firstSeenAt: new Date(first.at).toISOString(),
     lastSeenAt: new Date(last.at).toISOString(),
     lastRoute: last.route,
@@ -384,7 +387,8 @@ export function createBruteForceAlerter(
   const pinnedWebhook = opts.webhookUrl ?? "";
 
   const statePath = resolveStatePath(opts.statePath);
-  const persistHistoryLimit = opts.persistHistoryLimit ?? DEFAULT_PERSIST_HISTORY_LIMIT;
+  const persistHistoryLimit =
+    opts.persistHistoryLimit ?? DEFAULT_PERSIST_HISTORY_LIMIT;
 
   const perIp = new Map<string, PerIpState>();
   const inFlight = new Set<Promise<unknown>>();
@@ -411,7 +415,10 @@ export function createBruteForceAlerter(
     };
     recentAlertsBuffer.push(entry);
     if (recentAlertsBuffer.length > RECENT_ALERTS_BUFFER_SIZE) {
-      recentAlertsBuffer.splice(0, recentAlertsBuffer.length - RECENT_ALERTS_BUFFER_SIZE);
+      recentAlertsBuffer.splice(
+        0,
+        recentAlertsBuffer.length - RECENT_ALERTS_BUFFER_SIZE,
+      );
     }
   }
 
@@ -461,7 +468,10 @@ export function createBruteForceAlerter(
 
   function pruneIp(state: PerIpState, cutoff: number): void {
     let dropUntil = 0;
-    while (dropUntil < state.events.length && state.events[dropUntil]!.at < cutoff) {
+    while (
+      dropUntil < state.events.length &&
+      state.events[dropUntil]!.at < cutoff
+    ) {
       dropUntil += 1;
     }
     if (dropUntil > 0) {
@@ -576,10 +586,7 @@ export function createBruteForceAlerter(
     // Cooldown: once we've alerted for this IP, suppress further alerts
     // for one full window so an in-progress attack doesn't re-page the
     // on-call every request.
-    if (
-      state.lastAlertedAt !== null &&
-      t - state.lastAlertedAt < windowMs
-    ) {
+    if (state.lastAlertedAt !== null && t - state.lastAlertedAt < windowMs) {
       return;
     }
 
@@ -624,9 +631,7 @@ function getAlerter(): BruteForceAlerter {
  * `require-calibration-auth.ts` and the 429 path in
  * `calibration-auth-rate-limit.ts`. Always safe to call.
  */
-export function reportCalibrationAuthRejection(
-  ev: WrongTokenEventInput,
-): void {
+export function reportCalibrationAuthRejection(ev: WrongTokenEventInput): void {
   getAlerter().recordWrongTokenEvent(ev);
 }
 

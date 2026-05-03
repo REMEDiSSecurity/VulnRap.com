@@ -1,15 +1,40 @@
 import { useState, useRef } from "react";
-import { GitCompare, Loader2, CheckCircle, AlertTriangle, Layers, Search, ShieldCheck, Lightbulb, HelpCircle, BarChart3, Gauge, AlertCircle, Database, ExternalLink } from "lucide-react";
+import {
+  GitCompare,
+  Loader2,
+  CheckCircle,
+  AlertTriangle,
+  Layers,
+  Search,
+  ShieldCheck,
+  Lightbulb,
+  HelpCircle,
+  BarChart3,
+  Gauge,
+  AlertCircle,
+  Database,
+  ExternalLink,
+} from "lucide-react";
 import { useCheckReport } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Link } from "react-router-dom";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { getSettings, getSlopColorCustom, getSlopProgressColorCustom } from "@/lib/settings";
+import {
+  getSettings,
+  getSlopColorCustom,
+  getSlopProgressColorCustom,
+} from "@/lib/settings";
 import { anonymizeId } from "@/lib/utils";
-import { Link } from "react-router-dom";
 
 interface SimilarityMatch {
   reportId: number;
@@ -29,10 +54,24 @@ interface CompareResult {
   slopTier: string;
   qualityScore?: number;
   confidence?: number;
-  breakdown?: { linguistic?: number; factual?: number; template?: number; llm?: number | null; quality?: number };
-  evidence?: Array<{ type: string; description: string; weight: number; matched?: string | null }>;
+  breakdown?: {
+    linguistic?: number;
+    factual?: number;
+    template?: number;
+    llm?: number | null;
+    quality?: number;
+  };
+  evidence?: Array<{
+    type: string;
+    description: string;
+    weight: number;
+    matched?: string | null;
+  }>;
   feedback: string[];
-  redactionSummary: { totalRedactions: number; categories: Record<string, number> };
+  redactionSummary: {
+    totalRedactions: number;
+    categories: Record<string, number>;
+  };
   sectionHashes: Record<string, string>;
   llmEnhanced?: boolean;
   similarityMatches?: SimilarityMatch[];
@@ -53,13 +92,18 @@ function Hint({ text }: { text: string }) {
       <button
         type="button"
         className="inline-flex"
-        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
         onBlur={() => setOpen(false)}
         aria-label="More info"
       >
         <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-primary transition-colors" />
       </button>
-      <span className={`pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md glass-card px-3 py-2 text-xs text-popover-foreground transition-opacity z-50 glow-border text-left font-normal normal-case ${open ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+      <span
+        className={`pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md glass-card px-3 py-2 text-xs text-popover-foreground transition-opacity z-50 glow-border text-left font-normal normal-case ${open ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+      >
         {text}
       </span>
     </span>
@@ -86,10 +130,16 @@ function getMatchColor(similarity: number): string {
 
 function computeSectionOverlap(
   hashesA: Record<string, string>,
-  hashesB: Record<string, string>
+  hashesB: Record<string, string>,
 ): { identical: string[]; total: number } {
-  const keysA = Object.entries(hashesA).filter(([k]) => k !== "__full_document");
-  const valuesB = new Set(Object.entries(hashesB).filter(([k]) => k !== "__full_document").map(([, v]) => v));
+  const keysA = Object.entries(hashesA).filter(
+    ([k]) => k !== "__full_document",
+  );
+  const valuesB = new Set(
+    Object.entries(hashesB)
+      .filter(([k]) => k !== "__full_document")
+      .map(([, v]) => v),
+  );
   const identical = keysA.filter(([, v]) => valuesB.has(v)).map(([k]) => k);
   const allKeys = new Set([
     ...keysA.map(([k]) => k),
@@ -98,10 +148,26 @@ function computeSectionOverlap(
   return { identical, total: allKeys.size };
 }
 
-function ResultCard({ label, result, badge }: { label: string; result: CompareResult; badge?: React.ReactNode }) {
+function ResultCard({
+  label,
+  result,
+  badge,
+}: {
+  label: string;
+  result: CompareResult;
+  badge?: React.ReactNode;
+}) {
   const settings = getSettings();
-  const slopColor = getSlopColorCustom(result.slopScore, settings.slopThresholdLow, settings.slopThresholdHigh);
-  const progressColor = getSlopProgressColorCustom(result.slopScore, settings.slopThresholdLow, settings.slopThresholdHigh);
+  const slopColor = getSlopColorCustom(
+    result.slopScore,
+    settings.slopThresholdLow,
+    settings.slopThresholdHigh,
+  );
+  const progressColor = getSlopProgressColorCustom(
+    result.slopScore,
+    settings.slopThresholdLow,
+    settings.slopThresholdHigh,
+  );
   const bd = result.breakdown;
 
   return (
@@ -109,14 +175,22 @@ function ResultCard({ label, result, badge }: { label: string; result: CompareRe
       <CardHeader className="pb-2">
         <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-2">
           {label}
-          {badge ?? <Badge variant="outline" className="text-[10px]">Not stored</Badge>}
+          {badge ?? (
+            <Badge variant="outline" className="text-[10px]">
+              Not stored
+            </Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-center">
-            <div className="text-[9px] text-muted-foreground uppercase">Slop</div>
-            <div className={`text-3xl font-bold font-mono ${slopColor} glow-text`}>
+            <div className="text-[9px] text-muted-foreground uppercase">
+              Slop
+            </div>
+            <div
+              className={`text-3xl font-bold font-mono ${slopColor} glow-text`}
+            >
               {result.slopScore}
             </div>
           </div>
@@ -124,21 +198,38 @@ function ResultCard({ label, result, badge }: { label: string; result: CompareRe
             <>
               <div className="h-10 w-px bg-border/30" />
               <div className="flex flex-col items-center">
-                <div className="text-[9px] text-muted-foreground uppercase">Quality</div>
-                <div className={`text-3xl font-bold font-mono ${getQualityColor(result.qualityScore)}`}>
+                <div className="text-[9px] text-muted-foreground uppercase">
+                  Quality
+                </div>
+                <div
+                  className={`text-3xl font-bold font-mono ${getQualityColor(result.qualityScore)}`}
+                >
                   {result.qualityScore}
                 </div>
               </div>
             </>
           )}
           <div className="flex-1 space-y-1 ml-2">
-            <div className="text-xs font-medium uppercase">{result.slopTier}</div>
-            <Progress value={result.slopScore} className="h-1.5" indicatorClassName={progressColor} />
+            <div className="text-xs font-medium uppercase">
+              {result.slopTier}
+            </div>
+            <Progress
+              value={result.slopScore}
+              className="h-1.5"
+              indicatorClassName={progressColor}
+            />
             {result.confidence != null && (
               <div className="flex items-center gap-1 text-[10px]">
                 <Gauge className="w-3 h-3 text-muted-foreground" />
-                <span className={`font-mono ${getConfidenceColor(result.confidence)}`}>
-                  {(result.confidence * 100).toFixed(0)}% — {result.confidence >= 0.8 ? "High" : result.confidence >= 0.5 ? "Medium" : "Low"}
+                <span
+                  className={`font-mono ${getConfidenceColor(result.confidence)}`}
+                >
+                  {(result.confidence * 100).toFixed(0)}% —{" "}
+                  {result.confidence >= 0.8
+                    ? "High"
+                    : result.confidence >= 0.5
+                      ? "Medium"
+                      : "Low"}
                 </span>
               </div>
             )}
@@ -160,12 +251,21 @@ function ResultCard({ label, result, badge }: { label: string; result: CompareRe
                   { label: "Tmpl", score: bd.template ?? 0 },
                   { label: "LLM", score: bd.llm },
                 ].map(({ label: axLabel, score }) => (
-                  <div key={axLabel} className="flex items-center justify-between text-[10px]">
+                  <div
+                    key={axLabel}
+                    className="flex items-center justify-between text-[10px]"
+                  >
                     <span className="text-muted-foreground">{axLabel}</span>
                     {score != null ? (
-                      <span className={`font-mono font-bold ${(score as number) >= 50 ? "text-destructive" : (score as number) >= 25 ? "text-yellow-500" : "text-green-500"}`}>{score}</span>
+                      <span
+                        className={`font-mono font-bold ${(score as number) >= 50 ? "text-destructive" : (score as number) >= 25 ? "text-yellow-500" : "text-green-500"}`}
+                      >
+                        {score}
+                      </span>
                     ) : (
-                      <span className="font-mono text-muted-foreground/50">N/A</span>
+                      <span className="font-mono text-muted-foreground/50">
+                        N/A
+                      </span>
                     )}
                   </div>
                 ))}
@@ -179,7 +279,8 @@ function ResultCard({ label, result, badge }: { label: string; result: CompareRe
             <Separator className="bg-border/30" />
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <AlertCircle className="w-3 h-3 text-primary" />
-              {result.evidence.length} evidence signal{result.evidence.length !== 1 ? "s" : ""}
+              {result.evidence.length} evidence signal
+              {result.evidence.length !== 1 ? "s" : ""}
             </div>
           </>
         )}
@@ -219,12 +320,19 @@ function ResultCard({ label, result, badge }: { label: string; result: CompareRe
           </>
         )}
 
-        {Object.keys(result.sectionHashes).filter((k) => k !== "__full_document").length > 0 && (
+        {Object.keys(result.sectionHashes).filter(
+          (k) => k !== "__full_document",
+        ).length > 0 && (
           <>
             <Separator className="bg-border/30" />
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Layers className="w-3.5 h-3.5 text-primary" />
-              {Object.keys(result.sectionHashes).filter((k) => k !== "__full_document").length} sections parsed
+              {
+                Object.keys(result.sectionHashes).filter(
+                  (k) => k !== "__full_document",
+                ).length
+              }{" "}
+              sections parsed
             </div>
           </>
         )}
@@ -247,7 +355,10 @@ export default function Compare() {
 
   const checkA = useCheckReport({
     mutation: {
-      onMutate: () => ({ rid: requestRef.current, mode: dbLookup ? "db" as const : "manual" as const }),
+      onMutate: () => ({
+        rid: requestRef.current,
+        mode: dbLookup ? ("db" as const) : ("manual" as const),
+      }),
       onSuccess: (data, _vars, context) => {
         const ctx = context as { rid: number; mode: "manual" | "db" };
         if (ctx.rid !== requestRef.current) return;
@@ -261,7 +372,11 @@ export default function Compare() {
       onError: (_err, _vars, context) => {
         const ctx = context as { rid: number };
         if (ctx.rid !== requestRef.current) return;
-        toast({ title: "Analysis failed", description: "Could not analyze Report A.", variant: "destructive" });
+        toast({
+          title: "Analysis failed",
+          description: "Could not analyze Report A.",
+          variant: "destructive",
+        });
       },
     },
   });
@@ -277,7 +392,11 @@ export default function Compare() {
       onError: (_err, _vars, context) => {
         const ctx = context as { rid: number };
         if (ctx.rid !== requestRef.current) return;
-        toast({ title: "Analysis failed", description: "Could not analyze Report B.", variant: "destructive" });
+        toast({
+          title: "Analysis failed",
+          description: "Could not analyze Report B.",
+          variant: "destructive",
+        });
       },
     },
   });
@@ -285,18 +404,26 @@ export default function Compare() {
   const handleCompare = () => {
     const trimA = textA.trim();
     if (!trimA) {
-      toast({ title: "Missing content", description: "Please paste text in Report A.", variant: "destructive" });
+      toast({
+        title: "Missing content",
+        description: "Please paste text in Report A.",
+        variant: "destructive",
+      });
       return;
     }
     if (!dbLookup) {
       const trimB = textB.trim();
       if (!trimB) {
-        toast({ title: "Missing content", description: "Please paste text in both panels.", variant: "destructive" });
+        toast({
+          title: "Missing content",
+          description: "Please paste text in both panels.",
+          variant: "destructive",
+        });
         return;
       }
     }
     requestRef.current += 1;
-    const mode = dbLookup ? "db" as const : "manual" as const;
+    const mode = dbLookup ? ("db" as const) : ("manual" as const);
     setRequestMode(mode);
     setResultA(null);
     setResultB(null);
@@ -311,7 +438,10 @@ export default function Compare() {
   const manualBothDone = requestMode === "manual" && resultA && resultB;
   const dbDone = requestMode === "db" && resultA && !checkA.isPending;
 
-  const isPending = requestMode === "db" ? checkA.isPending : (checkA.isPending || checkB.isPending);
+  const isPending =
+    requestMode === "db"
+      ? checkA.isPending
+      : checkA.isPending || checkB.isPending;
 
   const sectionOverlap = manualBothDone
     ? computeSectionOverlap(resultA.sectionHashes, resultB.sectionHashes)
@@ -319,7 +449,7 @@ export default function Compare() {
 
   const canCompare = dbLookup
     ? !!textA.trim()
-    : (!!textA.trim() && !!textB.trim());
+    : !!textA.trim() && !!textB.trim();
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8">
@@ -353,15 +483,32 @@ export default function Compare() {
               autoComplete="off"
             />
             <div className="flex justify-between items-center text-xs text-muted-foreground mt-1">
-              <span>{textA.length > 0 ? `${textA.length.toLocaleString()} chars` : ""}</span>
+              <span>
+                {textA.length > 0
+                  ? `${textA.length.toLocaleString()} chars`
+                  : ""}
+              </span>
               {textA.length > 0 && (
-                <button type="button" className="hover:text-destructive transition-colors" onClick={() => { setTextA(""); setResultA(null); setDbMatches([]); setDbSectionMatches([]); }}>Clear</button>
+                <button
+                  type="button"
+                  className="hover:text-destructive transition-colors"
+                  onClick={() => {
+                    setTextA("");
+                    setResultA(null);
+                    setDbMatches([]);
+                    setDbSectionMatches([]);
+                  }}
+                >
+                  Clear
+                </button>
               )}
             </div>
           </CardContent>
         </Card>
 
-        <Card className={`glass-card-accent rounded-xl transition-all ${dbLookup ? "border-cyan-500/20" : ""}`}>
+        <Card
+          className={`glass-card-accent rounded-xl transition-all ${dbLookup ? "border-cyan-500/20" : ""}`}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground flex items-center justify-between">
               <span>{dbLookup ? "Database Match" : "Report B"}</span>
@@ -374,9 +521,12 @@ export default function Compare() {
                   <Database className="w-8 h-8 text-cyan-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-foreground">Database Similarity Search</p>
+                  <p className="text-sm font-medium text-foreground">
+                    Database Similarity Search
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1 max-w-xs leading-relaxed">
-                    We'll compare your report against all stored reports using MinHash/LSH and find the closest matches.
+                    We'll compare your report against all stored reports using
+                    MinHash/LSH and find the closest matches.
                   </p>
                 </div>
               </div>
@@ -391,9 +541,22 @@ export default function Compare() {
                   autoComplete="off"
                 />
                 <div className="flex justify-between items-center text-xs text-muted-foreground mt-1">
-                  <span>{textB.length > 0 ? `${textB.length.toLocaleString()} chars` : ""}</span>
+                  <span>
+                    {textB.length > 0
+                      ? `${textB.length.toLocaleString()} chars`
+                      : ""}
+                  </span>
                   {textB.length > 0 && (
-                    <button type="button" className="hover:text-destructive transition-colors" onClick={() => { setTextB(""); setResultB(null); }}>Clear</button>
+                    <button
+                      type="button"
+                      className="hover:text-destructive transition-colors"
+                      onClick={() => {
+                        setTextB("");
+                        setResultB(null);
+                      }}
+                    >
+                      Clear
+                    </button>
                   )}
                 </div>
               </>
@@ -429,11 +592,18 @@ export default function Compare() {
         disabled={!canCompare || isPending}
       >
         {isPending ? (
-          <><Loader2 className="w-5 h-5 animate-spin" /> {dbLookup ? "Searching Database..." : "Analyzing Both Reports..."}</>
+          <>
+            <Loader2 className="w-5 h-5 animate-spin" />{" "}
+            {dbLookup ? "Searching Database..." : "Analyzing Both Reports..."}
+          </>
         ) : dbLookup ? (
-          <><Search className="w-5 h-5" /> Search for Matches</>
+          <>
+            <Search className="w-5 h-5" /> Search for Matches
+          </>
         ) : (
-          <><GitCompare className="w-5 h-5" /> Compare Reports</>
+          <>
+            <GitCompare className="w-5 h-5" /> Compare Reports
+          </>
         )}
       </Button>
 
@@ -445,19 +615,26 @@ export default function Compare() {
                 <CardTitle className="flex items-center gap-2">
                   <Database className="w-5 h-5 text-cyan-400" />
                   Similarity Matches Found
-                  <Badge variant="outline" className="border-cyan-500/40 text-cyan-400 text-[10px]">
+                  <Badge
+                    variant="outline"
+                    className="border-cyan-500/40 text-cyan-400 text-[10px]"
+                  >
                     {dbMatches.length} match{dbMatches.length !== 1 ? "es" : ""}
                   </Badge>
                   <Hint text="These are reports in our database that share structural or content similarity with your submitted report, detected via MinHash/LSH and SimHash fingerprinting." />
                 </CardTitle>
                 <CardDescription>
-                  Reports in our database that are similar to yours, ranked by similarity score
+                  Reports in our database that are similar to yours, ranked by
+                  similarity score
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {dbMatches.map((match, i) => (
-                    <div key={i} className="rounded-lg glass-card p-4 space-y-3">
+                    <div
+                      key={i}
+                      className="rounded-lg glass-card p-4 space-y-3"
+                    >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <Link
@@ -468,11 +645,14 @@ export default function Compare() {
                             <ExternalLink className="w-3 h-3" />
                           </Link>
                           <Badge variant="outline" className="text-[10px]">
-                            {MATCH_TYPE_LABELS[match.matchType] ?? match.matchType}
+                            {MATCH_TYPE_LABELS[match.matchType] ??
+                              match.matchType}
                           </Badge>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`text-lg font-bold font-mono ${getMatchColor(match.similarity)}`}>
+                          <span
+                            className={`text-lg font-bold font-mono ${getMatchColor(match.similarity)}`}
+                          >
                             {Math.round(match.similarity)}%
                           </span>
                         </div>
@@ -480,7 +660,13 @@ export default function Compare() {
                       <Progress
                         value={match.similarity}
                         className="h-2"
-                        indicatorClassName={match.similarity >= 80 ? "bg-destructive" : match.similarity >= 50 ? "bg-orange-500" : "bg-yellow-500"}
+                        indicatorClassName={
+                          match.similarity >= 80
+                            ? "bg-destructive"
+                            : match.similarity >= 50
+                              ? "bg-orange-500"
+                              : "bg-yellow-500"
+                        }
                       />
                     </div>
                   ))}
@@ -495,9 +681,12 @@ export default function Compare() {
                     <CheckCircle className="w-8 h-8 text-green-400" />
                   </div>
                   <div>
-                    <p className="font-medium text-foreground">No Similar Reports Found</p>
+                    <p className="font-medium text-foreground">
+                      No Similar Reports Found
+                    </p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      This report doesn't match anything in our database. It appears to be unique.
+                      This report doesn't match anything in our database. It
+                      appears to be unique.
                     </p>
                   </div>
                 </div>
@@ -511,23 +700,39 @@ export default function Compare() {
                 <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-2">
                   <Layers className="w-4 h-4 text-primary" />
                   Section-Level Matches
-                  <Badge variant="outline" className="text-[10px]">{dbSectionMatches.length}</Badge>
+                  <Badge variant="outline" className="text-[10px]">
+                    {dbSectionMatches.length}
+                  </Badge>
                   <Hint text="Individual sections of your report that match sections in existing database reports. High similarity indicates copied or templated sections." />
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   {dbSectionMatches.map((sm, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs gap-2 rounded-lg glass-card p-3">
+                    <div
+                      key={i}
+                      className="flex items-center justify-between text-xs gap-2 rounded-lg glass-card p-3"
+                    >
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-medium truncate">{sm.sectionTitle}</span>
-                        <span className="text-muted-foreground shrink-0">→</span>
-                        <Link to={`/verify/${sm.matchedReportId}`} className="text-primary hover:underline font-mono shrink-0">
+                        <span className="font-medium truncate">
+                          {sm.sectionTitle}
+                        </span>
+                        <span className="text-muted-foreground shrink-0">
+                          →
+                        </span>
+                        <Link
+                          to={`/verify/${sm.matchedReportId}`}
+                          className="text-primary hover:underline font-mono shrink-0"
+                        >
                           {anonymizeId(sm.matchedReportId)}
                         </Link>
-                        <span className="text-muted-foreground truncate">({sm.matchedSectionTitle})</span>
+                        <span className="text-muted-foreground truncate">
+                          ({sm.matchedSectionTitle})
+                        </span>
                       </div>
-                      <span className={`font-mono font-bold shrink-0 ${getMatchColor(sm.similarity)}`}>
+                      <span
+                        className={`font-mono font-bold shrink-0 ${getMatchColor(sm.similarity)}`}
+                      >
                         {Math.round(sm.similarity)}%
                       </span>
                     </div>
@@ -571,17 +776,23 @@ export default function Compare() {
                   <Hint text="Sections are parsed from each report independently, then their SHA-256 hashes are compared. Identical hashes mean the section content is exactly the same after redaction." />
                 </CardTitle>
                 <CardDescription>
-                  {sectionOverlap.identical.length} of {sectionOverlap.total} unique sections are identical between the two reports
+                  {sectionOverlap.identical.length} of {sectionOverlap.total}{" "}
+                  unique sections are identical between the two reports
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {sectionOverlap.identical.length > 0 ? (
                   <div className="space-y-2">
                     {sectionOverlap.identical.map((section) => (
-                      <div key={section} className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm flex items-center gap-2">
+                      <div
+                        key={section}
+                        className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm flex items-center gap-2"
+                      >
                         <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
                         <strong>{section}</strong>
-                        <span className="text-muted-foreground">— identical in both reports</span>
+                        <span className="text-muted-foreground">
+                          — identical in both reports
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -591,8 +802,12 @@ export default function Compare() {
                       <CheckCircle className="w-6 h-6 text-green-400" />
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">No identical sections</p>
-                      <p className="text-xs text-muted-foreground">These reports appear to be independently written.</p>
+                      <p className="font-medium text-foreground">
+                        No identical sections
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        These reports appear to be independently written.
+                      </p>
                     </div>
                   </div>
                 )}

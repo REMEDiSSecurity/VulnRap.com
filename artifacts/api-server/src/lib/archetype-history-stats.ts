@@ -85,7 +85,8 @@ function isValidStats(parsed: unknown): parsed is PersistedStats {
   if (typeof p.lastCompactedAt !== "string") return false;
   if (!Number.isFinite(Date.parse(p.lastCompactedAt))) return false;
   if (typeof p.lastRemovedCount !== "number") return false;
-  if (!Number.isFinite(p.lastRemovedCount) || p.lastRemovedCount < 0) return false;
+  if (!Number.isFinite(p.lastRemovedCount) || p.lastRemovedCount < 0)
+    return false;
   if (p.recentRuns !== undefined) {
     if (!Array.isArray(p.recentRuns)) return false;
     if (!p.recentRuns.every(isValidRunRecord)) return false;
@@ -101,7 +102,10 @@ function fromPersisted(parsed: PersistedStats): CompactionStats {
   const lastRemoved = Math.round(parsed.lastRemovedCount);
   const seeded: CompactionRunRecord[] =
     parsed.recentRuns && parsed.recentRuns.length > 0
-      ? parsed.recentRuns.map(r => ({ at: r.at, removed: Math.round(r.removed) }))
+      ? parsed.recentRuns.map((r) => ({
+          at: r.at,
+          removed: Math.round(r.removed),
+        }))
       : [{ at: parsed.lastCompactedAt, removed: lastRemoved }];
   const recentRuns = seeded.slice(-MAX_RECENT_RUNS);
   return {
@@ -145,9 +149,10 @@ export async function recordCompactionRun(
   removedRows: number,
   timestamp: string = new Date().toISOString(),
 ): Promise<void> {
-  const safeRemoved = Number.isFinite(removedRows) && removedRows >= 0
-    ? Math.round(removedRows)
-    : 0;
+  const safeRemoved =
+    Number.isFinite(removedRows) && removedRows >= 0
+      ? Math.round(removedRows)
+      : 0;
   const previous = readCompactionStats();
   const previousRuns = previous?.recentRuns ?? [];
   const newRun: CompactionRunRecord = { at: timestamp, removed: safeRemoved };

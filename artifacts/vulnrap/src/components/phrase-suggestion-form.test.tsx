@@ -5,7 +5,13 @@
 // thank-you panel, and a 429 rate-limit response renders a friendly
 // cooldown banner instead of a generic toast.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 
 const { submitPhraseSuggestionMock, toastMock } = vi.hoisted(() => ({
   submitPhraseSuggestionMock: vi.fn(),
@@ -18,7 +24,8 @@ vi.mock("@workspace/api-client-react", async () => {
   );
   return {
     ...actual,
-    submitPhraseSuggestion: (...args: unknown[]) => submitPhraseSuggestionMock(...args),
+    submitPhraseSuggestion: (...args: unknown[]) =>
+      submitPhraseSuggestionMock(...args),
   };
 });
 
@@ -27,8 +34,8 @@ vi.mock("@/hooks/use-toast", () => ({
   toast: toastMock,
 }));
 
-import PhraseSuggestionForm from "./phrase-suggestion-form";
 import { ApiError } from "@workspace/api-client-react";
+import PhraseSuggestionForm from "./phrase-suggestion-form";
 
 beforeEach(() => {
   submitPhraseSuggestionMock.mockReset();
@@ -38,7 +45,9 @@ beforeEach(() => {
 describe("PhraseSuggestionForm", () => {
   it("disables the submit button until the phrase reaches the minimum length", () => {
     render(<PhraseSuggestionForm />);
-    const submit = screen.getByTestId("phrase-suggestion-submit") as HTMLButtonElement;
+    const submit = screen.getByTestId(
+      "phrase-suggestion-submit",
+    ) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
 
     fireEvent.change(screen.getByTestId("phrase-suggestion-text"), {
@@ -64,7 +73,9 @@ describe("PhraseSuggestionForm", () => {
     fireEvent.change(screen.getByTestId("phrase-suggestion-text"), {
       target: { value: "  leverages cutting-edge synergy  " },
     });
-    fireEvent.click(screen.getByTestId("phrase-suggestion-category-ai-self-disclosure"));
+    fireEvent.click(
+      screen.getByTestId("phrase-suggestion-category-ai-self-disclosure"),
+    );
     fireEvent.change(screen.getByTestId("phrase-suggestion-context"), {
       target: { value: "saw it in three reports" },
     });
@@ -79,7 +90,9 @@ describe("PhraseSuggestionForm", () => {
       context: "saw it in three reports",
     });
     await waitFor(() => {
-      expect(screen.getByTestId("phrase-suggestion-form-success")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("phrase-suggestion-form-success"),
+      ).toBeInTheDocument();
     });
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Suggestion received" }),
@@ -113,7 +126,9 @@ describe("PhraseSuggestionForm", () => {
     expect(banner.textContent).toMatch(/daily limit reached/i);
     expect(banner.textContent).toMatch(/5 suggestions per day/i);
     expect(banner.textContent).toMatch(/24 hours/i);
-    const submit = screen.getByTestId("phrase-suggestion-submit") as HTMLButtonElement;
+    const submit = screen.getByTestId(
+      "phrase-suggestion-submit",
+    ) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
   });
 });

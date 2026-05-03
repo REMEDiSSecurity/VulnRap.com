@@ -156,8 +156,7 @@ export function applyUnauthorizedNotice(
     // Prefer the freshest server message when we have one; fall back to
     // the previously-stored message so a follow-up 401 with an empty
     // body doesn't blank the banner copy.
-    serverMessage:
-      extractServerMessage(notice.body) ?? state.serverMessage,
+    serverMessage: extractServerMessage(notice.body) ?? state.serverMessage,
     url: notice.url,
     method: notice.method.toUpperCase(),
     noticeId: state.noticeId + 1,

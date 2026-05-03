@@ -6,9 +6,16 @@
 process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
 
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import http from "node:http";
-import type { AddressInfo } from "node:net";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  beforeAll,
+  afterAll,
+} from "vitest";
 import {
   createInMemoryDb,
   drizzleOrmOverrides,
@@ -21,6 +28,7 @@ import {
   type BaseDbState,
   type FakeRow,
 } from "./__test-fixtures__/in-memory-db";
+import type { AddressInfo } from "node:net";
 
 // Privacy-specific state extends the shared base with `userFeedbackTable`
 // rows and an auto-incrementing feedback id. The shared harness supplies
@@ -239,7 +247,10 @@ describe("GET /api/reports/:id — showInFeed enforcement", () => {
     expect(body.slopScore).toBe(42);
     expect(body.slopTier).toBe("Likely Slop");
     expect(body.contentMode).toBe("full");
-    expect(body.redactionSummary).toEqual({ totalRedactions: 0, categories: {} });
+    expect(body.redactionSummary).toEqual({
+      totalRedactions: 0,
+      categories: {},
+    });
     expect(body.evidence).toEqual([]);
     expect(body.similarityMatches).toEqual([]);
     expect(body.feedback).toEqual([]);
@@ -284,7 +295,12 @@ describe("GET /api/reports/:id/diagnostics — showInFeed enforcement", () => {
       vulnrapCorrelationId: "diag-200",
       vulnrapDurationMs: 17,
       vulnrapOverridesApplied: ["TEST_OVERRIDE"],
-      vulnrapEngineResults: { engines: [], compositeBreakdown: {}, warnings: [], engineCount: 0 },
+      vulnrapEngineResults: {
+        engines: [],
+        compositeBreakdown: {},
+        warnings: [],
+        engineCount: 0,
+      },
     });
     const res = await get(`/api/reports/${r.id}/diagnostics`);
     expect(res.status).toBe(200);
@@ -332,7 +348,9 @@ describe("GET /api/reports/:id/triage-report — showInFeed enforcement", () => 
 // ENDPOINT-mode family. This mirrors the existing diagnostics-panel "Active
 // verification mode" line.
 describe("GET /api/reports/:id/triage-report — verification mode header", () => {
-  async function getText(path: string): Promise<{ status: number; body: string }> {
+  async function getText(
+    path: string,
+  ): Promise<{ status: number; body: string }> {
     const r = await fetch(`${baseUrl}${path}`);
     return { status: r.status, body: await r.text() };
   }
@@ -466,7 +484,10 @@ describe("GET /api/reports/:id/triage-report — verification mode header", () =
       ...baseResult,
       cacheMetadata: { hits: { l1: 1, db: 0, fresh: 0 } },
     });
-    const cached = seedReport({ showInFeed: true, redactedText: "cached body" });
+    const cached = seedReport({
+      showInFeed: true,
+      redactedText: "cached body",
+    });
     const cachedRes = await getText(`/api/reports/${cached.id}/triage-report`);
     expect(cachedRes.status).toBe(200);
 
@@ -828,7 +849,9 @@ describe("GET /api/feedback/analytics — reportId exclusion", () => {
 // AVRI-prefixed composite overrides — and that legacy reports without any
 // AVRI data have the section omitted entirely.
 describe("GET /api/reports/:id/triage-report — AVRI Family Rubric section", () => {
-  async function getText(path: string): Promise<{ status: number; body: string }> {
+  async function getText(
+    path: string,
+  ): Promise<{ status: number; body: string }> {
     const r = await fetch(`${baseUrl}${path}`);
     return { status: r.status, body: await r.text() };
   }
@@ -922,7 +945,9 @@ describe("GET /api/reports/:id/triage-report — AVRI Family Rubric section", ()
     // Family name + classification metadata mirrored from the composite block.
     expect(res.body).toContain("- **Family**: Memory corruption / unsafe C");
     expect(res.body).toContain("- **Classification confidence**: HIGH");
-    expect(res.body).toContain("- **Classification reason**: matched member CWE-787");
+    expect(res.body).toContain(
+      "- **Classification reason**: matched member CWE-787",
+    );
 
     // Gold signals tally combines composite goldHitCount with Engine 2
     // goldTotalCount.
@@ -957,7 +982,10 @@ describe("GET /api/reports/:id/triage-report — AVRI Family Rubric section", ()
     // Non-AVRI override must not appear inside the AVRI composite-overrides
     // bullet list (the route only surfaces AVRI_*-prefixed rules here).
     const avriSectionEnd = res.body.indexOf("\n---", sectionIdx);
-    const avriSection = res.body.slice(sectionIdx, avriSectionEnd > -1 ? avriSectionEnd : undefined);
+    const avriSection = res.body.slice(
+      sectionIdx,
+      avriSectionEnd > -1 ? avriSectionEnd : undefined,
+    );
     expect(avriSection).not.toContain("TEMPLATE_DUPLICATE");
 
     // Composite-before-behavioural-penalties trailer is rendered when present.
@@ -1378,8 +1406,7 @@ describe("GET /api/reports/:id/triage-report — AVRI Family Rubric section", ()
                   teClConflicts: 0,
                   teClBroken: 0,
                   isFake: true,
-                  reason:
-                    "Both raw HTTP request and response look fabricated",
+                  reason: "Both raw HTTP request and response look fabricated",
                   revokedGoldHits: [
                     { id: "raw_http_request_with_headers", points: 14 },
                     { id: "request_response_diff", points: 12 },
@@ -1486,7 +1513,9 @@ describe("GET /api/reports/:id/triage-report — AVRI Family Rubric section", ()
 //   2. Empty (bonus=0 / no signals fired): the section is omitted
 //      entirely so the report doesn't render an empty stub.
 describe("GET /api/reports/:id/triage-report — Strong-Evidence Bonus section", () => {
-  async function getText(path: string): Promise<{ status: number; body: string }> {
+  async function getText(
+    path: string,
+  ): Promise<{ status: number; body: string }> {
     const r = await fetch(`${baseUrl}${path}`);
     return { status: r.status, body: await r.text() };
   }
@@ -1566,9 +1595,7 @@ describe("GET /api/reports/:id/triage-report — Strong-Evidence Bonus section",
 
     const res = await getText(`/api/reports/${r.id}/triage-report`);
     expect(res.status).toBe(200);
-    expect(res.body).toContain(
-      "## Strong-Evidence Bonus (Gold Categories)",
-    );
+    expect(res.body).toContain("## Strong-Evidence Bonus (Gold Categories)");
     expect(res.body).toContain("- **Applied bonus**: +6");
     // rawSum (6) <= cap (10) → "under cap" wording, not "capped at".
     expect(res.body).toContain("- **Raw sum**: +6 (under cap +10)");
@@ -1642,7 +1669,9 @@ describe("GET /api/reports/:id/triage-report — Strong-Evidence Bonus section",
 // security.txt that points researchers back at *their* origin instead of the
 // canonical vulnrap.com. Mirrors the docs-link tests in this file.
 describe("GET /.well-known/security.txt — public URL resolution", () => {
-  async function getText(path: string): Promise<{ status: number; body: string }> {
+  async function getText(
+    path: string,
+  ): Promise<{ status: number; body: string }> {
     const r = await fetch(`${baseUrl}${path}`);
     return { status: r.status, body: await r.text() };
   }
@@ -1722,9 +1751,7 @@ describe("GET /.well-known/security.txt — public URL resolution", () => {
     expect(match).not.toBeNull();
     const expiresIso = match![1];
     // RFC 5322 / RFC 9116 require ISO-8601 UTC; assert the canonical Z form.
-    expect(expiresIso).toMatch(
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
-    );
+    expect(expiresIso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     const expiresMs = Date.parse(expiresIso);
     expect(Number.isFinite(expiresMs)).toBe(true);
     // Strictly in the future relative to the start of this request.

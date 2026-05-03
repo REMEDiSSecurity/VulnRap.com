@@ -46,9 +46,7 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
           req.method() === "DELETE" &&
           req.url().includes("/api/feedback/calibration/handwavy-phrases")
         ) {
-          const body = req.postDataJSON() as
-            | { dryRun?: boolean }
-            | undefined;
+          const body = req.postDataJSON() as { dryRun?: boolean } | undefined;
           deleteCalls.push({ dryRun: !!body?.dryRun });
         }
       });
@@ -77,7 +75,9 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
       await row.getByTestId("handwavy-remove").click();
 
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(0, { timeout: 15_000 });
       await observer;
 
@@ -242,7 +242,9 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
       await confirmBtn.click();
       await expect(panel).toHaveCount(0, { timeout: 15_000 });
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(0, { timeout: 15_000 });
 
       expect(
@@ -325,9 +327,21 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
                           after: " has fired here",
                         },
                       },
-                      { id: "fixture-T2-beta", tier: "T2_BORDERLINE", snippet: null },
-                      { id: "fixture-T3-gamma", tier: "T3_SLOP", snippet: null },
-                      { id: "fixture-T4-delta", tier: "T4_HALLUCINATED", snippet: null },
+                      {
+                        id: "fixture-T2-beta",
+                        tier: "T2_BORDERLINE",
+                        snippet: null,
+                      },
+                      {
+                        id: "fixture-T3-gamma",
+                        tier: "T3_SLOP",
+                        snippet: null,
+                      },
+                      {
+                        id: "fixture-T4-delta",
+                        tier: "T4_HALLUCINATED",
+                        snippet: null,
+                      },
                     ],
                     warning:
                       "2 legitimate detections would be lost from the curated benchmark",
@@ -627,9 +641,8 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
       { length: 12 },
       (_, i) => `fixture-T3-${String(i + 1).padStart(2, "0")}`,
     );
-    const productionT3Ids = Array.from(
-      { length: 12 },
-      (_, i) => String(7000 + i),
+    const productionT3Ids = Array.from({ length: 12 }, (_, i) =>
+      String(7000 + i),
     );
 
     try {
@@ -1097,12 +1110,11 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
       await expect(panel).toHaveCount(0);
       // Row remains on the active list — no live DELETE fired.
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrase }),
       ).toHaveCount(1);
-      expect(
-        liveDeleteCalls,
-        "Back out must not fire a live DELETE",
-      ).toBe(0);
+      expect(liveDeleteCalls, "Back out must not fire a live DELETE").toBe(0);
     } finally {
       await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();

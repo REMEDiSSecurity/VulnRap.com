@@ -1,6 +1,18 @@
 import { Link } from "react-router-dom";
-import { Github, ScrollText, FileSearch, BookOpen, BarChart3, ScaleIcon } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Github,
+  ScrollText,
+  FileSearch,
+  BookOpen,
+  BarChart3,
+  ScaleIcon,
+} from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type Badge = {
   label: string;
@@ -13,27 +25,31 @@ type Badge = {
 const BADGES: Badge[] = [
   {
     label: "Open source",
-    tooltip: "All source code is publicly hosted on GitHub. Inspect, fork, or self-host.",
+    tooltip:
+      "All source code is publicly hosted on GitHub. Inspect, fork, or self-host.",
     to: "https://github.com/REMEDiSSecurity/VulnRap.Com",
     external: true,
     Icon: Github,
   },
   {
     label: "MIT licensed",
-    tooltip: "Released under the permissive MIT license. View the LICENSE file.",
+    tooltip:
+      "Released under the permissive MIT license. View the LICENSE file.",
     to: "https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/LICENSE",
     external: true,
     Icon: ScaleIcon,
   },
   {
     label: "Public methodology",
-    tooltip: "Scoring engines, signals, and thresholds are documented end-to-end.",
+    tooltip:
+      "Scoring engines, signals, and thresholds are documented end-to-end.",
     to: "/whitepaper",
     Icon: BookOpen,
   },
   {
     label: "Transparency report",
-    tooltip: "Live transparency page covering data handling, retention, and operations.",
+    tooltip:
+      "Live transparency page covering data handling, retention, and operations.",
     to: "/transparency",
     Icon: FileSearch,
   },
@@ -45,7 +61,8 @@ const BADGES: Badge[] = [
   },
   {
     label: "Built on RFC standards",
-    tooltip: "Uses CWE, CVSS, and other public standards rather than proprietary scales.",
+    tooltip:
+      "Uses CWE, CVSS, and other public standards rather than proprietary scales.",
     to: "/architecture",
     Icon: ScrollText,
   },
@@ -59,9 +76,7 @@ export function TrustBadges() {
         data-testid="trust-badges"
         aria-label="Trust and credibility badges"
       >
-        <div
-          className="flex gap-2 sm:gap-3 overflow-x-auto sm:overflow-visible sm:flex-wrap sm:justify-center px-2 sm:px-0 -mx-2 sm:mx-0 pb-2 sm:pb-0 snap-x snap-mandatory sm:snap-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0 [&>*]:basis-[calc((100%-1rem)/3)] sm:[&>*]:basis-auto"
-        >
+        <div className="flex gap-2 sm:gap-3 overflow-x-auto sm:overflow-visible sm:flex-wrap sm:justify-center px-2 sm:px-0 -mx-2 sm:mx-0 pb-2 sm:pb-0 snap-x snap-mandatory sm:snap-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0 [&>*]:basis-[calc((100%-1rem)/3)] sm:[&>*]:basis-auto">
           {BADGES.map(({ label, tooltip, to, external, Icon }) => {
             const inner = (
               <span className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1.5 rounded-full glass-card border border-border/40 text-[11px] sm:text-xs font-medium text-muted-foreground/80 grayscale hover:grayscale-0 hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all snap-start overflow-hidden">
@@ -90,7 +105,10 @@ export function TrustBadges() {
                     </Link>
                   )}
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[240px] text-center">
+                <TooltipContent
+                  side="bottom"
+                  className="max-w-[240px] text-center"
+                >
                   {tooltip}
                 </TooltipContent>
               </Tooltip>

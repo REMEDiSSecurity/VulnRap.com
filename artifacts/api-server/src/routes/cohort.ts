@@ -51,7 +51,11 @@ export function buildEmptyBins(): CohortBin[] {
   const bins: CohortBin[] = [];
   const width = 100 / BUCKET_COUNT;
   for (let i = 0; i < BUCKET_COUNT; i++) {
-    bins.push({ min: Math.round(i * width), max: Math.round((i + 1) * width), count: 0 });
+    bins.push({
+      min: Math.round(i * width),
+      max: Math.round((i + 1) * width),
+      count: 0,
+    });
   }
   return bins;
 }
@@ -74,7 +78,10 @@ export function bucketIndexForScore(score: number): number {
 //
 // Returns an integer 0..100. Returns 0 when the cohort is empty so the UI
 // can show a "no baseline yet" affordance instead of a misleading number.
-export function percentileRankFromBins(score: number, bins: CohortBin[]): number {
+export function percentileRankFromBins(
+  score: number,
+  bins: CohortBin[],
+): number {
   const total = bins.reduce((acc, b) => acc + b.count, 0);
   if (total === 0) return 0;
   const idx = bucketIndexForScore(score);
@@ -130,7 +137,9 @@ router.get("/cohort/baseline", async (req, res): Promise<void> => {
       // FLAT must also match legacy rows where avri_family is NULL — same
       // semantic the feed endpoint uses, so the cohort baseline matches
       // what the user would see if they filtered the feed.
-      conditions.push(sql`coalesce(${reportsTable.avriFamily}, 'FLAT') = 'FLAT'`);
+      conditions.push(
+        sql`coalesce(${reportsTable.avriFamily}, 'FLAT') = 'FLAT'`,
+      );
     } else {
       conditions.push(eq(reportsTable.avriFamily, cweFilter));
     }
@@ -147,7 +156,10 @@ router.get("/cohort/baseline", async (req, res): Promise<void> => {
 
   const bins = buildEmptyBins();
   for (const row of rows) {
-    const idx = Math.max(0, Math.min(BUCKET_COUNT - 1, Number(row.bucket) || 0));
+    const idx = Math.max(
+      0,
+      Math.min(BUCKET_COUNT - 1, Number(row.bucket) || 0),
+    );
     bins[idx].count = Number(row.count) || 0;
   }
 
@@ -205,7 +217,10 @@ router.get("/cohort/baseline", async (req, res): Promise<void> => {
       if (xs.length === 0) return null;
       const sorted = [...xs].sort((a, b) => a - b);
       const mid = sorted.length >> 1;
-      const m = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+      const m =
+        sorted.length % 2 === 0
+          ? (sorted[mid - 1] + sorted[mid]) / 2
+          : sorted[mid];
       return Math.round(m);
     };
     engineMedians = {

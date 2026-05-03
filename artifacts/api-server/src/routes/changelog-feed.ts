@@ -10,9 +10,9 @@
 // Mounted at the app root (not under /api) in app.ts so the public path
 // `/changelog/feed.xml` matches the auto-discovery <link rel="alternate">
 // injected into the changelog page head.
-import { Router, type IRouter, type Request } from "express";
 import { existsSync, readFileSync, statSync } from "fs";
 import path from "path";
+import { Router, type IRouter, type Request } from "express";
 import { buildPublicUrl } from "../lib/public-url";
 
 const router: IRouter = Router();
@@ -60,13 +60,27 @@ function readStringLiteral(text: string, start: number): [string, number] {
     if (ch === "\\") {
       const next = text[i + 1];
       switch (next) {
-        case "n": out += "\n"; break;
-        case "t": out += "\t"; break;
-        case "r": out += "\r"; break;
-        case "\\": out += "\\"; break;
-        case '"': out += '"'; break;
-        case "'": out += "'"; break;
-        default: out += next ?? ""; break;
+        case "n":
+          out += "\n";
+          break;
+        case "t":
+          out += "\t";
+          break;
+        case "r":
+          out += "\r";
+          break;
+        case "\\":
+          out += "\\";
+          break;
+        case '"':
+          out += '"';
+          break;
+        case "'":
+          out += "'";
+          break;
+        default:
+          out += next ?? "";
+          break;
       }
       i += 2;
       continue;
@@ -129,8 +143,7 @@ function extractItemStrings(body: string): string[] {
   return out;
 }
 
-const KEY_VALUE_STRING_RE = (key: string) =>
-  new RegExp(`\\b${key}\\s*:\\s*"`);
+const KEY_VALUE_STRING_RE = (key: string) => new RegExp(`\\b${key}\\s*:\\s*"`);
 
 // Parse a single section object body (text between `{` and `}` of one
 // section literal). Returns title/type/items, or null if the shape is
@@ -175,7 +188,8 @@ export function parseChangelogTsx(text: string): ChangelogFeedEntry[] {
   // Anchor on each version: "..." occurrence — the only place that string
   // appears is as a top-level entry key, so this is a reliable cut point.
   const entries: ChangelogFeedEntry[] = [];
-  const versionRe = /\bversion:\s*"([^"]+)"\s*,\s*\n\s*date:\s*"([^"]+)"\s*,\s*\n\s*label:\s*"((?:[^"\\]|\\.)*)"/g;
+  const versionRe =
+    /\bversion:\s*"([^"]+)"\s*,\s*\n\s*date:\s*"([^"]+)"\s*,\s*\n\s*label:\s*"((?:[^"\\]|\\.)*)"/g;
   let m: RegExpExecArray | null;
   while ((m = versionRe.exec(text)) !== null) {
     const [, version, date, labelRaw] = m;
@@ -235,10 +249,7 @@ function entryUpdated(date: string): string {
 // wrapped in an XML CDATA block downstream, so a second round of XML
 // escaping is not applied.
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function buildEntryHtml(entry: ChangelogFeedEntry): string {

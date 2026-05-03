@@ -80,9 +80,15 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       const batchBtn = group.getByTestId("handwavy-reinstate-batch");
       await expect(batchBtn).toBeVisible();
       await expect(batchBtn).toBeEnabled();
-      await expect(batchBtn).toHaveText(new RegExp(`Reinstate all ${phrases.length}\\b`));
-      await expect(group.getByTestId("handwavy-history-batch-reinstated")).toHaveCount(0);
-      await expect(group.getByTestId("handwavy-history-batch-nothing-to-do")).toHaveCount(0);
+      await expect(batchBtn).toHaveText(
+        new RegExp(`Reinstate all ${phrases.length}\\b`),
+      );
+      await expect(
+        group.getByTestId("handwavy-history-batch-reinstated"),
+      ).toHaveCount(0);
+      await expect(
+        group.getByTestId("handwavy-history-batch-nothing-to-do"),
+      ).toHaveCount(0);
 
       // None of these phrases should currently appear in the active list.
       for (const p of phrases) {
@@ -101,24 +107,34 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       await expect(batchDialog).toBeVisible({ timeout: 5_000 });
       // The dialog should list every phrase that's about to come back so a
       // misclick is obvious before the reviewer confirms.
-      const summary = batchDialog.getByTestId("handwavy-reinstate-batch-confirm-summary");
+      const summary = batchDialog.getByTestId(
+        "handwavy-reinstate-batch-confirm-summary",
+      );
       await expect(summary).toBeVisible();
       for (const p of phrases) {
         await expect(summary).toContainText(p);
       }
-      await batchDialog.getByTestId("handwavy-reinstate-batch-confirm-confirm").click();
+      await batchDialog
+        .getByTestId("handwavy-reinstate-batch-confirm-confirm")
+        .click();
       await expect(batchDialog).toHaveCount(0, { timeout: 5_000 });
 
       // After the round-trip the header swaps to "All reinstated" and the
       // batch button itself is gone.
-      await expect(group.getByTestId("handwavy-history-batch-reinstated")).toBeVisible({
+      await expect(
+        group.getByTestId("handwavy-history-batch-reinstated"),
+      ).toBeVisible({
         timeout: 15_000,
       });
-      await expect(group.getByTestId("handwavy-reinstate-batch")).toHaveCount(0);
+      await expect(group.getByTestId("handwavy-reinstate-batch")).toHaveCount(
+        0,
+      );
 
       // Each inner row should now show the per-phrase "Reinstated" badge
       // and the active list should once again contain every phrase.
-      await expect(group.getByTestId("handwavy-history-reinstated")).toHaveCount(phrases.length);
+      await expect(
+        group.getByTestId("handwavy-history-reinstated"),
+      ).toHaveCount(phrases.length);
       for (const p of phrases) {
         await expect(
           page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: p }),
@@ -147,8 +163,12 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       await expect(innerRows).toHaveCount(phrases.length);
 
       // Task #366 — fresh batch defaults collapsed; expand to interact.
-      const rowsDetails = group.getByTestId("handwavy-history-batch-rows-details");
-      if (!(await rowsDetails.evaluate((el) => (el as HTMLDetailsElement).open))) {
+      const rowsDetails = group.getByTestId(
+        "handwavy-history-batch-rows-details",
+      );
+      if (
+        !(await rowsDetails.evaluate((el) => (el as HTMLDetailsElement).open))
+      ) {
         await group.getByTestId("handwavy-history-batch-rows-summary").click();
       }
       await expect(rowsDetails).toHaveAttribute("open", /.*/);
@@ -162,16 +182,22 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       await firstRow.getByTestId("handwavy-reinstate").click();
       const reinstateDialog = page.getByTestId("handwavy-reinstate-confirm");
       await expect(reinstateDialog).toBeVisible({ timeout: 5_000 });
-      await reinstateDialog.getByTestId("handwavy-reinstate-confirm-confirm").click();
+      await reinstateDialog
+        .getByTestId("handwavy-reinstate-confirm-confirm")
+        .click();
       await expect(reinstateDialog).toHaveCount(0, { timeout: 5_000 });
 
       // The first phrase shows up in the active list…
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrases[0] }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrases[0] }),
       ).toHaveCount(1, { timeout: 15_000 });
       // …and the same row inside the history group flips to the
       // "Reinstated" badge.
-      await expect(firstRow.getByTestId("handwavy-history-reinstated")).toBeVisible({
+      await expect(
+        firstRow.getByTestId("handwavy-history-reinstated"),
+      ).toBeVisible({
         timeout: 15_000,
       });
 
@@ -181,7 +207,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       const batchBtn = group.getByTestId("handwavy-reinstate-batch");
       await expect(batchBtn).toBeVisible();
       await expect(batchBtn).toHaveText(/Reinstate all 2\b/);
-      await expect(group.getByTestId("handwavy-history-batch-reinstated")).toHaveCount(0);
+      await expect(
+        group.getByTestId("handwavy-history-batch-reinstated"),
+      ).toHaveCount(0);
 
       // Reinstate the remaining two via the batch button. Task #180 wraps
       // this button in the same confirm dialog as the per-row reinstate, so
@@ -189,7 +217,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       await batchBtn.click();
       const batchDialog2 = page.getByTestId("handwavy-reinstate-batch-confirm");
       await expect(batchDialog2).toBeVisible({ timeout: 5_000 });
-      const summary2 = batchDialog2.getByTestId("handwavy-reinstate-batch-confirm-summary");
+      const summary2 = batchDialog2.getByTestId(
+        "handwavy-reinstate-batch-confirm-summary",
+      );
       await expect(summary2).toBeVisible();
       // Only the not-yet-reinstated phrases should be listed; the first
       // phrase has already been individually reinstated above so it must
@@ -198,17 +228,23 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       for (const p of phrases.slice(1)) {
         await expect(summary2).toContainText(p);
       }
-      await batchDialog2.getByTestId("handwavy-reinstate-batch-confirm-confirm").click();
+      await batchDialog2
+        .getByTestId("handwavy-reinstate-batch-confirm-confirm")
+        .click();
       await expect(batchDialog2).toHaveCount(0, { timeout: 5_000 });
 
-      await expect(group.getByTestId("handwavy-history-batch-reinstated")).toBeVisible({
+      await expect(
+        group.getByTestId("handwavy-history-batch-reinstated"),
+      ).toBeVisible({
         timeout: 15_000,
       });
       // Once the last one is reinstated, the "(X of N reinstated)" partial
       // counter is replaced by the "All reinstated" badge — the partial
       // text should NOT still be in the header.
       await expect(header).not.toContainText(`of ${phrases.length} reinstated`);
-      await expect(group.getByTestId("handwavy-reinstate-batch")).toHaveCount(0);
+      await expect(group.getByTestId("handwavy-reinstate-batch")).toHaveCount(
+        0,
+      );
 
       for (const p of phrases) {
         await expect(
@@ -253,7 +289,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       );
       expect(phrasesPresentInPickerRow.length).toBeLessThan(phrases.length);
 
-      const pickerBtn = pickerRow.getByTestId("handwavy-removal-batches-reinstate");
+      const pickerBtn = pickerRow.getByTestId(
+        "handwavy-removal-batches-reinstate",
+      );
       await expect(pickerBtn).toBeVisible();
       await expect(pickerBtn).toBeEnabled();
 
@@ -294,7 +332,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       await expect(reinstatedRow).toHaveCount(1);
       await expect(reinstatedRow).toContainText(reinstatedPhrase);
       await expect(
-        reinstatedRow.getByTestId("handwavy-removal-batches-preview-row-already"),
+        reinstatedRow.getByTestId(
+          "handwavy-removal-batches-preview-row-already",
+        ),
       ).toBeVisible();
 
       const pendingRows = previewList.locator(
@@ -303,7 +343,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       await expect(pendingRows).toHaveCount(phrases.length - 1);
 
       await expect(
-        previewDialog.getByTestId("handwavy-removal-batches-preview-already-note"),
+        previewDialog.getByTestId(
+          "handwavy-removal-batches-preview-already-note",
+        ),
       ).toBeVisible();
       await expect(
         previewDialog.getByTestId("handwavy-removal-batches-preview-remaining"),
@@ -331,7 +373,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
         pickerRow.getByTestId("handwavy-removal-batches-reinstated"),
       ).toHaveCount(0);
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrases[1] }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrases[1] }),
       ).toHaveCount(0);
 
       // Re-open and confirm.
@@ -523,9 +567,21 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
     // Phrases chosen so insertion order does NOT match alphabetical
     // order — the assertions below would pass trivially if the UI
     // still rendered insertion order.
-    const hedgingPhrases = ["task485 hedging zeta", "task485 hedging Bravo", "task485 hedging mike"];
-    const absencePhrases = ["task485 absence Yankee", "task485 absence alpha", "task485 absence Charlie"];
-    const buzzwordPhrases = ["task485 buzzword Tango", "task485 buzzword delta", "task485 buzzword Oscar"];
+    const hedgingPhrases = [
+      "task485 hedging zeta",
+      "task485 hedging Bravo",
+      "task485 hedging mike",
+    ];
+    const absencePhrases = [
+      "task485 absence Yankee",
+      "task485 absence alpha",
+      "task485 absence Charlie",
+    ];
+    const buzzwordPhrases = [
+      "task485 buzzword Tango",
+      "task485 buzzword delta",
+      "task485 buzzword Oscar",
+    ];
     const allPhrases = [
       ...hedgingPhrases,
       ...absencePhrases,
@@ -638,9 +694,7 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
 
         // Sanity check the status partition is contiguous: every
         // pending row appears before every already-reinstated row.
-        const firstReinstatedIdx = rendered.findIndex(
-          (row) => row.reinstated,
-        );
+        const firstReinstatedIdx = rendered.findIndex((row) => row.reinstated);
         if (firstReinstatedIdx !== -1) {
           for (let i = firstReinstatedIdx; i < rendered.length; i += 1) {
             expect(rendered[i].reinstated).toBe(true);
@@ -789,9 +843,7 @@ test.describe("FLAT hand-wavy phrase panel — 'Reinstate all' batch button", ()
       // match the dialog's per-section counts exactly — the row and
       // the dialog must never disagree because they share the
       // grouping helper.
-      await pickerRow
-        .getByTestId("handwavy-removal-batches-reinstate")
-        .click();
+      await pickerRow.getByTestId("handwavy-removal-batches-reinstate").click();
       const previewDialog = page.getByTestId(
         "handwavy-removal-batches-preview-confirm",
       );

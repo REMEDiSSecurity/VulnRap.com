@@ -44,14 +44,18 @@ export interface CalibrationAuthLimiterOptions {
 export function createCalibrationAuthLimiter(
   opts: CalibrationAuthLimiterOptions = {},
 ): RateLimitRequestHandler {
-  const windowMs = opts.windowMs ?? readPositiveIntEnv(
-    "CALIBRATION_AUTH_RATE_LIMIT_WINDOW_MS",
-    DEFAULT_WINDOW_MS,
-  );
-  const max = opts.max ?? readPositiveIntEnv(
-    "CALIBRATION_AUTH_RATE_LIMIT_MAX_FAILURES",
-    DEFAULT_MAX_FAILURES,
-  );
+  const windowMs =
+    opts.windowMs ??
+    readPositiveIntEnv(
+      "CALIBRATION_AUTH_RATE_LIMIT_WINDOW_MS",
+      DEFAULT_WINDOW_MS,
+    );
+  const max =
+    opts.max ??
+    readPositiveIntEnv(
+      "CALIBRATION_AUTH_RATE_LIMIT_MAX_FAILURES",
+      DEFAULT_MAX_FAILURES,
+    );
 
   // Task #213 — when the bucket is exhausted, emit a structured warn-level
   // log BEFORE responding so an operator can see sustained brute-force

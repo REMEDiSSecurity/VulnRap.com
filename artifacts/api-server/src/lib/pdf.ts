@@ -16,7 +16,8 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<PdfResult> {
       return {
         success: false,
         text: "",
-        error: "PDF contains no extractable text. Scanned/image-only PDFs are not supported.",
+        error:
+          "PDF contains no extractable text. Scanned/image-only PDFs are not supported.",
       };
     }
 
@@ -29,7 +30,8 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<PdfResult> {
     return {
       success: false,
       text: "",
-      error: "Failed to parse PDF file. The file may be corrupted or password-protected.",
+      error:
+        "Failed to parse PDF file. The file may be corrupted or password-protected.",
     };
   }
 }

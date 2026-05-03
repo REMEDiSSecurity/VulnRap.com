@@ -53,8 +53,18 @@ function bumpVersion(current: string): string {
 }
 
 export function applyNewConfig(
-  changes: Partial<Pick<ScoringConfig, "prior" | "floor" | "ceiling" | "axisThresholds" | "tierThresholds" | "fabricationBoost">>,
-  description: string
+  changes: Partial<
+    Pick<
+      ScoringConfig,
+      | "prior"
+      | "floor"
+      | "ceiling"
+      | "axisThresholds"
+      | "tierThresholds"
+      | "fabricationBoost"
+    >
+  >,
+  description: string,
 ): ScoringConfig {
   const current = getCurrentConfig();
   const newVersion = bumpVersion(current.version);

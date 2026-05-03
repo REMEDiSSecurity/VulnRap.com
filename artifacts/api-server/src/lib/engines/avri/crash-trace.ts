@@ -150,8 +150,15 @@ function rangeAt(
   length: number,
 ): { start: number; end: number; line: number } {
   const safeStart = Math.max(0, Math.min(start, text.length));
-  const safeEnd = Math.max(safeStart, Math.min(safeStart + length, text.length));
-  return { start: safeStart, end: safeEnd, line: lineNumberAt(text, safeStart) };
+  const safeEnd = Math.max(
+    safeStart,
+    Math.min(safeStart + length, text.length),
+  );
+  return {
+    start: safeStart,
+    end: safeEnd,
+    line: lineNumberAt(text, safeStart),
+  };
 }
 
 // Frame-line shapes we recognize:
@@ -298,7 +305,8 @@ function detectThreadIdInconsistency(text: string): StructuralMarker | null {
   if (/==\d+==/.test(text)) return null;
   return {
     id: "thread_id_inconsistency",
-    description: "Trace references `thread T0`/`T1` but no `==<pid>==` header is present (real ASan/TSan output always anchors thread blocks to a PID)",
+    description:
+      "Trace references `thread T0`/`T1` but no `==<pid>==` header is present (real ASan/TSan output always anchors thread blocks to a PID)",
     range: rangeAt(text, m.index, m[0].length),
   };
 }
@@ -452,7 +460,10 @@ const NON_OVERFLOW_BUG_RE =
 function detectRegionSizeVsAccessSize(text: string): StructuralMarker | null {
   let regionSize: number | null = null;
   let regionMatch: RegExpExecArray | null = null;
-  const bracketRe = new RegExp(REGION_BRACKETED_RE.source, REGION_BRACKETED_RE.flags);
+  const bracketRe = new RegExp(
+    REGION_BRACKETED_RE.source,
+    REGION_BRACKETED_RE.flags,
+  );
   const bracketM = bracketRe.exec(text);
   if (bracketM) {
     regionSize = Number(bracketM[1]);
@@ -465,12 +476,14 @@ function detectRegionSizeVsAccessSize(text: string): StructuralMarker | null {
       regionMatch = decM;
     }
   }
-  if (regionSize === null || !Number.isFinite(regionSize) || !regionMatch) return null;
+  if (regionSize === null || !Number.isFinite(regionSize) || !regionMatch)
+    return null;
 
   if (regionSize === 0) {
     return {
       id: "region_size_vs_access_size",
-      description: "Heap region size is reported as 0 bytes; real allocations are non-zero",
+      description:
+        "Heap region size is reported as 0 bytes; real allocations are non-zero",
       range: rangeAt(text, regionMatch.index, regionMatch[0].length),
     };
   }
@@ -482,7 +495,8 @@ function detectRegionSizeVsAccessSize(text: string): StructuralMarker | null {
   if (!Number.isFinite(accessSize) || accessSize <= 0) return null;
 
   // Buffer-overflow bugs legitimately read past the region; skip them.
-  if (OVERFLOW_BUG_RE.test(text) && !NON_OVERFLOW_BUG_RE.test(text)) return null;
+  if (OVERFLOW_BUG_RE.test(text) && !NON_OVERFLOW_BUG_RE.test(text))
+    return null;
   // Only enforce the comparison when the bug class is one where the access
   // is supposed to fit inside the originally-allocated chunk (UAF / DF).
   if (!NON_OVERFLOW_BUG_RE.test(text)) return null;
@@ -540,13 +554,19 @@ function isSuspiciousRegisterValue(hex: string): boolean {
   const stripped = hex.toLowerCase().replace(/^0+/, "") || "0";
   if (stripped === "0") return false;
   if (stripped.length <= 2) return false;
-  if (stripped.length <= 6 && /^[1-9a-f][0-9a-f]*0{3,}$/i.test(stripped)) return true;
+  if (stripped.length <= 6 && /^[1-9a-f][0-9a-f]*0{3,}$/i.test(stripped))
+    return true;
   return false;
 }
 
 function detectFabricatedRegisterState(text: string): StructuralMarker | null {
   REGISTER_DUMP_RE.lastIndex = 0;
-  const entries: { name: string; value: string; index: number; length: number }[] = [];
+  const entries: {
+    name: string;
+    value: string;
+    index: number;
+    length: number;
+  }[] = [];
   let m: RegExpExecArray | null;
   while ((m = REGISTER_DUMP_RE.exec(text)) !== null) {
     entries.push({
@@ -579,7 +599,7 @@ function detectFabricatedRegisterState(text: string): StructuralMarker | null {
   // An entry is suspicious if either tell fires; every entry is counted at
   // most once even when both checks would catch it.
   let suspicious = 0;
-  let firstSuspicious: typeof entries[number] | null = null;
+  let firstSuspicious: (typeof entries)[number] | null = null;
   for (const e of entries) {
     const stripped = e.value.replace(/^0+/, "") || "0";
     if (isSuspiciousRegisterValue(e.value) || repeatedValues.has(stripped)) {
@@ -588,7 +608,11 @@ function detectFabricatedRegisterState(text: string): StructuralMarker | null {
     }
   }
 
-  if (suspicious >= 4 && suspicious / entries.length >= 0.5 && firstSuspicious) {
+  if (
+    suspicious >= 4 &&
+    suspicious / entries.length >= 0.5 &&
+    firstSuspicious
+  ) {
     return {
       id: "fabricated_register_state",
       description: `${suspicious}/${entries.length} register values are textbook-round (≤6 hex digits with ≥3 trailing zeros) or repeated across registers; real register dumps are pseudo-random pointers/constants`,
@@ -621,7 +645,12 @@ const PAGE_SIZE = BigInt("0x1000");
 
 function detectFabricatedMemoryMap(text: string): StructuralMarker | null {
   MAPS_LINE_RE.lastIndex = 0;
-  const ranges: { start: bigint; end: bigint; index: number; length: number }[] = [];
+  const ranges: {
+    start: bigint;
+    end: bigint;
+    index: number;
+    length: number;
+  }[] = [];
   let m: RegExpExecArray | null;
   while ((m = MAPS_LINE_RE.exec(text)) !== null) {
     // The regex restricts both groups to [0-9a-fA-F]+, so the BigInt
@@ -724,12 +753,22 @@ function isPowerOfTwo(n: number): boolean {
 
 function detectFabricatedProcStatus(text: string): StructuralMarker | null {
   PROC_STATUS_VM_RE.lastIndex = 0;
-  const entries: { name: string; value: number; index: number; length: number }[] = [];
+  const entries: {
+    name: string;
+    value: number;
+    index: number;
+    length: number;
+  }[] = [];
   let m: RegExpExecArray | null;
   while ((m = PROC_STATUS_VM_RE.exec(text)) !== null) {
     const v = Number(m[2]);
     if (Number.isFinite(v)) {
-      entries.push({ name: m[1], value: v, index: m.index, length: m[0].length });
+      entries.push({
+        name: m[1],
+        value: v,
+        index: m.index,
+        length: m[0].length,
+      });
     }
   }
   if (entries.length < 3) return null;
@@ -770,7 +809,8 @@ function detectFabricatedProcStatus(text: string): StructuralMarker | null {
 // three checks — it never fires on traces that legitimately omit the
 // section, since plenty of real reports paste only the stack frames.
 
-const SHADOW_BYTES_HEADER_RE = /Shadow\s+bytes\s+around\s+the\s+buggy\s+address[ \t]*:?[ \t]*/i;
+const SHADOW_BYTES_HEADER_RE =
+  /Shadow\s+bytes\s+around\s+the\s+buggy\s+address[ \t]*:?[ \t]*/i;
 // A shadow row line: optional leading `=>`, an address `0x<hex>:`, then a
 // run of hex byte pairs separated by whitespace, with optional `[ ]`
 // bracketing the buggy byte. The row contents are captured so the byte
@@ -804,7 +844,8 @@ function detectMalformedShadowBytes(text: string): StructuralMarker | null {
   const lines = after.split(/\r?\n/);
   let cursor = headerEnd;
   let hasBuggyMarker = false;
-  const rows: { width: number; raw: string; index: number; length: number }[] = [];
+  const rows: { width: number; raw: string; index: number; length: number }[] =
+    [];
   // Preserve the per-row newline length so cursor stays accurate even when
   // the trace mixes `\n` and `\r\n` line endings.
   const newlineLengths: number[] = [];
@@ -840,7 +881,12 @@ function detectMalformedShadowBytes(text: string): StructuralMarker | null {
         range: rangeAt(text, lineStart, line.length),
       };
     }
-    rows.push({ width: bytes.length, raw: line.trim(), index: lineStart, length: line.length });
+    rows.push({
+      width: bytes.length,
+      raw: line.trim(),
+      index: lineStart,
+      length: line.length,
+    });
   }
 
   if (rows.length === 0) {
@@ -994,17 +1040,7 @@ const BUG_CLASS_EXPECTATIONS: readonly BugClassExpectation[] = [
   {
     pattern: /heap[-\s]buffer[-\s](?:overflow|underflow)|heap[-\s]overflow/i,
     label: "heap-buffer-overflow",
-    expected: new Set([
-      "fa",
-      "fb",
-      "01",
-      "02",
-      "03",
-      "04",
-      "05",
-      "06",
-      "07",
-    ]),
+    expected: new Set(["fa", "fb", "01", "02", "03", "04", "05", "06", "07"]),
   },
   // Fallback for plain `use-after-free` (no `heap-` prefix). ASan emits
   // this only for the heap variant in practice; the stack variants always
@@ -1318,9 +1354,7 @@ export const CRASH_TRACE_GOLD_SIGNAL_IDS_BY_FAMILY: Readonly<
     "valgrind",
     "stack_trace_with_offset",
   ]),
-  RACE_CONCURRENCY: new Set([
-    "tsan_or_helgrind",
-  ]),
+  RACE_CONCURRENCY: new Set(["tsan_or_helgrind"]),
 };
 
 /** Returns the set of gold-signal IDs to revoke for the given family when

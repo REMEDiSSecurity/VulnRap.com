@@ -1,20 +1,45 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
-  Users, Github, MessageCircle, Mail, Code, FileText, Sparkles,
-  Send, CheckCircle2, AlertCircle, Heart, ArrowRight, BookOpen,
-  Bug, Zap, Award, GitBranch,
+  Users,
+  Github,
+  MessageCircle,
+  Mail,
+  Code,
+  FileText,
+  Sparkles,
+  Send,
+  CheckCircle2,
+  AlertCircle,
+  Heart,
+  ArrowRight,
+  BookOpen,
+  Bug,
+  Zap,
+  Award,
+  GitBranch,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useSubscribeNewsletter, ApiError } from "@workspace/api-client-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useSubscribeNewsletter, ApiError } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 
 const GITHUB_URL = "https://github.com/REMEDiSSecurity/VulnRap.Com";
 
 function ChannelCard({
-  icon, title, description, href, cta, status,
+  icon,
+  title,
+  description,
+  href,
+  cta,
+  status,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -24,19 +49,31 @@ function ChannelCard({
   status?: "live" | "soon";
 }) {
   const isExternal = href && /^https?:\/\//.test(href);
-  const wrapperClass = "glass-card rounded-xl p-5 flex flex-col gap-3 h-full transition-all hover:border-primary/40";
+  const wrapperClass =
+    "glass-card rounded-xl p-5 flex flex-col gap-3 h-full transition-all hover:border-primary/40";
   const inner = (
     <>
       <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">{icon}</div>
+        <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+          {icon}
+        </div>
         <div className="flex items-center gap-2 min-w-0">
-          <h3 className="text-base font-bold tracking-tight truncate">{title}</h3>
+          <h3 className="text-base font-bold tracking-tight truncate">
+            {title}
+          </h3>
           {status === "soon" && (
-            <Badge variant="outline" className="text-[9px] uppercase tracking-wider border-amber-500/40 text-amber-300/90 shrink-0">Soon</Badge>
+            <Badge
+              variant="outline"
+              className="text-[9px] uppercase tracking-wider border-amber-500/40 text-amber-300/90 shrink-0"
+            >
+              Soon
+            </Badge>
           )}
         </div>
       </div>
-      <p className="text-xs text-muted-foreground leading-relaxed flex-1">{description}</p>
+      <p className="text-xs text-muted-foreground leading-relaxed flex-1">
+        {description}
+      </p>
       <div className="flex items-center gap-1.5 text-xs font-mono text-primary/90 group-hover:text-primary transition-colors">
         {cta}
         <ArrowRight className="w-3 h-3" />
@@ -48,18 +85,29 @@ function ChannelCard({
   }
   if (isExternal) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className={`${wrapperClass} group`}>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${wrapperClass} group`}
+      >
         {inner}
       </a>
     );
   }
   return (
-    <Link to={href} className={`${wrapperClass} group`}>{inner}</Link>
+    <Link to={href} className={`${wrapperClass} group`}>
+      {inner}
+    </Link>
   );
 }
 
 function ContributionCard({
-  icon, title, description, examples, href,
+  icon,
+  title,
+  description,
+  examples,
+  href,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -74,7 +122,9 @@ function ContributionCard({
           <span className="text-primary">{icon}</span>
           {title}
         </CardTitle>
-        <CardDescription className="text-xs leading-relaxed">{description}</CardDescription>
+        <CardDescription className="text-xs leading-relaxed">
+          {description}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <ul className="space-y-1.5 text-xs text-muted-foreground">
@@ -104,28 +154,44 @@ function ContributionCard({
 function NewsletterForm() {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState<{ alreadySubscribed: boolean } | null>(null);
+  const [submitted, setSubmitted] = useState<{
+    alreadySubscribed: boolean;
+  } | null>(null);
   const subscribe = useSubscribeNewsletter();
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const trimmed = email.trim();
     if (!trimmed) {
-      toast({ title: "Email required", description: "Please enter your email address.", variant: "destructive" });
+      toast({
+        title: "Email required",
+        description: "Please enter your email address.",
+        variant: "destructive",
+      });
       return;
     }
     try {
       const res = await subscribe.mutateAsync({ data: { email: trimmed } });
       setSubmitted({ alreadySubscribed: res.alreadySubscribed });
-      toast({ title: res.alreadySubscribed ? "Already subscribed" : "Subscribed", description: res.message });
+      toast({
+        title: res.alreadySubscribed ? "Already subscribed" : "Subscribed",
+        description: res.message,
+      });
       if (!res.alreadySubscribed) setEmail("");
     } catch (err) {
-      const message = err instanceof ApiError
-        ? (err.data && typeof err.data === "object" && "error" in err.data
+      const message =
+        err instanceof ApiError
+          ? err.data && typeof err.data === "object" && "error" in err.data
             ? String((err.data as { error: unknown }).error)
-            : err.message)
-        : err instanceof Error ? err.message : "Subscription failed.";
-      toast({ title: "Subscription failed", description: message, variant: "destructive" });
+            : err.message
+          : err instanceof Error
+            ? err.message
+            : "Subscription failed.";
+      toast({
+        title: "Subscription failed",
+        description: message,
+        variant: "destructive",
+      });
     }
   }
 
@@ -137,7 +203,10 @@ function NewsletterForm() {
           Mailing list
         </CardTitle>
         <CardDescription className="text-xs leading-relaxed">
-          Low-volume updates: major releases, new detection signals, calibration audits, and the occasional field-test write-up. No tracking, no third-party newsletter platform — just an HMAC of your address on file so we don't double-send.
+          Low-volume updates: major releases, new detection signals, calibration
+          audits, and the occasional field-test write-up. No tracking, no
+          third-party newsletter platform — just an HMAC of your address on file
+          so we don't double-send.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -196,7 +265,16 @@ function NewsletterForm() {
           </div>
         )}
         <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
-          We store an HMAC-SHA256 of your address (keyed with our daily-rotation visitor secret) so we can detect duplicate signups without keeping the raw email in the database. See the <Link to="/privacy" className="text-primary/80 hover:text-primary underline-offset-2 hover:underline">privacy page</Link> for details.
+          We store an HMAC-SHA256 of your address (keyed with our daily-rotation
+          visitor secret) so we can detect duplicate signups without keeping the
+          raw email in the database. See the{" "}
+          <Link
+            to="/privacy"
+            className="text-primary/80 hover:text-primary underline-offset-2 hover:underline"
+          >
+            privacy page
+          </Link>{" "}
+          for details.
         </p>
       </CardContent>
     </Card>
@@ -213,7 +291,10 @@ export default function Community() {
           Community
         </h1>
         <p className="text-muted-foreground max-w-3xl leading-relaxed">
-          VulnRap is built in the open by and for triagers tired of low-validity reports. The detection corpus, the scoring rubric, and the platform itself all get better when more eyes look at them. Here's where to plug in.
+          VulnRap is built in the open by and for triagers tired of low-validity
+          reports. The detection corpus, the scoring rubric, and the platform
+          itself all get better when more eyes look at them. Here's where to
+          plug in.
         </p>
       </header>
 
@@ -221,7 +302,9 @@ export default function Community() {
       <section className="space-y-4" data-testid="section-get-involved">
         <div className="flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-primary" />
-          <h2 className="text-xl font-bold uppercase tracking-tight">Get involved</h2>
+          <h2 className="text-xl font-bold uppercase tracking-tight">
+            Get involved
+          </h2>
         </div>
         <div className="grid sm:grid-cols-3 gap-3">
           <div className="glass-card rounded-xl p-4 space-y-2">
@@ -230,7 +313,9 @@ export default function Community() {
               <h3 className="text-sm font-bold">Found a bug</h3>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Report misclassifications, false positives, or platform glitches via GitHub issues — or use the in-app feedback button next to any score.
+              Report misclassifications, false positives, or platform glitches
+              via GitHub issues — or use the in-app feedback button next to any
+              score.
             </p>
           </div>
           <div className="glass-card rounded-xl p-4 space-y-2">
@@ -239,7 +324,8 @@ export default function Community() {
               <h3 className="text-sm font-bold">Contributed a fixture</h3>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Sanitized real-world reports — both legit and slop — keep our calibration honest. Pull requests welcome.
+              Sanitized real-world reports — both legit and slop — keep our
+              calibration honest. Pull requests welcome.
             </p>
           </div>
           <div className="glass-card rounded-xl p-4 space-y-2">
@@ -248,7 +334,8 @@ export default function Community() {
               <h3 className="text-sm font-bold">Wrote a signal</h3>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              New heuristics, hand-wavy phrases, or rubric refinements ship to production every sprint. We credit every accepted contribution.
+              New heuristics, hand-wavy phrases, or rubric refinements ship to
+              production every sprint. We credit every accepted contribution.
             </p>
           </div>
         </div>
@@ -258,7 +345,9 @@ export default function Community() {
       <section className="space-y-4" data-testid="section-channels">
         <div className="flex items-center gap-2">
           <MessageCircle className="w-5 h-5 text-primary" />
-          <h2 className="text-xl font-bold uppercase tracking-tight">Channels</h2>
+          <h2 className="text-xl font-bold uppercase tracking-tight">
+            Channels
+          </h2>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <ChannelCard
@@ -291,10 +380,14 @@ export default function Community() {
       <section className="space-y-4" data-testid="section-contribution-paths">
         <div className="flex items-center gap-2">
           <GitBranch className="w-5 h-5 text-primary" />
-          <h2 className="text-xl font-bold uppercase tracking-tight">Contribution paths</h2>
+          <h2 className="text-xl font-bold uppercase tracking-tight">
+            Contribution paths
+          </h2>
         </div>
         <p className="text-sm text-muted-foreground max-w-3xl leading-relaxed">
-          Every part of VulnRap accepts pull requests. Pick the path that matches how you like to help — most contributors start with one fixture and end up writing their own signals a sprint later.
+          Every part of VulnRap accepts pull requests. Pick the path that
+          matches how you like to help — most contributors start with one
+          fixture and end up writing their own signals a sprint later.
         </p>
         <div className="grid sm:grid-cols-2 gap-3">
           <ContributionCard
@@ -350,10 +443,21 @@ export default function Community() {
           </CardHeader>
           <CardContent className="space-y-2 text-xs text-muted-foreground leading-relaxed">
             <p>
-              We try to keep the project boring to contribute to: clear labels on issues, small reviewable PRs, and a bias toward shipping calibration evidence with every detection change. If something is unclear, open a discussion before sinking time into the code.
+              We try to keep the project boring to contribute to: clear labels
+              on issues, small reviewable PRs, and a bias toward shipping
+              calibration evidence with every detection change. If something is
+              unclear, open a discussion before sinking time into the code.
             </p>
             <p>
-              The <Link to="/changelog" className="text-primary/90 hover:text-primary underline-offset-2 hover:underline">changelog</Link> is the best place to see how previous contributions landed and what we're working on this sprint.
+              The{" "}
+              <Link
+                to="/changelog"
+                className="text-primary/90 hover:text-primary underline-offset-2 hover:underline"
+              >
+                changelog
+              </Link>{" "}
+              is the best place to see how previous contributions landed and
+              what we're working on this sprint.
             </p>
           </CardContent>
         </Card>
@@ -363,7 +467,9 @@ export default function Community() {
       <section className="space-y-4" data-testid="section-recognition">
         <div className="flex items-center gap-2">
           <Award className="w-5 h-5 text-primary" />
-          <h2 className="text-xl font-bold uppercase tracking-tight">Recognition</h2>
+          <h2 className="text-xl font-bold uppercase tracking-tight">
+            Recognition
+          </h2>
         </div>
         <Card className="glass-card border-primary/20">
           <CardContent className="p-6 space-y-4">
@@ -371,25 +477,58 @@ export default function Community() {
               <Heart className="w-5 h-5 text-pink-400 shrink-0 mt-0.5" />
               <div className="space-y-2 text-sm leading-relaxed">
                 <p className="text-foreground">
-                  Every accepted PR shows up in the changelog with author attribution. Significant detection contributions also earn a callout on the <Link to="/transparency" className="text-primary hover:underline">impact page</Link> alongside the calibration delta they unlocked.
+                  Every accepted PR shows up in the changelog with author
+                  attribution. Significant detection contributions also earn a
+                  callout on the{" "}
+                  <Link
+                    to="/transparency"
+                    className="text-primary hover:underline"
+                  >
+                    impact page
+                  </Link>{" "}
+                  alongside the calibration delta they unlocked.
                 </p>
                 <p className="text-muted-foreground">
-                  We're a small team: contributions get reviewed quickly and credited prominently. If you'd prefer to stay anonymous (lots of PSIRT folks do), tell us in the PR description and we'll redact accordingly.
+                  We're a small team: contributions get reviewed quickly and
+                  credited prominently. If you'd prefer to stay anonymous (lots
+                  of PSIRT folks do), tell us in the PR description and we'll
+                  redact accordingly.
                 </p>
               </div>
             </div>
             <div className="grid sm:grid-cols-3 gap-3 pt-2 border-t border-border/40">
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">Changelog</div>
-                <Link to="/changelog" className="text-sm font-bold text-primary hover:underline">Per-release credits</Link>
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
+                  Changelog
+                </div>
+                <Link
+                  to="/changelog"
+                  className="text-sm font-bold text-primary hover:underline"
+                >
+                  Per-release credits
+                </Link>
               </div>
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">Impact report</div>
-                <Link to="/transparency" className="text-sm font-bold text-primary hover:underline">Public-good metrics</Link>
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
+                  Impact report
+                </div>
+                <Link
+                  to="/transparency"
+                  className="text-sm font-bold text-primary hover:underline"
+                >
+                  Public-good metrics
+                </Link>
               </div>
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">Repo</div>
-                <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-primary hover:underline inline-flex items-center gap-1">
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
+                  Repo
+                </div>
+                <a
+                  href={GITHUB_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-bold text-primary hover:underline inline-flex items-center gap-1"
+                >
                   GitHub contributors
                   <Github className="w-3.5 h-3.5" />
                 </a>

@@ -10,7 +10,12 @@ export interface InternalConsistencyResult {
 }
 
 function detectVulnClass(text: string): string | null {
-  if (/buffer\s*overflow|heap\s*overflow|stack\s*overflow|out.of.bounds/i.test(text)) return "buffer_overflow";
+  if (
+    /buffer\s*overflow|heap\s*overflow|stack\s*overflow|out.of.bounds/i.test(
+      text,
+    )
+  )
+    return "buffer_overflow";
   if (/sql\s*injection|sqli/i.test(text)) return "sqli";
   if (/cross.?site\s*scripting|xss/i.test(text)) return "xss";
   if (/use.after.free/i.test(text)) return "use_after_free";
@@ -22,15 +27,18 @@ function detectVulnClass(text: string): string | null {
   if (/xxe|xml\s*external\s*entity/i.test(text)) return "xxe";
   if (/deserialization/i.test(text)) return "deserialization";
   if (/prototype\s*pollution/i.test(text)) return "prototype_pollution";
-  if (/path\s*traversal|directory\s*traversal/i.test(text)) return "path_traversal";
+  if (/path\s*traversal|directory\s*traversal/i.test(text))
+    return "path_traversal";
   if (/privilege\s*escalation|privesc/i.test(text)) return "privesc";
   return null;
 }
 
 function detectLanguage(text: string): string | null {
   if (/(?:python|\.py\b|pip|django|flask)/i.test(text)) return "python";
-  if (/(?:\.c\b|\.h\b|gcc|clang|malloc|free\s*\(|#include)/i.test(text)) return "c";
-  if (/(?:node\.?js|npm|express|require\s*\(|\.js\b)/i.test(text)) return "javascript";
+  if (/(?:\.c\b|\.h\b|gcc|clang|malloc|free\s*\(|#include)/i.test(text))
+    return "c";
+  if (/(?:node\.?js|npm|express|require\s*\(|\.js\b)/i.test(text))
+    return "javascript";
   if (/(?:\.java\b|maven|gradle|spring|javax)/i.test(text)) return "java";
   if (/(?:\.go\b|golang|go\s+mod)/i.test(text)) return "go";
   if (/(?:\.rs\b|cargo|rust)/i.test(text)) return "rust";
@@ -39,24 +47,36 @@ function detectLanguage(text: string): string | null {
   return null;
 }
 
-export function computeInternalConsistency(text: string): InternalConsistencyResult {
+export function computeInternalConsistency(
+  text: string,
+): InternalConsistencyResult {
   const issues: ConsistencyIssue[] = [];
 
   const vulnType = detectVulnClass(text);
   const language = detectLanguage(text);
 
-  if (vulnType === "buffer_overflow" && language === "python" && !/c\s+extension|ctypes|cffi/i.test(text)) {
+  if (
+    vulnType === "buffer_overflow" &&
+    language === "python" &&
+    !/c\s+extension|ctypes|cffi/i.test(text)
+  ) {
     issues.push({
       type: "vuln_language_mismatch",
-      description: "Claims buffer overflow in Python code without mentioning C extensions",
+      description:
+        "Claims buffer overflow in Python code without mentioning C extensions",
       weight: 15,
     });
   }
 
-  if (vulnType === "sqli" && /(?:cli|command.?line|terminal)/i.test(text) && !/web|http|api/i.test(text)) {
+  if (
+    vulnType === "sqli" &&
+    /(?:cli|command.?line|terminal)/i.test(text) &&
+    !/web|http|api/i.test(text)
+  ) {
     issues.push({
       type: "vuln_context_mismatch",
-      description: "Claims SQL injection in CLI tool with no web interface mentioned",
+      description:
+        "Claims SQL injection in CLI tool with no web interface mentioned",
       weight: 12,
     });
   }
@@ -101,7 +121,11 @@ export function computeInternalConsistency(text: string): InternalConsistencyRes
     });
   }
 
-  if (vulnType === "prototype_pollution" && language && !["javascript", null].includes(language)) {
+  if (
+    vulnType === "prototype_pollution" &&
+    language &&
+    !["javascript", null].includes(language)
+  ) {
     issues.push({
       type: "vuln_language_mismatch",
       description: `Claims prototype pollution in ${language} — this is a JavaScript-specific vulnerability`,
@@ -109,6 +133,9 @@ export function computeInternalConsistency(text: string): InternalConsistencyRes
     });
   }
 
-  const consistencyScore = Math.max(0, 100 - issues.reduce((sum, i) => sum + i.weight * 3, 0));
+  const consistencyScore = Math.max(
+    0,
+    100 - issues.reduce((sum, i) => sum + i.weight * 3, 0),
+  );
   return { score: consistencyScore, issues };
 }

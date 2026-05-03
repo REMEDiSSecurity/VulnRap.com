@@ -6,9 +6,9 @@
 // `presets.ts` (Task #631): try cwd-relative first, then fall back
 // to monorepo-relative so tests run from the repo root also resolve.
 // Curated only for v1 — there is no admin/write endpoint.
-import { Router, type IRouter } from "express";
 import { existsSync, readFileSync } from "fs";
 import path from "path";
+import { Router, type IRouter } from "express";
 import { ListShowcaseResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -32,7 +32,10 @@ function resolveShowcasePath(): string {
 // process at boot instead of silently returning a 500 to the first
 // caller.
 function loadShowcase() {
-  const raw = JSON.parse(readFileSync(resolveShowcasePath(), "utf8")) as Record<string, unknown>;
+  const raw = JSON.parse(readFileSync(resolveShowcasePath(), "utf8")) as Record<
+    string,
+    unknown
+  >;
   return ListShowcaseResponse.parse({
     version: raw.version,
     entries: raw.entries,

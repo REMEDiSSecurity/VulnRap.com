@@ -11,10 +11,7 @@
 // so it runs on every CI sweep regardless of DATABASE_URL.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import {
-  isShadowScoringEnabled,
-  computeShadowScore,
-} from "./scoring-shadow";
+import { isShadowScoringEnabled, computeShadowScore } from "./scoring-shadow";
 
 const ENABLED_ENV = "SHADOW_SCORING_ENABLED";
 const DELTA_ENV = "SHADOW_SCORING_SCORE_DELTA";

@@ -7,8 +7,23 @@
 // a "download results CSV" button. Capped at 50 rows / 10 runs per
 // IP per day.
 import { useMemo, useRef, useState } from "react";
-import { FlaskConical, UploadCloud, Play, Download, Loader2, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  FlaskConical,
+  UploadCloud,
+  Play,
+  Download,
+  Loader2,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -55,8 +70,24 @@ const MAX_ROWS = 50;
 function normalizeLabel(raw: unknown): Label | null {
   if (typeof raw !== "string") return null;
   const v = raw.trim().toLowerCase();
-  if (["valid", "real", "true", "human", "1", "positive", "y", "yes"].includes(v)) return "valid";
-  if (["invalid", "slop", "fake", "false", "ai", "0", "negative", "n", "no"].includes(v)) return "invalid";
+  if (
+    ["valid", "real", "true", "human", "1", "positive", "y", "yes"].includes(v)
+  )
+    return "valid";
+  if (
+    [
+      "invalid",
+      "slop",
+      "fake",
+      "false",
+      "ai",
+      "0",
+      "negative",
+      "n",
+      "no",
+    ].includes(v)
+  )
+    return "invalid";
   return null;
 }
 
@@ -72,21 +103,39 @@ export function parseCsv(input: string): string[][] {
     const ch = input[i];
     if (inQuotes) {
       if (ch === '"') {
-        if (input[i + 1] === '"') { cell += '"'; i++; }
-        else inQuotes = false;
+        if (input[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else inQuotes = false;
       } else {
         cell += ch;
       }
       continue;
     }
-    if (ch === '"') { inQuotes = true; continue; }
-    if (ch === ",") { row.push(cell); cell = ""; continue; }
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === ",") {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
     if (ch === "\r") continue;
-    if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; continue; }
+    if (ch === "\n") {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
     cell += ch;
   }
-  if (cell.length > 0 || row.length > 0) { row.push(cell); rows.push(row); }
-  return rows.filter(r => r.some(c => c.length > 0));
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((c) => c.length > 0));
 }
 
 interface ParseResult {
@@ -106,7 +155,11 @@ export function parseJsonInput(text: string): ParseResult {
     return { rows: [], headers: null, errors: ["File is not valid JSON."] };
   }
   if (!Array.isArray(data)) {
-    return { rows: [], headers: null, errors: ["JSON must be an array of objects."] };
+    return {
+      rows: [],
+      headers: null,
+      errors: ["JSON must be an array of objects."],
+    };
   }
   const errors: string[] = [];
   const out: ParsedRow[] = [];
@@ -119,8 +172,14 @@ export function parseJsonInput(text: string): ParseResult {
     const text = (item.report_text ?? item.text ?? item.body) as unknown;
     const labelRaw = (item.expected_label ?? item.label) as unknown;
     const label = normalizeLabel(labelRaw);
-    if (typeof text !== "string" || !text.trim()) { errors.push(`Row ${i + 1}: missing text`); continue; }
-    if (!label) { errors.push(`Row ${i + 1}: missing/unknown label "${String(labelRaw)}"`); continue; }
+    if (typeof text !== "string" || !text.trim()) {
+      errors.push(`Row ${i + 1}: missing text`);
+      continue;
+    }
+    if (!label) {
+      errors.push(`Row ${i + 1}: missing/unknown label "${String(labelRaw)}"`);
+      continue;
+    }
     out.push({ text, label });
   }
   return { rows: out, headers: null, errors };
@@ -132,11 +191,22 @@ export function buildResultsCsv(rows: PerRow[]): string {
     if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
     return s;
   };
-  const lines = ["index,expected_label,predicted_label,composite_score,composite_label,correct,text_preview"];
+  const lines = [
+    "index,expected_label,predicted_label,composite_score,composite_label,correct,text_preview",
+  ];
   for (const r of rows) {
     lines.push(
-      [r.index, r.expectedLabel, r.predictedLabel, r.compositeScore, r.compositeLabel, r.correct, r.textPreview]
-        .map(escape).join(","),
+      [
+        r.index,
+        r.expectedLabel,
+        r.predictedLabel,
+        r.compositeScore,
+        r.compositeLabel,
+        r.correct,
+        r.textPreview,
+      ]
+        .map(escape)
+        .join(","),
     );
   }
   return lines.join("\n");
@@ -158,7 +228,9 @@ export default function TestYourself() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<RunResponse | null>(null);
   const [rateError, setRateError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<"index" | "expectedLabel" | "predictedLabel" | "compositeScore" | "correct">("index");
+  const [sortKey, setSortKey] = useState<
+    "index" | "expectedLabel" | "predictedLabel" | "compositeScore" | "correct"
+  >("index");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const columnsLooksLikeText = (h: string) =>
@@ -194,7 +266,8 @@ export default function TestYourself() {
     setCsvRows(grid.slice(1));
     setCsvHeaders(headers);
     const guessedText = headers.find(columnsLooksLikeText) ?? headers[0];
-    const guessedLabel = headers.find(columnsLooksLikeLabel) ?? headers[1] ?? headers[0];
+    const guessedLabel =
+      headers.find(columnsLooksLikeLabel) ?? headers[1] ?? headers[0];
     setTextColumn(guessedText);
     setLabelColumn(guessedLabel);
   };
@@ -215,8 +288,14 @@ export default function TestYourself() {
       const r = csvRows[i];
       const t = (r[ti] ?? "").trim();
       const lab = normalizeLabel(r[li]);
-      if (!t) { errors.push(`Row ${i + 1}: empty text`); continue; }
-      if (!lab) { errors.push(`Row ${i + 1}: unknown label "${r[li] ?? ""}"`); continue; }
+      if (!t) {
+        errors.push(`Row ${i + 1}: empty text`);
+        continue;
+      }
+      if (!lab) {
+        errors.push(`Row ${i + 1}: unknown label "${r[li] ?? ""}"`);
+        continue;
+      }
       out.push({ text: t, label: lab });
     }
     setParsedRows(out);
@@ -231,7 +310,10 @@ export default function TestYourself() {
 
   const run = async () => {
     if (trimmedRows.length === 0) {
-      toast({ title: "No rows to run", description: "Upload a CSV or JSON with at least one labeled row." });
+      toast({
+        title: "No rows to run",
+        description: "Upload a CSV or JSON with at least one labeled row.",
+      });
       return;
     }
     setRunning(true);
@@ -244,7 +326,9 @@ export default function TestYourself() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows: trimmedRows }),
       });
-      const body = (await res.json().catch(() => ({}))) as { error?: string } & Partial<RunResponse>;
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      } & Partial<RunResponse>;
       if (res.status === 429) {
         setRateError(body.error ?? "Daily rate limit exceeded.");
         return;
@@ -261,7 +345,8 @@ export default function TestYourself() {
     } catch (err) {
       toast({
         title: "Network error",
-        description: err instanceof Error ? err.message : "Could not reach the engine.",
+        description:
+          err instanceof Error ? err.message : "Could not reach the engine.",
         variant: "destructive",
       });
     } finally {
@@ -282,8 +367,11 @@ export default function TestYourself() {
   }, [result, sortKey, sortDir]);
 
   const onSort = (key: typeof sortKey) => {
-    if (sortKey === key) setSortDir(d => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(key); setSortDir("asc"); }
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
   };
 
   const downloadCsv = () => {
@@ -311,8 +399,8 @@ export default function TestYourself() {
           Bring your own labeled corpus. Upload up to 50 rows of{" "}
           <code className="font-mono text-xs">{`{report_text, expected_label}`}</code>{" "}
           and we'll run them through the live engine and report precision,
-          recall, and F1 against your labels. Nothing is persisted; the
-          page is rate-limited to 10 runs per IP per day.
+          recall, and F1 against your labels. Nothing is persisted; the page is
+          rate-limited to 10 runs per IP per day.
         </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-4" />
       </div>
@@ -323,8 +411,12 @@ export default function TestYourself() {
             <UploadCloud className="w-5 h-5" /> 1. Upload your battery
           </CardTitle>
           <CardDescription>
-            CSV with a header row, or a JSON array of objects. Recognised
-            label values: <code className="font-mono text-[11px]">valid / invalid / real / slop / true / false / 1 / 0</code>.
+            CSV with a header row, or a JSON array of objects. Recognised label
+            values:{" "}
+            <code className="font-mono text-[11px]">
+              valid / invalid / real / slop / true / false / 1 / 0
+            </code>
+            .
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -341,7 +433,10 @@ export default function TestYourself() {
                 e.target.value = "";
               }}
             />
-            <Button onClick={() => fileInputRef.current?.click()} variant="outline">
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              variant="outline"
+            >
               <UploadCloud className="w-4 h-4 mr-2" /> Choose file
             </Button>
           </div>
@@ -357,7 +452,11 @@ export default function TestYourself() {
                   value={textColumn}
                   onChange={(e) => setTextColumn(e.target.value)}
                 >
-                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  {csvHeaders.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -369,7 +468,11 @@ export default function TestYourself() {
                   value={labelColumn}
                   onChange={(e) => setLabelColumn(e.target.value)}
                 >
-                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  {csvHeaders.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -377,9 +480,16 @@ export default function TestYourself() {
 
           {parsedRows.length > 0 && (
             <div className="text-sm text-muted-foreground">
-              Parsed <span className="text-foreground font-mono">{parsedRows.length}</span> labeled rows
+              Parsed{" "}
+              <span className="text-foreground font-mono">
+                {parsedRows.length}
+              </span>{" "}
+              labeled rows
               {truncated && (
-                <span className="text-amber-500"> — only the first {MAX_ROWS} will be scored.</span>
+                <span className="text-amber-500">
+                  {" "}
+                  — only the first {MAX_ROWS} will be scored.
+                </span>
               )}
             </div>
           )}
@@ -387,11 +497,16 @@ export default function TestYourself() {
           {parseErrors.length > 0 && (
             <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-600 dark:text-amber-400 space-y-1">
               <div className="flex items-center gap-1.5 font-semibold">
-                <AlertTriangle className="w-3.5 h-3.5" /> {parseErrors.length} row(s) skipped
+                <AlertTriangle className="w-3.5 h-3.5" /> {parseErrors.length}{" "}
+                row(s) skipped
               </div>
               <ul className="list-disc list-inside space-y-0.5 max-h-32 overflow-y-auto">
-                {parseErrors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
-                {parseErrors.length > 10 && <li>… and {parseErrors.length - 10} more</li>}
+                {parseErrors.slice(0, 10).map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+                {parseErrors.length > 10 && (
+                  <li>… and {parseErrors.length - 10} more</li>
+                )}
               </ul>
             </div>
           )}
@@ -410,7 +525,16 @@ export default function TestYourself() {
             disabled={running || trimmedRows.length === 0}
             data-testid="byo-run"
           >
-            {running ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scoring…</> : <><Play className="w-4 h-4 mr-2" /> Run {trimmedRows.length} row(s)</>}
+            {running ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scoring…
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4 mr-2" /> Run {trimmedRows.length}{" "}
+                row(s)
+              </>
+            )}
           </Button>
 
           {rateError && (
@@ -429,72 +553,168 @@ export default function TestYourself() {
       </Card>
 
       {result && (
-        <Card className="glass-card-accent rounded-xl" data-testid="byo-results">
+        <Card
+          className="glass-card-accent rounded-xl"
+          data-testid="byo-results"
+        >
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <CardTitle className="text-lg">3. Results</CardTitle>
                 <CardDescription>
-                  Scored {result.aggregate.total} row(s). {result.rateLimit.remaining} run(s) left today.
+                  Scored {result.aggregate.total} row(s).{" "}
+                  {result.rateLimit.remaining} run(s) left today.
                 </CardDescription>
               </div>
-              <Button variant="outline" size="sm" onClick={downloadCsv} data-testid="byo-download">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadCsv}
+                data-testid="byo-download"
+              >
                 <Download className="w-4 h-4 mr-2" /> Download results CSV
               </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Metric label="Accuracy" value={formatPct(result.aggregate.accuracy)} testid="byo-metric-accuracy" />
-              <Metric label="Precision" value={formatPct(result.aggregate.precision)} testid="byo-metric-precision" />
-              <Metric label="Recall" value={formatPct(result.aggregate.recall)} testid="byo-metric-recall" />
-              <Metric label="F1" value={formatPct(result.aggregate.f1)} testid="byo-metric-f1" />
+              <Metric
+                label="Accuracy"
+                value={formatPct(result.aggregate.accuracy)}
+                testid="byo-metric-accuracy"
+              />
+              <Metric
+                label="Precision"
+                value={formatPct(result.aggregate.precision)}
+                testid="byo-metric-precision"
+              />
+              <Metric
+                label="Recall"
+                value={formatPct(result.aggregate.recall)}
+                testid="byo-metric-recall"
+              />
+              <Metric
+                label="F1"
+                value={formatPct(result.aggregate.f1)}
+                testid="byo-metric-f1"
+              />
             </div>
 
             <div>
-              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Confusion matrix</div>
-              <div className="grid grid-cols-3 gap-px bg-border rounded-md overflow-hidden text-sm" data-testid="byo-confusion">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                Confusion matrix
+              </div>
+              <div
+                className="grid grid-cols-3 gap-px bg-border rounded-md overflow-hidden text-sm"
+                data-testid="byo-confusion"
+              >
                 <div className="bg-background p-2" />
-                <div className="bg-muted p-2 font-semibold text-center">Predicted valid</div>
-                <div className="bg-muted p-2 font-semibold text-center">Predicted invalid</div>
+                <div className="bg-muted p-2 font-semibold text-center">
+                  Predicted valid
+                </div>
+                <div className="bg-muted p-2 font-semibold text-center">
+                  Predicted invalid
+                </div>
 
                 <div className="bg-muted p-2 font-semibold">Actual valid</div>
-                <div className="bg-emerald-500/10 p-2 text-center font-mono">{result.aggregate.confusionMatrix.truePositive}</div>
-                <div className="bg-amber-500/10 p-2 text-center font-mono">{result.aggregate.confusionMatrix.falseNegative}</div>
+                <div className="bg-emerald-500/10 p-2 text-center font-mono">
+                  {result.aggregate.confusionMatrix.truePositive}
+                </div>
+                <div className="bg-amber-500/10 p-2 text-center font-mono">
+                  {result.aggregate.confusionMatrix.falseNegative}
+                </div>
 
                 <div className="bg-muted p-2 font-semibold">Actual invalid</div>
-                <div className="bg-amber-500/10 p-2 text-center font-mono">{result.aggregate.confusionMatrix.falsePositive}</div>
-                <div className="bg-emerald-500/10 p-2 text-center font-mono">{result.aggregate.confusionMatrix.trueNegative}</div>
+                <div className="bg-amber-500/10 p-2 text-center font-mono">
+                  {result.aggregate.confusionMatrix.falsePositive}
+                </div>
+                <div className="bg-emerald-500/10 p-2 text-center font-mono">
+                  {result.aggregate.confusionMatrix.trueNegative}
+                </div>
               </div>
             </div>
 
             <div>
-              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Per-row results</div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                Per-row results
+              </div>
               <div className="overflow-x-auto rounded-md border border-border">
                 <table className="w-full text-sm">
                   <thead className="bg-muted text-xs uppercase">
                     <tr>
-                      <Th onClick={() => onSort("index")} active={sortKey === "index"} dir={sortDir}>#</Th>
-                      <Th onClick={() => onSort("expectedLabel")} active={sortKey === "expectedLabel"} dir={sortDir}>Actual</Th>
-                      <Th onClick={() => onSort("predictedLabel")} active={sortKey === "predictedLabel"} dir={sortDir}>Predicted</Th>
-                      <Th onClick={() => onSort("compositeScore")} active={sortKey === "compositeScore"} dir={sortDir}>Composite</Th>
-                      <Th onClick={() => onSort("correct")} active={sortKey === "correct"} dir={sortDir}>OK?</Th>
+                      <Th
+                        onClick={() => onSort("index")}
+                        active={sortKey === "index"}
+                        dir={sortDir}
+                      >
+                        #
+                      </Th>
+                      <Th
+                        onClick={() => onSort("expectedLabel")}
+                        active={sortKey === "expectedLabel"}
+                        dir={sortDir}
+                      >
+                        Actual
+                      </Th>
+                      <Th
+                        onClick={() => onSort("predictedLabel")}
+                        active={sortKey === "predictedLabel"}
+                        dir={sortDir}
+                      >
+                        Predicted
+                      </Th>
+                      <Th
+                        onClick={() => onSort("compositeScore")}
+                        active={sortKey === "compositeScore"}
+                        dir={sortDir}
+                      >
+                        Composite
+                      </Th>
+                      <Th
+                        onClick={() => onSort("correct")}
+                        active={sortKey === "correct"}
+                        dir={sortDir}
+                      >
+                        OK?
+                      </Th>
                       <th className="text-left px-3 py-2">Preview</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedPerRow.map(r => (
-                      <tr key={r.index} className="border-t border-border" data-testid={`byo-row-${r.index}`}>
-                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.index + 1}</td>
-                        <td className="px-3 py-2"><LabelBadge label={r.expectedLabel} /></td>
-                        <td className="px-3 py-2"><LabelBadge label={r.predictedLabel} /></td>
-                        <td className="px-3 py-2 font-mono">{r.compositeScore} <span className="text-[10px] text-muted-foreground">({r.compositeLabel})</span></td>
-                        <td className="px-3 py-2">
-                          {r.correct
-                            ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                            : <XCircle className="w-4 h-4 text-destructive" />}
+                    {sortedPerRow.map((r) => (
+                      <tr
+                        key={r.index}
+                        className="border-t border-border"
+                        data-testid={`byo-row-${r.index}`}
+                      >
+                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                          {r.index + 1}
                         </td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground max-w-md truncate" title={r.textPreview}>{r.textPreview}</td>
+                        <td className="px-3 py-2">
+                          <LabelBadge label={r.expectedLabel} />
+                        </td>
+                        <td className="px-3 py-2">
+                          <LabelBadge label={r.predictedLabel} />
+                        </td>
+                        <td className="px-3 py-2 font-mono">
+                          {r.compositeScore}{" "}
+                          <span className="text-[10px] text-muted-foreground">
+                            ({r.compositeLabel})
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          {r.correct ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-destructive" />
+                          )}
+                        </td>
+                        <td
+                          className="px-3 py-2 text-xs text-muted-foreground max-w-md truncate"
+                          title={r.textPreview}
+                        >
+                          {r.textPreview}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -508,10 +728,23 @@ export default function TestYourself() {
   );
 }
 
-function Metric({ label, value, testid }: { label: string; value: string; testid?: string }) {
+function Metric({
+  label,
+  value,
+  testid,
+}: {
+  label: string;
+  value: string;
+  testid?: string;
+}) {
   return (
-    <div className="rounded-md border border-border bg-background/50 p-3" data-testid={testid}>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+    <div
+      className="rounded-md border border-border bg-background/50 p-3"
+      data-testid={testid}
+    >
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
       <div className="text-2xl font-mono font-bold text-primary">{value}</div>
     </div>
   );
@@ -533,13 +766,27 @@ function LabelBadge({ label }: { label: Label }) {
   );
 }
 
-function Th({ children, onClick, active, dir }: { children: React.ReactNode; onClick: () => void; active: boolean; dir: "asc" | "desc" }) {
+function Th({
+  children,
+  onClick,
+  active,
+  dir,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  active: boolean;
+  dir: "asc" | "desc";
+}) {
   return (
     <th
-      className={cn("text-left px-3 py-2 cursor-pointer select-none", active && "text-primary")}
+      className={cn(
+        "text-left px-3 py-2 cursor-pointer select-none",
+        active && "text-primary",
+      )}
       onClick={onClick}
     >
-      {children}{active ? (dir === "asc" ? " ▲" : " ▼") : ""}
+      {children}
+      {active ? (dir === "asc" ? " ▲" : " ▼") : ""}
     </th>
   );
 }

@@ -26,14 +26,17 @@ describe("TriageEngineCard", () => {
       ["RED", "text-red-400 border-red-500/40"],
       ["YELLOW", "text-yellow-400 border-yellow-500/40"],
       ["GREEN", "text-green-400 border-green-500/40"],
-    ] as const)("applies the %s verdict colour to the verdict badge", (verdict, expectedClass) => {
-      render(<TriageEngineCard engine={makeEngine({ verdict })} />);
-      const badge = screen.getByTestId("triage-engine-verdict");
-      expect(badge).toHaveTextContent(verdict);
-      for (const cls of expectedClass.split(" ")) {
-        expect(badge).toHaveClass(cls);
-      }
-    });
+    ] as const)(
+      "applies the %s verdict colour to the verdict badge",
+      (verdict, expectedClass) => {
+        render(<TriageEngineCard engine={makeEngine({ verdict })} />);
+        const badge = screen.getByTestId("triage-engine-verdict");
+        expect(badge).toHaveTextContent(verdict);
+        for (const cls of expectedClass.split(" ")) {
+          expect(badge).toHaveClass(cls);
+        }
+      },
+    );
 
     it("falls back to muted styling for the GREY verdict", () => {
       render(<TriageEngineCard engine={makeEngine({ verdict: "GREY" })} />);
@@ -46,7 +49,9 @@ describe("TriageEngineCard", () => {
       const { container } = render(
         <TriageEngineCard engine={makeEngine({ verdict: "RED", score: 12 })} />,
       );
-      const indicator = container.querySelector(`.${VULNRAP_VERDICT_COLOR.RED}`);
+      const indicator = container.querySelector(
+        `.${VULNRAP_VERDICT_COLOR.RED}`,
+      );
       expect(indicator).not.toBeNull();
       expect(indicator).toHaveClass(VULNRAP_VERDICT_COLOR.RED);
     });
@@ -56,7 +61,9 @@ describe("TriageEngineCard", () => {
     it("renders the engine note when provided", () => {
       render(
         <TriageEngineCard
-          engine={makeEngine({ note: "Heuristic: 3 strong indicators of validity." })}
+          engine={makeEngine({
+            note: "Heuristic: 3 strong indicators of validity.",
+          })}
         />,
       );
       expect(screen.getByTestId("triage-engine-note")).toHaveTextContent(
@@ -66,12 +73,16 @@ describe("TriageEngineCard", () => {
 
     it("omits the note paragraph entirely when no note is supplied", () => {
       render(<TriageEngineCard engine={makeEngine({ note: undefined })} />);
-      expect(screen.queryByTestId("triage-engine-note")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("triage-engine-note"),
+      ).not.toBeInTheDocument();
     });
 
     it("treats an empty-string note as absent", () => {
       render(<TriageEngineCard engine={makeEngine({ note: "" })} />);
-      expect(screen.queryByTestId("triage-engine-note")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("triage-engine-note"),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -80,19 +91,34 @@ describe("TriageEngineCard", () => {
       const { rerender } = render(
         <TriageEngineCard engine={makeEngine({ triggeredIndicators: [] })} />,
       );
-      expect(screen.queryByTestId("triage-engine-indicators")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("triage-engine-indicators"),
+      ).not.toBeInTheDocument();
 
-      rerender(<TriageEngineCard engine={makeEngine({ triggeredIndicators: undefined })} />);
-      expect(screen.queryByTestId("triage-engine-indicators")).not.toBeInTheDocument();
+      rerender(
+        <TriageEngineCard
+          engine={makeEngine({ triggeredIndicators: undefined })}
+        />,
+      );
+      expect(
+        screen.queryByTestId("triage-engine-indicators"),
+      ).not.toBeInTheDocument();
     });
 
     it("renders all indicators when the list is at or below the cap", () => {
-      const indicators = Array.from({ length: MAX_TRIAGE_ENGINE_INDICATORS }, (_, i) => ({
-        signal: `SIG_${i}`,
-        explanation: `Explanation #${i}`,
-        strength: "MEDIUM" as const,
-      }));
-      render(<TriageEngineCard engine={makeEngine({ triggeredIndicators: indicators })} />);
+      const indicators = Array.from(
+        { length: MAX_TRIAGE_ENGINE_INDICATORS },
+        (_, i) => ({
+          signal: `SIG_${i}`,
+          explanation: `Explanation #${i}`,
+          strength: "MEDIUM" as const,
+        }),
+      );
+      render(
+        <TriageEngineCard
+          engine={makeEngine({ triggeredIndicators: indicators })}
+        />,
+      );
       const list = screen.getByTestId("triage-engine-indicators");
       for (const ind of indicators) {
         expect(list).toHaveTextContent(ind.signal);
@@ -109,7 +135,11 @@ describe("TriageEngineCard", () => {
           strength: "LOW" as const,
         }),
       );
-      render(<TriageEngineCard engine={makeEngine({ triggeredIndicators: indicators })} />);
+      render(
+        <TriageEngineCard
+          engine={makeEngine({ triggeredIndicators: indicators })}
+        />,
+      );
       const list = screen.getByTestId("triage-engine-indicators");
       for (let i = 0; i < MAX_TRIAGE_ENGINE_INDICATORS; i++) {
         expect(list).toHaveTextContent(`SIG_${i}`);
@@ -124,15 +154,33 @@ describe("TriageEngineCard", () => {
         <TriageEngineCard
           engine={makeEngine({
             triggeredIndicators: [
-              { signal: "STRONG_HIT", explanation: "high signal", strength: "HIGH" },
-              { signal: "MEDIUM_HIT", explanation: "medium signal", strength: "MEDIUM" },
-              { signal: "WEAK_HIT", explanation: "low signal", strength: "LOW" },
+              {
+                signal: "STRONG_HIT",
+                explanation: "high signal",
+                strength: "HIGH",
+              },
+              {
+                signal: "MEDIUM_HIT",
+                explanation: "medium signal",
+                strength: "MEDIUM",
+              },
+              {
+                signal: "WEAK_HIT",
+                explanation: "low signal",
+                strength: "LOW",
+              },
             ],
           })}
         />,
       );
-      expect(screen.getByText("STRONG_HIT")).toHaveClass("text-red-400", "border-red-500/40");
-      expect(screen.getByText("MEDIUM_HIT")).toHaveClass("text-yellow-400", "border-yellow-500/40");
+      expect(screen.getByText("STRONG_HIT")).toHaveClass(
+        "text-red-400",
+        "border-red-500/40",
+      );
+      expect(screen.getByText("MEDIUM_HIT")).toHaveClass(
+        "text-yellow-400",
+        "border-yellow-500/40",
+      );
       expect(screen.getByText("WEAK_HIT")).toHaveClass("text-muted-foreground");
     });
   });
@@ -151,7 +199,9 @@ describe("TriageEngineCard", () => {
       );
       const badge = screen.getByTestId("badge-soft-citation-legacy");
       expect(badge).toHaveTextContent("Soft citation: XSS → CWE-79");
-      expect(screen.queryByTestId("badge-soft-citation-avri")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("badge-soft-citation-avri"),
+      ).not.toBeInTheDocument();
     });
 
     it("renders the AVRI `signalBreakdown.avri.softCitation` shape", () => {
@@ -160,14 +210,18 @@ describe("TriageEngineCard", () => {
           engine={makeEngine({
             engine: "AVRI",
             signalBreakdown: {
-              avri: { softCitation: { name: "Open Redirect", inferredCwe: "CWE-601" } },
+              avri: {
+                softCitation: { name: "Open Redirect", inferredCwe: "CWE-601" },
+              },
             },
           })}
         />,
       );
       const badge = screen.getByTestId("badge-soft-citation-avri");
       expect(badge).toHaveTextContent("Soft citation: Open Redirect → CWE-601");
-      expect(screen.queryByTestId("badge-soft-citation-legacy")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("badge-soft-citation-legacy"),
+      ).not.toBeInTheDocument();
     });
 
     it("prefers the AVRI citation when both shapes are present", () => {
@@ -185,13 +239,19 @@ describe("TriageEngineCard", () => {
       const avri = screen.getByTestId("badge-soft-citation-avri");
       expect(avri).toHaveTextContent("Soft citation: XXE → CWE-611");
       expect(avri).not.toHaveTextContent("Legacy Pick");
-      expect(screen.queryByTestId("badge-soft-citation-legacy")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("badge-soft-citation-legacy"),
+      ).not.toBeInTheDocument();
     });
 
     it("renders no badge when neither shape is populated", () => {
       render(<TriageEngineCard engine={makeEngine({ signalBreakdown: {} })} />);
-      expect(screen.queryByTestId("badge-soft-citation-legacy")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("badge-soft-citation-avri")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("badge-soft-citation-legacy"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("badge-soft-citation-avri"),
+      ).not.toBeInTheDocument();
     });
 
     it("ignores partial soft-citation shapes that are missing the inferred CWE", () => {
@@ -205,8 +265,12 @@ describe("TriageEngineCard", () => {
           })}
         />,
       );
-      expect(screen.queryByTestId("badge-soft-citation-legacy")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("badge-soft-citation-avri")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("badge-soft-citation-legacy"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("badge-soft-citation-avri"),
+      ).not.toBeInTheDocument();
     });
   });
 });

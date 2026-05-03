@@ -1,5 +1,4 @@
 import { Pencil } from "lucide-react";
-import type { HandwavyEditEntry } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -7,6 +6,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { HandwavyEditEntry } from "@workspace/api-client-react";
 
 // Task #357 — single source of truth for the FLAT hand-wavy phrase panel's
 // "Renamed N×" badge. Renames are recorded as `{ from, to }` entries on the
@@ -50,8 +50,7 @@ export function HandwavyRenameBadge({
   formatTimestamp,
 }: HandwavyRenameBadgeProps) {
   if (renames.length === 0) return null;
-  const label =
-    renames.length === 1 ? "Renamed" : `Renamed ${renames.length}×`;
+  const label = renames.length === 1 ? "Renamed" : `Renamed ${renames.length}×`;
   return (
     <TooltipProvider delayDuration={150}>
       <Tooltip>

@@ -5,9 +5,9 @@
 // + per-engine weighting profiles that the `/presets` UI page renders and
 // `/check?preset=<id>` consumes to bootstrap local settings. Curated
 // only for v1: there is no admin/write endpoint.
-import { Router, type IRouter } from "express";
 import { existsSync, readFileSync } from "fs";
 import path from "path";
+import { Router, type IRouter } from "express";
 import { ListPresetsResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -37,7 +37,10 @@ function resolvePresetsPath(): string {
 // process at boot instead of silently returning a 500 to the first
 // caller. The thrown ZodError is loud enough to surface in CI.
 function loadPresets() {
-  const raw = JSON.parse(readFileSync(resolvePresetsPath(), "utf8")) as Record<string, unknown>;
+  const raw = JSON.parse(readFileSync(resolvePresetsPath(), "utf8")) as Record<
+    string,
+    unknown
+  >;
   return ListPresetsResponse.parse({
     version: raw.version,
     presets: raw.presets,

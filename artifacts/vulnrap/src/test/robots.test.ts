@@ -6,9 +6,9 @@
 // when a more-specific group exists. A `Disallow` only under the
 // wildcard group would therefore be silently overridden for every
 // explicitly named bot.
-import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { describe, it, expect } from "vitest";
 
 const ROBOTS = readFileSync(
   path.resolve(import.meta.dirname, "..", "..", "public", "robots.txt"),
@@ -92,9 +92,7 @@ describe("public/robots.txt", () => {
   });
 
   it("declares more than just the wildcard group (sanity check)", () => {
-    const explicit = PARSED.groups.filter(
-      (g) => !g.userAgents.includes("*"),
-    );
+    const explicit = PARSED.groups.filter((g) => !g.userAgents.includes("*"));
     expect(explicit.length).toBeGreaterThan(5);
   });
 
@@ -111,7 +109,10 @@ describe("public/robots.txt", () => {
           offenders.push(group.userAgents.join(","));
         }
       }
-      expect(offenders, `Groups missing Disallow ${reviewerPath}: ${offenders.join(" | ")}`).toEqual([]);
+      expect(
+        offenders,
+        `Groups missing Disallow ${reviewerPath}: ${offenders.join(" | ")}`,
+      ).toEqual([]);
     },
   );
 

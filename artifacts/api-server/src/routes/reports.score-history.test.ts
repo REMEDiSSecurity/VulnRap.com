@@ -8,9 +8,16 @@
 process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
 
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import http from "node:http";
-import type { AddressInfo } from "node:net";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  beforeAll,
+  afterAll,
+} from "vitest";
 import {
   createInMemoryDb,
   drizzleOrmOverrides,
@@ -23,6 +30,7 @@ import {
   type BaseDbState,
   type FakeRow,
 } from "./__test-fixtures__/in-memory-db";
+import type { AddressInfo } from "node:net";
 
 interface DbState extends BaseDbState {
   traces: FakeRow[];
@@ -159,8 +167,14 @@ describe("GET /api/reports/:id/score-history", () => {
   });
 
   it("returns 404 when the report is not visible in the feed", async () => {
-    const report = seedReport({ showInFeed: false, vulnrapCompositeScore: 50, vulnrapCompositeLabel: "REASONABLE" });
-    const res = await fetch(`${baseUrl}/api/reports/${report.id}/score-history`);
+    const report = seedReport({
+      showInFeed: false,
+      vulnrapCompositeScore: 50,
+      vulnrapCompositeLabel: "REASONABLE",
+    });
+    const res = await fetch(
+      `${baseUrl}/api/reports/${report.id}/score-history`,
+    );
     expect(res.status).toBe(404);
   });
 
@@ -171,15 +185,30 @@ describe("GET /api/reports/:id/score-history", () => {
       vulnrapCorrelationId: "orig-1",
       vulnrapEngineResults: {
         engines: [
-          { engine: "Engine 1", score: 30, verdict: "GREEN", confidence: "HIGH" },
-          { engine: "Engine 2", score: 80, verdict: "GREEN", confidence: "HIGH" },
+          {
+            engine: "Engine 1",
+            score: 30,
+            verdict: "GREEN",
+            confidence: "HIGH",
+          },
+          {
+            engine: "Engine 2",
+            score: 80,
+            verdict: "GREEN",
+            confidence: "HIGH",
+          },
         ],
       },
     });
 
-    const res = await fetch(`${baseUrl}/api/reports/${report.id}/score-history`);
+    const res = await fetch(
+      `${baseUrl}/api/reports/${report.id}/score-history`,
+    );
     expect(res.status).toBe(200);
-    const body = await res.json() as { reportId: number; entries: Array<Record<string, unknown>> };
+    const body = (await res.json()) as {
+      reportId: number;
+      entries: Array<Record<string, unknown>>;
+    };
     expect(body.reportId).toBe(report.id);
     expect(body.entries).toHaveLength(1);
     expect(body.entries[0]).toMatchObject({
@@ -205,7 +234,12 @@ describe("GET /api/reports/:id/score-history", () => {
       vulnrapCorrelationId: "cid-final",
       vulnrapEngineResults: {
         engines: [
-          { engine: "Engine 1", score: 20, verdict: "GREEN", confidence: "HIGH" },
+          {
+            engine: "Engine 1",
+            score: 20,
+            verdict: "GREEN",
+            confidence: "HIGH",
+          },
         ],
         rescoreHistory: [
           {
@@ -239,7 +273,12 @@ describe("GET /api/reports/:id/score-history", () => {
       reportId: report.id as number,
       trace: {
         correlationId: "cid-orig",
-        composite: { overallScore: 62, label: "NEEDS REVIEW", overridesApplied: [], warnings: [] },
+        composite: {
+          overallScore: 62,
+          label: "NEEDS REVIEW",
+          overridesApplied: [],
+          warnings: [],
+        },
         enginesUsed: ["Engine 1", "Engine 2"],
         featureFlags: { VULNRAP_USE_NEW_COMPOSITE: true },
       },
@@ -249,15 +288,24 @@ describe("GET /api/reports/:id/score-history", () => {
       reportId: report.id as number,
       trace: {
         correlationId: "cid-mid",
-        composite: { overallScore: 58, label: "NEEDS REVIEW", overridesApplied: [], warnings: [] },
+        composite: {
+          overallScore: 58,
+          label: "NEEDS REVIEW",
+          overridesApplied: [],
+          warnings: [],
+        },
         enginesUsed: ["Engine 1", "Engine 2", "Engine 3"],
         featureFlags: { VULNRAP_USE_AVRI: true },
       },
     });
 
-    const res = await fetch(`${baseUrl}/api/reports/${report.id}/score-history`);
+    const res = await fetch(
+      `${baseUrl}/api/reports/${report.id}/score-history`,
+    );
     expect(res.status).toBe(200);
-    const body = await res.json() as { entries: Array<Record<string, unknown>> };
+    const body = (await res.json()) as {
+      entries: Array<Record<string, unknown>>;
+    };
     expect(body.entries).toHaveLength(3);
 
     // Earliest = priorCompositeScore from the first rescore entry, dated at report.createdAt.
@@ -323,9 +371,13 @@ describe("GET /api/reports/:id/score-history", () => {
       },
     });
 
-    const res = await fetch(`${baseUrl}/api/reports/${report.id}/score-history`);
+    const res = await fetch(
+      `${baseUrl}/api/reports/${report.id}/score-history`,
+    );
     expect(res.status).toBe(200);
-    const body = await res.json() as { entries: Array<Record<string, unknown>> };
+    const body = (await res.json()) as {
+      entries: Array<Record<string, unknown>>;
+    };
     expect(body.entries).toHaveLength(2);
     expect(body.entries[0]).toMatchObject({
       compositeScore: 50,
@@ -349,9 +401,11 @@ describe("GET /api/reports/:id/score-history", () => {
       vulnrapCompositeLabel: null,
       vulnrapEngineResults: null,
     });
-    const res = await fetch(`${baseUrl}/api/reports/${report.id}/score-history`);
+    const res = await fetch(
+      `${baseUrl}/api/reports/${report.id}/score-history`,
+    );
     expect(res.status).toBe(200);
-    const body = await res.json() as { entries: unknown[] };
+    const body = (await res.json()) as { entries: unknown[] };
     expect(body.entries).toEqual([]);
   });
 });

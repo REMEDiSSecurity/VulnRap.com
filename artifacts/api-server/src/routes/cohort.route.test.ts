@@ -11,9 +11,16 @@ process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
 
 import http from "node:http";
-import type { AddressInfo } from "node:net";
 import express from "express";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   buildEmptyBins,
@@ -22,6 +29,7 @@ import {
   medianFromBins,
   type CohortBin,
 } from "./cohort";
+import type { AddressInfo } from "node:net";
 
 describe("cohort helpers — pure math", () => {
   it("buildEmptyBins partitions 0..100 into 10 equal buckets with the last inclusive of 100", () => {
@@ -112,7 +120,11 @@ function makeSelectChain(rows: SelectResult): Record<string, unknown> {
     resolve: (v: SelectResult) => void,
     reject: (e: unknown) => void,
   ): void => {
-    try { resolve(rows); } catch (e) { reject(e); }
+    try {
+      resolve(rows);
+    } catch (e) {
+      reject(e);
+    }
   };
   return chain;
 }
@@ -180,7 +192,11 @@ function request<T>(urlPath: string): Promise<HttpResponse<T>> {
         res.on("end", () => {
           const text = Buffer.concat(chunks).toString("utf8");
           let parsed: unknown;
-          try { parsed = text.length === 0 ? {} : JSON.parse(text); } catch { parsed = text; }
+          try {
+            parsed = text.length === 0 ? {} : JSON.parse(text);
+          } catch {
+            parsed = text;
+          }
           resolve({
             status: res.statusCode ?? 0,
             body: parsed as T,
@@ -239,7 +255,9 @@ describe("GET /cohort/baseline", () => {
 
   it("echoes the cwe scope when a known family is supplied", async () => {
     selectQueue.push([{ bucket: 4, count: 5 }]);
-    const r = await request<CohortBaselineResponse>("/cohort/baseline?cwe=INJECTION");
+    const r = await request<CohortBaselineResponse>(
+      "/cohort/baseline?cwe=INJECTION",
+    );
     expect(r.status).toBe(200);
     expect(r.body.cwe).toBe("INJECTION");
     expect(r.body.totalReports).toBe(5);
@@ -260,7 +278,9 @@ describe("GET /cohort/baseline", () => {
 
   it("falls back to the platform cohort (cwe=null) when an unknown family is requested", async () => {
     selectQueue.push([{ bucket: 3, count: 2 }]);
-    const r = await request<CohortBaselineResponse>("/cohort/baseline?cwe=NOT_A_FAMILY");
+    const r = await request<CohortBaselineResponse>(
+      "/cohort/baseline?cwe=NOT_A_FAMILY",
+    );
     expect(r.status).toBe(200);
     expect(r.body.cwe).toBeNull();
     expect(r.body.totalReports).toBe(2);

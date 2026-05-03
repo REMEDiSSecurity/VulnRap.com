@@ -90,7 +90,8 @@ export default function Whitepaper() {
           </div>
 
           <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-primary uppercase glow-text">
-            VulnRap: A Multi-Engine Methodology for Calibrated Vulnerability Report Scoring
+            VulnRap: A Multi-Engine Methodology for Calibrated Vulnerability
+            Report Scoring
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground italic">
             REMEDiS Security Research · Revision {new Date().getFullYear()}
@@ -103,17 +104,17 @@ export default function Whitepaper() {
             Abstract
           </h2>
           <p className="text-sm sm:text-[15px] leading-relaxed text-foreground/90">
-            Vulnerability triage queues are increasingly polluted by AI-generated
-            reports that are fluent but technically hollow. We present VulnRap,
-            an open-methodology scoring service that decomposes report quality
-            into four orthogonal engines — substance, novelty, evidence, and
-            structure — combined into a calibrated 0–100 score. We describe the
-            engine architecture, the isotonic calibration procedure used to
-            align raw outputs with human-reviewed ground truth, the drift
-            monitoring system that re-arms calibration on cohort shift, and
-            the validation results from a public corpus of {">"}40k reports.
-            We close with the methodology's known limitations and the
-            near-term research roadmap.
+            Vulnerability triage queues are increasingly polluted by
+            AI-generated reports that are fluent but technically hollow. We
+            present VulnRap, an open-methodology scoring service that decomposes
+            report quality into four orthogonal engines — substance, novelty,
+            evidence, and structure — combined into a calibrated 0–100 score. We
+            describe the engine architecture, the isotonic calibration procedure
+            used to align raw outputs with human-reviewed ground truth, the
+            drift monitoring system that re-arms calibration on cohort shift,
+            and the validation results from a public corpus of {">"}40k reports.
+            We close with the methodology's known limitations and the near-term
+            research roadmap.
           </p>
         </section>
 
@@ -179,9 +180,9 @@ export default function Whitepaper() {
             Existing report-quality heuristics (length thresholds, banned-word
             lists, keyword detectors) are easy to defeat and produce no
             calibrated confidence. We argue that a useful filter must be
-            multi-signal, transparent, and continuously calibrated against
-            human ground truth — and that the methodology itself must be
-            published so that submitters and reviewers alike can audit it.
+            multi-signal, transparent, and continuously calibrated against human
+            ground truth — and that the methodology itself must be published so
+            that submitters and reviewers alike can audit it.
           </p>
         </section>
 
@@ -192,8 +193,8 @@ export default function Whitepaper() {
           <p className="text-sm sm:text-[15px] leading-relaxed text-foreground/90">
             VulnRap decomposes report quality into four engines that score
             independent dimensions. Each engine emits a 0–1 raw score plus
-            structured evidence; engines never share state, which keeps
-            failures isolated and makes per-signal regression testing tractable.
+            structured evidence; engines never share state, which keeps failures
+            isolated and makes per-signal regression testing tractable.
           </p>
           <h3 className="text-base sm:text-lg font-semibold text-foreground mt-2">
             2.1 Substance Engine
@@ -208,29 +209,27 @@ export default function Whitepaper() {
             2.2 Novelty Engine
           </h3>
           <p className="text-sm sm:text-[15px] leading-relaxed text-foreground/90">
-            The novelty engine compares the report against a rolling corpus
-            of prior submissions using locality-sensitive hashing over
-            normalized n-grams, and flags near-duplicates of canonical
-            tutorial content.
+            The novelty engine compares the report against a rolling corpus of
+            prior submissions using locality-sensitive hashing over normalized
+            n-grams, and flags near-duplicates of canonical tutorial content.
           </p>
           <h3 className="text-base sm:text-lg font-semibold text-foreground mt-2">
             2.3 Evidence Engine
           </h3>
           <p className="text-sm sm:text-[15px] leading-relaxed text-foreground/90">
             The evidence engine scores the presence and structure of
-            reproducible artifacts: ordered repro steps, payloads, observed
-            vs. expected behavior, and any logs or screenshots referenced in
-            the body.
+            reproducible artifacts: ordered repro steps, payloads, observed vs.
+            expected behavior, and any logs or screenshots referenced in the
+            body.
           </p>
           <h3 className="text-base sm:text-lg font-semibold text-foreground mt-2">
             2.4 Structure Engine
           </h3>
           <p className="text-sm sm:text-[15px] leading-relaxed text-foreground/90">
             The structure engine evaluates section coverage (impact, repro,
-            mitigation) and internal consistency between the claimed CWE,
-            CVSS vector, and the body. Inconsistencies are heavily weighted
-            because they are the strongest leading indicator of fabricated
-            content.
+            mitigation) and internal consistency between the claimed CWE, CVSS
+            vector, and the body. Inconsistencies are heavily weighted because
+            they are the strongest leading indicator of fabricated content.
           </p>
         </section>
 
@@ -241,20 +240,20 @@ export default function Whitepaper() {
           <p className="text-sm sm:text-[15px] leading-relaxed text-foreground/90">
             Raw engine scores are not directly comparable: a 0.7 from substance
             does not mean the same thing as a 0.7 from novelty. We fit a
-            per-engine isotonic regression against a held-out reviewer corpus
-            in which each report carries a binary "valid / not valid" label
-            and an optional severity tag. Isotonic regression is preferred
-            over Platt scaling because it makes no parametric assumption about
-            the calibration curve and tolerates the heavy-tailed distributions
+            per-engine isotonic regression against a held-out reviewer corpus in
+            which each report carries a binary "valid / not valid" label and an
+            optional severity tag. Isotonic regression is preferred over Platt
+            scaling because it makes no parametric assumption about the
+            calibration curve and tolerates the heavy-tailed distributions
             common to corpus signals.
           </p>
           <p className="text-sm sm:text-[15px] leading-relaxed text-foreground/90">
             The four calibrated probabilities are combined with a learned
-            weighted geometric mean. The geometric mean (rather than
-            arithmetic) ensures that any single engine collapsing toward zero
-            drags the composite down — a deliberate choice that biases the
-            system toward false negatives over false positives, matching
-            triager preferences elicited in user research.
+            weighted geometric mean. The geometric mean (rather than arithmetic)
+            ensures that any single engine collapsing toward zero drags the
+            composite down — a deliberate choice that biases the system toward
+            false negatives over false positives, matching triager preferences
+            elicited in user research.
           </p>
         </section>
 
@@ -264,16 +263,16 @@ export default function Whitepaper() {
           </h2>
           <p className="text-sm sm:text-[15px] leading-relaxed text-foreground/90">
             Calibration decays as both attack patterns and LLM output styles
-            evolve. We monitor two cohorts continuously: a rolling 30-day
-            window of newly scored reports and the held-out reviewer set. A
-            population-stability index (PSI) is computed weekly per engine;
-            when PSI exceeds 0.2 on any engine, the calibration is flagged
-            for re-arming and a banner is shown on the public stats page.
+            evolve. We monitor two cohorts continuously: a rolling 30-day window
+            of newly scored reports and the held-out reviewer set. A
+            population-stability index (PSI) is computed weekly per engine; when
+            PSI exceeds 0.2 on any engine, the calibration is flagged for
+            re-arming and a banner is shown on the public stats page.
           </p>
           <p className="text-sm sm:text-[15px] leading-relaxed text-foreground/90">
-            Re-arming is rate-limited by a cooldown to prevent oscillation
-            and is logged in the changelog so external reviewers can correlate
-            score shifts with calibration events.
+            Re-arming is rate-limited by a cooldown to prevent oscillation and
+            is logged in the changelog so external reviewers can correlate score
+            shifts with calibration events.
           </p>
         </section>
 
@@ -285,10 +284,10 @@ export default function Whitepaper() {
             On the latest reviewer corpus, the composite score achieves a
             ROC-AUC of 0.91 against the binary valid/invalid label, with
             precision-recall break-even at score = 62/100. Per-engine ablation
-            shows that removing the substance engine costs the most absolute
-            AUC (~0.06), followed by structure (~0.04), evidence (~0.03), and
-            novelty (~0.02). Live numbers and per-engine confusion matrices
-            are published on the public Stats page and refresh nightly.
+            shows that removing the substance engine costs the most absolute AUC
+            (~0.06), followed by structure (~0.04), evidence (~0.03), and
+            novelty (~0.02). Live numbers and per-engine confusion matrices are
+            published on the public Stats page and refresh nightly.
           </p>
         </section>
 
@@ -301,16 +300,16 @@ export default function Whitepaper() {
             non-English reports are scored with reduced confidence because
             substance and structure engines are tuned on English-language
             corpora. Second, very short but legitimate reports (e.g.
-            cryptographic primitives expressible in a single paragraph) can
-            be under-scored by the substance engine. Third, novelty
-            comparisons are limited to the public corpus and cannot detect
-            duplication against private vendor backlogs.
+            cryptographic primitives expressible in a single paragraph) can be
+            under-scored by the substance engine. Third, novelty comparisons are
+            limited to the public corpus and cannot detect duplication against
+            private vendor backlogs.
           </p>
           <p className="text-sm sm:text-[15px] leading-relaxed text-foreground/90">
             The near-term roadmap targets these in order: a multilingual
-            substance tokenizer, a length-aware substance prior, and an
-            opt-in private-corpus comparison API for vendors who want to
-            cross-check submissions against their own historical reports.
+            substance tokenizer, a length-aware substance prior, and an opt-in
+            private-corpus comparison API for vendors who want to cross-check
+            submissions against their own historical reports.
           </p>
         </section>
 
@@ -320,27 +319,33 @@ export default function Whitepaper() {
           </h2>
           <ol className="wp-refs list-decimal list-outside ml-5 space-y-1.5 text-xs sm:text-sm text-muted-foreground">
             <li>
-              Niculescu-Mizil, A. &amp; Caruana, R. (2005). <em>Predicting Good
-              Probabilities With Supervised Learning.</em> ICML.
+              Niculescu-Mizil, A. &amp; Caruana, R. (2005).{" "}
+              <em>Predicting Good Probabilities With Supervised Learning.</em>{" "}
+              ICML.
             </li>
             <li>
-              Zadrozny, B. &amp; Elkan, C. (2002). <em>Transforming classifier
-              scores into accurate multiclass probability estimates.</em> KDD.
+              Zadrozny, B. &amp; Elkan, C. (2002).{" "}
+              <em>
+                Transforming classifier scores into accurate multiclass
+                probability estimates.
+              </em>{" "}
+              KDD.
             </li>
             <li>
               MITRE Corporation. <em>Common Weakness Enumeration (CWE).</em>{" "}
               <a href="https://cwe.mitre.org">cwe.mitre.org</a>.
             </li>
             <li>
-              FIRST. <em>Common Vulnerability Scoring System v3.1
-              Specification.</em>{" "}
+              FIRST.{" "}
+              <em>Common Vulnerability Scoring System v3.1 Specification.</em>{" "}
               <a href="https://www.first.org/cvss/">first.org/cvss</a>.
             </li>
             <li>
               VulnRap public corpus &amp; engine source.{" "}
               <a href="https://github.com/REMEDiSSecurity/VulnRap.Com">
                 github.com/REMEDiSSecurity/VulnRap.Com
-              </a>.
+              </a>
+              .
             </li>
           </ol>
         </section>

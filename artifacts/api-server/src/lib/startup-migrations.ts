@@ -131,7 +131,8 @@ export async function runStartupMigrations(): Promise<void> {
   if (runVersioned) {
     try {
       await runMigrations({
-        log: (msg) => logger.info({ migrator: "drizzle" }, `[startup-migrations] ${msg}`),
+        log: (msg) =>
+          logger.info({ migrator: "drizzle" }, `[startup-migrations] ${msg}`),
       });
     } catch (err) {
       // FAIL-FAST in production. Serving requests against an unknown

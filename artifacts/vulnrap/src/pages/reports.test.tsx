@@ -102,21 +102,23 @@ describe("Reports feed — Task #198 fake-raw-HTTP & stripped-crash-trace badges
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : (input as Request).url;
-      if (url.includes(FEED_URL_FRAGMENT)) {
-        return new Response(JSON.stringify(SAMPLE_FEED), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return new Response("not found", { status: 404 });
-    });
+    fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : (input as Request).url;
+        if (url.includes(FEED_URL_FRAGMENT)) {
+          return new Response(JSON.stringify(SAMPLE_FEED), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response("not found", { status: 404 });
+      });
   });
 
   afterEach(() => {
@@ -133,13 +135,15 @@ describe("Reports feed — Task #198 fake-raw-HTTP & stripped-crash-trace badges
     // The fake-raw-HTTP row should carry the matching chip.
     const fakeRow = screen.getByText("RPT-FAKE-HTTP").closest("a");
     expect(fakeRow).not.toBeNull();
-    expect(within(fakeRow as HTMLElement).getByTestId("badge-fake-raw-http")).toHaveTextContent(
-      "FAKE_RAW_HTTP",
-    );
+    expect(
+      within(fakeRow as HTMLElement).getByTestId("badge-fake-raw-http"),
+    ).toHaveTextContent("FAKE_RAW_HTTP");
     // …and should NOT carry the stripped-crash-trace chip — they're independent
     // signals plumbed from different AVRI sub-blocks.
     expect(
-      within(fakeRow as HTMLElement).queryByTestId("badge-stripped-crash-trace"),
+      within(fakeRow as HTMLElement).queryByTestId(
+        "badge-stripped-crash-trace",
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -153,7 +157,9 @@ describe("Reports feed — Task #198 fake-raw-HTTP & stripped-crash-trace badges
     const strippedRow = screen.getByText("RPT-STRIPPED-TRACE").closest("a");
     expect(strippedRow).not.toBeNull();
     expect(
-      within(strippedRow as HTMLElement).getByTestId("badge-stripped-crash-trace"),
+      within(strippedRow as HTMLElement).getByTestId(
+        "badge-stripped-crash-trace",
+      ),
     ).toHaveTextContent("STRIPPED_CRASH_TRACE");
     expect(
       within(strippedRow as HTMLElement).queryByTestId("badge-fake-raw-http"),
@@ -173,7 +179,9 @@ describe("Reports feed — Task #198 fake-raw-HTTP & stripped-crash-trace badges
       within(cleanRow as HTMLElement).queryByTestId("badge-fake-raw-http"),
     ).not.toBeInTheDocument();
     expect(
-      within(cleanRow as HTMLElement).queryByTestId("badge-stripped-crash-trace"),
+      within(cleanRow as HTMLElement).queryByTestId(
+        "badge-stripped-crash-trace",
+      ),
     ).not.toBeInTheDocument();
   });
 });
@@ -232,21 +240,23 @@ describe("Reports feed — Task #423 inferred-CWE badge", () => {
   };
 
   beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : (input as Request).url;
-      if (url.includes(FEED_URL_FRAGMENT)) {
-        return new Response(JSON.stringify(INFERRED_FEED), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return new Response("not found", { status: 404 });
-    });
+    fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : (input as Request).url;
+        if (url.includes(FEED_URL_FRAGMENT)) {
+          return new Response(JSON.stringify(INFERRED_FEED), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response("not found", { status: 404 });
+      });
   });
 
   afterEach(() => {

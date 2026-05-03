@@ -35,15 +35,15 @@ We chose to build VulnRap on [Replit](https://replit.com) because we already had
 
 ## Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, Vite 7, Tailwind CSS 4, React Router v7 |
-| UI | Radix UI + shadcn/ui |
+| Layer         | Technology                                          |
+| ------------- | --------------------------------------------------- |
+| Frontend      | React 19, Vite 7, Tailwind CSS 4, React Router v7   |
+| UI            | Radix UI + shadcn/ui                                |
 | Data Fetching | TanStack React Query + Orval (codegen from OpenAPI) |
-| API Server | Express 5, TypeScript |
-| Database | PostgreSQL + Drizzle ORM |
-| Validation | Zod v4 |
-| Security | helmet, express-rate-limit, multer |
+| API Server    | Express 5, TypeScript                               |
+| Database      | PostgreSQL + Drizzle ORM                            |
+| Validation    | Zod v4                                              |
+| Security      | helmet, express-rate-limit, multer                  |
 
 ## Architecture
 
@@ -181,31 +181,31 @@ Full interactive API docs: [vulnrap.com/api/docs](https://vulnrap.com/api/docs) 
 
 ### Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/reports` | Submit a report for full analysis |
-| `POST` | `/api/reports/check` | Analyze without storing (receiver flow) |
-| `GET` | `/api/reports/:id` | Get full analysis results |
-| `GET` | `/api/reports/:id/verify` | Lightweight verification badge data |
-| `GET` | `/api/reports/:id/triage-report` | Exportable markdown triage report |
-| `DELETE` | `/api/reports/:id` | Delete a report (requires delete token) |
-| `GET` | `/api/reports/:id/compare/:matchId` | Compare two reports side by side |
-| `GET` | `/api/reports/lookup/:hash` | Find report by SHA-256 content hash |
-| `GET` | `/api/stats` | Platform-wide statistics |
-| `POST` | `/api/feedback` | Submit user feedback |
-| `GET` | `/api/healthz` | Health check |
+| Method   | Path                                | Description                             |
+| -------- | ----------------------------------- | --------------------------------------- |
+| `POST`   | `/api/reports`                      | Submit a report for full analysis       |
+| `POST`   | `/api/reports/check`                | Analyze without storing (receiver flow) |
+| `GET`    | `/api/reports/:id`                  | Get full analysis results               |
+| `GET`    | `/api/reports/:id/verify`           | Lightweight verification badge data     |
+| `GET`    | `/api/reports/:id/triage-report`    | Exportable markdown triage report       |
+| `DELETE` | `/api/reports/:id`                  | Delete a report (requires delete token) |
+| `GET`    | `/api/reports/:id/compare/:matchId` | Compare two reports side by side        |
+| `GET`    | `/api/reports/lookup/:hash`         | Find report by SHA-256 content hash     |
+| `GET`    | `/api/stats`                        | Platform-wide statistics                |
+| `POST`   | `/api/feedback`                     | Submit user feedback                    |
+| `GET`    | `/api/healthz`                      | Health check                            |
 
 ## Pages
 
-| Route | Purpose |
-|-------|---------|
-| `/` | Submit a report for analysis |
+| Route          | Purpose                                                                                  |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| `/`            | Submit a report for analysis                                                             |
 | `/results/:id` | Full analysis results with slop score, similarity, redaction summary, verification badge |
-| `/check` | Receiver flow — analyze an incoming report without storing anything |
-| `/verify/:id` | Public verification page for sharing with vulnerability programs |
-| `/stats` | Platform statistics dashboard |
-| `/developers` | API documentation and integration guide |
-| `/privacy` | Privacy policy explaining what is stored and how |
+| `/check`       | Receiver flow — analyze an incoming report without storing anything                      |
+| `/verify/:id`  | Public verification page for sharing with vulnerability programs                         |
+| `/stats`       | Platform statistics dashboard                                                            |
+| `/developers`  | API documentation and integration guide                                                  |
+| `/privacy`     | Privacy policy explaining what is stored and how                                         |
 
 ## Local vs Hosted
 
@@ -233,17 +233,21 @@ The bundled `Dockerfile` is multi-stage, runs as a non-root user, ships a
 Multi-axis evidence collection feeding a three-engine composite (architecture last reweighted in v3.8.0; see [Composite Scoring](#composite-scoring-three-engine-v380) below for how the axes are fused):
 
 ### Axis 1: Linguistic AI Fingerprinting
+
 Deterministic analysis that checks for:
+
 - **AI filler phrases** — ~50 weighted phrases ("It is important to note," "As an AI language model," etc.)
 - **Statistical text analysis** — Sentence length variance, passive voice ratio, contraction absence, bigram entropy
 - **Template detection** — Bounty template headers (Vulnerability Type, Severity, CVSS Score, etc.), formal letter patterns (Dear Team / Best regards), dependency dumps, OWASP padding
 - **Formulaic phrase detection** — 32 AI-generated boilerplate patterns (years of experience, industry tools, discovered a critical, etc.)
 
 ### Axis 2: Quality vs Slop Separation
+
 - **qualityScore** (0-100) — Report completeness: version info, code blocks, repro steps
 - **Separated from AI detection** — A terse real report can have low quality but also low slop
 
 ### Axis 3: Factual Verification
+
 - **Severity inflation** — Critical CVSS claims (9.8) without RCE/auth-bypass evidence
 - **Placeholder URLs** — example.com, target.com, and other generic domains
 - **Fabricated debug output** — Fake ASan addresses, GDB register values
@@ -253,7 +257,9 @@ Deterministic analysis that checks for:
 - **Test certificate abuse** — Reports referencing demo/test certificates as real vulnerabilities
 
 ### Axis 4: LLM Semantic Analysis (optional)
+
 When `OPENAI_API_KEY` is configured, an LLM evaluates five weighted dimensions:
+
 - **Specificity** (0.15) — Are version numbers, endpoints, and payloads concrete?
 - **Originality** (0.25) — Unique observations vs. rehashed vulnerability descriptions?
 - **Voice** (0.20) — Natural human writing vs. AI-generated prose?
@@ -263,25 +269,29 @@ When `OPENAI_API_KEY` is configured, an LLM evaluates five weighted dimensions:
 The LLM also produces **triage guidance** (reproduction steps, missing information, don't-miss warnings, reporter feedback) in the same call.
 
 ### Axis 5: Active Content Verification
+
 - **GitHub API verification** — Checks if referenced file paths and function names actually exist in the target repo
 - **NVD 2.0 cross-referencing** — Validates CVE IDs, detects plagiarism from NVD descriptions (>30% overlap)
 - **PoC plausibility** — Flags placeholder domains and textbook payloads
 - **Project detection** — Recognizes 40+ known OSS projects, GitHub/GitLab URLs, npm/PyPI packages
 
 ### Human Indicator Detection
+
 - Detects contractions, terse/informal style, informal abbreviations (btw/fwiw/iirc), commit/PR references, patched version references
 - Human indicators produce negative weights that reduce slop score
 
 ### Composite Scoring (Three-Engine, v3.8.0)
+
 The signals from Axes 1–5 above are consumed by three independent engines, each producing a 0–100 sub-score. The composite is a weighted blend, where **higher = stronger evidence of a real, reproducible issue** (the inverse of the legacy slop score, which is still exposed via the `slopScore` API field for backward compatibility).
 
-- **Engine 1 — AI Authorship Detector** (5%, *inverted*) — Linguistic + perplexity signals; the engine's raw "AI-likely" score is inverted before being weighted, so legitimate-sounding reports help the composite.
+- **Engine 1 — AI Authorship Detector** (5%, _inverted_) — Linguistic + perplexity signals; the engine's raw "AI-likely" score is inverted before being weighted, so legitimate-sounding reports help the composite.
 - **Engine 2 — Technical Substance Analyzer** (60%) — Code evidence, references, reproducibility, PoC integrity, and claim/evidence ratio. When the AVRI feature flag (`VULNRAP_USE_AVRI`) is on, this rubric is swapped for one of nine CWE-family-specific rubrics with family-specific gold signals and absence penalties.
 - **Engine 3 — CWE Coherence Checker** (35%) — Verifies the report's stated vulnerability class is consistent with the evidence and PoC. Capped at 42 when Engine 2 reports near-zero substance (Sprint 12 A1 substance gate).
 
 **Composite overrides** (audit-trailed in `compositeOverrides`): `CONVERGENT_NEGATIVE` (-20), `CWE_TYPE_SWAP` (-15), `CLAIM_EVIDENCE_EXTREME` (-25), `HIGH_REJECTION_CWE_PRIOR` (-5), `THIN_LEGITIMATE_REPORT` (-5), and the new `BEHAVIORAL_MATCH_REWARD` (+6, Sprint 12 A2 — fires when Engine 2 surfaces a `GOLD_SIGNAL` AND Engine 3 ≥ 60 with no negative CWE signals AND Engine 1 verdict ≠ RED).
 
 ### Composite Score Labels
+
 - **0–20**: Likely Invalid
 - **21–35**: High Risk
 - **36–50**: Needs Review
@@ -292,7 +302,9 @@ The signals from Axes 1–5 above are consumed by three independent engines, eac
 ## PSIRT Triage Workflow
 
 ### Triage Recommendations
+
 Automated decision engine for PSIRT teams. **Triage bands operate on the composite score (high = real, low = slop):**
+
 - **PRIORITIZE** — Composite ≥65
 - **MANUAL_REVIEW** — Composite ≥55
 - **STANDARD_TRIAGE** — Composite ≥40 (default)
@@ -302,6 +314,7 @@ Automated decision engine for PSIRT teams. **Triage bands operate on the composi
 Includes challenge questions, temporal signal detection (suspiciously fast CVE turnaround), template reuse detection, and revision tracking.
 
 ### AI Triage Assistant
+
 - **Reproduction guidance** for 8 vulnerability classes (XSS, SQLi, SSRF, deserialization, buffer overflow, path traversal, auth bypass, race condition)
 - **Gap analysis** — Identifies missing elements (PoC, versions, environment, HTTP details, auth context, network position, dependency versions)
 - **Don't-miss warnings** — Dependency tree, source file verification, endpoint validation, attack chain analysis, RCE verification
@@ -361,8 +374,8 @@ validation skill's callbacks are only available there):
 ```javascript
 const reg = await import("./scripts/vulnrap-e2e-register.mjs");
 await reg.syncVulnrapE2eValidation({
-  setValidationCommand,    // pre-registered in code_execution
-  clearValidationCommand,  // pre-registered in code_execution
+  setValidationCommand, // pre-registered in code_execution
+  clearValidationCommand, // pre-registered in code_execution
 });
 ```
 
@@ -410,7 +423,7 @@ defense:
    seeded corpus fails loudly.
 2. **Production replay** — `scripts/scoring-gate-replay.mjs` pulls
    the most recent 100 reports from `DATABASE_URL`, recomputes the
-   `slopTier` through the *current* scoring pipeline, and fails if
+   `slopTier` through the _current_ scoring pipeline, and fails if
    the tier-flip rate exceeds **0.5%** (i.e. more than zero flips on
    100 reports). A per-fixture diff is printed to stdout so you can
    see exactly which reports moved between tiers and by how much.
@@ -435,7 +448,7 @@ SCORING_GATE_FLIP_THRESHOLD=0.02 bash scripts/scoring-gate.sh
 
 Some changes — recalibrating engine weights, lowering a tier
 threshold after a corpus refresh, fixing a known bug in a signal
-detector — *should* move tiers on production data. That is the whole
+detector — _should_ move tiers on production data. That is the whole
 point of the change. In those cases, bypass the gate explicitly:
 
 ```bash
@@ -448,7 +461,7 @@ When you bypass:
   needs to be able to tell "deliberate recalibration" from "I was
   in a hurry and skipped the gate".
 - **Update the golden corpus snapshots in the same PR.** Otherwise
-  the next change that *should* fail the gate will pass because the
+  the next change that _should_ fail the gate will pass because the
   snapshots are stale.
 - **Re-run the gate without the bypass after merging** so the new
   baseline is recorded as the next reference point.

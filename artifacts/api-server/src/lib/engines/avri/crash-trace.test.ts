@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { evaluateCrashTrace, detectStructuralFabrication } from "./crash-trace.js";
+import {
+  evaluateCrashTrace,
+  detectStructuralFabrication,
+} from "./crash-trace.js";
 import { runEngine2Avri } from "./engine2-avri.js";
 import { FAMILIES_BY_ID } from "./families.js";
 import { extractSignals } from "../extractors.js";
@@ -67,7 +70,9 @@ describe("evaluateCrashTrace", () => {
   });
 
   it("returns 0 frames for prose with no crash trace", () => {
-    const r = evaluateCrashTrace("There is a use-after-free somewhere. Trust me.");
+    const r = evaluateCrashTrace(
+      "There is a use-after-free somewhere. Trust me.",
+    );
     expect(r.framesAnalyzed).toBe(0);
     expect(r.isStripped).toBe(false);
   });
@@ -724,7 +729,9 @@ Shadow byte legend (one shadow byte represents 8 application bytes):
   });
 
   it("does NOT fire on the symbol-rich TSan trace (no shadow section, irrelevant section)", () => {
-    const ids = detectStructuralFabrication(SYMBOL_RICH_TSAN_TRACE).map((m) => m.id);
+    const ids = detectStructuralFabrication(SYMBOL_RICH_TSAN_TRACE).map(
+      (m) => m.id,
+    );
     expect(ids).not.toContain("malformed_shadow_bytes");
   });
 

@@ -111,7 +111,8 @@ export function computeQualityPreview(input: string): QualityPreview {
     {
       id: "steps",
       label: "Stepwise repro (1., 2., …)",
-      status: stepwiseCount >= 3 ? "pass" : stepwiseCount >= 1 ? "warn" : "fail",
+      status:
+        stepwiseCount >= 3 ? "pass" : stepwiseCount >= 1 ? "warn" : "fail",
       detail:
         stepwiseCount === 0
           ? "No numbered steps detected"

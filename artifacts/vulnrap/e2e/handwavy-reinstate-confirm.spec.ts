@@ -1,5 +1,5 @@
-import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { test, expect } from "@playwright/test";
 import {
   addPhrase,
   cleanup,
@@ -95,9 +95,13 @@ test.describe("FLAT hand-wavy phrase panel — Reinstate confirmation dialog", (
       await dialog.getByTestId("handwavy-reinstate-confirm-cancel").click();
       await expect(dialog).toHaveCount(0, { timeout: 5_000 });
       await expect(reinstateBtn).toBeVisible();
-      await expect(historyRow.getByTestId("handwavy-history-reinstated")).toHaveCount(0);
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: seeded.phrase }),
+        historyRow.getByTestId("handwavy-history-reinstated"),
+      ).toHaveCount(0);
+      await expect(
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: seeded.phrase }),
         "Cancel must NOT re-enable the phrase on the active list",
       ).toHaveCount(0);
     } finally {
@@ -142,13 +146,17 @@ test.describe("FLAT hand-wavy phrase panel — Reinstate confirmation dialog", (
       // Dialog closes…
       await expect(dialog).toHaveCount(0, { timeout: 5_000 });
       // …the row swaps to the "Reinstated" badge…
-      await expect(historyRow.getByTestId("handwavy-history-reinstated")).toBeVisible({
+      await expect(
+        historyRow.getByTestId("handwavy-history-reinstated"),
+      ).toBeVisible({
         timeout: 15_000,
       });
       await expect(historyRow.getByTestId("handwavy-reinstate")).toHaveCount(0);
       // …and the phrase reappears on the active list.
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: seeded.phrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: seeded.phrase }),
       ).toHaveCount(1, { timeout: 15_000 });
     } finally {
       await cleanup(apiCtx, seeded.phrase, { reviewer: `${REVIEWER}-cleanup` });

@@ -416,9 +416,7 @@ PORT = "8080"
 
 // 2) Real-world: load every artifacts/*/.replit-artifact/artifact.toml
 //    and assert no conflicts. This is the regression guard proper.
-const artifactDirs = (
-  await readdir(ARTIFACTS_DIR, { withFileTypes: true })
-)
+const artifactDirs = (await readdir(ARTIFACTS_DIR, { withFileTypes: true }))
   .filter((d) => d.isDirectory())
   .map((d) => d.name)
   .sort();
@@ -471,15 +469,15 @@ check(
   realConflicts.length === 0,
   conflictReport
     ? `${conflictReport}\n       ` +
-      `Two artifacts declared overlapping routing prefixes. Pick ` +
-      `non-overlapping prefixes in each artifact's [[services]] paths ` +
-      `array (e.g. /api vs /web; the catch-all "/" may coexist with ` +
-      `any non-"/" prefix). Duplicating "/" across artifacts -- or ` +
-      `nesting one artifact's prefix inside another (e.g. /api and ` +
-      `/api/v1) -- is the regression from task #324: the workspace ` +
-      `path router gets two candidates for the same request, silently ` +
-      `picks one, and breaks the other artifact's dev server. Fix via ` +
-      `verifyAndReplaceArtifactToml; do not edit artifact.toml in place.`
+        `Two artifacts declared overlapping routing prefixes. Pick ` +
+        `non-overlapping prefixes in each artifact's [[services]] paths ` +
+        `array (e.g. /api vs /web; the catch-all "/" may coexist with ` +
+        `any non-"/" prefix). Duplicating "/" across artifacts -- or ` +
+        `nesting one artifact's prefix inside another (e.g. /api and ` +
+        `/api/v1) -- is the regression from task #324: the workspace ` +
+        `path router gets two candidates for the same request, silently ` +
+        `picks one, and breaks the other artifact's dev server. Fix via ` +
+        `verifyAndReplaceArtifactToml; do not edit artifact.toml in place.`
     : "",
 );
 

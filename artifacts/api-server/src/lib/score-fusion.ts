@@ -1,14 +1,26 @@
-import type { LinguisticResult } from "./linguistic-analysis";
-import type { FactualResult } from "./factual-verification";
-import type { LLMSlopResult, LLMSubstanceScores, LLMClaims } from "./llm-slop";
 import { detectHumanIndicators, type HumanIndicator } from "./human-indicators";
-import type { VerificationResult } from "./active-verification";
 import { getCurrentConfig, getConfigVersion } from "./scoring-config";
 import { computeSpectralScore, type SpectralResult } from "./spectral-analysis";
-import { computeEvidenceQuality, type EvidenceQualityResult } from "./evidence-quality";
-import { detectHallucinationSignals, type HallucinationResult } from "./hallucination-detector";
-import { computeClaimSpecificity, type ClaimSpecificityResult } from "./claim-specificity";
-import { computeInternalConsistency, type InternalConsistencyResult } from "./internal-consistency";
+import {
+  computeEvidenceQuality,
+  type EvidenceQualityResult,
+} from "./evidence-quality";
+import {
+  detectHallucinationSignals,
+  type HallucinationResult,
+} from "./hallucination-detector";
+import {
+  computeClaimSpecificity,
+  type ClaimSpecificityResult,
+} from "./claim-specificity";
+import {
+  computeInternalConsistency,
+  type InternalConsistencyResult,
+} from "./internal-consistency";
+import type { VerificationResult } from "./active-verification";
+import type { LLMSlopResult, LLMSubstanceScores, LLMClaims } from "./llm-slop";
+import type { FactualResult } from "./factual-verification";
+import type { LinguisticResult } from "./linguistic-analysis";
 
 export interface ScoreBreakdown {
   linguistic: number;
@@ -50,9 +62,17 @@ export interface EvidenceItem {
   context?: { markers?: Array<{ id: string; description: string }> };
 }
 
-export type Quadrant = "AI_SLOP" | "AI_ASSISTED" | "WEAK_HUMAN" | "STRONG_HUMAN";
+export type Quadrant =
+  | "AI_SLOP"
+  | "AI_ASSISTED"
+  | "WEAK_HUMAN"
+  | "STRONG_HUMAN";
 
-export type Archetype = "AUTO_CLOSE" | "PRIORITIZE_REVIEW" | "REQUEST_DETAILS" | "ACCEPT";
+export type Archetype =
+  | "AUTO_CLOSE"
+  | "PRIORITIZE_REVIEW"
+  | "REQUEST_DETAILS"
+  | "ACCEPT";
 
 export interface TwoAxisResult {
   authenticityScore: number;
@@ -127,7 +147,10 @@ const DEFAULT_THRESHOLDS: TierThresholds = {
 
 const QUADRANT_THRESHOLD = 50;
 
-export function classifyQuadrant(authenticityScore: number, validityScore: number): { quadrant: Quadrant; archetype: Archetype } {
+export function classifyQuadrant(
+  authenticityScore: number,
+  validityScore: number,
+): { quadrant: Quadrant; archetype: Archetype } {
   const highAuth = authenticityScore >= QUADRANT_THRESHOLD;
   const highValid = validityScore >= QUADRANT_THRESHOLD;
 
@@ -158,8 +181,14 @@ export function loadThresholds(): TierThresholds {
   const envLow = parseInt(process.env.SLOP_THRESHOLD_LOW || "", 10);
   const envHigh = parseInt(process.env.SLOP_THRESHOLD_HIGH || "", 10);
 
-  const low = !isNaN(envLow) && envLow >= 0 && envLow <= 100 ? envLow : config.tierThresholds.low;
-  const high = !isNaN(envHigh) && envHigh >= 0 && envHigh <= 100 ? envHigh : config.tierThresholds.high;
+  const low =
+    !isNaN(envLow) && envLow >= 0 && envLow <= 100
+      ? envLow
+      : config.tierThresholds.low;
+  const high =
+    !isNaN(envHigh) && envHigh >= 0 && envHigh <= 100
+      ? envHigh
+      : config.tierThresholds.high;
 
   if (low >= high) {
     return { low: config.tierThresholds.low, high: config.tierThresholds.high };
@@ -175,15 +204,19 @@ function computeAuthenticityScore(
   humanResult: { totalReduction: number },
 ): number {
   const linguisticAxis = Math.round(
-    linguistic.lexicalScore * 0.6 + linguistic.statisticalScore * 0.4
+    linguistic.lexicalScore * 0.6 + linguistic.statisticalScore * 0.4,
   );
 
-  let auth = linguisticAxis * 0.40
-    + linguistic.templateScore * 0.35
-    + spectral.score * 0.25;
+  let auth =
+    linguisticAxis * 0.4 +
+    linguistic.templateScore * 0.35 +
+    spectral.score * 0.25;
 
   if (linguisticAxis > 40 && linguistic.templateScore > 50) {
-    const compoundBoost = Math.min(15, (linguisticAxis - 40) * 0.3 + (linguistic.templateScore - 50) * 0.1);
+    const compoundBoost = Math.min(
+      15,
+      (linguisticAxis - 40) * 0.3 + (linguistic.templateScore - 50) * 0.1,
+    );
     auth += compoundBoost;
   }
 
@@ -205,19 +238,46 @@ function computeSubstanceAxis(
 
     if (sub.pocValidity < 20 && claims.hasPoC) {
       score += 30;
-      allEvidence.push({ type: "substance_poc_mismatch", description: "PoC provided but does not exercise the claimed library or vulnerability", weight: 30 });
+      allEvidence.push({
+        type: "substance_poc_mismatch",
+        description:
+          "PoC provided but does not exercise the claimed library or vulnerability",
+        weight: 30,
+      });
     }
     if (sub.domainCoherence < 25) {
       score += 20;
-      allEvidence.push({ type: "substance_domain_incoherent", description: "Claims show fundamental misunderstanding of the project's architecture or purpose", weight: 20 });
+      allEvidence.push({
+        type: "substance_domain_incoherent",
+        description:
+          "Claims show fundamental misunderstanding of the project's architecture or purpose",
+        weight: 20,
+      });
     }
-    if (claims.selfDisclosesAI && (sub.pocValidity < 40 || sub.domainCoherence < 30 || sub.claimSpecificity < 25)) {
+    if (
+      claims.selfDisclosesAI &&
+      (sub.pocValidity < 40 ||
+        sub.domainCoherence < 30 ||
+        sub.claimSpecificity < 25)
+    ) {
       score += 12;
-      allEvidence.push({ type: "substance_ai_low_quality", description: "Reporter discloses AI use combined with low substance scores", weight: 12 });
+      allEvidence.push({
+        type: "substance_ai_low_quality",
+        description:
+          "Reporter discloses AI use combined with low substance scores",
+        weight: 12,
+      });
     }
-    if (claims.complianceRelevance === "low" && claims.complianceBuzzwords.length >= 2) {
+    if (
+      claims.complianceRelevance === "low" &&
+      claims.complianceBuzzwords.length >= 2
+    ) {
       score += 10;
-      allEvidence.push({ type: "substance_irrelevant_compliance", description: `Compliance frameworks (${claims.complianceBuzzwords.join(", ")}) cited but irrelevant to the project type`, weight: 10 });
+      allEvidence.push({
+        type: "substance_irrelevant_compliance",
+        description: `Compliance frameworks (${claims.complianceBuzzwords.join(", ")}) cited but irrelevant to the project type`,
+        weight: 10,
+      });
     }
 
     if (sub.pocValidity > 75) {
@@ -232,13 +292,13 @@ function computeSubstanceAxis(
   }
 
   const hasHallucinatedFunction = factual.evidence.some(
-    e => e.type === "hallucinated_function"
+    (e) => e.type === "hallucinated_function",
   );
   const hasFabricatedCve = factual.evidence.some(
-    e => e.type === "fabricated_cve"
+    (e) => e.type === "fabricated_cve",
   );
-  const hasFutureCve = factual.evidence.some(e => e.type === "future_cve");
-  const hasFakeAsan = factual.evidence.some(e => e.type === "fake_asan");
+  const hasFutureCve = factual.evidence.some((e) => e.type === "future_cve");
+  const hasFakeAsan = factual.evidence.some((e) => e.type === "fake_asan");
 
   if (hasHallucinatedFunction) score += 35;
   if (hasFabricatedCve) score += 28;
@@ -257,25 +317,35 @@ function computeHeuristicValidity(
   verification: VerificationResult | null,
 ): number {
   const evidenceWeight = 0.25;
-  const hallucinationWeight = 0.20;
-  const claimWeight = 0.20;
+  const hallucinationWeight = 0.2;
+  const claimWeight = 0.2;
   const consistencyWeight = 0.15;
-  const factualWeight = 0.10;
-  const verificationWeight = 0.10;
+  const factualWeight = 0.1;
+  const verificationWeight = 0.1;
 
   const substanceLow = claimSpec.score < 10 && evidenceQuality.score < 10;
-  const effectiveHallucination = substanceLow ? Math.min(hallucination.score, 40) : hallucination.score;
-  const effectiveConsistency = substanceLow ? Math.min(consistency.score, 40) : consistency.score;
+  const effectiveHallucination = substanceLow
+    ? Math.min(hallucination.score, 40)
+    : hallucination.score;
+  const effectiveConsistency = substanceLow
+    ? Math.min(consistency.score, 40)
+    : consistency.score;
 
-  let validity = evidenceQuality.score * evidenceWeight
-    + effectiveHallucination * hallucinationWeight
-    + claimSpec.score * claimWeight
-    + effectiveConsistency * consistencyWeight
-    + (100 - factual.score) * factualWeight;
+  let validity =
+    evidenceQuality.score * evidenceWeight +
+    effectiveHallucination * hallucinationWeight +
+    claimSpec.score * claimWeight +
+    effectiveConsistency * consistencyWeight +
+    (100 - factual.score) * factualWeight;
 
   if (verification && verification.checks.length > 0) {
-    const verifiedCount = verification.checks.filter(c => c.result === "verified").length;
-    const verificationBonus = Math.min(100, verifiedCount * 20 + (100 - verification.score) * 0.5);
+    const verifiedCount = verification.checks.filter(
+      (c) => c.result === "verified",
+    ).length;
+    const verificationBonus = Math.min(
+      100,
+      verifiedCount * 20 + (100 - verification.score) * 0.5,
+    );
     validity += verificationBonus * verificationWeight;
   } else {
     validity += 50 * verificationWeight;
@@ -292,8 +362,20 @@ function computeValidityScore(
   claimSpec: ClaimSpecificityResult,
   consistency: InternalConsistencyResult,
   verification: VerificationResult | null,
-): { final: number; heuristic: number; llmRaw: number | null; evidenceFreeCapApplied: boolean } {
-  const heuristic = computeHeuristicValidity(factual, evidenceQuality, hallucination, claimSpec, consistency, verification);
+): {
+  final: number;
+  heuristic: number;
+  llmRaw: number | null;
+  evidenceFreeCapApplied: boolean;
+} {
+  const heuristic = computeHeuristicValidity(
+    factual,
+    evidenceQuality,
+    hallucination,
+    claimSpec,
+    consistency,
+    verification,
+  );
 
   if (llm && llm.llmBreakdown) {
     let llmRaw = llm.llmBreakdown.validityScore ?? 50;
@@ -301,8 +383,11 @@ function computeValidityScore(
     if (llm.llmSubstance) {
       const sub = llm.llmSubstance;
       const substanceModifier = (sub.substanceScore - 50) * 0.15;
-      const coherenceModifier = (sub.coherenceScore - 50) * 0.10;
-      llmRaw = Math.min(100, Math.max(0, Math.round(llmRaw + substanceModifier + coherenceModifier)));
+      const coherenceModifier = (sub.coherenceScore - 50) * 0.1;
+      llmRaw = Math.min(
+        100,
+        Math.max(0, Math.round(llmRaw + substanceModifier + coherenceModifier)),
+      );
     }
 
     // Task #446 — evidence-free post-check. The substance prompt audit
@@ -339,11 +424,19 @@ function computeValidityScore(
       }
     }
 
-    const final = Math.min(100, Math.max(0, Math.round(heuristic * 0.50 + llmRaw * 0.50)));
+    const final = Math.min(
+      100,
+      Math.max(0, Math.round(heuristic * 0.5 + llmRaw * 0.5)),
+    );
     return { final, heuristic, llmRaw, evidenceFreeCapApplied };
   }
 
-  return { final: heuristic, heuristic, llmRaw: null, evidenceFreeCapApplied: false };
+  return {
+    final: heuristic,
+    heuristic,
+    llmRaw: null,
+    evidenceFreeCapApplied: false,
+  };
 }
 
 export function fuseScores(
@@ -402,10 +495,18 @@ export function fuseScores(
   const consistency = computeInternalConsistency(originalText);
 
   for (const marker of spectral.markers) {
-    allEvidence.push({ type: "spectral_" + marker.type, description: marker.description, weight: marker.weight });
+    allEvidence.push({
+      type: "spectral_" + marker.type,
+      description: marker.description,
+      weight: marker.weight,
+    });
   }
   for (const marker of evidenceQuality.markers) {
-    allEvidence.push({ type: "evidence_" + marker.type, description: marker.description, weight: marker.weight });
+    allEvidence.push({
+      type: "evidence_" + marker.type,
+      description: marker.description,
+      weight: marker.weight,
+    });
   }
   for (const signal of hallucination.signals) {
     allEvidence.push({
@@ -415,7 +516,9 @@ export function fuseScores(
       // Task #431: forward the flat string[] marker IDs for signals that
       // aggregate multiple tells (e.g. impossible_http_response) — the
       // triage UI renders one badge per id.
-      ...(signal.markers && signal.markers.length > 0 ? { markers: signal.markers } : {}),
+      ...(signal.markers && signal.markers.length > 0
+        ? { markers: signal.markers }
+        : {}),
       // Task #435: forward the structured marker payload (today only set on
       // `structural_fabrication`) so the diagnostics UI can render each
       // marker as its own bullet with its description.
@@ -423,20 +526,39 @@ export function fuseScores(
     });
   }
   for (const marker of claimSpec.markers) {
-    allEvidence.push({ type: "claim_" + marker.type, description: marker.description || marker.type, weight: marker.weight });
+    allEvidence.push({
+      type: "claim_" + marker.type,
+      description: marker.description || marker.type,
+      weight: marker.weight,
+    });
   }
   for (const issue of consistency.issues) {
-    allEvidence.push({ type: "consistency_" + issue.type, description: issue.description, weight: issue.weight });
+    allEvidence.push({
+      type: "consistency_" + issue.type,
+      description: issue.description,
+      weight: issue.weight,
+    });
   }
 
   const humanResult = detectHumanIndicators(originalText);
 
-  const authenticityScore = computeAuthenticityScore(linguistic, llm, spectral, humanResult);
+  const authenticityScore = computeAuthenticityScore(
+    linguistic,
+    llm,
+    spectral,
+    humanResult,
+  );
 
   const substanceAxis = computeSubstanceAxis(llm, factual, allEvidence);
 
   const validityResult = computeValidityScore(
-    factual, llm, evidenceQuality, hallucination, claimSpec, consistency, verification ?? null,
+    factual,
+    llm,
+    evidenceQuality,
+    hallucination,
+    claimSpec,
+    consistency,
+    verification ?? null,
   );
 
   // Task #209 — disagreementThreshold is named so the audit telemetry can
@@ -457,17 +579,23 @@ export function fuseScores(
     const diff = Math.abs(validityResult.heuristic - validityResult.llmRaw);
     if (diff > disagreementThreshold) {
       conservativeFloorApplied = true;
-      finalValidityScore = Math.min(validityResult.heuristic, validityResult.llmRaw);
+      finalValidityScore = Math.min(
+        validityResult.heuristic,
+        validityResult.llmRaw,
+      );
     }
   }
 
-  const validityDelta = validityResult.llmRaw !== null
-    ? Math.abs(validityResult.heuristic - validityResult.llmRaw)
-    : null;
+  const validityDelta =
+    validityResult.llmRaw !== null
+      ? Math.abs(validityResult.heuristic - validityResult.llmRaw)
+      : null;
   let higherSide: "heuristic" | "llm" | "tied" | null = null;
   if (validityResult.llmRaw !== null) {
-    if (validityResult.heuristic > validityResult.llmRaw) higherSide = "heuristic";
-    else if (validityResult.llmRaw > validityResult.heuristic) higherSide = "llm";
+    if (validityResult.heuristic > validityResult.llmRaw)
+      higherSide = "heuristic";
+    else if (validityResult.llmRaw > validityResult.heuristic)
+      higherSide = "llm";
     else higherSide = "tied";
   }
   const validityFusion: ValidityFusionAudit = {
@@ -482,14 +610,23 @@ export function fuseScores(
     evidenceFreeCapApplied: validityResult.evidenceFreeCapApplied,
   };
 
-  const { quadrant, archetype } = classifyQuadrant(authenticityScore, finalValidityScore);
+  const { quadrant, archetype } = classifyQuadrant(
+    authenticityScore,
+    finalValidityScore,
+  );
 
-  const styleDriven = Math.round(authenticityScore * 0.65 + (100 - finalValidityScore) * 0.35);
-  const substanceDriven = Math.round(substanceAxis * 0.85 + (100 - finalValidityScore) * 0.15);
+  const styleDriven = Math.round(
+    authenticityScore * 0.65 + (100 - finalValidityScore) * 0.35,
+  );
+  const substanceDriven = Math.round(
+    substanceAxis * 0.85 + (100 - finalValidityScore) * 0.15,
+  );
   let slopScore = Math.max(styleDriven, substanceDriven);
 
   if (verification) {
-    const verifiedCount = verification.checks.filter(c => c.result === "verified").length;
+    const verifiedCount = verification.checks.filter(
+      (c) => c.result === "verified",
+    ).length;
     if (verifiedCount > 0) {
       const verifiedReduction = Math.min(verifiedCount * -3, -1);
       slopScore = Math.max(params.FLOOR, slopScore + verifiedReduction);
@@ -498,10 +635,14 @@ export function fuseScores(
 
   slopScore = Math.min(100, Math.max(0, slopScore));
 
-  const evidenceCount = allEvidence.filter(e => e.weight >= 5).length;
+  const evidenceCount = allEvidence.filter((e) => e.weight >= 5).length;
   let confidence = Math.min(
     1.0,
-    0.3 + evidenceCount * 0.07 + (llm ? 0.2 : 0) + humanResult.indicators.length * 0.03 + (verification && verification.checks.length > 0 ? 0.1 : 0)
+    0.3 +
+      evidenceCount * 0.07 +
+      (llm ? 0.2 : 0) +
+      humanResult.indicators.length * 0.03 +
+      (verification && verification.checks.length > 0 ? 0.1 : 0),
   );
 
   if (!llm) {
@@ -529,7 +670,10 @@ export function fuseScores(
     factual: Math.round(factual.score),
     template: Math.round(templateScore),
     llm: llm ? Math.round(llm.llmSlopScore) : null,
-    verification: verification && verification.checks.length > 0 ? verification.score : null,
+    verification:
+      verification && verification.checks.length > 0
+        ? verification.score
+        : null,
     quality: Math.round(qualityScore),
     scoringConfigVersion: getConfigVersion(),
     spectral: spectral.score,
@@ -570,10 +714,23 @@ export function fuseScores(
 }
 
 export function recomputeSlopScoreWithoutLlm(
-  breakdown: { linguistic: number; factual: number; template: number; verification?: number | null },
+  breakdown: {
+    linguistic: number;
+    factual: number;
+    template: number;
+    verification?: number | null;
+  },
   evidenceItems: EvidenceItem[],
   originalText: string,
-): { slopScore: number; confidence: number; slopTier: string; authenticityScore: number; validityScore: number; quadrant: Quadrant; archetype: Archetype } {
+): {
+  slopScore: number;
+  confidence: number;
+  slopTier: string;
+  authenticityScore: number;
+  validityScore: number;
+  quadrant: Quadrant;
+  archetype: Archetype;
+} {
   const thr = loadThresholds();
   const params = loadScoringParams();
 
@@ -585,56 +742,78 @@ export function recomputeSlopScoreWithoutLlm(
   const humanResult = detectHumanIndicators(originalText);
 
   const linguisticAxis = breakdown.linguistic;
-  let auth = linguisticAxis * 0.40 + breakdown.template * 0.35 + spectral.score * 0.25;
+  let auth =
+    linguisticAxis * 0.4 + breakdown.template * 0.35 + spectral.score * 0.25;
   if (linguisticAxis > 40 && breakdown.template > 50) {
-    const compoundBoost = Math.min(15, (linguisticAxis - 40) * 0.3 + (breakdown.template - 50) * 0.1);
+    const compoundBoost = Math.min(
+      15,
+      (linguisticAxis - 40) * 0.3 + (breakdown.template - 50) * 0.1,
+    );
     auth += compoundBoost;
   }
   auth = Math.max(0, auth + humanResult.totalReduction);
   const authenticityScore = Math.min(100, Math.max(0, Math.round(auth)));
 
   const substanceLow = claimSpec.score < 10 && evidenceQuality.score < 10;
-  const effectiveHallucination = substanceLow ? Math.min(hallucination.score, 40) : hallucination.score;
-  const effectiveConsistency = substanceLow ? Math.min(consistency.score, 40) : consistency.score;
+  const effectiveHallucination = substanceLow
+    ? Math.min(hallucination.score, 40)
+    : hallucination.score;
+  const effectiveConsistency = substanceLow
+    ? Math.min(consistency.score, 40)
+    : consistency.score;
 
   const factualInverse = 100 - breakdown.factual;
-  let validity = evidenceQuality.score * 0.25
-    + effectiveHallucination * 0.20
-    + claimSpec.score * 0.20
-    + effectiveConsistency * 0.15
-    + factualInverse * 0.10;
+  let validity =
+    evidenceQuality.score * 0.25 +
+    effectiveHallucination * 0.2 +
+    claimSpec.score * 0.2 +
+    effectiveConsistency * 0.15 +
+    factualInverse * 0.1;
 
   if (breakdown.verification != null) {
-    validity += (100 - breakdown.verification) * 0.10;
+    validity += (100 - breakdown.verification) * 0.1;
   } else {
-    validity += 50 * 0.10;
+    validity += 50 * 0.1;
   }
 
   const validityScore = Math.min(100, Math.max(0, Math.round(validity)));
-  const { quadrant, archetype } = classifyQuadrant(authenticityScore, validityScore);
+  const { quadrant, archetype } = classifyQuadrant(
+    authenticityScore,
+    validityScore,
+  );
 
   let substanceAxis = 0;
-  const hasHallucinatedFunction = evidenceItems.some(e => e.type === "hallucinated_function");
-  const hasFabricatedCve = evidenceItems.some(e => e.type === "fabricated_cve");
-  const hasFutureCve = evidenceItems.some(e => e.type === "future_cve");
-  const hasFakeAsan = evidenceItems.some(e => e.type === "fake_asan");
+  const hasHallucinatedFunction = evidenceItems.some(
+    (e) => e.type === "hallucinated_function",
+  );
+  const hasFabricatedCve = evidenceItems.some(
+    (e) => e.type === "fabricated_cve",
+  );
+  const hasFutureCve = evidenceItems.some((e) => e.type === "future_cve");
+  const hasFakeAsan = evidenceItems.some((e) => e.type === "fake_asan");
   if (hasHallucinatedFunction) substanceAxis += 35;
   if (hasFabricatedCve) substanceAxis += 28;
   if (hasFutureCve) substanceAxis += 25;
   if (hasFakeAsan) substanceAxis += 20;
   substanceAxis = Math.min(100, Math.max(0, substanceAxis));
 
-  const styleDriven = Math.round(authenticityScore * 0.65 + (100 - validityScore) * 0.35);
-  const substanceDriven = Math.round(substanceAxis * 0.85 + (100 - validityScore) * 0.15);
+  const styleDriven = Math.round(
+    authenticityScore * 0.65 + (100 - validityScore) * 0.35,
+  );
+  const substanceDriven = Math.round(
+    substanceAxis * 0.85 + (100 - validityScore) * 0.15,
+  );
   let slopScore = Math.max(styleDriven, substanceDriven);
 
   slopScore = Math.min(100, Math.max(0, slopScore));
 
-  const nonLlmEvidence = evidenceItems.filter(e => e.type !== "llm_red_flag" && e.type !== "llm_observation");
-  const evidenceCount = nonLlmEvidence.filter(e => e.weight >= 5).length;
+  const nonLlmEvidence = evidenceItems.filter(
+    (e) => e.type !== "llm_red_flag" && e.type !== "llm_observation",
+  );
+  const evidenceCount = nonLlmEvidence.filter((e) => e.weight >= 5).length;
   let confidence = Math.min(
     1.0,
-    0.3 + evidenceCount * 0.07 + humanResult.indicators.length * 0.03
+    0.3 + evidenceCount * 0.07 + humanResult.indicators.length * 0.03,
   );
 
   confidence *= 0.85;
@@ -655,7 +834,10 @@ export function recomputeSlopScoreWithoutLlm(
   };
 }
 
-export function getSlopTier(score: number, _thresholds?: TierThresholds): string {
+export function getSlopTier(
+  score: number,
+  _thresholds?: TierThresholds,
+): string {
   if (score >= 80) return "Slop";
   if (score >= 60) return "Likely Slop";
   if (score >= 40) return "Questionable";

@@ -15,11 +15,11 @@ import {
   setCalibrationToken,
   getGetAvriDriftNotificationsQueryKey,
 } from "@workspace/api-client-react";
-import FeedbackAnalytics from "./feedback-analytics";
 import {
   applyRateLimitNotice,
   resetCalibrationCooldown,
 } from "@/lib/calibration-cooldown";
+import FeedbackAnalytics from "./feedback-analytics";
 
 const SERVER_TOKEN = "server-side-reviewer-token";
 

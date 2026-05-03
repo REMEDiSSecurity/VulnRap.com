@@ -1,10 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { HandwavyRenameBadge, getRenameEdits } from "./handwavy-rename-badge";
 import type { HandwavyEditEntry } from "@workspace/api-client-react";
-import {
-  HandwavyRenameBadge,
-  getRenameEdits,
-} from "./handwavy-rename-badge";
 
 // Task #357 — focused unit coverage for the rename audit badge. The badge
 // mirrors `HandwavyCategoryFlipBadge` (Task #338) so the active-row list and
@@ -88,7 +85,9 @@ describe("HandwavyRenameBadge", () => {
   });
 
   it("renders the count suffix when the phrase has been renamed multiple times", () => {
-    render(<HandwavyRenameBadge renames={twoRenames} testIdPrefix="handwavy" />);
+    render(
+      <HandwavyRenameBadge renames={twoRenames} testIdPrefix="handwavy" />,
+    );
     const badge = screen.getByTestId("handwavy-rename-badge");
     expect(badge).toHaveTextContent("Renamed 2×");
   });
@@ -101,7 +100,10 @@ describe("HandwavyRenameBadge", () => {
     unmount();
 
     render(
-      <HandwavyRenameBadge renames={oneRename} testIdPrefix="handwavy-history" />,
+      <HandwavyRenameBadge
+        renames={oneRename}
+        testIdPrefix="handwavy-history"
+      />,
     );
     expect(screen.getByTestId("handwavy-history-rename-badge")).toBeVisible();
   });

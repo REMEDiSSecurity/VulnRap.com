@@ -21,13 +21,13 @@ curl -s 'http://localhost:8080/api/test/run?debug=1' \
 
 ## Heuristic-score distribution across the 72-fixture battery
 
-| Tier              | n  | h=0 | h=8 | h ≥ 25 |
-| ----------------- | -- | --- | --- | ------ |
-| T1_LEGIT          | 15 | 15  | 0   | 0      |
-| T2_BORDERLINE     | 10 | 10  | 0   | 0      |
-| T3_SLOP           | 33 | 32  | 1   | 0      |
-| T4_HALLUCINATED   | 14 | 14  | 0   | 0      |
-| **Total**         | 72 | 71  | 1   | **0**  |
+| Tier            | n   | h=0 | h=8 | h ≥ 25 |
+| --------------- | --- | --- | --- | ------ |
+| T1_LEGIT        | 15  | 15  | 0   | 0      |
+| T2_BORDERLINE   | 10  | 10  | 0   | 0      |
+| T3_SLOP         | 33  | 32  | 1   | 0      |
+| T4_HALLUCINATED | 14  | 14  | 0   | 0      |
+| **Total**       | 72  | 71  | 1   | **0**  |
 
 Gate-fire rate on the battery: **0 / 72 (0%)**. Every fixture is reported
 as `skipped_below_borderline`.
@@ -53,7 +53,7 @@ the cost-gate was supposed to catch.
 ## Why widening the thresholds is the wrong fix
 
 - **Lowering `COST_GUARD_LOW` (25 → 0)** would convert the gate into "always
-  fire" since *every* heuristic value is ≥ 0. Gate-fire rate jumps from 0%
+  fire" since _every_ heuristic value is ≥ 0. Gate-fire rate jumps from 0%
   to 100%, including all obvious-slop T3/T4 and obvious-legit T1 reports.
   That defeats the cost gate's only job.
 - **Raising `COST_GUARD_HIGH` above 60** catches nothing. No fixture in the

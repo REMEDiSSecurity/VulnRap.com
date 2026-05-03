@@ -78,7 +78,9 @@ export async function seedE2eLabeledCorpus(
   const [{ count: existing = 0 } = { count: 0 }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(reportsTable)
-    .where(like(reportsTable.fileName, `${E2E_LABELED_CORPUS_FILENAME_PREFIX}%`));
+    .where(
+      like(reportsTable.fileName, `${E2E_LABELED_CORPUS_FILENAME_PREFIX}%`),
+    );
 
   if (existing >= target) {
     return { existing, inserted: 0, total: existing };
@@ -140,14 +142,12 @@ const invokedDirectly =
 if (invokedDirectly) {
   seedE2eLabeledCorpus()
     .then((r) => {
-      // eslint-disable-next-line no-console
       console.log(
         `[seed-e2e-labeled-corpus] existing=${r.existing} inserted=${r.inserted} total=${r.total}`,
       );
       process.exit(0);
     })
     .catch((err) => {
-      // eslint-disable-next-line no-console
       console.error("[seed-e2e-labeled-corpus] failed:", err);
       process.exit(1);
     });

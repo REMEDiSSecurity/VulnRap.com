@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { detectAgentFingerprint, AGENT_DISPLAY_LABEL, type AgentLabel } from "./agent-fingerprint";
+import {
+  detectAgentFingerprint,
+  AGENT_DISPLAY_LABEL,
+  type AgentLabel,
+} from "./agent-fingerprint";
 
 // Task #644: 8 fixture pairs, one per likely agent class. Each fixture is
 // a realistic-ish prose snippet that carries the stylistic fingerprints
@@ -104,7 +108,10 @@ describe("detectAgentFingerprint", () => {
   for (const f of FIXTURES) {
     it(`fingerprints "${f.name}" as ${f.expected}`, () => {
       const r = detectAgentFingerprint(f.text);
-      expect(r.likelyAgent, `wanted ${f.expected}, got ${r.likelyAgent}; scores=${JSON.stringify(r.scores)}`).toBe(f.expected);
+      expect(
+        r.likelyAgent,
+        `wanted ${f.expected}, got ${r.likelyAgent}; scores=${JSON.stringify(r.scores)}`,
+      ).toBe(f.expected);
       if (f.expected === "unknown") {
         expect(r.confidence).toBe(0);
       } else {
@@ -112,10 +119,11 @@ describe("detectAgentFingerprint", () => {
         expect(r.confidence).toBeLessThanOrEqual(0.95);
         // The fixture should fire at least one rule that voted for the
         // winning agent, otherwise the verdict is structurally suspect.
-        const winningRules = r.matches.filter((m) =>
-          // matches don't carry the agent — but every winning fixture
-          // should produce at least one match overall.
-          m.weight > 0,
+        const winningRules = r.matches.filter(
+          (m) =>
+            // matches don't carry the agent — but every winning fixture
+            // should produce at least one match overall.
+            m.weight > 0,
         );
         expect(winningRules.length).toBeGreaterThan(0);
       }
@@ -125,8 +133,9 @@ describe("detectAgentFingerprint", () => {
   it("never returns a confidence above 0.95 — we never claim certainty", () => {
     // Stack many GPT-4 tells into one body. Even with maximal matches,
     // the confidence is capped.
-    const stacked = `Certainly! Of course! I'd be happy to help. Let's dive into this. ${
-      "**Important:** ".repeat(3)} Now let's continue. — — — — — — — —
+    const stacked = `Certainly! Of course! I'd be happy to help. Let's dive into this. ${"**Important:** ".repeat(
+      3,
+    )} Now let's continue. — — — — — — — —
 In conclusion, to summarize, remember that this is the right approach.`;
     const r = detectAgentFingerprint(stacked);
     expect(r.confidence).toBeLessThanOrEqual(0.95);
@@ -134,7 +143,13 @@ In conclusion, to summarize, remember that this is the right approach.`;
 
   it("exposes friendly display labels for every label", () => {
     const labels: AgentLabel[] = [
-      "gpt4", "claude", "gemini", "cursor-agent", "replit-agent", "human", "unknown",
+      "gpt4",
+      "claude",
+      "gemini",
+      "cursor-agent",
+      "replit-agent",
+      "human",
+      "unknown",
     ];
     for (const l of labels) {
       expect(AGENT_DISPLAY_LABEL[l]).toBeTypeOf("string");
@@ -143,7 +158,9 @@ In conclusion, to summarize, remember that this is the right approach.`;
   });
 
   it("includes lightweight stylometric features in the result", () => {
-    const r = detectAgentFingerprint("Hello world. This is a test sentence. And another one.");
+    const r = detectAgentFingerprint(
+      "Hello world. This is a test sentence. And another one.",
+    );
     expect(r.features.wordCount).toBeGreaterThan(0);
     expect(r.features.sentenceCount).toBeGreaterThan(0);
     expect(r.features.avgSentenceLen).toBeGreaterThan(0);

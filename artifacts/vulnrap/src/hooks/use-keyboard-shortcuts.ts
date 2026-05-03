@@ -19,7 +19,9 @@ export type ShortcutGroup = {
 
 export function isMac(): boolean {
   if (typeof navigator === "undefined") return false;
-  return /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
+  return /Mac|iPhone|iPad|iPod/.test(
+    navigator.platform || navigator.userAgent || "",
+  );
 }
 
 export function modKeyLabel(): string {
@@ -33,7 +35,16 @@ function isTypingTarget(el: EventTarget | null): boolean {
   if (tag === "textarea") return true;
   if (tag === "input") {
     const type = (el as HTMLInputElement).type.toLowerCase();
-    const nonText = ["checkbox", "radio", "button", "submit", "reset", "range", "color", "file"];
+    const nonText = [
+      "checkbox",
+      "radio",
+      "button",
+      "submit",
+      "reset",
+      "range",
+      "color",
+      "file",
+    ];
     return !nonText.includes(type);
   }
   return false;
@@ -41,7 +52,9 @@ function isTypingTarget(el: EventTarget | null): boolean {
 
 function isAnotherModalOpen(): boolean {
   if (typeof document === "undefined") return false;
-  return !!document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]');
+  return !!document.querySelector(
+    '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+  );
 }
 
 export function useKeyboardShortcuts(): {
@@ -181,7 +194,8 @@ export function getShortcutGroups(): ShortcutGroup[] {
         { keys: ["/"], description: "Focus the report text area" },
         {
           keys: ["Enter"],
-          description: "Submit the report (in textarea, Shift+Enter for newline)",
+          description:
+            "Submit the report (in textarea, Shift+Enter for newline)",
         },
         {
           keys: [mod, "Enter"],

@@ -13,7 +13,7 @@ Three rules before you send anything:
 
 1. **Listen to at least one recent episode.** Reference it by name in the first two sentences. Hosts can tell.
 2. **Pitch a story, not a product.** "We built a thing" is a press release. "AI-generated vuln reports are drowning maintainers and we have data" is a story.
-3. **Make it easy to say yes.** Include length variants, hooks, bio, and availability in the *first* email. Do not make the host write back asking for a bio.
+3. **Make it easy to say yes.** Include length variants, hooks, bio, and availability in the _first_ email. Do not make the host write back asking for a bio.
 
 ---
 
@@ -29,7 +29,7 @@ Use this as the email subject, the opener at a meetup, or the first line of a Si
 
 > Hi {{host_first_name}},
 >
-> Long-time listener — {{specific_recent_episode_reference}} was the one that made me finally write in. I run outreach for VulnRap, a free public scoring engine for vulnerability reports. Maintainers and PSIRTs paste in a report, we score it for credibility, and we explain *why* — so the obvious AI-generated noise gets filtered without good researchers getting steamrolled.
+> Long-time listener — {{specific_recent_episode_reference}} was the one that made me finally write in. I run outreach for VulnRap, a free public scoring engine for vulnerability reports. Maintainers and PSIRTs paste in a report, we score it for credibility, and we explain _why_ — so the obvious AI-generated noise gets filtered without good researchers getting steamrolled.
 >
 > We've been live for about nine months and we now have enough signal data to say something concrete about what the "AI slop in bug bounty" wave actually looks like — which CWEs it clusters around, which platforms get hit hardest, and (the part nobody talks about) how often a real bug is hiding inside a slop-shaped report. I think there's a good 20–40 minute conversation in this for {{show_name}}, and I'd love to put our founder on with you.
 >
@@ -44,6 +44,7 @@ Keep this under 180 words. If it's longer, it's a memo, not a pitch.
 ## Variant 3 — Full pitch (for shows that ask for a one-pager, or for warm intros)
 
 ### Subject
+
 `Pitch: the data behind the "AI slop bug bounty" wave — for {{show_name}}`
 
 ### Body
@@ -92,7 +93,7 @@ Each of these can carry an episode on its own. Pick the one that matches the sho
    Data-forward episode. Charts, numbers, surprising findings. Best for shows with a research/data audience (Risky Business, Security. Cryptography. Whatever., Day[0]).
 
 2. **"The real bugs hiding inside fake-looking reports."**
-   Three anonymized case studies of reports that *looked* AI-generated, scored low, and turned out to describe real, exploitable issues. Best for narrative-driven shows (Darknet Diaries, Malicious Life, Click Here).
+   Three anonymized case studies of reports that _looked_ AI-generated, scored low, and turned out to describe real, exploitable issues. Best for narrative-driven shows (Darknet Diaries, Malicious Life, Click Here).
 
 3. **"Score this live: a vuln triage game show."**
    Host reads a report on-air, guesses the score, then we reveal what VulnRap gave it and why. Works as a recurring segment. Best for conversational/panel shows (Security Now, SANS Stormcast bonus episodes, Hacking Humans).
@@ -124,6 +125,7 @@ Send the short version by default. Offer the long version if asked.
 > Pronouns: {{pronouns}}. Available for remote interviews in English{{other_languages_if_any}}.
 
 ### Assets to attach
+
 - Headshot: square, 1024×1024 minimum, neutral background. Path: `assets/press/{{founder_name}}-headshot.jpg`.
 - Logo: SVG and PNG (transparent). Path: `assets/press/vulnrap-logo.{svg,png}`.
 - One-line company description (matches Variant 1 above).

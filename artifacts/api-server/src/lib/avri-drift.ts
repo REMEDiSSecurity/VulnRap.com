@@ -89,7 +89,9 @@ const FAMILY_SHIFT_WARN = 5;
 
 /** UTC Monday of the week that contains `d`, formatted YYYY-MM-DD. */
 function isoWeekStart(d: Date): string {
-  const u = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const u = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
   const dow = u.getUTCDay(); // 0=Sun..6=Sat
   const offset = dow === 0 ? -6 : 1 - dow;
   u.setUTCDate(u.getUTCDate() + offset);
@@ -154,7 +156,11 @@ function summarizePerFamily(
     byFam.get(r.family)!.push(r.composite);
   }
   return Array.from(byFam.entries())
-    .map(([family, xs]) => ({ family, count: xs.length, mean: meanOf(xs) ?? 0 }))
+    .map(([family, xs]) => ({
+      family,
+      count: xs.length,
+      mean: meanOf(xs) ?? 0,
+    }))
     .sort((a, b) => a.family.localeCompare(b.family));
 }
 
@@ -162,7 +168,9 @@ export async function generateAvriDriftReport(
   opts: { weeks?: number } = {},
 ): Promise<AvriDriftReport> {
   const weeksRequested = Math.max(1, Math.min(26, Math.floor(opts.weeks ?? 8)));
-  const cutoff = new Date(Date.now() - weeksRequested * 7 * 24 * 60 * 60 * 1000);
+  const cutoff = new Date(
+    Date.now() - weeksRequested * 7 * 24 * 60 * 60 * 1000,
+  );
 
   // Restrict the cohort to reports persisted with an AVRI block
   // (vulnrap_engine_results -> 'avri'). Pre-AVRI rows in the same window
@@ -198,7 +206,11 @@ export async function generateAvriDriftReport(
   for (const r of rows) {
     if (r.composite == null || r.contentText == null) continue;
     const bucket = bucketForLabel(r.label);
-    const family = resolveFamily(r.avriFamily, r.vulnrapEngineResults, r.contentText);
+    const family = resolveFamily(
+      r.avriFamily,
+      r.vulnrapEngineResults,
+      r.contentText,
+    );
     enriched.push({
       weekStart: isoWeekStart(new Date(r.createdAt)),
       bucket,
@@ -214,16 +226,18 @@ export async function generateAvriDriftReport(
   }
   const weekStarts = Array.from(byWeek.keys()).sort();
 
-  const weeks: WeekBucket[] = weekStarts.map(weekStart => {
+  const weeks: WeekBucket[] = weekStarts.map((weekStart) => {
     const items = byWeek.get(weekStart)!;
-    const t1Items = items.filter(i => i.bucket === "T1");
-    const t3Items = items.filter(i => i.bucket === "T3");
-    const t1Mean = meanOf(t1Items.map(i => i.composite));
-    const t3Mean = meanOf(t3Items.map(i => i.composite));
-    const gap = t1Mean != null && t3Mean != null
-      ? Number((t1Mean - t3Mean).toFixed(1))
-      : null;
-    const gapEligible = t1Items.length >= MIN_BUCKET && t3Items.length >= MIN_BUCKET;
+    const t1Items = items.filter((i) => i.bucket === "T1");
+    const t3Items = items.filter((i) => i.bucket === "T3");
+    const t1Mean = meanOf(t1Items.map((i) => i.composite));
+    const t3Mean = meanOf(t3Items.map((i) => i.composite));
+    const gap =
+      t1Mean != null && t3Mean != null
+        ? Number((t1Mean - t3Mean).toFixed(1))
+        : null;
+    const gapEligible =
+      t1Items.length >= MIN_BUCKET && t3Items.length >= MIN_BUCKET;
     return {
       weekStart,
       reportCount: items.length,
@@ -255,7 +269,7 @@ export async function generateAvriDriftReport(
       const old = prev.perFamily[bucketName];
       for (const fam of cur) {
         if (fam.count < MIN_BUCKET) continue;
-        const oldFam = old.find(f => f.family === fam.family);
+        const oldFam = old.find((f) => f.family === fam.family);
         if (!oldFam || oldFam.count < MIN_BUCKET) continue;
         const shift = Number((fam.mean - oldFam.mean).toFixed(1));
         if (Math.abs(shift) >= FAMILY_SHIFT_WARN) {

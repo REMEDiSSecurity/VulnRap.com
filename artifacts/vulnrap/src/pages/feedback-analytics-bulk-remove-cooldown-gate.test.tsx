@@ -26,10 +26,10 @@
 //      central `bailOnCooldown("Bulk removal")` inside
 //      `confirmBulkRemove`) are exercised here.
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   act,
   render,
@@ -41,16 +41,16 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { setCalibrationToken } from "@workspace/api-client-react";
+import {
+  applyRateLimitNotice,
+  resetCalibrationCooldown,
+} from "@/lib/calibration-cooldown";
+import { HandwavyPhrasesAdmin } from "./feedback-analytics";
 import type {
   HandwavyMarker,
   HandwavyPhrasesList,
   HandwavyPhraseRemovalBatchesList,
 } from "@workspace/api-client-react";
-import { HandwavyPhrasesAdmin } from "./feedback-analytics";
-import {
-  applyRateLimitNotice,
-  resetCalibrationCooldown,
-} from "@/lib/calibration-cooldown";
 
 // ---------- fixtures -------------------------------------------------------
 
@@ -192,10 +192,7 @@ function installFetchMock(): MockHandle {
           realDeletes.transient += 1;
           if (!transientFailUsed.value) {
             transientFailUsed.value = true;
-            return jsonResponse(
-              { error: "Synthetic transient failure" },
-              500,
-            );
+            return jsonResponse({ error: "Synthetic transient failure" }, 500);
           }
           // If a regression lets a second real DELETE for the transient
           // phrase escape past the cooldown gate, surface it as a
@@ -259,7 +256,7 @@ describe("Task #469 — confirmBulkRemove centralizes the wrong-token cooldown b
   // This is the load-bearing "the gate lives inside the helper" test. A
   // future refactor that drops the central bail (or moves it back below
   // `setBusy`) regresses LOUDLY here, no UI plumbing required.
-  it("source: `confirmBulkRemove` calls `bailOnCooldown(...)` BEFORE `setBusy(\"bulk-remove\")`", () => {
+  it('source: `confirmBulkRemove` calls `bailOnCooldown(...)` BEFORE `setBusy("bulk-remove")`', () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const source = readFileSync(
       path.join(here, "feedback-analytics.tsx"),
@@ -296,7 +293,7 @@ describe("Task #469 — confirmBulkRemove centralizes the wrong-token cooldown b
     // the old name.
     expect(
       prefixCodeOnly,
-      "Task #469: `confirmBulkRemove` must call `bailOnCooldown(...)` BEFORE `setBusy(\"bulk-remove\")` so any new caller is automatically protected from the wrong-token throttle (mirrors `handleUndoBulkBatch`).",
+      'Task #469: `confirmBulkRemove` must call `bailOnCooldown(...)` BEFORE `setBusy("bulk-remove")` so any new caller is automatically protected from the wrong-token throttle (mirrors `handleUndoBulkBatch`).',
     ).toMatch(/if\s*\(\s*bailOnCooldown\s*\([^)]*\)\s*\)\s*return\s*;/);
   });
 
@@ -309,9 +306,7 @@ describe("Task #469 — confirmBulkRemove centralizes the wrong-token cooldown b
 
     // Wait for both data hooks to land before driving the toolbar.
     await waitFor(() => {
-      expect(screen.getAllByTestId("handwavy-row").length).toBe(
-        PHRASES.length,
-      );
+      expect(screen.getAllByTestId("handwavy-row").length).toBe(PHRASES.length);
     });
 
     // Select every active row and open the bulk-remove preview.
@@ -367,8 +362,7 @@ describe("Task #469 — confirmBulkRemove centralizes the wrong-token cooldown b
         limit: 4,
         remaining: 0,
         body: {
-          error:
-            "Too many failed calibration auth attempts. Try again later.",
+          error: "Too many failed calibration auth attempts. Try again later.",
         },
         headers: new Headers(),
       });

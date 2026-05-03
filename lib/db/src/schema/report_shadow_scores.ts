@@ -16,7 +16,15 @@
 // `/api/internal/shadow-drift` endpoint can filter on a partial index
 // without recomputing the divergence boolean for every row on every
 // query.
-import { pgTable, serial, integer, varchar, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  serial,
+  integer,
+  varchar,
+  timestamp,
+  boolean,
+  index,
+} from "drizzle-orm/pg-core";
 import { reportsTable } from "./reports";
 
 export const reportShadowScoresTable = pgTable(
@@ -32,7 +40,9 @@ export const reportShadowScoresTable = pgTable(
     shadowTier: varchar("shadow_tier", { length: 30 }).notNull(),
     scoreDiff: integer("score_diff").notNull(),
     tierDiverged: boolean("tier_diverged").notNull().default(false),
-    shadowVersion: varchar("shadow_version", { length: 64 }).notNull().default("unknown"),
+    shadowVersion: varchar("shadow_version", { length: 64 })
+      .notNull()
+      .default("unknown"),
     scoredAt: timestamp("scored_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -45,4 +55,5 @@ export const reportShadowScoresTable = pgTable(
 );
 
 export type ReportShadowScore = typeof reportShadowScoresTable.$inferSelect;
-export type InsertReportShadowScore = typeof reportShadowScoresTable.$inferInsert;
+export type InsertReportShadowScore =
+  typeof reportShadowScoresTable.$inferInsert;

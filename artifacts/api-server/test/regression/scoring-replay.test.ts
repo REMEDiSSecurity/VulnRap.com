@@ -91,14 +91,12 @@ describe("Pre-merge scoring gate: replay last 100 production reports", () => {
     return;
   }
 
-  it(
-    `tier-flip rate against last ${REPLAY_LIMIT} reports stays <= ${
-      FLIP_RATE_THRESHOLD * 100
-    }%`,
-    async () => {
-      const { db } = await import("@workspace/db");
-      const rows = (await db.execute(
-        sql`SELECT id,
+  it(`tier-flip rate against last ${REPLAY_LIMIT} reports stays <= ${
+    FLIP_RATE_THRESHOLD * 100
+  }%`, async () => {
+    const { db } = await import("@workspace/db");
+    const rows = (await db.execute(
+      sql`SELECT id,
                    content_text  AS "contentText",
                    redacted_text AS "redactedText",
                    slop_score    AS "slopScore",
@@ -108,106 +106,104 @@ describe("Pre-merge scoring gate: replay last 100 production reports", () => {
               AND length(COALESCE(content_text, redacted_text)) > 0
             ORDER BY id DESC
             LIMIT ${REPLAY_LIMIT}`,
-      )) as unknown as { rows: StoredRow[] } | StoredRow[];
+    )) as unknown as { rows: StoredRow[] } | StoredRow[];
 
-      const reports: StoredRow[] = Array.isArray(rows)
-        ? (rows as StoredRow[])
-        : (rows.rows ?? []);
+    const reports: StoredRow[] = Array.isArray(rows)
+      ? (rows as StoredRow[])
+      : (rows.rows ?? []);
 
-      if (reports.length === 0) {
-        console.warn(
-          "[scoring-gate] No reports with stored text found in DB; " +
-            "passing vacuously. Run the analyze pipeline against a few " +
-            "fixtures so the gate has signal to compare against.",
-        );
-        expect(true).toBe(true);
-        return;
-      }
-
-      const diffs: ReplayDiff[] = [];
-      const flips: ReplayDiff[] = [];
-
-      for (const row of reports) {
-        const text = (row.contentText ?? row.redactedText ?? "").trim();
-        if (!text) continue;
-        let recomputed: { tier: string; score: number };
-        try {
-          recomputed = recomputeTier(text);
-        } catch (err) {
-          console.error(
-            `[scoring-gate] report #${row.id}: scoring threw — ${
-              (err as Error).message
-            }`,
-          );
-          throw err;
-        }
-        const diff: ReplayDiff = {
-          id: row.id,
-          storedTier: row.slopTier,
-          recomputedTier: recomputed.tier,
-          storedScore: row.slopScore,
-          recomputedScore: recomputed.score,
-          scoreDelta: recomputed.score - row.slopScore,
-        };
-        diffs.push(diff);
-        if (diff.storedTier !== diff.recomputedTier) {
-          flips.push(diff);
-        }
-      }
-
-      const total = diffs.length;
-      const flipRate = total === 0 ? 0 : flips.length / total;
-
-      console.log(
-        `[scoring-gate] replayed ${total} reports — ${flips.length} tier-flip(s), ` +
-          `flip rate ${(flipRate * 100).toFixed(2)}% (threshold ${(
-            FLIP_RATE_THRESHOLD * 100
-          ).toFixed(2)}%)`,
+    if (reports.length === 0) {
+      console.warn(
+        "[scoring-gate] No reports with stored text found in DB; " +
+          "passing vacuously. Run the analyze pipeline against a few " +
+          "fixtures so the gate has signal to compare against.",
       );
+      expect(true).toBe(true);
+      return;
+    }
 
-      if (flips.length > 0) {
-        console.log("[scoring-gate] Per-fixture tier-flip diff:");
-        for (const f of flips) {
-          console.log(
-            `  #${f.id}: ${f.storedTier} (${f.storedScore}) -> ` +
-              `${f.recomputedTier} (${f.recomputedScore}, delta ${
-                f.scoreDelta >= 0 ? "+" : ""
-              }${f.scoreDelta})`,
-          );
-        }
+    const diffs: ReplayDiff[] = [];
+    const flips: ReplayDiff[] = [];
+
+    for (const row of reports) {
+      const text = (row.contentText ?? row.redactedText ?? "").trim();
+      if (!text) continue;
+      let recomputed: { tier: string; score: number };
+      try {
+        recomputed = recomputeTier(text);
+      } catch (err) {
+        console.error(
+          `[scoring-gate] report #${row.id}: scoring threw — ${
+            (err as Error).message
+          }`,
+        );
+        throw err;
       }
+      const diff: ReplayDiff = {
+        id: row.id,
+        storedTier: row.slopTier,
+        recomputedTier: recomputed.tier,
+        storedScore: row.slopScore,
+        recomputedScore: recomputed.score,
+        scoreDelta: recomputed.score - row.slopScore,
+      };
+      diffs.push(diff);
+      if (diff.storedTier !== diff.recomputedTier) {
+        flips.push(diff);
+      }
+    }
 
-      const largeScoreDeltas = diffs
-        .filter((d) => Math.abs(d.scoreDelta) >= 5)
-        .sort((a, b) => Math.abs(b.scoreDelta) - Math.abs(a.scoreDelta))
-        .slice(0, 10);
-      if (largeScoreDeltas.length > 0) {
+    const total = diffs.length;
+    const flipRate = total === 0 ? 0 : flips.length / total;
+
+    console.log(
+      `[scoring-gate] replayed ${total} reports — ${flips.length} tier-flip(s), ` +
+        `flip rate ${(flipRate * 100).toFixed(2)}% (threshold ${(
+          FLIP_RATE_THRESHOLD * 100
+        ).toFixed(2)}%)`,
+    );
+
+    if (flips.length > 0) {
+      console.log("[scoring-gate] Per-fixture tier-flip diff:");
+      for (const f of flips) {
         console.log(
-          "[scoring-gate] Top score drift (no tier flip but |delta|>=5):",
+          `  #${f.id}: ${f.storedTier} (${f.storedScore}) -> ` +
+            `${f.recomputedTier} (${f.recomputedScore}, delta ${
+              f.scoreDelta >= 0 ? "+" : ""
+            }${f.scoreDelta})`,
         );
-        for (const d of largeScoreDeltas) {
-          console.log(
-            `  #${d.id}: ${d.storedTier} ${d.storedScore} -> ` +
-              `${d.recomputedScore} (delta ${
-                d.scoreDelta >= 0 ? "+" : ""
-              }${d.scoreDelta})`,
-          );
-        }
       }
+    }
 
-      if (flipRate > FLIP_RATE_THRESHOLD) {
-        throw new Error(
-          `[scoring-gate] FAIL: tier-flip rate ${(flipRate * 100).toFixed(
-            2,
-          )}% exceeds threshold ${(FLIP_RATE_THRESHOLD * 100).toFixed(
-            2,
-          )}% (${flips.length}/${total} reports flipped). ` +
-            "If this change is an intentional calibration update, re-run " +
-            "with SCORING_GATE_BYPASS=1 (see README 'Pre-merge scoring gate').",
+    const largeScoreDeltas = diffs
+      .filter((d) => Math.abs(d.scoreDelta) >= 5)
+      .sort((a, b) => Math.abs(b.scoreDelta) - Math.abs(a.scoreDelta))
+      .slice(0, 10);
+    if (largeScoreDeltas.length > 0) {
+      console.log(
+        "[scoring-gate] Top score drift (no tier flip but |delta|>=5):",
+      );
+      for (const d of largeScoreDeltas) {
+        console.log(
+          `  #${d.id}: ${d.storedTier} ${d.storedScore} -> ` +
+            `${d.recomputedScore} (delta ${
+              d.scoreDelta >= 0 ? "+" : ""
+            }${d.scoreDelta})`,
         );
       }
-      expect(flipRate).toBeLessThanOrEqual(FLIP_RATE_THRESHOLD);
-    },
-    120_000,
-  );
+    }
+
+    if (flipRate > FLIP_RATE_THRESHOLD) {
+      throw new Error(
+        `[scoring-gate] FAIL: tier-flip rate ${(flipRate * 100).toFixed(
+          2,
+        )}% exceeds threshold ${(FLIP_RATE_THRESHOLD * 100).toFixed(
+          2,
+        )}% (${flips.length}/${total} reports flipped). ` +
+          "If this change is an intentional calibration update, re-run " +
+          "with SCORING_GATE_BYPASS=1 (see README 'Pre-merge scoring gate').",
+      );
+    }
+    expect(flipRate).toBeLessThanOrEqual(FLIP_RATE_THRESHOLD);
+  }, 120_000);
 });

@@ -50,13 +50,13 @@ calibration.
 The composite score returned by VulnRap maps to one of five triage
 actions. The mapping is the same one used by the public report view:
 
-| Composite | Recommended action  | Suggested Bugcrowd move           |
-| --------: | ------------------- | --------------------------------- |
-|     ≥ 65  | `PRIORITIZE`        | Assign to senior triager + tag    |
-|     ≥ 55  | `MANUAL_REVIEW`     | Standard human review             |
-|     ≥ 40  | `STANDARD_TRIAGE`   | Normal queue                      |
-|     ≥ 25  | `CHALLENGE_REPORTER`| Post the generated questions      |
-|     <  25 | `AUTO_CLOSE`        | Transition to `not_applicable`    |
+| Composite | Recommended action   | Suggested Bugcrowd move        |
+| --------: | -------------------- | ------------------------------ |
+|      ≥ 65 | `PRIORITIZE`         | Assign to senior triager + tag |
+|      ≥ 55 | `MANUAL_REVIEW`      | Standard human review          |
+|      ≥ 40 | `STANDARD_TRIAGE`    | Normal queue                   |
+|      ≥ 25 | `CHALLENGE_REPORTER` | Post the generated questions   |
+|      < 25 | `AUTO_CLOSE`         | Transition to `not_applicable` |
 
 Override: if AVRI gold-signal hits ≥ 2 and composite ≥ 40, the action
 is upgraded to `PRIORITIZE` regardless of band. Use this as a hard stop
@@ -314,7 +314,7 @@ def auto_close(submission_id: str, scored: dict) -> bool:
 ```
 
 We strongly recommend running the close script in **dry-run mode for at
-least a week** before flipping it on — log what you *would* have closed
+least a week** before flipping it on — log what you _would_ have closed
 and have a senior triager spot-check the list. The composite is
 calibrated against a public corpus, but every program's inbound mix is
 different.

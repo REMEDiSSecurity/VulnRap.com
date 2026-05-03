@@ -13,10 +13,10 @@ traces with `avriBreakdown` populated** had accumulated in `analysis_traces`.
 
 That prerequisite is not met as of 2026-04-30:
 
-| Source                              | Rows | Date range            | Rows with `trace.avriBreakdown` |
-| ----------------------------------- | ---: | --------------------- | ------------------------------: |
-| Production `analysis_traces`        |   30 | 2026-04-20 → 04-25    |                               0 |
-| Dev `analysis_traces`               |   32 | 2026-04-20 → 04-25    |                               0 |
+| Source                       | Rows | Date range         | Rows with `trace.avriBreakdown` |
+| ---------------------------- | ---: | ------------------ | ------------------------------: |
+| Production `analysis_traces` |   30 | 2026-04-20 → 04-25 |                               0 |
+| Dev `analysis_traces`        |   32 | 2026-04-20 → 04-25 |                               0 |
 
 The v3.9.0 default-on flip (`VULNRAP_USE_AVRI=true`) shipped 2026-04-29,
 **one day ago**. Every persisted trace was written under the legacy path.
@@ -272,11 +272,11 @@ they show what shape of data the production query above will surface.
 The substance-score projection at `w ∈ {0.50, 0.55, 0.60, 0.65}`. Only
 fixtures that cross a behavior gate at any candidate are listed:
 
-| fixture                                                | rawAvri | legacy | w=0.50 | w=0.55 | w=0.60 | w=0.65 | crosses                                             |
-| ------------------------------------------------------ | ------: | -----: | -----: | -----: | -----: | -----: | --------------------------------------------------- |
-| `curl-slop-h1-3116935-des-ntlm-broken-crypto`          |      84 |     17 |     51 |     54 |     57 |     61 | crosses BMR (≥60) gate at w=0.65                    |
-| `legit-01-cve-2025-0725-curl`                          |      51 |     69 |     60 |     59 |     58 |     57 | drops below BMR (≥60) at w=0.55+                    |
-| `legit-06-open-redirect-cve-2017-7233-django`          |       4 |     85 |     45 |     40 |     36 |     32 | drops below E3 gate (<45) at w=0.55+                |
+| fixture                                       | rawAvri | legacy | w=0.50 | w=0.55 | w=0.60 | w=0.65 | crosses                              |
+| --------------------------------------------- | ------: | -----: | -----: | -----: | -----: | -----: | ------------------------------------ |
+| `curl-slop-h1-3116935-des-ntlm-broken-crypto` |      84 |     17 |     51 |     54 |     57 |     61 | crosses BMR (≥60) gate at w=0.65     |
+| `legit-01-cve-2025-0725-curl`                 |      51 |     69 |     60 |     59 |     58 |     57 | drops below BMR (≥60) at w=0.55+     |
+| `legit-06-open-redirect-cve-2017-7233-django` |       4 |     85 |     45 |     40 |     36 |     32 | drops below E3 gate (<45) at w=0.55+ |
 
 Reading: the synthetic battery suggests **w=0.55 is safe**, **w=0.60 is
 right at the edge** (legit-06's substance drops to 36, well into the

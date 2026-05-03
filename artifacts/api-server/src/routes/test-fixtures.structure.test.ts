@@ -11,26 +11,33 @@ describe("test-fixtures structural guards", () => {
     });
 
     it(`${tier} has no duplicate fixture text bodies`, () => {
-      const texts = TEST_FIXTURE_COHORTS[tier].map(f => f.text.trim());
+      const texts = TEST_FIXTURE_COHORTS[tier].map((f) => f.text.trim());
       const seen = new Set<string>();
       const dupes: string[] = [];
       for (const t of texts) {
         if (seen.has(t)) dupes.push(t.slice(0, 60));
         seen.add(t);
       }
-      expect(dupes, `duplicate text bodies in ${tier}: ${dupes.join("; ")}`).toEqual([]);
+      expect(
+        dupes,
+        `duplicate text bodies in ${tier}: ${dupes.join("; ")}`,
+      ).toEqual([]);
     });
 
     it(`${tier} has no duplicate fixture ids`, () => {
-      const ids = TEST_FIXTURE_COHORTS[tier].map(f => f.id);
+      const ids = TEST_FIXTURE_COHORTS[tier].map((f) => f.id);
       expect(new Set(ids).size).toBe(ids.length);
     });
 
     it(`${tier} fixtures all carry the matching tier label`, () => {
       const expected =
-        tier === "T1" ? "T1_LEGIT" :
-        tier === "T2" ? "T2_BORDERLINE" :
-        tier === "T3" ? "T3_SLOP" : "T4_HALLUCINATED";
+        tier === "T1"
+          ? "T1_LEGIT"
+          : tier === "T2"
+            ? "T2_BORDERLINE"
+            : tier === "T3"
+              ? "T3_SLOP"
+              : "T4_HALLUCINATED";
       for (const f of TEST_FIXTURE_COHORTS[tier]) {
         expect(f.tier, `${f.id} should be tagged ${expected}`).toBe(expected);
       }
@@ -39,8 +46,13 @@ describe("test-fixtures structural guards", () => {
 
   it("T4 fixtures all assert the calibrated 0–35 composite band", () => {
     for (const f of TEST_FIXTURE_COHORTS.T4) {
-      expect(f.expectedComposite[0], `${f.id} lower bound`).toBeGreaterThanOrEqual(0);
-      expect(f.expectedComposite[1], `${f.id} upper bound`).toBeLessThanOrEqual(35);
+      expect(
+        f.expectedComposite[0],
+        `${f.id} lower bound`,
+      ).toBeGreaterThanOrEqual(0);
+      expect(f.expectedComposite[1], `${f.id} upper bound`).toBeLessThanOrEqual(
+        35,
+      );
     }
   });
 
@@ -54,7 +66,7 @@ describe("test-fixtures structural guards", () => {
       "T3-14-pseudo-asan-symbolless": "pseudo_asan",
       "T3-15-prose-poc-no-payload": "prose_poc",
     };
-    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map((f) => [f.id, f]));
     for (const [id, archetype] of Object.entries(expected)) {
       const f = byId.get(id);
       expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
@@ -77,7 +89,7 @@ describe("test-fixtures structural guards", () => {
       "T3-17-fabricated-diff-web-client": "fabricated_diff",
       "T3-18-fabricated-diff-memory-corruption": "fabricated_diff",
     };
-    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map((f) => [f.id, f]));
     for (const [id, archetype] of Object.entries(expected)) {
       const f = byId.get(id);
       expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
@@ -91,13 +103,15 @@ describe("test-fixtures structural guards", () => {
       "T3-17-fabricated-diff-web-client",
       "T3-18-fabricated-diff-memory-corruption",
     ];
-    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map((f) => [f.id, f]));
     for (const id of ids) {
       const f = byId.get(id);
       expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
       const result = runAvriComposite(f!.text, { claimedCwes: f!.claimedCwes });
       expect(
-        result.overridesApplied.some(o => o.includes("AVRI_FABRICATED_PATCH")),
+        result.overridesApplied.some((o) =>
+          o.includes("AVRI_FABRICATED_PATCH"),
+        ),
         `${id} should surface AVRI_FABRICATED_PATCH override (got: ${result.overridesApplied.join(" | ")})`,
       ).toBe(true);
     }
@@ -115,7 +129,7 @@ describe("test-fixtures structural guards", () => {
       "T3-21-no-gold-memory-corruption": "no_gold_signals",
       "T3-22-no-gold-authn-authz": "no_gold_signals",
     };
-    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map((f) => [f.id, f]));
     for (const [id, archetype] of Object.entries(expected)) {
       const f = byId.get(id);
       expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
@@ -130,13 +144,13 @@ describe("test-fixtures structural guards", () => {
       "T3-21-no-gold-memory-corruption",
       "T3-22-no-gold-authn-authz",
     ];
-    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map((f) => [f.id, f]));
     for (const id of ids) {
       const f = byId.get(id);
       expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
       const result = runAvriComposite(f!.text, { claimedCwes: f!.claimedCwes });
       expect(
-        result.overridesApplied.some(o => o.includes("AVRI_NO_GOLD_SIGNALS")),
+        result.overridesApplied.some((o) => o.includes("AVRI_NO_GOLD_SIGNALS")),
         `${id} should surface AVRI_NO_GOLD_SIGNALS override (got: ${result.overridesApplied.join(" | ")})`,
       ).toBe(true);
     }
@@ -150,7 +164,7 @@ describe("test-fixtures structural guards", () => {
       "T3-25-contradiction-memory-corruption": "family_contradiction",
       "T3-26-contradiction-authn-authz": "family_contradiction",
     };
-    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map((f) => [f.id, f]));
     for (const [id, archetype] of Object.entries(expected)) {
       const f = byId.get(id);
       expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
@@ -165,13 +179,15 @@ describe("test-fixtures structural guards", () => {
       "T3-25-contradiction-memory-corruption",
       "T3-26-contradiction-authn-authz",
     ];
-    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map((f) => [f.id, f]));
     for (const id of ids) {
       const f = byId.get(id);
       expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
       const result = runAvriComposite(f!.text, { claimedCwes: f!.claimedCwes });
       expect(
-        result.overridesApplied.some(o => o.includes("AVRI_FAMILY_CONTRADICTION")),
+        result.overridesApplied.some((o) =>
+          o.includes("AVRI_FAMILY_CONTRADICTION"),
+        ),
         `${id} should surface AVRI_FAMILY_CONTRADICTION override (got: ${result.overridesApplied.join(" | ")})`,
       ).toBe(true);
     }
@@ -192,7 +208,7 @@ describe("test-fixtures structural guards", () => {
       "T3-28-flat-slop-structural-only": "flat_slop_haircut",
       "T3-29-flat-slop-buzzword-soup": "flat_slop_haircut",
     };
-    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map((f) => [f.id, f]));
     for (const [id, archetype] of Object.entries(expected)) {
       const f = byId.get(id);
       expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
@@ -206,13 +222,15 @@ describe("test-fixtures structural guards", () => {
       "T3-28-flat-slop-structural-only",
       "T3-29-flat-slop-buzzword-soup",
     ];
-    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map(f => [f.id, f]));
+    const byId = new Map(TEST_FIXTURE_COHORTS.T3.map((f) => [f.id, f]));
     for (const id of ids) {
       const f = byId.get(id);
       expect(f, `expected fixture ${id} in T3 cohort`).toBeDefined();
       const result = runAvriComposite(f!.text, { claimedCwes: f!.claimedCwes });
       expect(
-        result.overridesApplied.some(o => o.includes("AVRI_FLAT_SLOP_HAIRCUT")),
+        result.overridesApplied.some((o) =>
+          o.includes("AVRI_FLAT_SLOP_HAIRCUT"),
+        ),
         `${id} should surface AVRI_FLAT_SLOP_HAIRCUT override (got: ${result.overridesApplied.join(" | ")})`,
       ).toBe(true);
       expect(

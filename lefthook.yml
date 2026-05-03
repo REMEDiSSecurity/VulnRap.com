@@ -1,0 +1,16 @@
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json,md,yml,yaml,css,html}"
+      run: pnpm exec prettier --write --ignore-unknown {staged_files}
+      stage_fixed: true
+    lint:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
+      stage_fixed: true
+    typecheck-touched:
+      # Run a fast `tsc --noEmit` only for the packages whose TypeScript files
+      # were touched. Keeps the hook under ~5s on a typical small change.
+      glob: "*.{ts,tsx,mts,cts}"
+      run: node scripts/lefthook-typecheck-touched.mjs {staged_files}

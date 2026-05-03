@@ -5,7 +5,9 @@ export function MethodologySuggestionFooter({ topic }: { topic: string }) {
   return (
     <div className="border-t border-border/30 pt-3 flex items-center justify-between gap-3">
       <p className="text-[10px] text-muted-foreground leading-relaxed">
-        Have a better idea for how we handle <span className="text-foreground">{topic}</span>? We're always looking to improve our methodology.
+        Have a better idea for how we handle{" "}
+        <span className="text-foreground">{topic}</span>? We're always looking
+        to improve our methodology.
       </p>
       <a
         href={`mailto:remedisllc@gmail.com?subject=${subject}`}

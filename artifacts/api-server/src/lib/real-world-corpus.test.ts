@@ -8,7 +8,13 @@ function analyzeReport(text: string) {
   const linguistic = analyzeLinguistic(text);
   const factual = analyzeFactual(text);
   const heuristic = analyzeSloppiness(text);
-  const fusion = fuseScores(linguistic, factual, null, heuristic.qualityScore, text);
+  const fusion = fuseScores(
+    linguistic,
+    factual,
+    null,
+    heuristic.qualityScore,
+    text,
+  );
   return { linguistic, factual, heuristic, fusion };
 }
 
@@ -38,7 +44,9 @@ Impact Summary: The security impact of this vulnerability is severe and multi-fa
 
     const result = analyzeReport(text);
     expect(result.fusion.slopScore).toBeGreaterThanOrEqual(0);
-    expect(result.linguistic.score + result.factual.score).toBeGreaterThanOrEqual(0);
+    expect(
+      result.linguistic.score + result.factual.score,
+    ).toBeGreaterThanOrEqual(0);
   });
 
   it("REAL-SLOP-003: Use of Broken Cryptographic Algorithm CWE-327 (HackerOne #3116935) — heuristic baseline", () => {
@@ -167,7 +175,8 @@ The server executes the filename in a shell context.`;
   });
 
   it("handles extremely long single line input", () => {
-    const text = "A".repeat(20000) + " buffer overflow test " + "B".repeat(20000);
+    const text =
+      "A".repeat(20000) + " buffer overflow test " + "B".repeat(20000);
     expect(() => analyzeReport(text)).not.toThrow();
   });
 

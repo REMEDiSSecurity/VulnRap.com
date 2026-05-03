@@ -26,7 +26,7 @@ export function addHistoryEntry(entry: HistoryEntry): void {
   try {
     const history = getHistory();
     const exists = history.findIndex(
-      (h) => h.id === entry.id && h.type === entry.type
+      (h) => h.id === entry.id && h.type === entry.type,
     );
     if (exists >= 0) {
       history[exists] = entry;
@@ -46,7 +46,11 @@ export function clearHistory(): void {
   } catch {}
 }
 
-export function markHistoryEntryReconstructed(id: number, type: "submit" | "check", reconstructed: boolean): void {
+export function markHistoryEntryReconstructed(
+  id: number,
+  type: "submit" | "check",
+  reconstructed: boolean,
+): void {
   try {
     const history = getHistory();
     const idx = history.findIndex((h) => h.id === id && h.type === type);
@@ -60,7 +64,7 @@ export function markHistoryEntryReconstructed(id: number, type: "submit" | "chec
 export function removeHistoryEntry(id: number, type: "submit" | "check"): void {
   try {
     const history = getHistory().filter(
-      (h) => !(h.id === id && h.type === type)
+      (h) => !(h.id === id && h.type === type),
     );
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
   } catch {}

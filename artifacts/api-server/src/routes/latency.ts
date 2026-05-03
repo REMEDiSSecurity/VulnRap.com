@@ -7,9 +7,7 @@ const router: IRouter = Router();
 
 const WINDOW_HOURS = 24;
 
-const BIN_EDGES_MS = [
-  50, 100, 200, 400, 800, 1500, 3000, 5000, 10000, 20000,
-];
+const BIN_EDGES_MS = [50, 100, 200, 400, 800, 1500, 3000, 5000, 10000, 20000];
 
 function percentile(sortedValues: number[], p: number): number {
   if (sortedValues.length === 0) return 0;
@@ -94,7 +92,9 @@ router.get("/public/latency-snapshot", async (_req, res): Promise<void> => {
   } | null = null;
 
   if (engineEntries.length >= 2 && pipeline.percentiles.p95 > 0) {
-    const p95s = engineEntries.map((e) => e.percentiles.p95).sort((a, b) => a - b);
+    const p95s = engineEntries
+      .map((e) => e.percentiles.p95)
+      .sort((a, b) => a - b);
     const median = p95s[Math.floor(p95s.length / 2)];
     const top = engineEntries[0];
     if (

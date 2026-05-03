@@ -1,13 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import {
-  ArchetypeRowView,
-  type ArchetypeRow,
-} from "./feedback-analytics";
-import {
   recentHeadroomDecline,
   type ArchetypeHistorySnapshot,
 } from "@/lib/archetype-history";
+import { ArchetypeRowView, type ArchetypeRow } from "./feedback-analytics";
 
 // Task #364 — guard the "Headroom shrinking −X.Xpt" badge that
 // `ArchetypeRowView` renders when `recentHeadroomDecline(history) >=

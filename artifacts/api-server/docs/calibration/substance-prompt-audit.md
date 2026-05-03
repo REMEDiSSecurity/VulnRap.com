@@ -22,7 +22,7 @@ Two changes, applied together:
 
 2. **Add a heuristic post-check in
    [`computeValidityScore`](../../src/lib/score-fusion.ts)** that caps
-   `llmRaw` at the heuristic when the LLM's *own* claim extraction
+   `llmRaw` at the heuristic when the LLM's _own_ claim extraction
    confirms the report is evidence-free (`hasPoC === false`,
    `pocValidity ≤ 20`, no `claimedFiles`, no `claimedFunctions`, no
    `claimedCVEs`, no `claimedLineNumbers`). Surfaced as
@@ -39,14 +39,14 @@ but cannot push it UP above what the heuristic already justified.
 Live `gpt-5-nano` probe of the 6 fixtures listed in Task #446
 (baseline prompt, single shot per fixture):
 
-| Fixture                              | poc | spec | domain | substance | validity |
-|--------------------------------------|-----|------|--------|-----------|----------|
-| T3-14-pseudo-asan-symbolless         | 20  | 30   | **70** | 40        | 38       |
-| T3-AVRI-ssrf-template                | 0   | 30   | **70** | 33        | 33       |
-| T3-21-no-gold-memory-corruption      | 0   | 50   | **70** | 40        | 55       |
-| T3-20-no-gold-web-client             | 0   | 45   | **70** | 32        | 53       |
-| T3-16-fabricated-diff-injection      | 0   | 50   | **70** | 60        | 60       |
-| T3-02-marketing-tone                 | 0   | 10   | 50     | 20        |  0       |
+| Fixture                         | poc | spec | domain | substance | validity |
+| ------------------------------- | --- | ---- | ------ | --------- | -------- |
+| T3-14-pseudo-asan-symbolless    | 20  | 30   | **70** | 40        | 38       |
+| T3-AVRI-ssrf-template           | 0   | 30   | **70** | 33        | 33       |
+| T3-21-no-gold-memory-corruption | 0   | 50   | **70** | 40        | 55       |
+| T3-20-no-gold-web-client        | 0   | 45   | **70** | 32        | 53       |
+| T3-16-fabricated-diff-injection | 0   | 50   | **70** | 60        | 60       |
+| T3-02-marketing-tone            | 0   | 10   | 50     | 20        | 0        |
 
 Three failure modes were visible:
 
@@ -61,15 +61,15 @@ Three failure modes were visible:
    evidence-free prose.** Vague prose is trivially internally
    consistent with itself; a report that fabricates nothing has
    nothing to be flagged as hallucinated. Absence of fabricated
-   specifics was being scored *equivalently to presence of real
-   specifics*.
+   specifics was being scored _equivalently to presence of real
+   specifics_.
 
 3. **`green_flags` rewarded soft signals** ("remediation aligns with
    standards", "vulnerability class is sound", "clear description")
    that do not substantiate any specific bug.
 
-The net effect on T3_SLOP fixtures was an `llmRaw` 10–25 points above
-the heuristic — just *under* the 30-point disagreement floor — so the
+The net effect on T3*SLOP fixtures was an `llmRaw` 10–25 points above
+the heuristic — just \_under* the 30-point disagreement floor — so the
 50/50 blend silently inflated the validity axis.
 
 ## Re-probe with the tightened prompt
@@ -77,13 +77,13 @@ the heuristic — just *under* the 30-point disagreement floor — so the
 Same 6 fixtures, single shot each, after the prompt change. Note the
 collapse on the four prose-only reports:
 
-| Fixture                              | poc | spec | domain | substance | validity (before → after) |
-|--------------------------------------|-----|------|--------|-----------|---------------------------|
-| T3-14-pseudo-asan-symbolless         | 25  | 28   | 55     | 36        | 38 → **38**               |
-| T3-AVRI-ssrf-template                | 0   | 50   | 50     | 40        | 33 → **25**               |
-| T3-21-no-gold-memory-corruption      | 0   | 50   | 25     | 25        | 55 → **25**               |
-| T3-20-no-gold-web-client             | 0   | 15   | 65     | 40        | 53 → **40**               |
-| T3-16-fabricated-diff-injection      | 0   | 25   | 45     | 27        | 60 → **24**               |
+| Fixture                         | poc | spec | domain | substance | validity (before → after) |
+| ------------------------------- | --- | ---- | ------ | --------- | ------------------------- |
+| T3-14-pseudo-asan-symbolless    | 25  | 28   | 55     | 36        | 38 → **38**               |
+| T3-AVRI-ssrf-template           | 0   | 50   | 50     | 40        | 33 → **25**               |
+| T3-21-no-gold-memory-corruption | 0   | 50   | 25     | 25        | 55 → **25**               |
+| T3-20-no-gold-web-client        | 0   | 15   | 65     | 40        | 53 → **40**               |
+| T3-16-fabricated-diff-injection | 0   | 25   | 45     | 27        | 60 → **24**               |
 
 T3-14 is unchanged (still has the symbolless-ASan-as-PoC head-fake) —
 it is already protected by the existing 30-point disagreement floor.
@@ -95,15 +95,15 @@ fixture, gpt-5-nano), via the
 [`auditTelemetry.validityFusion`](../../src/routes/test-fixtures.ts)
 counters added in Task #446:
 
-| Bucket                       | Before (audit doc run 2) | After |
-|------------------------------|--------------------------|-------|
-| T3_SLOP — LLM-higher count   | 6 / 33                   | **1 / 33** |
-| T3_SLOP — floor-fires        | (subset of above)        | 1 (T3-06) |
+| Bucket                       | Before (audit doc run 2) | After                          |
+| ---------------------------- | ------------------------ | ------------------------------ |
+| T3_SLOP — LLM-higher count   | 6 / 33                   | **1 / 33**                     |
+| T3_SLOP — floor-fires        | (subset of above)        | 1 (T3-06)                      |
 | T3_SLOP — evidence-free cap  | n/a                      | 3 (T3-AVRI-ssrf, T3-11, T3-20) |
-| T1_LEGIT — evidence-free cap | n/a                      | **0**     |
-| T1_LEGIT — LLM-higher count  | (not recorded)           | 13 / 15   |
-| T3_SLOP `passRate`           | 1.00                     | **1.00**  |
-| T1_LEGIT `passRate`          | 0.73 (pre-existing)      | 0.73      |
+| T1_LEGIT — evidence-free cap | n/a                      | **0**                          |
+| T1_LEGIT — LLM-higher count  | (not recorded)           | 13 / 15                        |
+| T3_SLOP `passRate`           | 1.00                     | **1.00**                       |
+| T1_LEGIT `passRate`          | 0.73 (pre-existing)      | 0.73                           |
 
 Per-fixture audit, T3_SLOP rows where the cap or floor or LLM-higher
 fired:
@@ -125,7 +125,7 @@ regressions.
 
 ## Why the post-check is conservative
 
-The cap requires the LLM's *own* claim extraction to report ALL of:
+The cap requires the LLM's _own_ claim extraction to report ALL of:
 
 - `hasPoC === false`
 - `pocValidity ≤ 20`
@@ -142,7 +142,7 @@ T1_LEGIT. The April 2026 sweep confirms this: the cap fired 3 times,
 all on T3_SLOP, zero times on T1_LEGIT.
 
 The cap is also asymmetric: it only fires when `llmRaw > heuristic`.
-When the LLM correctly rates an evidence-free report *below* the
+When the LLM correctly rates an evidence-free report _below_ the
 heuristic, the cap is a no-op and the LLM signal is allowed to pull
 validity DOWN normally. This preserves the existing intent of the
 disagreement floor.
@@ -179,5 +179,5 @@ Aggregate counters added in Task #446:
   reports.
 - **Drop the substance modifier in `computeValidityScore` entirely.**
   Would stop substance from inflating `llmRaw` but also stop it from
-  correctly *deflating* `llmRaw` on borderline reports — the LLM's
+  correctly _deflating_ `llmRaw` on borderline reports — the LLM's
   own substance signal is still useful when present.

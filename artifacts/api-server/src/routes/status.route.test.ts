@@ -3,9 +3,17 @@ process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
 
 import http from "node:http";
-import type { AddressInfo } from "node:net";
 import express from "express";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import type { AddressInfo } from "node:net";
 
 interface FakeTraceRow {
   createdAt: Date;
@@ -26,7 +34,11 @@ function makeSelectChain(rows: FakeTraceRow[]): Record<string, unknown> {
     resolve: (v: FakeTraceRow[]) => void,
     reject: (e: unknown) => void,
   ): void => {
-    try { resolve(rows); } catch (e) { reject(e); }
+    try {
+      resolve(rows);
+    } catch (e) {
+      reject(e);
+    }
   };
   return chain;
 }
@@ -92,7 +104,11 @@ function request<T>(urlPath: string): Promise<HttpResponse<T>> {
         res.on("end", () => {
           const text = Buffer.concat(chunks).toString("utf8");
           let parsed: unknown;
-          try { parsed = text.length === 0 ? {} : JSON.parse(text); } catch { parsed = text; }
+          try {
+            parsed = text.length === 0 ? {} : JSON.parse(text);
+          } catch {
+            parsed = text;
+          }
           resolve({
             status: res.statusCode ?? 0,
             body: parsed as T,
@@ -109,8 +125,17 @@ function request<T>(urlPath: string): Promise<HttpResponse<T>> {
 interface StatusResponse {
   generatedAt: string;
   overallStatus: "operational" | "degraded" | "down";
-  uptime: { windowDays: number; daysWithTraffic: number; uptimePercentage: number };
-  latency: { windowHours: number; sampleCount: number; p50Ms: number; p95Ms: number };
+  uptime: {
+    windowDays: number;
+    daysWithTraffic: number;
+    uptimePercentage: number;
+  };
+  latency: {
+    windowHours: number;
+    sampleCount: number;
+    p50Ms: number;
+    p95Ms: number;
+  };
   engines: Array<{
     id: string;
     label: string;

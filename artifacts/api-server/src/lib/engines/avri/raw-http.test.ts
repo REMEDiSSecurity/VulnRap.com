@@ -230,7 +230,7 @@ const SLOP_INJECTION_FIXTURE = [
   "allowing UNION SELECT / OR 1=1 attacks. CWE-89. Severity: Critical.",
   "",
   "Vulnerable construction:",
-  "    query = \"SELECT * FROM products WHERE name='\" + q + \"'\"",
+  '    query = "SELECT * FROM products WHERE name=\'" + q + "\'"',
   "",
   "```http",
   "POST /search?q=foo HTTP/1.1",
@@ -389,7 +389,9 @@ describe("runEngine2Avri — AUTHN_AUTHZ raw-HTTP integration", () => {
     expect(indicators).toContain("FAKE_RAW_HTTP");
     const fakeInd = indicators.find((s) => s === "FAKE_RAW_HTTP");
     expect(fakeInd).toBeDefined();
-    const fakeIndObj = result.engine.triggeredIndicators.find((i) => i.signal === "FAKE_RAW_HTTP");
+    const fakeIndObj = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
     expect(fakeIndObj?.explanation).toMatch(/AUTHN_AUTHZ/);
     const survivingIds = result.detail.goldHits.map((g) => g.id);
     expect(survivingIds).not.toContain("authorization_header_swap");
@@ -531,7 +533,9 @@ describe("runEngine2Avri — AUTHN_AUTHZ fabricated-credential integration", () 
     const result = runEngine2Avri(sig, FAKE_JWT_AUTHN_FIXTURE, AUTHN);
     const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
     expect(indicators).toContain("FAKE_RAW_HTTP");
-    const fakeIndObj = result.engine.triggeredIndicators.find((i) => i.signal === "FAKE_RAW_HTTP");
+    const fakeIndObj = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
     expect(fakeIndObj?.explanation).toMatch(/AUTHN_AUTHZ/);
     expect(fakeIndObj?.explanation).toMatch(/JWT/);
     const survivingIds = result.detail.goldHits.map((g) => g.id);
@@ -558,7 +562,9 @@ describe("runEngine2Avri — INJECTION raw-HTTP integration", () => {
     const result = runEngine2Avri(sig, SLOP_INJECTION_FIXTURE, INJ);
     const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
     expect(indicators).toContain("FAKE_RAW_HTTP");
-    const fakeIndObj = result.engine.triggeredIndicators.find((i) => i.signal === "FAKE_RAW_HTTP");
+    const fakeIndObj = result.engine.triggeredIndicators.find(
+      (i) => i.signal === "FAKE_RAW_HTTP",
+    );
     expect(fakeIndObj?.explanation).toMatch(/INJECTION/);
     const survivingIds = result.detail.goldHits.map((g) => g.id);
     expect(survivingIds).not.toContain("specific_endpoint_param");
@@ -637,7 +643,9 @@ describe("isPlaceholderBody", () => {
   });
 
   it("does not flag real exploit payloads", () => {
-    expect(isPlaceholderBody("q=' UNION SELECT password FROM users--")).toBe(false);
+    expect(isPlaceholderBody("q=' UNION SELECT password FROM users--")).toBe(
+      false,
+    );
     expect(isPlaceholderBody("id=1; cat /etc/passwd")).toBe(false);
     expect(isPlaceholderBody('{"$ne": null}')).toBe(false);
     expect(isPlaceholderBody("name=admin' OR 1=1--")).toBe(false);
@@ -665,7 +673,10 @@ describe("evaluateRawHttpRequest — placeholder body detection", () => {
 
   it("strips the placeholder body byte range from the surrounding text", () => {
     const r = evaluateRawHttpRequest(SLOP_SQLI_PLACEHOLDER_BODY_FIXTURE);
-    const stripped = stripPlaceholderBodies(SLOP_SQLI_PLACEHOLDER_BODY_FIXTURE, r);
+    const stripped = stripPlaceholderBodies(
+      SLOP_SQLI_PLACEHOLDER_BODY_FIXTURE,
+      r,
+    );
     expect(stripped).not.toContain("<sql payload here>");
     // Surrounding prose / headers survive.
     expect(stripped).toContain("# Critical SQL injection");
@@ -844,7 +855,7 @@ const SLOP_SQLI_PROSE_PLACEHOLDER_DQUOTE_FIXTURE = [
   "# Critical SQL injection on /search via the q parameter",
   "",
   "The q parameter is concatenated directly into a database query.",
-  'This is the canonical UNION SELECT class of attacks (CWE-89).',
+  "This is the canonical UNION SELECT class of attacks (CWE-89).",
   "Severity: Critical. Affects all customers in production.",
   "",
   'We confirmed the issue end-to-end: the payload "<sql payload here>"',
@@ -1035,13 +1046,14 @@ const SLOP_CMDI_PROSE_PLACEHOLDER_NOSLOT_PROMISE_FIXTURE = [
   "fleet — please prioritize.",
 ].join("\n");
 
-
 describe("findProsePlaceholderPayloadRanges", () => {
   it("flags Payload:/Inject:/Exec:/Run: <slot> in prose", () => {
     expect(
       findProsePlaceholderPayloadRanges("Payload: `<sql payload here>`").length,
     ).toBe(1);
-    expect(findProsePlaceholderPayloadRanges("inject: <inject>").length).toBe(1);
+    expect(findProsePlaceholderPayloadRanges("inject: <inject>").length).toBe(
+      1,
+    );
     expect(
       findProsePlaceholderPayloadRanges("exec: `<command here>`").length,
     ).toBe(1);
@@ -1147,19 +1159,16 @@ describe("findProsePlaceholderPayloadRanges", () => {
       ).length,
     ).toBe(1);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "we send <sql payload here> to /search",
-      ).length,
+      findProsePlaceholderPayloadRanges("we send <sql payload here> to /search")
+        .length,
     ).toBe(1);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "exec <command here> to confirm RCE",
-      ).length,
+      findProsePlaceholderPayloadRanges("exec <command here> to confirm RCE")
+        .length,
     ).toBe(1);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "run <shell command here> on the host",
-      ).length,
+      findProsePlaceholderPayloadRanges("run <shell command here> on the host")
+        .length,
     ).toBe(1);
   });
 
@@ -1171,14 +1180,12 @@ describe("findProsePlaceholderPayloadRanges", () => {
     // rather than gesturing at a hidden exploit, and must not be
     // flagged.
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the payload <unknown> was rejected",
-      ).length,
+      findProsePlaceholderPayloadRanges("the payload <unknown> was rejected")
+        .length,
     ).toBe(0);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the command <foo> was not recognised",
-      ).length,
+      findProsePlaceholderPayloadRanges("the command <foo> was not recognised")
+        .length,
     ).toBe(0);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1203,9 +1210,8 @@ describe("findProsePlaceholderPayloadRanges", () => {
       ).length,
     ).toBe(1);
     expect(
-      findProsePlaceholderPayloadRanges(
-        'exec "<command here>" to confirm RCE',
-      ).length,
+      findProsePlaceholderPayloadRanges('exec "<command here>" to confirm RCE')
+        .length,
     ).toBe(1);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1220,9 +1226,8 @@ describe("findProsePlaceholderPayloadRanges", () => {
     // \"<unknown>\" was rejected") is legitimate prose and must not
     // be flagged. Only slop vocabulary inside the slot qualifies.
     expect(
-      findProsePlaceholderPayloadRanges(
-        'the payload "<unknown>" was rejected',
-      ).length,
+      findProsePlaceholderPayloadRanges('the payload "<unknown>" was rejected')
+        .length,
     ).toBe(0);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1251,9 +1256,8 @@ describe("findProsePlaceholderPayloadRanges", () => {
       ).length,
     ).toBe(1);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "exec [<command here>] to confirm RCE",
-      ).length,
+      findProsePlaceholderPayloadRanges("exec [<command here>] to confirm RCE")
+        .length,
     ).toBe(1);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1268,9 +1272,8 @@ describe("findProsePlaceholderPayloadRanges", () => {
     // [<unknown>] was rejected") read as a server-supplied placeholder
     // and must not be flagged.
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the payload [<unknown>] was rejected",
-      ).length,
+      findProsePlaceholderPayloadRanges("the payload [<unknown>] was rejected")
+        .length,
     ).toBe(0);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1340,9 +1343,8 @@ describe("findProsePlaceholderPayloadRanges", () => {
       ).length,
     ).toBe(1);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "exec (<command here>) to confirm RCE",
-      ).length,
+      findProsePlaceholderPayloadRanges("exec (<command here>) to confirm RCE")
+        .length,
     ).toBe(1);
   });
 
@@ -1382,14 +1384,12 @@ describe("findProsePlaceholderPayloadRanges", () => {
     // and must not be flagged just because we relaxed the separator
     // class.
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the payload, <unknown>, was rejected",
-      ).length,
+      findProsePlaceholderPayloadRanges("the payload, <unknown>, was rejected")
+        .length,
     ).toBe(0);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the payload (<unknown>) was rejected",
-      ).length,
+      findProsePlaceholderPayloadRanges("the payload (<unknown>) was rejected")
+        .length,
     ).toBe(0);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1403,9 +1403,8 @@ describe("findProsePlaceholderPayloadRanges", () => {
     // slot is ordinary prose markup and stays safe even when the
     // separator is comma / paren / em-dash.
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the value, <inject>, was rejected",
-      ).length,
+      findProsePlaceholderPayloadRanges("the value, <inject>, was rejected")
+        .length,
     ).toBe(0);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1452,9 +1451,8 @@ describe("findProsePlaceholderPayloadRanges", () => {
     // and would otherwise slip past the colon-form and the
     // word-then-slot inline form.
     expect(
-      findProsePlaceholderPayloadRanges(
-        "`<inject>` is the payload we sent",
-      ).length,
+      findProsePlaceholderPayloadRanges("`<inject>` is the payload we sent")
+        .length,
     ).toBe(1);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1606,14 +1604,12 @@ describe("findProsePlaceholderPayloadRanges", () => {
     // field (`<x>`) failed" are ordinary prose markup and must stay
     // safe even though the relaxed separator class is in play.
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the value, `<unknown>`, was rejected",
-      ).length,
+      findProsePlaceholderPayloadRanges("the value, `<unknown>`, was rejected")
+        .length,
     ).toBe(0);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the field (`<x>`) failed validation",
-      ).length,
+      findProsePlaceholderPayloadRanges("the field (`<x>`) failed validation")
+        .length,
     ).toBe(0);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1645,9 +1641,8 @@ describe("findProsePlaceholderPayloadRanges", () => {
     // the payload" gestures at the slot exactly the same way as
     // "`<inject>` is the payload" without the comma.
     expect(
-      findProsePlaceholderPayloadRanges(
-        "`<inject>`, is the payload we sent",
-      ).length,
+      findProsePlaceholderPayloadRanges("`<inject>`, is the payload we sent")
+        .length,
     ).toBe(1);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1700,18 +1695,10 @@ describe("findProsePlaceholderPayloadRanges", () => {
   it("flags the labelled no-slot dodge with a bare slop term", () => {
     // "Payload: TBD" / "Payload: TODO" / "payload = N/A" — the label is
     // followed by a standalone slop term in place of any slot.
-    expect(
-      findProsePlaceholderPayloadRanges("Payload: TBD").length,
-    ).toBe(1);
-    expect(
-      findProsePlaceholderPayloadRanges("Payload: TODO").length,
-    ).toBe(1);
-    expect(
-      findProsePlaceholderPayloadRanges("payload = N/A").length,
-    ).toBe(1);
-    expect(
-      findProsePlaceholderPayloadRanges("Command: FIXME").length,
-    ).toBe(1);
+    expect(findProsePlaceholderPayloadRanges("Payload: TBD").length).toBe(1);
+    expect(findProsePlaceholderPayloadRanges("Payload: TODO").length).toBe(1);
+    expect(findProsePlaceholderPayloadRanges("payload = N/A").length).toBe(1);
+    expect(findProsePlaceholderPayloadRanges("Command: FIXME").length).toBe(1);
     expect(
       findProsePlaceholderPayloadRanges("Inject: placeholder").length,
     ).toBe(1);
@@ -1727,9 +1714,7 @@ describe("findProsePlaceholderPayloadRanges", () => {
     expect(
       findProsePlaceholderPayloadRanges("Payload: [your payload]").length,
     ).toBe(1);
-    expect(
-      findProsePlaceholderPayloadRanges("payload: [todo]").length,
-    ).toBe(1);
+    expect(findProsePlaceholderPayloadRanges("payload: [todo]").length).toBe(1);
     expect(
       findProsePlaceholderPayloadRanges(
         "Command: [insert the actual command here]",
@@ -1746,15 +1731,11 @@ describe("findProsePlaceholderPayloadRanges", () => {
         "Payload: ' UNION SELECT password FROM users--",
       ).length,
     ).toBe(0);
-    expect(
-      findProsePlaceholderPayloadRanges("payload = 1234").length,
-    ).toBe(0);
+    expect(findProsePlaceholderPayloadRanges("payload = 1234").length).toBe(0);
     expect(
       findProsePlaceholderPayloadRanges("command: [GET /api/users]").length,
     ).toBe(0);
-    expect(
-      findProsePlaceholderPayloadRanges("Payload: [1234]").length,
-    ).toBe(0);
+    expect(findProsePlaceholderPayloadRanges("Payload: [1234]").length).toBe(0);
   });
 
   it("flags the parenthetical no-slot dodge", () => {
@@ -1764,16 +1745,15 @@ describe("findProsePlaceholderPayloadRanges", () => {
     expect(
       findProsePlaceholderPayloadRanges("the payload (to be added)").length,
     ).toBe(1);
-    expect(
-      findProsePlaceholderPayloadRanges("the payload (TBD)").length,
-    ).toBe(1);
+    expect(findProsePlaceholderPayloadRanges("the payload (TBD)").length).toBe(
+      1,
+    );
     expect(
       findProsePlaceholderPayloadRanges("the command (placeholder)").length,
     ).toBe(1);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the payload (will be filled in below)",
-      ).length,
+      findProsePlaceholderPayloadRanges("the payload (will be filled in below)")
+        .length,
     ).toBe(1);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1793,9 +1773,8 @@ describe("findProsePlaceholderPayloadRanges", () => {
       findProsePlaceholderPayloadRanges("the command (above)").length,
     ).toBe(0);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the payload (see appendix A) was sent",
-      ).length,
+      findProsePlaceholderPayloadRanges("the payload (see appendix A) was sent")
+        .length,
     ).toBe(0);
   });
 
@@ -1804,19 +1783,16 @@ describe("findProsePlaceholderPayloadRanges", () => {
     // provided" — payload-context noun phrase followed by a copula and
     // a deferral verb.
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the payload will be added later",
-      ).length,
+      findProsePlaceholderPayloadRanges("the payload will be added later")
+        .length,
     ).toBe(1);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the actual payload will be provided",
-      ).length,
+      findProsePlaceholderPayloadRanges("the actual payload will be provided")
+        .length,
     ).toBe(1);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the command was filled in below",
-      ).length,
+      findProsePlaceholderPayloadRanges("the command was filled in below")
+        .length,
     ).toBe(1);
     expect(
       findProsePlaceholderPayloadRanges("the exploit is to be shared").length,
@@ -1831,9 +1807,8 @@ describe("findProsePlaceholderPayloadRanges", () => {
       findProsePlaceholderPayloadRanges("the payload was rejected").length,
     ).toBe(0);
     expect(
-      findProsePlaceholderPayloadRanges(
-        "the command returned a 500 response",
-      ).length,
+      findProsePlaceholderPayloadRanges("the command returned a 500 response")
+        .length,
     ).toBe(0);
     expect(
       findProsePlaceholderPayloadRanges("the payload was blocked").length,
@@ -1845,9 +1820,8 @@ describe("findProsePlaceholderPayloadRanges", () => {
     // deliver the payload. The qualifier (actual/real/exact/...)
     // OR a deferral keyword after the noun is required.
     expect(
-      findProsePlaceholderPayloadRanges(
-        "I'll add the actual payload later",
-      ).length,
+      findProsePlaceholderPayloadRanges("I'll add the actual payload later")
+        .length,
     ).toBe(1);
     expect(
       findProsePlaceholderPayloadRanges(
@@ -1892,9 +1866,9 @@ describe("findProsePlaceholderPayloadRanges", () => {
         "Replace [insert payload here] with the SQL string",
       ).length,
     ).toBe(1);
-    expect(
-      findProsePlaceholderPayloadRanges("[your sql payload]").length,
-    ).toBe(1);
+    expect(findProsePlaceholderPayloadRanges("[your sql payload]").length).toBe(
+      1,
+    );
     expect(
       findProsePlaceholderPayloadRanges(
         "Use [add the actual command here] in the cmd field",
@@ -1906,12 +1880,10 @@ describe("findProsePlaceholderPayloadRanges", () => {
     // Brackets that are only slop-direction ("[insert your name]") or
     // only payload-noun ("[payload]") don't qualify on their own —
     // both are too easy to false-positive on.
-    expect(
-      findProsePlaceholderPayloadRanges("[insert your name]").length,
-    ).toBe(0);
-    expect(
-      findProsePlaceholderPayloadRanges("[your address]").length,
-    ).toBe(0);
+    expect(findProsePlaceholderPayloadRanges("[insert your name]").length).toBe(
+      0,
+    );
+    expect(findProsePlaceholderPayloadRanges("[your address]").length).toBe(0);
     expect(
       findProsePlaceholderPayloadRanges("see [your settings]").length,
     ).toBe(0);
@@ -1932,7 +1904,11 @@ describe("findProsePlaceholderPayloadRanges", () => {
 describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
   it("revokes concrete_payload when prose only gestures at a SQLi payload", () => {
     const sig = extractSignals(SLOP_SQLI_PROSE_PLACEHOLDER_FIXTURE);
-    const result = runEngine2Avri(sig, SLOP_SQLI_PROSE_PLACEHOLDER_FIXTURE, INJ);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_SQLI_PROSE_PLACEHOLDER_FIXTURE,
+      INJ,
+    );
     const survivingIds = result.detail.goldHits.map((g) => g.id);
     expect(survivingIds).not.toContain("concrete_payload");
     const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
@@ -1967,7 +1943,11 @@ describe("runEngine2Avri — INJECTION prose-placeholder integration", () => {
 
   it("revokes concrete_payload when prose only gestures at a command-injection payload", () => {
     const sig = extractSignals(SLOP_CMDI_PROSE_PLACEHOLDER_FIXTURE);
-    const result = runEngine2Avri(sig, SLOP_CMDI_PROSE_PLACEHOLDER_FIXTURE, INJ);
+    const result = runEngine2Avri(
+      sig,
+      SLOP_CMDI_PROSE_PLACEHOLDER_FIXTURE,
+      INJ,
+    );
     const survivingIds = result.detail.goldHits.map((g) => g.id);
     expect(survivingIds).not.toContain("concrete_payload");
     const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
@@ -2311,9 +2291,7 @@ const PLAUSIBLE_RESPONSE_FIXTURE = [
 describe("isSuspiciousJsonBody", () => {
   it("flags single-key narrative JSON bodies", () => {
     expect(
-      isSuspiciousJsonBody(
-        '{"error": "SQL injection in users.id parameter"}',
-      ),
+      isSuspiciousJsonBody('{"error": "SQL injection in users.id parameter"}'),
     ).toBe(true);
     expect(
       isSuspiciousJsonBody('{"data": "user account compromised by attacker"}'),
@@ -2327,9 +2305,9 @@ describe("isSuspiciousJsonBody", () => {
         '{"id": 4012, "username": "bob", "balance": 250.00}',
       ),
     ).toBe(false);
-    expect(
-      isSuspiciousJsonBody('{"uuid": "a-b-c", "data": "leaked"}'),
-    ).toBe(false);
+    expect(isSuspiciousJsonBody('{"uuid": "a-b-c", "data": "leaked"}')).toBe(
+      false,
+    );
     // ≥3 top-level keys carrying narrative vocab is no longer
     // automatically safe (slop authors pad fake bodies with throwaway
     // keys to clear the old key-count threshold), but the body is
@@ -2523,9 +2501,7 @@ describe("evaluateRawHttpResponse", () => {
   });
 
   it("returns 0 responses for prose with no HTTP/1.x status line", () => {
-    const r = evaluateRawHttpResponse(
-      "The server returns a 200 OK response.",
-    );
+    const r = evaluateRawHttpResponse("The server returns a 200 OK response.");
     expect(r.responsesAnalyzed).toBe(0);
     expect(r.isFake).toBe(false);
   });
@@ -2571,11 +2547,7 @@ describe("evaluateRawHttpResponse", () => {
 describe("runEngine2Avri — INJECTION fabricated-response integration", () => {
   it("revokes request_response_diff when the only response evidence is a fabricated block", () => {
     const sig = extractSignals(SLOP_FABRICATED_RESPONSE_FIXTURE);
-    const result = runEngine2Avri(
-      sig,
-      SLOP_FABRICATED_RESPONSE_FIXTURE,
-      INJ,
-    );
+    const result = runEngine2Avri(sig, SLOP_FABRICATED_RESPONSE_FIXTURE, INJ);
     const indicators = result.engine.triggeredIndicators.map((i) => i.signal);
     expect(indicators).toContain("FAKE_RAW_HTTP");
     const fakeIndObj = result.engine.triggeredIndicators.find(
@@ -2634,7 +2606,7 @@ describe("runEngine2Avri — WEB_CLIENT fabricated-response integration", () => 
       "HTTP/1.1 200 OK",
       "Content-Type: text/html",
       "",
-      '<html><body><input value="<script>alert(\'xss attack injected\')</script>"></body></html>',
+      "<html><body><input value=\"<script>alert('xss attack injected')</script>\"></body></html>",
       "```",
       "",
       "The XSS payload is reflected in the response above.",
@@ -2651,7 +2623,11 @@ describe("runEngine2Avri — WEB_CLIENT fabricated-response integration", () => 
     // so the signal stays. We only test that FAKE_RAW_HTTP fired and
     // the response sub-block is populated.
     const avri = result.engine.signalBreakdown?.avri as
-      | { rawHttp?: { response?: { isFake?: boolean; responsesFlagged?: number } } }
+      | {
+          rawHttp?: {
+            response?: { isFake?: boolean; responsesFlagged?: number };
+          };
+        }
       | undefined;
     const rawHttp = avri?.rawHttp;
     expect(rawHttp?.response?.isFake).toBe(true);

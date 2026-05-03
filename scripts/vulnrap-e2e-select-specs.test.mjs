@@ -113,9 +113,7 @@ check(
   const r = selectSpecs([`artifacts/vulnrap/e2e/${SAMPLE_SPEC}`], ALL_SPECS);
   check(
     "single touched spec -> mode=subset with that spec only",
-    r.mode === "subset" &&
-      r.specs.length === 1 &&
-      r.specs[0] === SAMPLE_SPEC,
+    r.mode === "subset" && r.specs.length === 1 && r.specs[0] === SAMPLE_SPEC,
     JSON.stringify(r),
   );
 }
@@ -314,8 +312,8 @@ for (const spec of RELEASE_SPECS) {
     {
       mode: "subset",
       specs: [
-        "handwavy-undo.spec.ts",                     // in RELEASE_SPECS
-        "totally-unrelated-non-release.spec.ts",     // not in RELEASE_SPECS
+        "handwavy-undo.spec.ts", // in RELEASE_SPECS
+        "totally-unrelated-non-release.spec.ts", // not in RELEASE_SPECS
       ],
     },
     RELEASE_SPECS,
@@ -382,11 +380,10 @@ for (const spec of RELEASE_SPECS) {
 // subprocess outcome doesn't depend on the test runner's git state.
 {
   const env = { ...process.env, E2E_RUN_ALL_SPECS: "1" };
-  const res = spawnSync(
-    "node",
-    [RELEASE_SELECT_SCRIPT, ...RELEASE_SPECS],
-    { encoding: "utf8", env },
-  );
+  const res = spawnSync("node", [RELEASE_SELECT_SCRIPT, ...RELEASE_SPECS], {
+    encoding: "utf8",
+    env,
+  });
   check(
     "release-e2e-select CLI: E2E_RUN_ALL_SPECS=1 prints exactly 'RUN' on stdout",
     res.status === 0 && res.stdout.trim() === "RUN",

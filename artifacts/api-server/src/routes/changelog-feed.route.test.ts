@@ -6,9 +6,9 @@
 // edit that breaks the format trips the test instead of silently shipping
 // an empty feed. Then validates buildAtomFeed produces well-formed XML
 // with the required Atom elements and one <entry> per parsed version.
-import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import path from "path";
+import { describe, it, expect } from "vitest";
 import {
   parseChangelogTsx,
   buildAtomFeed,
@@ -92,9 +92,17 @@ describe("parseChangelogTsx", () => {
       path.resolve(process.cwd(), "../vulnrap/src/pages/changelog.tsx"),
     ];
     const file = candidates.find((c) => {
-      try { readFileSync(c); return true; } catch { return false; }
+      try {
+        readFileSync(c);
+        return true;
+      } catch {
+        return false;
+      }
     });
-    if (!file) throw new Error(`changelog.tsx not found, tried: ${candidates.join(", ")}`);
+    if (!file)
+      throw new Error(
+        `changelog.tsx not found, tried: ${candidates.join(", ")}`,
+      );
     const text = readFileSync(file, "utf8");
     const entries = parseChangelogTsx(text);
     // The current page has 17 versions (1.0.0 → 3.10.0). Allow growth but
@@ -146,7 +154,7 @@ describe("buildAtomFeed", () => {
     expect(xml).toContain("<updated>2026-05-03T00:00:00.000Z</updated>");
     // Item text should be escaped and present inside the html-typed content.
     // Inside CDATA the raw '"' is preserved (no entity escape needed).
-    expect(xml).toContain('item one with ] bracket inside');
+    expect(xml).toContain("item one with ] bracket inside");
     expect(xml).toContain('item two with "escaped quotes"');
     expect(xml).toContain("<![CDATA[");
     expect(xml).toContain("]]>");
@@ -159,6 +167,8 @@ describe("buildAtomFeed", () => {
     const entryCount = xml.match(/<entry>/g)?.length ?? 0;
     expect(entryCount).toBe(entries.length);
     // Top-level <updated> should match the newest entry's date.
-    expect(xml).toContain(`<updated>${new Date(`${entries[0].date}T00:00:00Z`).toISOString()}</updated>`);
+    expect(xml).toContain(
+      `<updated>${new Date(`${entries[0].date}T00:00:00Z`).toISOString()}</updated>`,
+    );
   });
 });

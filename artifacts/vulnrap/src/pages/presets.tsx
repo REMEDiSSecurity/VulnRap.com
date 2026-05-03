@@ -6,16 +6,42 @@
 // page reads the same query parameter and applies the preset's
 // sensitivity + slop thresholds to local settings on mount.
 import { Link } from "react-router-dom";
-import { Library, Sparkles, Loader2, AlertCircle, ArrowRight, Gauge, Sliders } from "lucide-react";
+import {
+  Library,
+  Sparkles,
+  Loader2,
+  AlertCircle,
+  ArrowRight,
+  Gauge,
+  Sliders,
+} from "lucide-react";
 import { useListPresets, type PresetEntry } from "@workspace/api-client-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-const SENSITIVITY_LABEL: Record<PresetEntry["sensitivity"], { label: string; tone: string }> = {
-  lenient: { label: "Lenient", tone: "border-green-500/40 text-green-300/90 bg-green-500/5" },
-  balanced: { label: "Balanced", tone: "border-primary/40 text-primary bg-primary/5" },
-  strict: { label: "Strict", tone: "border-orange-500/40 text-orange-300/90 bg-orange-500/5" },
+const SENSITIVITY_LABEL: Record<
+  PresetEntry["sensitivity"],
+  { label: string; tone: string }
+> = {
+  lenient: {
+    label: "Lenient",
+    tone: "border-green-500/40 text-green-300/90 bg-green-500/5",
+  },
+  balanced: {
+    label: "Balanced",
+    tone: "border-primary/40 text-primary bg-primary/5",
+  },
+  strict: {
+    label: "Strict",
+    tone: "border-orange-500/40 text-orange-300/90 bg-orange-500/5",
+  },
 };
 
 const ENGINE_LABEL: Record<keyof PresetEntry["engineWeights"], string> = {
@@ -42,8 +68,13 @@ function PresetCard({ preset }: { preset: PresetEntry }) {
     <Card className="glass-card rounded-xl flex flex-col h-full">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base leading-tight">{preset.name}</CardTitle>
-          <Badge variant="outline" className={`text-[9px] uppercase tracking-wider shrink-0 ${sens.tone}`}>
+          <CardTitle className="text-base leading-tight">
+            {preset.name}
+          </CardTitle>
+          <Badge
+            variant="outline"
+            className={`text-[9px] uppercase tracking-wider shrink-0 ${sens.tone}`}
+          >
             {sens.label}
           </Badge>
         </div>
@@ -80,10 +111,19 @@ function PresetCard({ preset }: { preset: PresetEntry }) {
             <Sliders className="w-3 h-3" /> Engine weights
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-            {(Object.entries(preset.engineWeights) as [keyof PresetEntry["engineWeights"], number][]).map(([k, v]) => (
+            {(
+              Object.entries(preset.engineWeights) as [
+                keyof PresetEntry["engineWeights"],
+                number,
+              ][]
+            ).map(([k, v]) => (
               <div key={k} className="flex items-center justify-between">
-                <span className="text-muted-foreground/80">{ENGINE_LABEL[k]}</span>
-                <span className={`font-mono font-bold ${weightTone(v)}`}>×{formatWeight(v)}</span>
+                <span className="text-muted-foreground/80">
+                  {ENGINE_LABEL[k]}
+                </span>
+                <span className={`font-mono font-bold ${weightTone(v)}`}>
+                  ×{formatWeight(v)}
+                </span>
               </div>
             ))}
           </div>
@@ -116,7 +156,9 @@ export default function Presets() {
           Preset Library
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-          Curated starting profiles bundling sensitivity calibration plus per-engine weights. Pick the one that matches your triage workflow and deep-link straight to the report checker.
+          Curated starting profiles bundling sensitivity calibration plus
+          per-engine weights. Pick the one that matches your triage workflow and
+          deep-link straight to the report checker.
         </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-4" />
       </div>
@@ -130,10 +172,17 @@ export default function Presets() {
         </CardHeader>
         <CardContent className="text-xs sm:text-sm text-muted-foreground leading-relaxed space-y-2">
           <p>
-            Each preset captures a sensitivity profile (lenient / balanced / strict), the slop-tier thresholds the results page uses, and how heavily each detection engine should be weighted. Clicking <span className="font-mono text-primary">Use on /check</span> loads the preset into your local settings and opens the checker so you can validate a report under that calibration.
+            Each preset captures a sensitivity profile (lenient / balanced /
+            strict), the slop-tier thresholds the results page uses, and how
+            heavily each detection engine should be weighted. Clicking{" "}
+            <span className="font-mono text-primary">Use on /check</span> loads
+            the preset into your local settings and opens the checker so you can
+            validate a report under that calibration.
           </p>
           <p className="text-[11px] text-muted-foreground/70">
-            Presets are curated by the VulnRap team — community-submitted presets are not accepted in v1. Your choice is stored only in your browser.
+            Presets are curated by the VulnRap team — community-submitted
+            presets are not accepted in v1. Your choice is stored only in your
+            browser.
           </p>
         </CardContent>
       </Card>
@@ -150,12 +199,16 @@ export default function Presets() {
           <CardContent className="py-6 flex flex-col sm:flex-row items-start gap-3">
             <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
             <div className="flex-1 text-sm">
-              <div className="font-semibold text-destructive mb-1">Failed to load presets</div>
+              <div className="font-semibold text-destructive mb-1">
+                Failed to load presets
+              </div>
               <div className="text-muted-foreground text-xs leading-relaxed">
                 {error instanceof Error ? error.message : "Unknown error"}
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Retry
+            </Button>
           </CardContent>
         </Card>
       )}

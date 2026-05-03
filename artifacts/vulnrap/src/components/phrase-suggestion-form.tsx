@@ -1,11 +1,21 @@
 import { useState, useCallback } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { submitPhraseSuggestion, ApiError } from "@workspace/api-client-react";
+import {
+  MessageCircleQuestion,
+  CheckCircle2,
+  AlertTriangle,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { submitPhraseSuggestion, ApiError } from "@workspace/api-client-react";
-import { MessageCircleQuestion, CheckCircle2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Task #634 — User-suggested phrase form. Lives at the bottom of
@@ -56,7 +66,9 @@ export default function PhraseSuggestionForm() {
       });
       setSubmitted(true);
       toast({
-        title: result.duplicate ? "Already in the queue" : "Suggestion received",
+        title: result.duplicate
+          ? "Already in the queue"
+          : "Suggestion received",
         description: result.message,
       });
     } catch (err) {
@@ -68,15 +80,21 @@ export default function PhraseSuggestionForm() {
               typeof body.error === "string"
                 ? body.error
                 : "Daily suggestion limit reached. Try again tomorrow.",
-            dailyLimit: typeof body.dailyLimit === "number" ? body.dailyLimit : null,
+            dailyLimit:
+              typeof body.dailyLimit === "number" ? body.dailyLimit : null,
             retryAfterHours:
-              typeof body.retryAfterHours === "number" ? body.retryAfterHours : null,
+              typeof body.retryAfterHours === "number"
+                ? body.retryAfterHours
+                : null,
           });
         } else if (err.status === 400) {
           const body = (err.data ?? {}) as Record<string, unknown>;
           toast({
             title: "Couldn't accept that suggestion",
-            description: typeof body.error === "string" ? body.error : "Please check your input.",
+            description:
+              typeof body.error === "string"
+                ? body.error
+                : "Please check your input.",
             variant: "destructive",
           });
         } else {
@@ -109,10 +127,12 @@ export default function PhraseSuggestionForm() {
           <div className="p-4 rounded-full icon-glow-green mb-4">
             <CheckCircle2 className="w-10 h-10 text-green-400" />
           </div>
-          <p className="font-medium text-foreground text-lg">Thanks for the suggestion!</p>
+          <p className="font-medium text-foreground text-lg">
+            Thanks for the suggestion!
+          </p>
           <p className="text-sm text-muted-foreground mt-1 max-w-md">
-            A reviewer will look at your phrase soon. New suggestions are queued and never
-            auto-applied to live scoring.
+            A reviewer will look at your phrase soon. New suggestions are queued
+            and never auto-applied to live scoring.
           </p>
           <Button
             variant="outline"
@@ -132,15 +152,19 @@ export default function PhraseSuggestionForm() {
   }
 
   return (
-    <Card className="glass-card rounded-xl" data-testid="phrase-suggestion-form">
+    <Card
+      className="glass-card rounded-xl"
+      data-testid="phrase-suggestion-form"
+    >
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MessageCircleQuestion className="w-5 h-5 text-primary" />
           Suggest a Phrase for Reviewer Triage
         </CardTitle>
         <CardDescription>
-          Keep seeing a handwavy or AI-self-disclosure phrase in slop reports? Send it our
-          way — reviewers triage every submission before anything reaches live scoring.
+          Keep seeing a handwavy or AI-self-disclosure phrase in slop reports?
+          Send it our way — reviewers triage every submission before anything
+          reaches live scoring.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -151,10 +175,15 @@ export default function PhraseSuggestionForm() {
           >
             <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-medium text-amber-200">{rateLimited.message}</p>
+              <p className="font-medium text-amber-200">
+                {rateLimited.message}
+              </p>
               <p className="text-xs text-amber-200/70 mt-1">
                 {rateLimited.dailyLimit != null && (
-                  <>Limit is {rateLimited.dailyLimit} suggestions per day per visitor. </>
+                  <>
+                    Limit is {rateLimited.dailyLimit} suggestions per day per
+                    visitor.{" "}
+                  </>
                 )}
                 {rateLimited.retryAfterHours != null && (
                   <>Try again in about {rateLimited.retryAfterHours} hours.</>

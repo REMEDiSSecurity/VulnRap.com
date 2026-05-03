@@ -3,12 +3,12 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { setCalibrationToken } from "@workspace/api-client-react";
+import { HandwavyPhrasesAdmin } from "./feedback-analytics";
 import type {
   HandwavyMarker,
   HandwavyPhrasesList,
   HandwavyPhraseRemovalBatchesList,
 } from "@workspace/api-client-react";
-import { HandwavyPhrasesAdmin } from "./feedback-analytics";
 
 // Task #463 — render coverage for the coverage-gap banner that Task #323
 // added inside the bulk-removal preview's production block. The

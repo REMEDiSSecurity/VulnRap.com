@@ -36,7 +36,11 @@ const LEGACY_LIMIT_KEY = "vulnrap.handwavy.productionScanLimit";
 // Pre-seed the limit key so the calibration page picks it up on first
 // render, with the rendered input pulling from localStorage in its
 // useState initializer.
-async function setStoredLimit(page: Page, key: string, value: string): Promise<void> {
+async function setStoredLimit(
+  page: Page,
+  key: string,
+  value: string,
+): Promise<void> {
   await page.addInitScript(
     ([k, v]) => {
       try {
@@ -136,7 +140,12 @@ test.describe("Task #230 shared production-scan window", () => {
                     total: 0,
                     validDetectionsLost: 0,
                     falsePositivesDropped: 0,
-                    byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+                    byTier: {
+                      t1Legit: 0,
+                      t2Borderline: 0,
+                      t3Slop: 0,
+                      t4Hallucinated: 0,
+                    },
                     sampleMatches: [],
                     warning: null,
                     corpusSize: 0,
@@ -145,7 +154,12 @@ test.describe("Task #230 shared production-scan window", () => {
                     total: 0,
                     validDetectionsLost: 0,
                     falsePositivesDropped: 0,
-                    byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+                    byTier: {
+                      t1Legit: 0,
+                      t2Borderline: 0,
+                      t3Slop: 0,
+                      t4Hallucinated: 0,
+                    },
                     sampleMatches: [],
                     warning: null,
                     corpusSize: 0,
@@ -166,7 +180,9 @@ test.describe("Task #230 shared production-scan window", () => {
 
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
       // Sanity: the input picked up the seeded value.
-      await expect(page.getByTestId("handwavy-production-scan-limit")).toHaveValue("750");
+      await expect(
+        page.getByTestId("handwavy-production-scan-limit"),
+      ).toHaveValue("750");
 
       const row = page
         .locator(`[data-testid="handwavy-row"]`)
@@ -175,7 +191,9 @@ test.describe("Task #230 shared production-scan window", () => {
       await row.getByTestId("handwavy-remove").click();
 
       // The dry-run body must include our seeded limit.
-      await expect.poll(() => captured.length, { timeout: 15_000 }).toBeGreaterThan(0);
+      await expect
+        .poll(() => captured.length, { timeout: 15_000 })
+        .toBeGreaterThan(0);
       expect(captured[0]).toBe(750);
     } finally {
       await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
@@ -187,10 +205,14 @@ test.describe("Task #230 shared production-scan window", () => {
     page,
   }) => {
     const apiCtx = await newApiContext();
-    const phrases = [uniquePhrase("task230", "batch1"), uniquePhrase("task230", "batch2")];
+    const phrases = [
+      uniquePhrase("task230", "batch1"),
+      uniquePhrase("task230", "batch2"),
+    ];
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       await setStoredLimit(page, LIMIT_KEY, "5000");
       await injectCalibrationTokenIntoPage(page);
 
@@ -221,7 +243,9 @@ test.describe("Task #230 shared production-scan window", () => {
       );
 
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
-      await expect(page.getByTestId("handwavy-production-scan-limit")).toHaveValue("5000");
+      await expect(
+        page.getByTestId("handwavy-production-scan-limit"),
+      ).toHaveValue("5000");
 
       // Tick both rows then open the bulk preview.
       for (const phrase of phrases) {
@@ -233,7 +257,9 @@ test.describe("Task #230 shared production-scan window", () => {
       }
       await page.getByTestId("handwavy-bulk-remove").click();
 
-      await expect.poll(() => captured.length, { timeout: 15_000 }).toBeGreaterThan(0);
+      await expect
+        .poll(() => captured.length, { timeout: 15_000 })
+        .toBeGreaterThan(0);
       expect(captured[0]).toBe(5000);
 
       // The preview panel's production-block subtitle should call out the
@@ -259,7 +285,8 @@ test.describe("Task #230 shared production-scan window", () => {
       // No localStorage seed → default applies.
       await injectCalibrationTokenIntoPage(page);
 
-      const dryRunBodies: Array<{ has: boolean; value: number | undefined }> = [];
+      const dryRunBodies: Array<{ has: boolean; value: number | undefined }> =
+        [];
       await page.route(
         "**/api/feedback/calibration/handwavy-phrases",
         async (route) => {
@@ -277,7 +304,12 @@ test.describe("Task #230 shared production-scan window", () => {
             | undefined;
           if (body?.dryRun === true && body.phrase === phrase) {
             dryRunBodies.push({
-              has: body !== undefined && Object.prototype.hasOwnProperty.call(body, "productionScanLimit"),
+              has:
+                body !== undefined &&
+                Object.prototype.hasOwnProperty.call(
+                  body,
+                  "productionScanLimit",
+                ),
               value: body.productionScanLimit,
             });
           }
@@ -286,7 +318,9 @@ test.describe("Task #230 shared production-scan window", () => {
       );
 
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
-      await expect(page.getByTestId("handwavy-production-scan-limit")).toHaveValue("2000");
+      await expect(
+        page.getByTestId("handwavy-production-scan-limit"),
+      ).toHaveValue("2000");
 
       const row = page
         .locator(`[data-testid="handwavy-row"]`)
@@ -294,7 +328,9 @@ test.describe("Task #230 shared production-scan window", () => {
       await expect(row).toHaveCount(1, { timeout: 15_000 });
       await row.getByTestId("handwavy-remove").click();
 
-      await expect.poll(() => dryRunBodies.length, { timeout: 15_000 }).toBeGreaterThan(0);
+      await expect
+        .poll(() => dryRunBodies.length, { timeout: 15_000 })
+        .toBeGreaterThan(0);
       // Default value is intentionally omitted to keep the request body
       // identical to the pre-Task-#230 shape.
       expect(dryRunBodies[0].has).toBe(false);
@@ -367,7 +403,12 @@ test.describe("Task #327 production-scan timestamp range surfaced on every previ
             // subtitle MUST stay out of the DOM here.
             dryRunMatches: {
               total: 0,
-              byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+              byTier: {
+                t1Legit: 0,
+                t2Borderline: 0,
+                t3Slop: 0,
+                t4Hallucinated: 0,
+              },
               falsePositives: 0,
               corpusSize: 50,
               sampleMatches: [],
@@ -380,7 +421,12 @@ test.describe("Task #327 production-scan timestamp range surfaced on every previ
             // ("reports"), and the "from <…> to <…>" date pair.
             dryRunMatchesProduction: {
               total: 0,
-              byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+              byTier: {
+                t1Legit: 0,
+                t2Borderline: 0,
+                t3Slop: 0,
+                t4Hallucinated: 0,
+              },
               falsePositives: 0,
               corpusSize: 273,
               sampleMatches: [],
@@ -480,9 +526,15 @@ test.describe("Task #327 production-scan timestamp range surfaced on every previ
                   total: 1,
                   validDetectionsLost: 1,
                   falsePositivesDropped: 0,
-                  byTier: { t1Legit: 1, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+                  byTier: {
+                    t1Legit: 1,
+                    t2Borderline: 0,
+                    t3Slop: 0,
+                    t4Hallucinated: 0,
+                  },
                   sampleMatches: [],
-                  warning: "1 legitimate detection would be lost from the curated benchmark",
+                  warning:
+                    "1 legitimate detection would be lost from the curated benchmark",
                   corpusSize: 47,
                   oldestCreatedAt: null,
                   newestCreatedAt: null,
@@ -491,7 +543,12 @@ test.describe("Task #327 production-scan timestamp range surfaced on every previ
                   total: 0,
                   validDetectionsLost: 0,
                   falsePositivesDropped: 0,
-                  byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+                  byTier: {
+                    t1Legit: 0,
+                    t2Borderline: 0,
+                    t3Slop: 0,
+                    t4Hallucinated: 0,
+                  },
                   sampleMatches: [],
                   warning: null,
                   corpusSize: 412,

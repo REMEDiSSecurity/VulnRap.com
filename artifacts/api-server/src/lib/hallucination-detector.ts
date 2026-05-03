@@ -1,4 +1,7 @@
-import { detectStructuralFabrication, type StructuralMarker } from "./engines/avri/crash-trace";
+import {
+  detectStructuralFabrication,
+  type StructuralMarker,
+} from "./engines/avri/crash-trace";
 
 /**
  * Optional structured payload for a hallucination signal. Lets the diagnostics
@@ -141,8 +144,10 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
 
   const stackFrames = text.match(/#\d+\s+0x[0-9a-f]+\s+in\s+\S+/gi) || [];
   if (stackFrames.length >= 3) {
-    const uniqueFrames = new Set(stackFrames.map(f => f.replace(/#\d+/, "#N")));
-    const repetitionRatio = 1 - (uniqueFrames.size / stackFrames.length);
+    const uniqueFrames = new Set(
+      stackFrames.map((f) => f.replace(/#\d+/, "#N")),
+    );
+    const repetitionRatio = 1 - uniqueFrames.size / stackFrames.length;
     if (repetitionRatio > 0.5) {
       signals.push({
         type: "fabricated_stack_trace",
@@ -169,7 +174,7 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
     // Intentionally empty: no entry survived the Sprint 13B-1 audit.
   ]);
   const addresses = text.match(/0x[0-9a-f]{8,16}/gi) || [];
-  const roundAddresses = addresses.filter(a => {
+  const roundAddresses = addresses.filter((a) => {
     const lower = a.toLowerCase();
     if (KNOWN_ALLOCATOR_ADDRESSES.has(lower)) return false;
     const hex = lower.replace("0x", "");
@@ -201,8 +206,13 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
     });
   }
 
-  const exploitScripts = text.match(/(?:exploit|payload|poc|attack)\.py/gi) || [];
-  if (exploitScripts.length > 0 && !text.includes("import ") && !text.includes("def ")) {
+  const exploitScripts =
+    text.match(/(?:exploit|payload|poc|attack)\.py/gi) || [];
+  if (
+    exploitScripts.length > 0 &&
+    !text.includes("import ") &&
+    !text.includes("def ")
+  ) {
     signals.push({
       type: "phantom_exploit_script",
       description: `References "${exploitScripts[0]}" but provides no actual source code`,
@@ -232,12 +242,19 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
   // structural anchors or describe the bug in their own prose without
   // citing a specific ASan classifier.
   const hasAsan = /AddressSanitizer/i.test(text);
-  const claimsAsanBugClass = /(?:heap[-\s]buffer[-\s]overflow|stack[-\s]buffer[-\s]overflow|global[-\s]buffer[-\s]overflow|heap[-\s]use[-\s]after[-\s]free|use[-\s]after[-\s]free|double[-\s]free|heap\s+overflow|stack\s+overflow)/i.test(text);
+  const claimsAsanBugClass =
+    /(?:heap[-\s]buffer[-\s]overflow|stack[-\s]buffer[-\s]overflow|global[-\s]buffer[-\s]overflow|heap[-\s]use[-\s]after[-\s]free|use[-\s]after[-\s]free|double[-\s]free|heap\s+overflow|stack\s+overflow)/i.test(
+      text,
+    );
   const hasAsanDetails = /SUMMARY:\s*AddressSanitizer/i.test(text);
   const hasShadowBytes = /Shadow\s+bytes\s+around/i.test(text);
-  const hasAsanErrorHeader = /==\d+==\s*ERROR:\s*AddressSanitizer\s*:/i.test(text);
-  const hasResolvedFrame = /#\d+\s+0x[0-9a-f]+\s+in\s+\S[^\n]*\.[A-Za-z0-9_+-]+:\d+/i.test(text);
-  const hasReadWriteSize = /(?:READ|WRITE)\s+of\s+size\s+\d+\s+at\s+0x[0-9a-f]+/i.test(text);
+  const hasAsanErrorHeader = /==\d+==\s*ERROR:\s*AddressSanitizer\s*:/i.test(
+    text,
+  );
+  const hasResolvedFrame =
+    /#\d+\s+0x[0-9a-f]+\s+in\s+\S[^\n]*\.[A-Za-z0-9_+-]+:\d+/i.test(text);
+  const hasReadWriteSize =
+    /(?:READ|WRITE)\s+of\s+size\s+\d+\s+at\s+0x[0-9a-f]+/i.test(text);
   const hasFreedBy = /freed\s+by\s+thread\s+T\d+\s+here/i.test(text);
   const hasPrevAllocated = /previously\s+allocated\s+by\s+thread/i.test(text);
   const hasRealAsanContext =
@@ -251,7 +268,8 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
   if (hasAsan && claimsAsanBugClass && !hasRealAsanContext) {
     signals.push({
       type: "incomplete_asan",
-      description: "ASan excerpt is structurally inconsistent — claims a specific bug class but shows no shadow bytes, ERROR header, resolved frames, READ/WRITE size header, or freed-by trailer that real ASan produces",
+      description:
+        "ASan excerpt is structurally inconsistent — claims a specific bug class but shows no shadow bytes, ERROR header, resolved frames, READ/WRITE size header, or freed-by trailer that real ASan produces",
       weight: 12,
     });
   }
@@ -261,7 +279,7 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
   const codeContent = codeBlocks.join(" ");
 
   if (functionRefs.length >= 3) {
-    const phantomFunctions = functionRefs.filter(f => {
+    const phantomFunctions = functionRefs.filter((f) => {
       const name = f.replace(/\s*\($/, "");
       return !codeContent.includes(name);
     });
@@ -300,7 +318,9 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
   ]);
   const pidMatches = text.match(/==(\d+)==/g) || [];
   const distinctMagicPids = new Set(
-    pidMatches.map((p) => p.replace(/==/g, "")).filter((p) => MAGIC_PIDS.has(p)),
+    pidMatches
+      .map((p) => p.replace(/==/g, ""))
+      .filter((p) => MAGIC_PIDS.has(p)),
   );
   if (distinctMagicPids.size >= 2) {
     signals.push({
@@ -309,7 +329,9 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
       weight: 6,
     });
   } else if (distinctMagicPids.size === 1) {
-    const hasOtherFabrication = signals.some((s) => PRIMARY_FABRICATION_TYPES.has(s.type));
+    const hasOtherFabrication = signals.some((s) =>
+      PRIMARY_FABRICATION_TYPES.has(s.type),
+    );
     if (hasOtherFabrication) {
       const pid = [...distinctMagicPids][0];
       signals.push({
@@ -338,28 +360,44 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
   }
 
   const hasXSS = /(?:cross.?site\s+scripting|XSS)/i.test(text);
-  const claimsRCE = /(?:remote\s+code\s+execution|RCE|arbitrary\s+code\s+execution)/i.test(text);
-  if (hasXSS && claimsRCE && !/(?:electron|node|server.?side|SSR)/i.test(text)) {
+  const claimsRCE =
+    /(?:remote\s+code\s+execution|RCE|arbitrary\s+code\s+execution)/i.test(
+      text,
+    );
+  if (
+    hasXSS &&
+    claimsRCE &&
+    !/(?:electron|node|server.?side|SSR)/i.test(text)
+  ) {
     signals.push({
       type: "impact_escalation",
-      description: "Claims RCE from XSS without mentioning a server-side or Electron context — typical AI overstatement",
+      description:
+        "Claims RCE from XSS without mentioning a server-side or Electron context — typical AI overstatement",
       weight: 8,
     });
   }
 
   const mentionsPython = /(?:python|\.py|pip|django|flask)/i.test(text);
-  const mentionsJS = /(?:node\.?js|npm|express|\.js\b|require\s*\()/i.test(text);
+  const mentionsJS = /(?:node\.?js|npm|express|\.js\b|require\s*\()/i.test(
+    text,
+  );
   const mentionsC = /(?:\.c\b|\.h\b|gcc|malloc|free\s*\(|#include)/i.test(text);
-  const languageCount = [mentionsPython, mentionsJS, mentionsC].filter(Boolean).length;
+  const languageCount = [mentionsPython, mentionsJS, mentionsC].filter(
+    Boolean,
+  ).length;
   if (languageCount >= 3) {
     signals.push({
       type: "language_confusion",
-      description: "Report references Python, JavaScript, AND C/C++ — a single vulnerability rarely spans 3 language ecosystems",
+      description:
+        "Report references Python, JavaScript, AND C/C++ — a single vulnerability rarely spans 3 language ecosystems",
       weight: 8,
     });
   }
 
-  const sentencesArr = text.split(/[.!?]+/).map(s => s.trim().toLowerCase()).filter(s => s.length > 20);
+  const sentencesArr = text
+    .split(/[.!?]+/)
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s.length > 20);
   const seen = new Map<string, number>();
   let duplicates = 0;
   for (const s of sentencesArr) {
@@ -378,12 +416,19 @@ export function detectHallucinationSignals(text: string): HallucinationResult {
   }
 
   const hasResponsibleDisclosure = /responsible\s+disclosure/i.test(text);
-  const hasTimeline = /(?:reported|disclosed|notified|contacted)\s+(?:on|at)?\s*\d{4}[-/]\d{2}[-/]\d{2}/i.test(text);
-  const hasVendorContact = /(?:vendor|maintainer|developer)\s+(?:response|confirmed|acknowledged)/i.test(text);
+  const hasTimeline =
+    /(?:reported|disclosed|notified|contacted)\s+(?:on|at)?\s*\d{4}[-/]\d{2}[-/]\d{2}/i.test(
+      text,
+    );
+  const hasVendorContact =
+    /(?:vendor|maintainer|developer)\s+(?:response|confirmed|acknowledged)/i.test(
+      text,
+    );
   if (hasResponsibleDisclosure && !hasTimeline && !hasVendorContact) {
     signals.push({
       type: "empty_disclosure_claim",
-      description: 'Claims "responsible disclosure" but provides no disclosure timeline or vendor communication — boilerplate padding',
+      description:
+        'Claims "responsible disclosure" but provides no disclosure timeline or vendor communication — boilerplate padding',
       weight: 5,
     });
   }
@@ -499,7 +544,8 @@ const HTTP_MESSAGE_START_RE =
 
 const FENCED_BLOCK_RE = /```[a-zA-Z0-9_+-]*\r?\n([\s\S]*?)\r?\n```/g;
 
-const HEADER_LINE_HALLUCINATION_RE = /^([A-Za-z][A-Za-z0-9\-_]*)\s*:\s*(.*?)\s*$/;
+const HEADER_LINE_HALLUCINATION_RE =
+  /^([A-Za-z][A-Za-z0-9\-_]*)\s*:\s*(.*?)\s*$/;
 
 function parseHttpMessages(block: string): HttpMessage[] {
   HTTP_MESSAGE_START_RE.lastIndex = 0;
@@ -537,7 +583,8 @@ function parseHttpMessages(block: string): HttpMessage[] {
   const out: HttpMessage[] = [];
   for (let i = 0; i < starts.length; i++) {
     const s = starts[i];
-    const nextStart = i + 1 < starts.length ? starts[i + 1].msgStart : block.length;
+    const nextStart =
+      i + 1 < starts.length ? starts[i + 1].msgStart : block.length;
     const tail = block.slice(s.headerStart, nextStart);
     let headerSection = tail;
     let body = "";
@@ -595,7 +642,10 @@ function inspectMessages(messages: HttpMessage[], markers: Set<string>): void {
       // wording is unambiguous.
       const expected = STATUS_REASON_PHRASES[code];
       if (expected && msg.reasonPhrase) {
-        const phrase = msg.reasonPhrase.trim().toLowerCase().replace(/\s+/g, " ");
+        const phrase = msg.reasonPhrase
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, " ");
         if (phrase.length > 0 && !expected.includes(phrase)) {
           markers.add(`status_${code}_with_wrong_reason_phrase`);
         }
@@ -606,7 +656,10 @@ function inspectMessages(messages: HttpMessage[], markers: Set<string>): void {
       // 8-char floor on the trimmed body lets through trailing
       // whitespace / a stray newline that the markdown fence
       // boundary may introduce.
-      if ((code === 204 || code === 304 || (code >= 100 && code < 200)) && bodyLen >= 8) {
+      if (
+        (code === 204 || code === 304 || (code >= 100 && code < 200)) &&
+        bodyLen >= 8
+      ) {
         markers.add(`status_${code}_must_have_no_body`);
       }
 
@@ -777,11 +830,7 @@ function tryParseGraphqlResponse(
   } catch {
     return null;
   }
-  if (
-    parsed === null ||
-    typeof parsed !== "object" ||
-    Array.isArray(parsed)
-  ) {
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     return null;
   }
   const obj = parsed as Record<string, unknown>;
@@ -836,7 +885,11 @@ function inspectGraphqlResponse(
 
   // Predicate 2: `errors: []` (empty array). Per spec §7.1.2 the
   // `errors` field MUST be a non-empty list when present.
-  if (resp.hasErrorsKey && Array.isArray(resp.errors) && resp.errors.length === 0) {
+  if (
+    resp.hasErrorsKey &&
+    Array.isArray(resp.errors) &&
+    resp.errors.length === 0
+  ) {
     markers.add("empty_errors_array");
   }
 
@@ -887,8 +940,12 @@ function inspectGraphqlResponse(
         !Array.isArray(ext) &&
         typeof (ext as Record<string, unknown>).code === "string"
       ) {
-        const code = ((ext as Record<string, unknown>).code as string).toUpperCase();
-        if (FABRICATED_EXTENSION_CODE_TOKENS.some((tok) => code.includes(tok))) {
+        const code = (
+          (ext as Record<string, unknown>).code as string
+        ).toUpperCase();
+        if (
+          FABRICATED_EXTENSION_CODE_TOKENS.some((tok) => code.includes(tok))
+        ) {
           markers.add("fabricated_extensions_code");
         }
       }

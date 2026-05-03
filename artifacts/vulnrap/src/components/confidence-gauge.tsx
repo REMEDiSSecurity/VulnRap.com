@@ -6,7 +6,11 @@ interface ConfidenceGaugeProps {
   label?: string;
 }
 
-export function ConfidenceGauge({ value, size = 140, label }: ConfidenceGaugeProps) {
+export function ConfidenceGauge({
+  value,
+  size = 140,
+  label,
+}: ConfidenceGaugeProps) {
   const pct = Math.max(0, Math.min(1, value));
   const strokeWidth = 10;
   const r = (size - strokeWidth) / 2 - 4;
@@ -54,14 +58,29 @@ export function ConfidenceGauge({ value, size = 140, label }: ConfidenceGaugePro
   const largeArcFg = sweepAngle > Math.PI ? 1 : 0;
 
   const bgPath = `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcBg} 1 ${end.x} ${end.y}`;
-  const fgPath = sweepAngle > 0.01
-    ? `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFg} 1 ${current.x} ${current.y}`
-    : "";
+  const fgPath =
+    sweepAngle > 0.01
+      ? `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFg} 1 ${current.x} ${current.y}`
+      : "";
 
   const color = useMemo(() => {
-    if (pct >= 0.8) return { stroke: "#22c55e", glow: "rgba(34, 197, 94, 0.3)", text: "text-green-400" };
-    if (pct >= 0.5) return { stroke: "#eab308", glow: "rgba(234, 179, 8, 0.3)", text: "text-yellow-400" };
-    return { stroke: "#f97316", glow: "rgba(249, 115, 22, 0.3)", text: "text-orange-400" };
+    if (pct >= 0.8)
+      return {
+        stroke: "#22c55e",
+        glow: "rgba(34, 197, 94, 0.3)",
+        text: "text-green-400",
+      };
+    if (pct >= 0.5)
+      return {
+        stroke: "#eab308",
+        glow: "rgba(234, 179, 8, 0.3)",
+        text: "text-yellow-400",
+      };
+    return {
+      stroke: "#f97316",
+      glow: "rgba(249, 115, 22, 0.3)",
+      text: "text-orange-400",
+    };
   }, [pct]);
 
   const confidenceLabel = pct >= 0.8 ? "High" : pct >= 0.5 ? "Medium" : "Low";
@@ -69,7 +88,11 @@ export function ConfidenceGauge({ value, size = 140, label }: ConfidenceGaugePro
 
   return (
     <div className="flex flex-col items-center">
-      <svg viewBox={`0 0 ${size} ${size * 0.75}`} width={size} height={size * 0.75}>
+      <svg
+        viewBox={`0 0 ${size} ${size * 0.75}`}
+        width={size}
+        height={size * 0.75}
+      >
         <defs>
           <filter id={`gauge-glow-${filterId}`}>
             <feGaussianBlur stdDeviation="3" result="blur" />
@@ -130,7 +153,9 @@ export function ConfidenceGauge({ value, size = 140, label }: ConfidenceGaugePro
         </text>
       </svg>
       {label && (
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wide -mt-1">{label}</span>
+        <span className="text-[10px] text-muted-foreground uppercase tracking-wide -mt-1">
+          {label}
+        </span>
       )}
     </div>
   );

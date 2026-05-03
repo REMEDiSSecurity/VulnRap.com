@@ -114,16 +114,23 @@ describe("DiagnosticsPanel smoke test", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
-      if (url.includes(`/api/reports/${REPORT_ID}/diagnostics`)) {
-        return new Response(JSON.stringify(SAMPLE_DIAGNOSTICS), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return new Response("not found", { status: 404 });
-    });
+    fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : (input as Request).url;
+        if (url.includes(`/api/reports/${REPORT_ID}/diagnostics`)) {
+          return new Response(JSON.stringify(SAMPLE_DIAGNOSTICS), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response("not found", { status: 404 });
+      });
   });
 
   afterEach(() => {
@@ -165,30 +172,37 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText("true")).toBeInTheDocument();
 
     // At least one pipeline stage timing rendered
-    expect(screen.getAllByText(/Pipeline Timings/i).length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText(/Pipeline Timings/i).length,
+    ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("ingest")).toBeInTheDocument();
     expect(screen.getByText("12 ms")).toBeInTheDocument();
     expect(screen.getByText(/total 187 ms/i)).toBeInTheDocument();
 
     // Correlation id surfaced for triage
-    expect(screen.getByText(/correlation: corr-test-1234/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/correlation: corr-test-1234/i),
+    ).toBeInTheDocument();
   });
 
   // Task #624 — engine-version footer line.
   it("renders the engine-version footer when the diagnostics response includes engineVersions", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        engineVersions: {
-          linguistic: "3.10.0",
-          substance: "3.10.1",
-          cwe: "3.10.0",
-          avri: "3.11.0",
-          fusion: "3.10.0",
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            engineVersions: {
+              linguistic: "3.10.0",
+              substance: "3.10.1",
+              cwe: "3.10.0",
+              avri: "3.11.0",
+              fusion: "3.10.0",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -210,72 +224,89 @@ describe("DiagnosticsPanel smoke test", () => {
     await waitFor(() => {
       expect(screen.getByText(/Composite Breakdown/i)).toBeInTheDocument();
     });
-    expect(screen.queryByTestId("diagnostics-engine-versions")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("diagnostics-engine-versions"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders the AVRI family rubric section with gold hits, misses, absence penalties, and overrides", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        composite: {
-          ...SAMPLE_DIAGNOSTICS.composite,
-          overridesApplied: [
-            "AVRI_NO_GOLD_SIGNALS: zero gold signals for Memory corruption / unsafe C",
-            "AVRI_VELOCITY: same-day submission velocity penalty (-10)",
-          ],
-        },
-        avri: {
-          family: "MEMORY_CORRUPTION",
-          familyName: "Memory corruption / unsafe C",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-787",
-            evidence: ["CWE-787"],
-            technology: null,
-          },
-          goldHitCount: 1,
-          velocityPenalty: -10,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 42,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 38,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "MEMORY_CORRUPTION",
-                  familyName: "Memory corruption / unsafe C",
-                  baseScore: 22,
-                  goldHitCount: 1,
-                  goldTotalCount: 8,
-                  goldHits: [
-                    { id: "asan_or_sanitizer", description: "AddressSanitizer crash output", points: 22 },
-                  ],
-                  goldMisses: [
-                    { id: "valgrind", description: "Valgrind error trace", points: 18 },
-                  ],
-                  absencePenalty: -8,
-                  absencePenalties: [
-                    { id: "no_size_or_offset", description: "No explicit byte/size/offset value", points: 5 },
-                  ],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  rawAvriScore: 14,
-                  legacyScore: 50,
-                  blendedScore: 38,
-                },
-              },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            composite: {
+              ...SAMPLE_DIAGNOSTICS.composite,
+              overridesApplied: [
+                "AVRI_NO_GOLD_SIGNALS: zero gold signals for Memory corruption / unsafe C",
+                "AVRI_VELOCITY: same-day submission velocity penalty (-10)",
+              ],
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            avri: {
+              family: "MEMORY_CORRUPTION",
+              familyName: "Memory corruption / unsafe C",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-787",
+                evidence: ["CWE-787"],
+                technology: null,
+              },
+              goldHitCount: 1,
+              velocityPenalty: -10,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 42,
+            },
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 38,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "MEMORY_CORRUPTION",
+                      familyName: "Memory corruption / unsafe C",
+                      baseScore: 22,
+                      goldHitCount: 1,
+                      goldTotalCount: 8,
+                      goldHits: [
+                        {
+                          id: "asan_or_sanitizer",
+                          description: "AddressSanitizer crash output",
+                          points: 22,
+                        },
+                      ],
+                      goldMisses: [
+                        {
+                          id: "valgrind",
+                          description: "Valgrind error trace",
+                          points: 18,
+                        },
+                      ],
+                      absencePenalty: -8,
+                      absencePenalties: [
+                        {
+                          id: "no_size_or_offset",
+                          description: "No explicit byte/size/offset value",
+                          points: 5,
+                        },
+                      ],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      rawAvriScore: 14,
+                      legacyScore: 50,
+                      blendedScore: 38,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -286,24 +317,32 @@ describe("DiagnosticsPanel smoke test", () => {
     });
 
     // Family + classification confidence
-    expect(screen.getAllByText(/Memory corruption \/ unsafe C/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Memory corruption \/ unsafe C/i).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText(/class:\s*HIGH/i)).toBeInTheDocument();
     expect(screen.getByText(/matched member CWE-787/i)).toBeInTheDocument();
 
     // Gold hits/misses descriptions
     expect(screen.getByText(/Gold Signals Found/i)).toBeInTheDocument();
-    expect(screen.getByText(/AddressSanitizer crash output/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/AddressSanitizer crash output/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Expected Signals Missing/i)).toBeInTheDocument();
     expect(screen.getByText(/Valgrind error trace/i)).toBeInTheDocument();
 
     // Absence penalty surfaced with description
     expect(screen.getByText(/Absence Penalties Applied/i)).toBeInTheDocument();
-    expect(screen.getByText(/No explicit byte\/size\/offset value/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/No explicit byte\/size\/offset value/i),
+    ).toBeInTheDocument();
 
     // Composite-level AVRI overrides surfaced
     expect(screen.getByText(/AVRI Composite Overrides/i)).toBeInTheDocument();
     expect(screen.getByText(/No gold signals for family/i)).toBeInTheDocument();
-    expect(screen.getByText(/Submission-velocity penalty/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Submission-velocity penalty/i),
+    ).toBeInTheDocument();
 
     // Task 374: AVRI Family Rubric heading carries a "Learn more"
     // link that resolves to the matching changelog anchor so the
@@ -311,74 +350,77 @@ describe("DiagnosticsPanel smoke test", () => {
     const rubricLinks = screen
       .getAllByRole("link", { name: /learn more/i })
       .filter(
-        (a) =>
-          a.getAttribute("href") === "/changelog#avri-family-rubric",
+        (a) => a.getAttribute("href") === "/changelog#avri-family-rubric",
       );
     expect(rubricLinks.length).toBeGreaterThan(0);
   });
 
   it("renders the STRIPPED_CRASH_TRACE block with reason, frame counts, and revoked trace gold signals", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "MEMORY_CORRUPTION",
-          familyName: "Memory corruption / unsafe C",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-787",
-            evidence: ["CWE-787"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 18,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 22,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "MEMORY_CORRUPTION",
-                  familyName: "Memory corruption / unsafe C",
-                  baseScore: 18,
-                  goldHitCount: 0,
-                  goldTotalCount: 8,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  crashTrace: {
-                    framesAnalyzed: 6,
-                    goodFrames: 1,
-                    placeholderFrames: 4,
-                    isStripped: true,
-                    reason: "Crash trace has 4/6 frames with placeholder symbols/offsets",
-                    revokedGoldHits: [
-                      { id: "asan_or_sanitizer", points: 22 },
-                      { id: "stack_trace_with_offset", points: 14 },
-                    ],
-                    penalty: -18,
-                  },
-                  rawAvriScore: 0,
-                  legacyScore: 30,
-                  blendedScore: 22,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "MEMORY_CORRUPTION",
+              familyName: "Memory corruption / unsafe C",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-787",
+                evidence: ["CWE-787"],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 18,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 22,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "MEMORY_CORRUPTION",
+                      familyName: "Memory corruption / unsafe C",
+                      baseScore: 18,
+                      goldHitCount: 0,
+                      goldTotalCount: 8,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      crashTrace: {
+                        framesAnalyzed: 6,
+                        goodFrames: 1,
+                        placeholderFrames: 4,
+                        isStripped: true,
+                        reason:
+                          "Crash trace has 4/6 frames with placeholder symbols/offsets",
+                        revokedGoldHits: [
+                          { id: "asan_or_sanitizer", points: 22 },
+                          { id: "stack_trace_with_offset", points: 14 },
+                        ],
+                        penalty: -18,
+                      },
+                      rawAvriScore: 0,
+                      legacyScore: 30,
+                      blendedScore: 22,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -388,9 +430,13 @@ describe("DiagnosticsPanel smoke test", () => {
       expect(screen.getByText("STRIPPED_CRASH_TRACE")).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/crash trace downgraded \(-18\)/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Crash trace has 4\/6 frames with placeholder symbols\/offsets/i),
+      screen.getByText(/crash trace downgraded \(-18\)/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Crash trace has 4\/6 frames with placeholder symbols\/offsets/i,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText(/frames:\s*6/i)).toBeInTheDocument();
     expect(screen.getByText(/good:\s*1/i)).toBeInTheDocument();
@@ -402,66 +448,70 @@ describe("DiagnosticsPanel smoke test", () => {
   });
 
   it("renders the STRIPPED_CRASH_TRACE block with race-trace wording for RACE_CONCURRENCY reports", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "RACE_CONCURRENCY",
-          familyName: "Concurrency / data race",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-362",
-            evidence: ["CWE-362"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 18,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 22,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "RACE_CONCURRENCY",
-                  familyName: "Concurrency / data race",
-                  baseScore: 18,
-                  goldHitCount: 0,
-                  goldTotalCount: 6,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  crashTrace: {
-                    framesAnalyzed: 5,
-                    goodFrames: 1,
-                    placeholderFrames: 3,
-                    isStripped: true,
-                    reason: "TSan trace has 3/5 frames with placeholder symbols/offsets",
-                    revokedGoldHits: [
-                      { id: "tsan_or_helgrind_header", points: 22 },
-                    ],
-                    penalty: -18,
-                  },
-                  rawAvriScore: 0,
-                  legacyScore: 30,
-                  blendedScore: 22,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "RACE_CONCURRENCY",
+              familyName: "Concurrency / data race",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-362",
+                evidence: ["CWE-362"],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 18,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 22,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "RACE_CONCURRENCY",
+                      familyName: "Concurrency / data race",
+                      baseScore: 18,
+                      goldHitCount: 0,
+                      goldTotalCount: 6,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      crashTrace: {
+                        framesAnalyzed: 5,
+                        goodFrames: 1,
+                        placeholderFrames: 3,
+                        isStripped: true,
+                        reason:
+                          "TSan trace has 3/5 frames with placeholder symbols/offsets",
+                        revokedGoldHits: [
+                          { id: "tsan_or_helgrind_header", points: 22 },
+                        ],
+                        penalty: -18,
+                      },
+                      rawAvriScore: 0,
+                      legacyScore: 30,
+                      blendedScore: 22,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -472,92 +522,101 @@ describe("DiagnosticsPanel smoke test", () => {
     });
 
     // Wording reads naturally for a race report (not "crash trace")
-    expect(screen.getByText(/race trace downgraded \(-18\)/i)).toBeInTheDocument();
-    expect(screen.queryByText(/crash trace downgraded/i)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/TSan trace has 3\/5 frames with placeholder symbols\/offsets/i),
+      screen.getByText(/race trace downgraded \(-18\)/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/crash trace downgraded/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /TSan trace has 3\/5 frames with placeholder symbols\/offsets/i,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText(/tsan_or_helgrind_header/)).toBeInTheDocument();
   });
 
   it("renders the STRUCTURAL_FABRICATION block with each marker label, id, and offending excerpt (Task #317)", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "MEMORY_CORRUPTION",
-          familyName: "Memory corruption / unsafe C",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-787",
-            evidence: ["CWE-787"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 28,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 28,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "MEMORY_CORRUPTION",
-                  familyName: "Memory corruption / unsafe C",
-                  baseScore: 22,
-                  goldHitCount: 0,
-                  goldTotalCount: 8,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  // crashTrace is NOT stripped (good frames are present),
-                  // but the Sprint 13B-2 / Task #303 detectors fired against
-                  // the trace's structural envelope. The panel must surface
-                  // the markers in their own block so reviewers can see why
-                  // the report was downgraded.
-                  crashTrace: {
-                    framesAnalyzed: 6,
-                    goodFrames: 5,
-                    placeholderFrames: 0,
-                    isStripped: false,
-                    reason: null,
-                    revokedGoldHits: [],
-                    penalty: 0,
-                    hasStructuralFabrication: true,
-                    structuralFabricationPenalty: -12,
-                    structuralMarkers: [
-                      {
-                        id: "round_function_offsets",
-                        description:
-                          "3 frames carry round/zero function offsets (0x0, 0x100, 0x1000); real offsets are non-zero and non-round",
-                      },
-                      {
-                        id: "thread_id_inconsistency",
-                        description:
-                          "Trace references `thread T0`/`T1` but no `==<pid>==` header is present (real ASan/TSan output always anchors thread blocks to a PID)",
-                      },
-                    ],
-                  },
-                  rawAvriScore: 10,
-                  legacyScore: 45,
-                  blendedScore: 28,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "MEMORY_CORRUPTION",
+              familyName: "Memory corruption / unsafe C",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-787",
+                evidence: ["CWE-787"],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 28,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 28,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "MEMORY_CORRUPTION",
+                      familyName: "Memory corruption / unsafe C",
+                      baseScore: 22,
+                      goldHitCount: 0,
+                      goldTotalCount: 8,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      // crashTrace is NOT stripped (good frames are present),
+                      // but the Sprint 13B-2 / Task #303 detectors fired against
+                      // the trace's structural envelope. The panel must surface
+                      // the markers in their own block so reviewers can see why
+                      // the report was downgraded.
+                      crashTrace: {
+                        framesAnalyzed: 6,
+                        goodFrames: 5,
+                        placeholderFrames: 0,
+                        isStripped: false,
+                        reason: null,
+                        revokedGoldHits: [],
+                        penalty: 0,
+                        hasStructuralFabrication: true,
+                        structuralFabricationPenalty: -12,
+                        structuralMarkers: [
+                          {
+                            id: "round_function_offsets",
+                            description:
+                              "3 frames carry round/zero function offsets (0x0, 0x100, 0x1000); real offsets are non-zero and non-round",
+                          },
+                          {
+                            id: "thread_id_inconsistency",
+                            description:
+                              "Trace references `thread T0`/`T1` but no `==<pid>==` header is present (real ASan/TSan output always anchors thread blocks to a PID)",
+                          },
+                        ],
+                      },
+                      rawAvriScore: 10,
+                      legacyScore: 45,
+                      blendedScore: 28,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -582,8 +641,12 @@ describe("DiagnosticsPanel smoke test", () => {
     // description (which carries the offending excerpt inline). The block has
     // a stable testid so we can scope queries inside it.
     const block = screen.getByTestId("structural-fabrication-block");
-    expect(within(block).getByText("Round/zero function offsets")).toBeInTheDocument();
-    expect(within(block).getByText("(round_function_offsets)")).toBeInTheDocument();
+    expect(
+      within(block).getByText("Round/zero function offsets"),
+    ).toBeInTheDocument();
+    expect(
+      within(block).getByText("(round_function_offsets)"),
+    ).toBeInTheDocument();
     expect(
       within(block).getByText(
         /3 frames carry round\/zero function offsets \(0x0, 0x100, 0x1000\)/i,
@@ -593,7 +656,9 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(
       within(block).getByText("Thread block without `==<pid>==` anchor"),
     ).toBeInTheDocument();
-    expect(within(block).getByText("(thread_id_inconsistency)")).toBeInTheDocument();
+    expect(
+      within(block).getByText("(thread_id_inconsistency)"),
+    ).toBeInTheDocument();
     expect(
       within(block).getByText(
         /Trace references `thread T0`\/`T1` but no `==<pid>==` header is present/i,
@@ -602,9 +667,7 @@ describe("DiagnosticsPanel smoke test", () => {
 
     // STRIPPED_CRASH_TRACE block is NOT shown (isStripped=false), proving
     // the structural-fab block is independent.
-    expect(
-      screen.queryByText("STRIPPED_CRASH_TRACE"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("STRIPPED_CRASH_TRACE")).not.toBeInTheDocument();
   });
 
   it("makes STRUCTURAL_FABRICATION markers clickable and invokes onStructuralMarkerClick with the line number when range is present (Task #451)", async () => {
@@ -616,80 +679,83 @@ describe("DiagnosticsPanel smoke test", () => {
     //   2. Fire the `onStructuralMarkerClick` callback with that line
     //      number when the bullet is clicked, so the parent page can
     //      scroll its `<HighlightedReport>` panel to the offending line.
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "MEMORY_CORRUPTION",
-          familyName: "Memory corruption / unsafe C",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-787",
-            evidence: ["CWE-787"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 28,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 28,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "MEMORY_CORRUPTION",
-                  familyName: "Memory corruption / unsafe C",
-                  baseScore: 22,
-                  goldHitCount: 0,
-                  goldTotalCount: 8,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  crashTrace: {
-                    framesAnalyzed: 6,
-                    goodFrames: 5,
-                    placeholderFrames: 0,
-                    isStripped: false,
-                    reason: null,
-                    revokedGoldHits: [],
-                    penalty: 0,
-                    hasStructuralFabrication: true,
-                    structuralFabricationPenalty: -12,
-                    structuralMarkers: [
-                      {
-                        id: "round_function_offsets",
-                        description:
-                          "3 frames carry round/zero function offsets (0x0, 0x100, 0x1000)",
-                        range: { start: 120, end: 140, line: 7 },
-                      },
-                      {
-                        id: "thread_id_inconsistency",
-                        description:
-                          "Trace references `thread T0`/`T1` but no `==<pid>==` header is present",
-                        range: { start: 250, end: 285, line: 14 },
-                      },
-                    ],
-                  },
-                  rawAvriScore: 10,
-                  legacyScore: 45,
-                  blendedScore: 28,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "MEMORY_CORRUPTION",
+              familyName: "Memory corruption / unsafe C",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-787",
+                evidence: ["CWE-787"],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 28,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 28,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "MEMORY_CORRUPTION",
+                      familyName: "Memory corruption / unsafe C",
+                      baseScore: 22,
+                      goldHitCount: 0,
+                      goldTotalCount: 8,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      crashTrace: {
+                        framesAnalyzed: 6,
+                        goodFrames: 5,
+                        placeholderFrames: 0,
+                        isStripped: false,
+                        reason: null,
+                        revokedGoldHits: [],
+                        penalty: 0,
+                        hasStructuralFabrication: true,
+                        structuralFabricationPenalty: -12,
+                        structuralMarkers: [
+                          {
+                            id: "round_function_offsets",
+                            description:
+                              "3 frames carry round/zero function offsets (0x0, 0x100, 0x1000)",
+                            range: { start: 120, end: 140, line: 7 },
+                          },
+                          {
+                            id: "thread_id_inconsistency",
+                            description:
+                              "Trace references `thread T0`/`T1` but no `==<pid>==` header is present",
+                            range: { start: 250, end: 285, line: 14 },
+                          },
+                        ],
+                      },
+                      rawAvriScore: 10,
+                      legacyScore: 45,
+                      blendedScore: 28,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const onStructuralMarkerClick = vi.fn();
     const user = userEvent.setup();
@@ -734,59 +800,62 @@ describe("DiagnosticsPanel smoke test", () => {
     // we fall back to a plain `<li>` (no button, no data-testid) and the
     // `onStructuralMarkerClick` callback — even when wired — never
     // fires because there's nothing to click.
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 28,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "MEMORY_CORRUPTION",
-                  familyName: "Memory corruption / unsafe C",
-                  baseScore: 22,
-                  goldHitCount: 0,
-                  goldTotalCount: 8,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  crashTrace: {
-                    framesAnalyzed: 6,
-                    goodFrames: 5,
-                    placeholderFrames: 0,
-                    isStripped: false,
-                    reason: null,
-                    revokedGoldHits: [],
-                    penalty: 0,
-                    hasStructuralFabrication: true,
-                    structuralFabricationPenalty: -12,
-                    structuralMarkers: [
-                      {
-                        id: "round_function_offsets",
-                        description:
-                          "3 frames carry round/zero function offsets",
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 28,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "MEMORY_CORRUPTION",
+                      familyName: "Memory corruption / unsafe C",
+                      baseScore: 22,
+                      goldHitCount: 0,
+                      goldTotalCount: 8,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      crashTrace: {
+                        framesAnalyzed: 6,
+                        goodFrames: 5,
+                        placeholderFrames: 0,
+                        isStripped: false,
+                        reason: null,
+                        revokedGoldHits: [],
+                        penalty: 0,
+                        hasStructuralFabrication: true,
+                        structuralFabricationPenalty: -12,
+                        structuralMarkers: [
+                          {
+                            id: "round_function_offsets",
+                            description:
+                              "3 frames carry round/zero function offsets",
+                          },
+                        ],
                       },
-                    ],
+                      rawAvriScore: 10,
+                      legacyScore: 45,
+                      blendedScore: 28,
+                    },
                   },
-                  rawAvriScore: 10,
-                  legacyScore: 45,
-                  blendedScore: 28,
                 },
-              },
+              ],
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const onStructuralMarkerClick = vi.fn();
     const user = userEvent.setup();
@@ -815,80 +884,83 @@ describe("DiagnosticsPanel smoke test", () => {
     //   3. Flash the row briefly so the reviewer's eye lands on it.
     //   4. Re-fire on every nonce bump so re-clicking the same marker
     //      still works.
-    fetchSpy.mockImplementation(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "MEMORY_CORRUPTION",
-          familyName: "Memory corruption / unsafe C",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-787",
-            evidence: ["CWE-787"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 28,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 28,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "MEMORY_CORRUPTION",
-                  familyName: "Memory corruption / unsafe C",
-                  baseScore: 22,
-                  goldHitCount: 0,
-                  goldTotalCount: 8,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  crashTrace: {
-                    framesAnalyzed: 6,
-                    goodFrames: 5,
-                    placeholderFrames: 0,
-                    isStripped: false,
-                    reason: null,
-                    revokedGoldHits: [],
-                    penalty: 0,
-                    hasStructuralFabrication: true,
-                    structuralFabricationPenalty: -12,
-                    structuralMarkers: [
-                      {
-                        id: "round_function_offsets",
-                        description:
-                          "3 frames carry round/zero function offsets (0x0, 0x100, 0x1000)",
-                        range: { start: 120, end: 140, line: 7 },
-                      },
-                      {
-                        id: "implausible_thread_id",
-                        description:
-                          "Thread id `T9999` outside realistic kernel pid range",
-                        range: { start: 250, end: 285, line: 14 },
-                      },
-                    ],
-                  },
-                  rawAvriScore: 10,
-                  legacyScore: 45,
-                  blendedScore: 28,
-                },
+    fetchSpy.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "MEMORY_CORRUPTION",
+              familyName: "Memory corruption / unsafe C",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-787",
+                evidence: ["CWE-787"],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 28,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 28,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "MEMORY_CORRUPTION",
+                      familyName: "Memory corruption / unsafe C",
+                      baseScore: 22,
+                      goldHitCount: 0,
+                      goldTotalCount: 8,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      crashTrace: {
+                        framesAnalyzed: 6,
+                        goodFrames: 5,
+                        placeholderFrames: 0,
+                        isStripped: false,
+                        reason: null,
+                        revokedGoldHits: [],
+                        penalty: 0,
+                        hasStructuralFabrication: true,
+                        structuralFabricationPenalty: -12,
+                        structuralMarkers: [
+                          {
+                            id: "round_function_offsets",
+                            description:
+                              "3 frames carry round/zero function offsets (0x0, 0x100, 0x1000)",
+                            range: { start: 120, end: 140, line: 7 },
+                          },
+                          {
+                            id: "implausible_thread_id",
+                            description:
+                              "Thread id `T9999` outside realistic kernel pid range",
+                            range: { start: 250, end: 285, line: 14 },
+                          },
+                        ],
+                      },
+                      rawAvriScore: 10,
+                      legacyScore: 45,
+                      blendedScore: 28,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     // happy-dom doesn't implement scrollIntoView; spy on it so we can
     // verify the panel called it on the matching row.
@@ -923,7 +995,10 @@ describe("DiagnosticsPanel smoke test", () => {
     const targetRow = await screen.findByTestId(
       "structural-marker-implausible_thread_id-row",
     );
-    expect(targetRow).toHaveAttribute("data-marker-id", "implausible_thread_id");
+    expect(targetRow).toHaveAttribute(
+      "data-marker-id",
+      "implausible_thread_id",
+    );
 
     // The non-target marker is also rendered but should not flash.
     const otherRow = await screen.findByTestId(
@@ -941,81 +1016,84 @@ describe("DiagnosticsPanel smoke test", () => {
   });
 
   it("renders STRUCTURAL_FABRICATION with subsumed-penalty wording when stripped-trace already fired (Task #317)", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "RACE_CONCURRENCY",
-          familyName: "Concurrency / data race",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-362",
-            evidence: ["CWE-362"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 18,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 22,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "RACE_CONCURRENCY",
-                  familyName: "Concurrency / data race",
-                  baseScore: 18,
-                  goldHitCount: 0,
-                  goldTotalCount: 6,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  crashTrace: {
-                    framesAnalyzed: 6,
-                    goodFrames: 1,
-                    placeholderFrames: 4,
-                    isStripped: true,
-                    reason: "TSan trace has 4/6 frames placeholder",
-                    revokedGoldHits: [],
-                    penalty: -18,
-                    hasStructuralFabrication: true,
-                    // Penalty 0 — engine deliberately subsumes the
-                    // structural-fab charge under stripped-trace so the
-                    // report isn't double-charged for the same trace.
-                    structuralFabricationPenalty: 0,
-                    structuralMarkers: [
-                      {
-                        id: "frame_numbering_gaps",
-                        description:
-                          "Frame numbering jumps from #1 to #4; real sanitizer output is contiguous within a block",
-                      },
-                      {
-                        id: "round_heap_region_size",
-                        description:
-                          'Heap "region size: 0x100" in hex; real ASan emits "<N>-byte region [0x..., 0x...)" in decimal',
-                      },
-                    ],
-                  },
-                  rawAvriScore: 0,
-                  legacyScore: 30,
-                  blendedScore: 22,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "RACE_CONCURRENCY",
+              familyName: "Concurrency / data race",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-362",
+                evidence: ["CWE-362"],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 18,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 22,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "RACE_CONCURRENCY",
+                      familyName: "Concurrency / data race",
+                      baseScore: 18,
+                      goldHitCount: 0,
+                      goldTotalCount: 6,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      crashTrace: {
+                        framesAnalyzed: 6,
+                        goodFrames: 1,
+                        placeholderFrames: 4,
+                        isStripped: true,
+                        reason: "TSan trace has 4/6 frames placeholder",
+                        revokedGoldHits: [],
+                        penalty: -18,
+                        hasStructuralFabrication: true,
+                        // Penalty 0 — engine deliberately subsumes the
+                        // structural-fab charge under stripped-trace so the
+                        // report isn't double-charged for the same trace.
+                        structuralFabricationPenalty: 0,
+                        structuralMarkers: [
+                          {
+                            id: "frame_numbering_gaps",
+                            description:
+                              "Frame numbering jumps from #1 to #4; real sanitizer output is contiguous within a block",
+                          },
+                          {
+                            id: "round_heap_region_size",
+                            description:
+                              'Heap "region size: 0x100" in hex; real ASan emits "<N>-byte region [0x..., 0x...)" in decimal',
+                          },
+                        ],
+                      },
+                      rawAvriScore: 0,
+                      legacyScore: 30,
+                      blendedScore: 22,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -1043,67 +1121,70 @@ describe("DiagnosticsPanel smoke test", () => {
   });
 
   it("does not render the STRUCTURAL_FABRICATION block when hasStructuralFabrication is false (Task #317)", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "MEMORY_CORRUPTION",
-          familyName: "Memory corruption / unsafe C",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-787",
-            evidence: ["CWE-787"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 28,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 60,
-              verdict: "GREEN" as const,
-              confidence: "HIGH" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "MEMORY_CORRUPTION",
-                  familyName: "Memory corruption / unsafe C",
-                  baseScore: 60,
-                  goldHitCount: 2,
-                  goldTotalCount: 8,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  crashTrace: {
-                    framesAnalyzed: 6,
-                    goodFrames: 6,
-                    placeholderFrames: 0,
-                    isStripped: false,
-                    reason: null,
-                    revokedGoldHits: [],
-                    penalty: 0,
-                    hasStructuralFabrication: false,
-                    structuralFabricationPenalty: 0,
-                    structuralMarkers: [],
-                  },
-                  rawAvriScore: 60,
-                  legacyScore: 60,
-                  blendedScore: 60,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "MEMORY_CORRUPTION",
+              familyName: "Memory corruption / unsafe C",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-787",
+                evidence: ["CWE-787"],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 28,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 60,
+                  verdict: "GREEN" as const,
+                  confidence: "HIGH" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "MEMORY_CORRUPTION",
+                      familyName: "Memory corruption / unsafe C",
+                      baseScore: 60,
+                      goldHitCount: 2,
+                      goldTotalCount: 8,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      crashTrace: {
+                        framesAnalyzed: 6,
+                        goodFrames: 6,
+                        placeholderFrames: 0,
+                        isStripped: false,
+                        reason: null,
+                        revokedGoldHits: [],
+                        penalty: 0,
+                        hasStructuralFabrication: false,
+                        structuralFabricationPenalty: 0,
+                        structuralMarkers: [],
+                      },
+                      rawAvriScore: 60,
+                      legacyScore: 60,
+                      blendedScore: 60,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -1122,71 +1203,74 @@ describe("DiagnosticsPanel smoke test", () => {
   });
 
   it("renders the FAKE_RAW_HTTP block with reason, request counters, and revoked smuggling gold signals", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "REQUEST_SMUGGLING",
-          familyName: "HTTP request smuggling / desync",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-444",
-            evidence: ["CWE-444"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 18,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 22,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "REQUEST_SMUGGLING",
-                  familyName: "HTTP request smuggling / desync",
-                  baseScore: 18,
-                  goldHitCount: 0,
-                  goldTotalCount: 6,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  rawHttp: {
-                    requestsAnalyzed: 1,
-                    totalHeaders: 7,
-                    placeholderHeaders: 4,
-                    crlfPresent: false,
-                    teClConflicts: 1,
-                    teClBroken: 1,
-                    isFake: true,
-                    reason:
-                      "Fabricated raw HTTP request (no CRLFs, placeholder header values)",
-                    revokedGoldHits: [
-                      { id: "raw_http_te_cl_conflict", points: 22 },
-                      { id: "raw_http_request_with_headers", points: 14 },
-                    ],
-                    penalty: -18,
-                  },
-                  rawAvriScore: 0,
-                  legacyScore: 30,
-                  blendedScore: 22,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "REQUEST_SMUGGLING",
+              familyName: "HTTP request smuggling / desync",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-444",
+                evidence: ["CWE-444"],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 18,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 22,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "REQUEST_SMUGGLING",
+                      familyName: "HTTP request smuggling / desync",
+                      baseScore: 18,
+                      goldHitCount: 0,
+                      goldTotalCount: 6,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      rawHttp: {
+                        requestsAnalyzed: 1,
+                        totalHeaders: 7,
+                        placeholderHeaders: 4,
+                        crlfPresent: false,
+                        teClConflicts: 1,
+                        teClBroken: 1,
+                        isFake: true,
+                        reason:
+                          "Fabricated raw HTTP request (no CRLFs, placeholder header values)",
+                        revokedGoldHits: [
+                          { id: "raw_http_te_cl_conflict", points: 22 },
+                          { id: "raw_http_request_with_headers", points: 14 },
+                        ],
+                        penalty: -18,
+                      },
+                      rawAvriScore: 0,
+                      legacyScore: 30,
+                      blendedScore: 22,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -1196,7 +1280,9 @@ describe("DiagnosticsPanel smoke test", () => {
       expect(screen.getByText("FAKE_RAW_HTTP")).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/raw HTTP downgraded \(-18\)/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/raw HTTP downgraded \(-18\)/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
         /Fabricated raw HTTP request \(no CRLFs, placeholder header values\)/i,
@@ -1212,7 +1298,9 @@ describe("DiagnosticsPanel smoke test", () => {
 
     expect(screen.getByText(/Gold Signals Revoked/i)).toBeInTheDocument();
     expect(screen.getByText(/raw_http_te_cl_conflict/)).toBeInTheDocument();
-    expect(screen.getByText(/raw_http_request_with_headers/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/raw_http_request_with_headers/),
+    ).toBeInTheDocument();
   });
 
   // Task #447 — the FAKE_RAW_HTTP_RESPONSE sub-block must surface its own
@@ -1222,85 +1310,88 @@ describe("DiagnosticsPanel smoke test", () => {
   // mirrors the printable triage report's sub-bullet so the panel and the
   // offline MD/PDF export stay in lock-step.
   it("renders a 'Response gold signals revoked' line inside the FAKE_RAW_HTTP_RESPONSE sub-block when rawHttp.response.revokedGoldHits is non-empty (Task #447)", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "INJECTION",
-          familyName: "Injection",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-79",
-            evidence: ["CWE-79"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 18,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 22,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "INJECTION",
-                  familyName: "Injection",
-                  baseScore: 18,
-                  goldHitCount: 0,
-                  goldTotalCount: 6,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  rawHttp: {
-                    requestsAnalyzed: 1,
-                    totalHeaders: 4,
-                    placeholderHeaders: 0,
-                    crlfPresent: true,
-                    teClConflicts: 0,
-                    teClBroken: 0,
-                    isFake: true,
-                    reason:
-                      "Fake raw HTTP response (fabricated `HTTP/1.1 200 OK` block missing Date/Server headers)",
-                    revokedGoldHits: [
-                      { id: "request_response_diff", points: 12 },
-                    ],
-                    penalty: -12,
-                    response: {
-                      responsesAnalyzed: 1,
-                      responsesFlagged: 1,
-                      totalHeaders: 2,
-                      responsesMissingDate: 1,
-                      responsesMissingServer: 1,
-                      responsesWithSuspiciousJsonBody: 1,
-                      responsesMissingIncidentals: 1,
-                      isFake: true,
-                      reason:
-                        "Fabricated response: missing Date/Server, suspiciously clean JSON body, no incidental headers",
-                      revokedGoldHits: [
-                        { id: "request_response_diff", points: 12 },
-                      ],
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "INJECTION",
+              familyName: "Injection",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-79",
+                evidence: ["CWE-79"],
+                technology: null,
+              },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 18,
+            },
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 22,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "INJECTION",
+                      familyName: "Injection",
+                      baseScore: 18,
+                      goldHitCount: 0,
+                      goldTotalCount: 6,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      rawHttp: {
+                        requestsAnalyzed: 1,
+                        totalHeaders: 4,
+                        placeholderHeaders: 0,
+                        crlfPresent: true,
+                        teClConflicts: 0,
+                        teClBroken: 0,
+                        isFake: true,
+                        reason:
+                          "Fake raw HTTP response (fabricated `HTTP/1.1 200 OK` block missing Date/Server headers)",
+                        revokedGoldHits: [
+                          { id: "request_response_diff", points: 12 },
+                        ],
+                        penalty: -12,
+                        response: {
+                          responsesAnalyzed: 1,
+                          responsesFlagged: 1,
+                          totalHeaders: 2,
+                          responsesMissingDate: 1,
+                          responsesMissingServer: 1,
+                          responsesWithSuspiciousJsonBody: 1,
+                          responsesMissingIncidentals: 1,
+                          isFake: true,
+                          reason:
+                            "Fabricated response: missing Date/Server, suspiciously clean JSON body, no incidental headers",
+                          revokedGoldHits: [
+                            { id: "request_response_diff", points: 12 },
+                          ],
+                        },
+                      },
+                      rawAvriScore: 0,
+                      legacyScore: 30,
+                      blendedScore: 22,
                     },
                   },
-                  rawAvriScore: 0,
-                  legacyScore: 30,
-                  blendedScore: 22,
                 },
-              },
+              ],
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -1328,81 +1419,84 @@ describe("DiagnosticsPanel smoke test", () => {
   // when the response sub-block is fake but `revokedGoldHits` is absent
   // (legacy persisted reports analyzed before the field shipped) or empty.
   it("does not render the 'Response gold signals revoked' line when rawHttp.response.revokedGoldHits is empty/absent (Task #447)", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "INJECTION",
-          familyName: "Injection",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-79",
-            evidence: ["CWE-79"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 18,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 22,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "INJECTION",
-                  familyName: "Injection",
-                  baseScore: 18,
-                  goldHitCount: 0,
-                  goldTotalCount: 6,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  rawHttp: {
-                    requestsAnalyzed: 1,
-                    totalHeaders: 4,
-                    placeholderHeaders: 0,
-                    crlfPresent: true,
-                    teClConflicts: 0,
-                    teClBroken: 0,
-                    isFake: true,
-                    reason:
-                      "Fake raw HTTP response (fabricated `HTTP/1.1 200 OK` block missing Date/Server headers)",
-                    revokedGoldHits: [],
-                    penalty: -12,
-                    response: {
-                      responsesAnalyzed: 1,
-                      responsesFlagged: 1,
-                      totalHeaders: 2,
-                      responsesMissingDate: 1,
-                      responsesMissingServer: 1,
-                      responsesWithSuspiciousJsonBody: 1,
-                      responsesMissingIncidentals: 1,
-                      isFake: true,
-                      reason: null,
-                      // revokedGoldHits intentionally omitted to simulate
-                      // a legacy persisted report.
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "INJECTION",
+              familyName: "Injection",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-79",
+                evidence: ["CWE-79"],
+                technology: null,
+              },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 18,
+            },
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 22,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "INJECTION",
+                      familyName: "Injection",
+                      baseScore: 18,
+                      goldHitCount: 0,
+                      goldTotalCount: 6,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      rawHttp: {
+                        requestsAnalyzed: 1,
+                        totalHeaders: 4,
+                        placeholderHeaders: 0,
+                        crlfPresent: true,
+                        teClConflicts: 0,
+                        teClBroken: 0,
+                        isFake: true,
+                        reason:
+                          "Fake raw HTTP response (fabricated `HTTP/1.1 200 OK` block missing Date/Server headers)",
+                        revokedGoldHits: [],
+                        penalty: -12,
+                        response: {
+                          responsesAnalyzed: 1,
+                          responsesFlagged: 1,
+                          totalHeaders: 2,
+                          responsesMissingDate: 1,
+                          responsesMissingServer: 1,
+                          responsesWithSuspiciousJsonBody: 1,
+                          responsesMissingIncidentals: 1,
+                          isFake: true,
+                          reason: null,
+                          // revokedGoldHits intentionally omitted to simulate
+                          // a legacy persisted report.
+                        },
+                      },
+                      rawAvriScore: 0,
+                      legacyScore: 30,
+                      blendedScore: 22,
                     },
                   },
-                  rawAvriScore: 0,
-                  legacyScore: 30,
-                  blendedScore: 22,
                 },
-              },
+              ],
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -1424,85 +1518,88 @@ describe("DiagnosticsPanel smoke test", () => {
   // introduced by Task #317 so reviewers learn the "fabricated raw HTTP"
   // pattern at a glance without scrolling for the underlying excerpts.
   it("renders the FAKE_RAW_HTTP block with each request-side signal label, id, and description (Task #450)", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "REQUEST_SMUGGLING",
-          familyName: "HTTP request smuggling / desync",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-444",
-            evidence: ["CWE-444"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 18,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 22,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "REQUEST_SMUGGLING",
-                  familyName: "HTTP request smuggling / desync",
-                  baseScore: 18,
-                  goldHitCount: 0,
-                  goldTotalCount: 6,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  rawHttp: {
-                    requestsAnalyzed: 1,
-                    totalHeaders: 7,
-                    placeholderHeaders: 4,
-                    crlfPresent: false,
-                    teClConflicts: 1,
-                    teClBroken: 1,
-                    isFake: true,
-                    reason:
-                      "Fabricated raw HTTP request (no CRLFs, placeholder header values)",
-                    revokedGoldHits: [],
-                    penalty: -18,
-                    signals: [
-                      {
-                        id: "placeholder_headers",
-                        description:
-                          "4 of 7 header values look like placeholders (e.g. `<token>`, `example.com`)",
-                      },
-                      {
-                        id: "broken_te_cl_conflict",
-                        description:
-                          "Transfer-Encoding/Content-Length conflict declared in prose but the headers don't actually carry the conflicting values",
-                      },
-                      {
-                        id: "missing_crlf",
-                        description:
-                          "Request bytes use LF-only line endings; real raw HTTP uses CRLF",
-                      },
-                    ],
-                  },
-                  rawAvriScore: 0,
-                  legacyScore: 30,
-                  blendedScore: 22,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "REQUEST_SMUGGLING",
+              familyName: "HTTP request smuggling / desync",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-444",
+                evidence: ["CWE-444"],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 18,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 22,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "REQUEST_SMUGGLING",
+                      familyName: "HTTP request smuggling / desync",
+                      baseScore: 18,
+                      goldHitCount: 0,
+                      goldTotalCount: 6,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      rawHttp: {
+                        requestsAnalyzed: 1,
+                        totalHeaders: 7,
+                        placeholderHeaders: 4,
+                        crlfPresent: false,
+                        teClConflicts: 1,
+                        teClBroken: 1,
+                        isFake: true,
+                        reason:
+                          "Fabricated raw HTTP request (no CRLFs, placeholder header values)",
+                        revokedGoldHits: [],
+                        penalty: -18,
+                        signals: [
+                          {
+                            id: "placeholder_headers",
+                            description:
+                              "4 of 7 header values look like placeholders (e.g. `<token>`, `example.com`)",
+                          },
+                          {
+                            id: "broken_te_cl_conflict",
+                            description:
+                              "Transfer-Encoding/Content-Length conflict declared in prose but the headers don't actually carry the conflicting values",
+                          },
+                          {
+                            id: "missing_crlf",
+                            description:
+                              "Request bytes use LF-only line endings; real raw HTTP uses CRLF",
+                          },
+                        ],
+                      },
+                      rawAvriScore: 0,
+                      legacyScore: 30,
+                      blendedScore: 22,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -1518,12 +1615,14 @@ describe("DiagnosticsPanel smoke test", () => {
 
     // Each signal renders its plain-English label, the id in parens, and
     // the engine's description string carrying the offending excerpt.
-    expect(within(block).getByText("Placeholder header values")).toBeInTheDocument();
-    expect(within(block).getByText("(placeholder_headers)")).toBeInTheDocument();
     expect(
-      within(block).getByText(
-        /4 of 7 header values look like placeholders/i,
-      ),
+      within(block).getByText("Placeholder header values"),
+    ).toBeInTheDocument();
+    expect(
+      within(block).getByText("(placeholder_headers)"),
+    ).toBeInTheDocument();
+    expect(
+      within(block).getByText(/4 of 7 header values look like placeholders/i),
     ).toBeInTheDocument();
 
     expect(
@@ -1531,14 +1630,16 @@ describe("DiagnosticsPanel smoke test", () => {
         "Broken Transfer-Encoding/Content-Length conflict",
       ),
     ).toBeInTheDocument();
-    expect(within(block).getByText("(broken_te_cl_conflict)")).toBeInTheDocument();
+    expect(
+      within(block).getByText("(broken_te_cl_conflict)"),
+    ).toBeInTheDocument();
 
-    expect(within(block).getByText("Missing CRLF line endings")).toBeInTheDocument();
+    expect(
+      within(block).getByText("Missing CRLF line endings"),
+    ).toBeInTheDocument();
     expect(within(block).getByText("(missing_crlf)")).toBeInTheDocument();
     expect(
-      within(block).getByText(
-        /Request bytes use LF-only line endings/i,
-      ),
+      within(block).getByText(/Request bytes use LF-only line endings/i),
     ).toBeInTheDocument();
   });
 
@@ -1546,96 +1647,99 @@ describe("DiagnosticsPanel smoke test", () => {
   // FAKE_RAW_HTTP_RESPONSE sub-block. Same plain-English headline +
   // `(id)` + description shape as the request-side list above.
   it("renders the FAKE_RAW_HTTP_RESPONSE sub-block with each response-side signal label, id, and description (Task #450)", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "INJECTION",
-          familyName: "Injection",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-79",
-            evidence: ["CWE-79"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 18,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 22,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "INJECTION",
-                  familyName: "Injection",
-                  baseScore: 18,
-                  goldHitCount: 0,
-                  goldTotalCount: 6,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  rawHttp: {
-                    requestsAnalyzed: 1,
-                    totalHeaders: 4,
-                    placeholderHeaders: 0,
-                    crlfPresent: true,
-                    teClConflicts: 0,
-                    teClBroken: 0,
-                    isFake: true,
-                    reason:
-                      "Fake raw HTTP response (fabricated `HTTP/1.1 200 OK` block missing Date/Server headers)",
-                    revokedGoldHits: [],
-                    penalty: -12,
-                    response: {
-                      responsesAnalyzed: 1,
-                      responsesFlagged: 1,
-                      totalHeaders: 2,
-                      responsesMissingDate: 1,
-                      responsesMissingServer: 1,
-                      responsesWithSuspiciousJsonBody: 1,
-                      responsesMissingIncidentals: 1,
-                      isFake: true,
-                      reason: null,
-                      signals: [
-                        {
-                          id: "missing_date_header",
-                          description:
-                            "Response is missing the Date header (real HTTP/1.1 responses always carry one)",
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "INJECTION",
+              familyName: "Injection",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-79",
+                evidence: ["CWE-79"],
+                technology: null,
+              },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 18,
+            },
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 22,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "INJECTION",
+                      familyName: "Injection",
+                      baseScore: 18,
+                      goldHitCount: 0,
+                      goldTotalCount: 6,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      rawHttp: {
+                        requestsAnalyzed: 1,
+                        totalHeaders: 4,
+                        placeholderHeaders: 0,
+                        crlfPresent: true,
+                        teClConflicts: 0,
+                        teClBroken: 0,
+                        isFake: true,
+                        reason:
+                          "Fake raw HTTP response (fabricated `HTTP/1.1 200 OK` block missing Date/Server headers)",
+                        revokedGoldHits: [],
+                        penalty: -12,
+                        response: {
+                          responsesAnalyzed: 1,
+                          responsesFlagged: 1,
+                          totalHeaders: 2,
+                          responsesMissingDate: 1,
+                          responsesMissingServer: 1,
+                          responsesWithSuspiciousJsonBody: 1,
+                          responsesMissingIncidentals: 1,
+                          isFake: true,
+                          reason: null,
+                          signals: [
+                            {
+                              id: "missing_date_header",
+                              description:
+                                "Response is missing the Date header (real HTTP/1.1 responses always carry one)",
+                            },
+                            {
+                              id: "suspicious_json_body",
+                              description:
+                                "JSON response body reads as a vulnerability narrative with no real-API incidentals",
+                            },
+                            {
+                              id: "missing_incidental_headers",
+                              description:
+                                "Response carries no X-Request-Id / Content-Length / Cache-Control / Set-Cookie",
+                            },
+                          ],
                         },
-                        {
-                          id: "suspicious_json_body",
-                          description:
-                            "JSON response body reads as a vulnerability narrative with no real-API incidentals",
-                        },
-                        {
-                          id: "missing_incidental_headers",
-                          description:
-                            "Response carries no X-Request-Id / Content-Length / Cache-Control / Set-Cookie",
-                        },
-                      ],
+                      },
+                      rawAvriScore: 0,
+                      legacyScore: 30,
+                      blendedScore: 22,
                     },
                   },
-                  rawAvriScore: 0,
-                  legacyScore: 30,
-                  blendedScore: 22,
                 },
-              },
+              ],
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -1645,12 +1749,12 @@ describe("DiagnosticsPanel smoke test", () => {
       expect(screen.getByText("FAKE_RAW_HTTP_RESPONSE")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Missing Date response header")).toBeInTheDocument();
+    expect(
+      screen.getByText("Missing Date response header"),
+    ).toBeInTheDocument();
     expect(screen.getByText("(missing_date_header)")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /Response is missing the Date header/i,
-      ),
+      screen.getByText(/Response is missing the Date header/i),
     ).toBeInTheDocument();
 
     expect(
@@ -1678,73 +1782,76 @@ describe("DiagnosticsPanel smoke test", () => {
   // id as the headline so reviewers still see *something* they can grep
   // for, instead of an empty cell.
   it("falls back to the raw signal id when RAW_HTTP_SIGNAL_LABELS has no entry (Task #450)", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "REQUEST_SMUGGLING",
-          familyName: "HTTP request smuggling / desync",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-444",
-            evidence: ["CWE-444"],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 18,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 22,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "REQUEST_SMUGGLING",
-                  familyName: "HTTP request smuggling / desync",
-                  baseScore: 18,
-                  goldHitCount: 0,
-                  goldTotalCount: 6,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  rawHttp: {
-                    requestsAnalyzed: 1,
-                    totalHeaders: 4,
-                    placeholderHeaders: 0,
-                    crlfPresent: false,
-                    teClConflicts: 0,
-                    teClBroken: 0,
-                    isFake: true,
-                    reason: "Fabricated raw HTTP request",
-                    revokedGoldHits: [],
-                    penalty: -12,
-                    signals: [
-                      {
-                        id: "future_unknown_signal",
-                        description: "Some future detector fired here",
-                      },
-                    ],
-                  },
-                  rawAvriScore: 0,
-                  legacyScore: 30,
-                  blendedScore: 22,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "REQUEST_SMUGGLING",
+              familyName: "HTTP request smuggling / desync",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-444",
+                evidence: ["CWE-444"],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 18,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 22,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "REQUEST_SMUGGLING",
+                      familyName: "HTTP request smuggling / desync",
+                      baseScore: 18,
+                      goldHitCount: 0,
+                      goldTotalCount: 6,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      rawHttp: {
+                        requestsAnalyzed: 1,
+                        totalHeaders: 4,
+                        placeholderHeaders: 0,
+                        crlfPresent: false,
+                        teClConflicts: 0,
+                        teClBroken: 0,
+                        isFake: true,
+                        reason: "Fabricated raw HTTP request",
+                        revokedGoldHits: [],
+                        penalty: -12,
+                        signals: [
+                          {
+                            id: "future_unknown_signal",
+                            description: "Some future detector fired here",
+                          },
+                        ],
+                      },
+                      rawAvriScore: 0,
+                      legacyScore: 30,
+                      blendedScore: 22,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -1764,73 +1871,76 @@ describe("DiagnosticsPanel smoke test", () => {
   });
 
   it("does not render the FAKE_RAW_HTTP block when rawHttp.isFake is false", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "REQUEST_SMUGGLING",
-          familyName: "HTTP request smuggling / desync",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-444",
-            evidence: ["CWE-444"],
-            technology: null,
-          },
-          goldHitCount: 1,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 30,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 30,
-              verdict: "AMBER" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "REQUEST_SMUGGLING",
-                  familyName: "HTTP request smuggling / desync",
-                  baseScore: 30,
-                  goldHitCount: 1,
-                  goldTotalCount: 6,
-                  goldHits: [
-                    {
-                      id: "raw_http_request_with_headers",
-                      description: "Raw HTTP request bytes shown",
-                      points: 14,
-                    },
-                  ],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  rawHttp: {
-                    requestsAnalyzed: 1,
-                    totalHeaders: 7,
-                    placeholderHeaders: 0,
-                    crlfPresent: true,
-                    teClConflicts: 0,
-                    teClBroken: 0,
-                    isFake: false,
-                    reason: null,
-                    revokedGoldHits: [],
-                    penalty: 0,
-                  },
-                  rawAvriScore: 30,
-                  legacyScore: 30,
-                  blendedScore: 30,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "REQUEST_SMUGGLING",
+              familyName: "HTTP request smuggling / desync",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-444",
+                evidence: ["CWE-444"],
+                technology: null,
               },
+              goldHitCount: 1,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 30,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 30,
+                  verdict: "AMBER" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "REQUEST_SMUGGLING",
+                      familyName: "HTTP request smuggling / desync",
+                      baseScore: 30,
+                      goldHitCount: 1,
+                      goldTotalCount: 6,
+                      goldHits: [
+                        {
+                          id: "raw_http_request_with_headers",
+                          description: "Raw HTTP request bytes shown",
+                          points: 14,
+                        },
+                      ],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      rawHttp: {
+                        requestsAnalyzed: 1,
+                        totalHeaders: 7,
+                        placeholderHeaders: 0,
+                        crlfPresent: true,
+                        teClConflicts: 0,
+                        teClBroken: 0,
+                        isFake: false,
+                        reason: null,
+                        revokedGoldHits: [],
+                        penalty: 0,
+                      },
+                      rawAvriScore: 30,
+                      legacyScore: 30,
+                      blendedScore: 30,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -1845,71 +1955,74 @@ describe("DiagnosticsPanel smoke test", () => {
   });
 
   it("renders the AI_SELF_DISCLOSURE block listing each matched phrase, detector id, and applied penalty (Task #428)", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "INJECTION",
-          familyName: "Injection",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-79",
-            evidence: ["CWE-79"],
-            technology: null,
-          },
-          goldHitCount: 1,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 40,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 32,
-              verdict: "AMBER" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "INJECTION",
-                  familyName: "Injection",
-                  baseScore: 40,
-                  goldHitCount: 1,
-                  goldTotalCount: 6,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  // Task #300 detector output: two phrases fired, total
-                  // bounded penalty -8 lands on the engine score.
-                  aiSelfDisclosure: {
-                    detected: true,
-                    penalty: -8,
-                    matches: [
-                      {
-                        id: "ai_assistant_attribution",
-                        excerpt: "prepared using an AI security assistant",
-                      },
-                      {
-                        id: "ai_generated_disclaimer",
-                        excerpt: "this report was generated by ChatGPT",
-                      },
-                    ],
-                  },
-                  rawAvriScore: 32,
-                  legacyScore: 40,
-                  blendedScore: 32,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "INJECTION",
+              familyName: "Injection",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-79",
+                evidence: ["CWE-79"],
+                technology: null,
               },
+              goldHitCount: 1,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 40,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 32,
+                  verdict: "AMBER" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "INJECTION",
+                      familyName: "Injection",
+                      baseScore: 40,
+                      goldHitCount: 1,
+                      goldTotalCount: 6,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      // Task #300 detector output: two phrases fired, total
+                      // bounded penalty -8 lands on the engine score.
+                      aiSelfDisclosure: {
+                        detected: true,
+                        penalty: -8,
+                        matches: [
+                          {
+                            id: "ai_assistant_attribution",
+                            excerpt: "prepared using an AI security assistant",
+                          },
+                          {
+                            id: "ai_generated_disclaimer",
+                            excerpt: "this report was generated by ChatGPT",
+                          },
+                        ],
+                      },
+                      rawAvriScore: 32,
+                      legacyScore: 40,
+                      blendedScore: 32,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -1945,62 +2058,65 @@ describe("DiagnosticsPanel smoke test", () => {
   });
 
   it("does not render the AI_SELF_DISCLOSURE block when aiSelfDisclosure.detected is false (Task #428)", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "INJECTION",
-          familyName: "Injection",
-          classification: {
-            confidence: "HIGH" as const,
-            reason: "matched member CWE-79",
-            evidence: ["CWE-79"],
-            technology: null,
-          },
-          goldHitCount: 1,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 50,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 50,
-              verdict: "GREEN" as const,
-              confidence: "HIGH" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "INJECTION",
-                  familyName: "Injection",
-                  baseScore: 50,
-                  goldHitCount: 1,
-                  goldTotalCount: 6,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  // Detector ran but no phrase fired — block must stay
-                  // hidden so legitimate reports don't carry a noisy row.
-                  aiSelfDisclosure: {
-                    detected: false,
-                    penalty: 0,
-                    matches: [],
-                  },
-                  rawAvriScore: 50,
-                  legacyScore: 50,
-                  blendedScore: 50,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "INJECTION",
+              familyName: "Injection",
+              classification: {
+                confidence: "HIGH" as const,
+                reason: "matched member CWE-79",
+                evidence: ["CWE-79"],
+                technology: null,
               },
+              goldHitCount: 1,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 50,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 50,
+                  verdict: "GREEN" as const,
+                  confidence: "HIGH" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "INJECTION",
+                      familyName: "Injection",
+                      baseScore: 50,
+                      goldHitCount: 1,
+                      goldTotalCount: 6,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      // Detector ran but no phrase fired — block must stay
+                      // hidden so legitimate reports don't carry a noisy row.
+                      aiSelfDisclosure: {
+                        detected: false,
+                        penalty: 0,
+                        matches: [],
+                      },
+                      rawAvriScore: 50,
+                      legacyScore: 50,
+                      blendedScore: 50,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -2025,66 +2141,69 @@ describe("DiagnosticsPanel smoke test", () => {
   // must still surface the matched-phrase evidence. Pins that the block
   // lives outside the FLAT/non-FLAT branch in `AvriFamilySection`.
   it("renders the AI_SELF_DISCLOSURE block for FLAT-family reports too (Task #428)", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "FLAT",
-          familyName: "FLAT",
-          classification: {
-            confidence: "LOW" as const,
-            reason: "no specific CWE family detected",
-            evidence: [],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 30,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 22,
-              verdict: "AMBER" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "FLAT",
-                  familyName: "FLAT",
-                  baseScore: 0,
-                  goldHitCount: 0,
-                  goldTotalCount: 0,
-                  goldHits: [],
-                  goldMisses: [],
-                  // FLAT path uses absencePenalty only, no goldHits/Misses.
-                  absencePenalty: 0,
-                  absencePenalties: [],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  aiSelfDisclosure: {
-                    detected: true,
-                    penalty: -8,
-                    matches: [
-                      {
-                        id: "ai_assistant_attribution",
-                        excerpt: "prepared using an AI security assistant",
-                      },
-                    ],
-                  },
-                  rawAvriScore: 22,
-                  legacyScore: 30,
-                  blendedScore: 22,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "FLAT",
+              familyName: "FLAT",
+              classification: {
+                confidence: "LOW" as const,
+                reason: "no specific CWE family detected",
+                evidence: [],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 30,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 22,
+                  verdict: "AMBER" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "FLAT",
+                      familyName: "FLAT",
+                      baseScore: 0,
+                      goldHitCount: 0,
+                      goldTotalCount: 0,
+                      goldHits: [],
+                      goldMisses: [],
+                      // FLAT path uses absencePenalty only, no goldHits/Misses.
+                      absencePenalty: 0,
+                      absencePenalties: [],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      aiSelfDisclosure: {
+                        detected: true,
+                        penalty: -8,
+                        matches: [
+                          {
+                            id: "ai_assistant_attribution",
+                            excerpt: "prepared using an AI security assistant",
+                          },
+                        ],
+                      },
+                      rawAvriScore: 22,
+                      legacyScore: 30,
+                      blendedScore: 22,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -2116,111 +2235,131 @@ describe("DiagnosticsPanel smoke test", () => {
   });
 
   it("groups the FLAT hand-wavy phrase entries by category in the diagnostics panel", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify({
-        ...SAMPLE_DIAGNOSTICS,
-        avri: {
-          family: "FLAT",
-          familyName: "FLAT",
-          classification: {
-            confidence: "LOW" as const,
-            reason: "no specific CWE family detected",
-            evidence: [],
-            technology: null,
-          },
-          goldHitCount: 0,
-          velocityPenalty: 0,
-          templatePenalty: 0,
-          rawCompositeBeforeBehavioralPenalties: 30,
-        },
-        engines: {
-          ...SAMPLE_DIAGNOSTICS.engines,
-          engines: [
-            {
-              engine: "Technical Substance Analyzer",
-              score: 30,
-              verdict: "RED" as const,
-              confidence: "MEDIUM" as const,
-              signalBreakdown: {
-                avri: {
-                  family: "FLAT",
-                  familyName: "FLAT",
-                  baseScore: 50,
-                  goldHitCount: 0,
-                  goldTotalCount: 0,
-                  goldHits: [],
-                  goldMisses: [],
-                  absencePenalty: -24,
-                  absencePenalties: [
-                    {
-                      id: "flat_handwavy:do_not_have_a_reproducer",
-                      description: 'Hand-wavy phrase: "do not have a reproducer"',
-                      points: 6,
-                      flatHandwavyCategory: "absence",
-                    },
-                    {
-                      id: "flat_handwavy:private_poc",
-                      description: 'Hand-wavy phrase: "private poc"',
-                      points: 6,
-                      flatHandwavyCategory: "absence",
-                    },
-                    {
-                      id: "flat_handwavy:may_not_be_encrypted",
-                      description: 'Hand-wavy phrase: "may not be encrypted"',
-                      points: 6,
-                      flatHandwavyCategory: "hedging",
-                    },
-                    {
-                      id: "flat_handwavy:advanced_persistent_threats",
-                      description: 'Hand-wavy phrase: "advanced persistent threats"',
-                      points: 6,
-                      flatHandwavyCategory: "buzzword",
-                    },
-                  ],
-                  contradictions: [],
-                  contradictionPenalty: 0,
-                  rawAvriScore: 26,
-                  legacyScore: 50,
-                  blendedScore: 30,
-                },
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...SAMPLE_DIAGNOSTICS,
+            avri: {
+              family: "FLAT",
+              familyName: "FLAT",
+              classification: {
+                confidence: "LOW" as const,
+                reason: "no specific CWE family detected",
+                evidence: [],
+                technology: null,
               },
+              goldHitCount: 0,
+              velocityPenalty: 0,
+              templatePenalty: 0,
+              rawCompositeBeforeBehavioralPenalties: 30,
             },
-          ],
-        },
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+            engines: {
+              ...SAMPLE_DIAGNOSTICS.engines,
+              engines: [
+                {
+                  engine: "Technical Substance Analyzer",
+                  score: 30,
+                  verdict: "RED" as const,
+                  confidence: "MEDIUM" as const,
+                  signalBreakdown: {
+                    avri: {
+                      family: "FLAT",
+                      familyName: "FLAT",
+                      baseScore: 50,
+                      goldHitCount: 0,
+                      goldTotalCount: 0,
+                      goldHits: [],
+                      goldMisses: [],
+                      absencePenalty: -24,
+                      absencePenalties: [
+                        {
+                          id: "flat_handwavy:do_not_have_a_reproducer",
+                          description:
+                            'Hand-wavy phrase: "do not have a reproducer"',
+                          points: 6,
+                          flatHandwavyCategory: "absence",
+                        },
+                        {
+                          id: "flat_handwavy:private_poc",
+                          description: 'Hand-wavy phrase: "private poc"',
+                          points: 6,
+                          flatHandwavyCategory: "absence",
+                        },
+                        {
+                          id: "flat_handwavy:may_not_be_encrypted",
+                          description:
+                            'Hand-wavy phrase: "may not be encrypted"',
+                          points: 6,
+                          flatHandwavyCategory: "hedging",
+                        },
+                        {
+                          id: "flat_handwavy:advanced_persistent_threats",
+                          description:
+                            'Hand-wavy phrase: "advanced persistent threats"',
+                          points: 6,
+                          flatHandwavyCategory: "buzzword",
+                        },
+                      ],
+                      contradictions: [],
+                      contradictionPenalty: 0,
+                      rawAvriScore: 26,
+                      legacyScore: 50,
+                      blendedScore: 30,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
     await user.click(screen.getByRole("button", { name: /show/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Hand-wavy Phrases Triggering Slop Haircut/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Hand-wavy Phrases Triggering Slop Haircut/i),
+      ).toBeInTheDocument();
     });
 
     // Each themed group header is rendered with its phrase count + raw-point subtotal.
-    const absenceHeader = screen.getByText(/Self-admitted absence of evidence/i);
+    const absenceHeader = screen.getByText(
+      /Self-admitted absence of evidence/i,
+    );
     expect(absenceHeader).toBeInTheDocument();
-    expect(absenceHeader.parentElement?.textContent ?? "").toMatch(/2 phrases.*−12 raw/);
+    expect(absenceHeader.parentElement?.textContent ?? "").toMatch(
+      /2 phrases.*−12 raw/,
+    );
 
     const hedgingHeader = screen.getByText(/Generic hedging/i);
     expect(hedgingHeader).toBeInTheDocument();
-    expect(hedgingHeader.parentElement?.textContent ?? "").toMatch(/1 phrase.*−6 raw/);
+    expect(hedgingHeader.parentElement?.textContent ?? "").toMatch(
+      /1 phrase.*−6 raw/,
+    );
 
     const buzzwordHeader = screen.getByText(/Buzzword-soup framings/i);
     expect(buzzwordHeader).toBeInTheDocument();
-    expect(buzzwordHeader.parentElement?.textContent ?? "").toMatch(/1 phrase.*−6 raw/);
+    expect(buzzwordHeader.parentElement?.textContent ?? "").toMatch(
+      /1 phrase.*−6 raw/,
+    );
 
     // Phrases still render under their group, with the same per-hit weight.
     expect(screen.getByText(/"do not have a reproducer"/i)).toBeInTheDocument();
     expect(screen.getByText(/"may not be encrypted"/i)).toBeInTheDocument();
-    expect(screen.getByText(/"advanced persistent threats"/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/"advanced persistent threats"/i),
+    ).toBeInTheDocument();
 
     // Task 111: each themed group ships a one-line legend describing what
     // the bucket signals about the report.
     expect(
-      screen.getByText(/no runnable reproducer.*the bug is asserted, not observed/i),
+      screen.getByText(
+        /no runnable reproducer.*the bug is asserted, not observed/i,
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/zero direct observation of the claimed behavior/i),
@@ -2287,7 +2426,8 @@ describe("DiagnosticsPanel smoke test", () => {
                   },
                   {
                     id: "flat_handwavy:advanced_persistent_threats",
-                    description: 'Hand-wavy phrase: "advanced persistent threats"',
+                    description:
+                      'Hand-wavy phrase: "advanced persistent threats"',
                     points: 6,
                     flatHandwavyCategory: "buzzword",
                   },
@@ -2309,15 +2449,27 @@ describe("DiagnosticsPanel smoke test", () => {
     // Task 190: AVRI rubric now lives in @workspace/avri-rubric, which uses
     // bold-key formatting and adds a "(haircut N)" total to the absence
     // penalties header.
-    expect(md).toMatch(/- \*\*Absence penalties applied\*\* \(haircut -?\d+\):/);
+    expect(md).toMatch(
+      /- \*\*Absence penalties applied\*\* \(haircut -?\d+\):/,
+    );
     // Per-theme headers carry the same phrase count + raw subtotal as the on-screen panel.
-    expect(md).toContain("Self-admitted absence of evidence (2 phrases, −12 raw):");
-    expect(md).toContain("Generic hedging (\"may / appears\") (1 phrase, −6 raw):");
+    expect(md).toContain(
+      "Self-admitted absence of evidence (2 phrases, −12 raw):",
+    );
+    expect(md).toContain(
+      'Generic hedging ("may / appears") (1 phrase, −6 raw):',
+    );
     expect(md).toContain("Buzzword-soup framings (1 phrase, −6 raw):");
     // Phrase rows still render under their theme bucket.
-    expect(md).toContain('−6 Hand-wavy phrase: "do not have a reproducer" (flat_handwavy:do_not_have_a_reproducer)');
-    expect(md).toContain('−6 Hand-wavy phrase: "may not be encrypted" (flat_handwavy:may_not_be_encrypted)');
-    expect(md).toContain('−6 Hand-wavy phrase: "advanced persistent threats" (flat_handwavy:advanced_persistent_threats)');
+    expect(md).toContain(
+      '−6 Hand-wavy phrase: "do not have a reproducer" (flat_handwavy:do_not_have_a_reproducer)',
+    );
+    expect(md).toContain(
+      '−6 Hand-wavy phrase: "may not be encrypted" (flat_handwavy:may_not_be_encrypted)',
+    );
+    expect(md).toContain(
+      '−6 Hand-wavy phrase: "advanced persistent threats" (flat_handwavy:advanced_persistent_threats)',
+    );
 
     // Themed buckets render in the canonical absence → hedging → buzzword order.
     const absenceIdx = md.indexOf("Self-admitted absence of evidence");
@@ -2361,7 +2513,11 @@ describe("DiagnosticsPanel smoke test", () => {
                 goldHitCount: 1,
                 goldTotalCount: 8,
                 goldHits: [
-                  { id: "asan_or_sanitizer", description: "AddressSanitizer crash output", points: 22 },
+                  {
+                    id: "asan_or_sanitizer",
+                    description: "AddressSanitizer crash output",
+                    points: 22,
+                  },
                 ],
                 goldMisses: [],
                 absencePenalty: 0,
@@ -2442,13 +2598,17 @@ describe("DiagnosticsPanel smoke test", () => {
     const md = buildMarkdownSummary(withFamilyAbsence);
 
     // Task 190: bold-key absence header from @workspace/avri-rubric.
-    expect(md).toMatch(/- \*\*Absence penalties applied\*\* \(haircut -?\d+\):/);
+    expect(md).toMatch(
+      /- \*\*Absence penalties applied\*\* \(haircut -?\d+\):/,
+    );
     // No themed grouping headers for non-FLAT families.
     expect(md).not.toContain("Self-admitted absence of evidence");
     expect(md).not.toContain("Generic hedging");
     expect(md).not.toContain("Buzzword-soup framings");
     expect(md).toContain("−5 No SQL payload included (sqli:missing_payload)");
-    expect(md).toContain("−5 No database error excerpt cited (sqli:missing_db_error)");
+    expect(md).toContain(
+      "−5 No database error excerpt cited (sqli:missing_db_error)",
+    );
   });
 
   it("surfaces the FAKE_RAW_HTTP block in the printable markdown export with placeholder/CRLF/TE-CL counters", () => {
@@ -2559,7 +2719,8 @@ describe("DiagnosticsPanel smoke test", () => {
                 signal: "STRIPPED_CRASH_TRACE",
                 value: true,
                 strength: "HIGH",
-                explanation: "Crash trace has 4/6 frames with placeholder symbols",
+                explanation:
+                  "Crash trace has 4/6 frames with placeholder symbols",
               },
               {
                 signal: "ABSENCE_PENALTY",
@@ -2579,10 +2740,13 @@ describe("DiagnosticsPanel smoke test", () => {
         ],
       },
     };
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify(withIndicators),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(JSON.stringify(withIndicators), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -2596,9 +2760,13 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(screen.getByText(/\(3 indicators\)/)).toBeInTheDocument();
 
     // Click the engine row to expand triggered indicators
-    await user.click(screen.getByRole("button", { name: /Technical Substance Analyzer/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Technical Substance Analyzer/i }),
+    );
 
-    expect(screen.getAllByText(/Triggered Indicators/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Triggered Indicators/i).length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getByText("STRIPPED_CRASH_TRACE")).toBeInTheDocument();
     expect(screen.getByText("ABSENCE_PENALTY")).toBeInTheDocument();
     expect(screen.getByText("POC_MISMATCH")).toBeInTheDocument();
@@ -2608,7 +2776,9 @@ describe("DiagnosticsPanel smoke test", () => {
 
     // Markdown export includes a Triggered Indicators subsection
     const md = buildMarkdownSummary(withIndicators);
-    expect(md).toContain("### Triggered Indicators — Technical Substance Analyzer");
+    expect(md).toContain(
+      "### Triggered Indicators — Technical Substance Analyzer",
+    );
     expect(md).toContain("**HIGH**");
     expect(md).toContain("`STRIPPED_CRASH_TRACE`");
     expect(md).toContain("**MEDIUM**");
@@ -2644,10 +2814,13 @@ describe("DiagnosticsPanel smoke test", () => {
         ],
       },
     };
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify(withMalformed),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(JSON.stringify(withMalformed), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -2657,7 +2830,9 @@ describe("DiagnosticsPanel smoke test", () => {
       expect(screen.getByText(/Per-Engine Scores/i)).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole("button", { name: /Technical Substance Analyzer/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Technical Substance Analyzer/i }),
+    );
 
     // The signal renders exactly once (in the UNSPECIFIED group, not also in LOW)
     expect(screen.getAllByText("MYSTERY_SIGNAL")).toHaveLength(1);
@@ -2700,10 +2875,13 @@ describe("DiagnosticsPanel smoke test", () => {
         ],
       },
     };
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify(withGoldBonus),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(JSON.stringify(withGoldBonus), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -2718,12 +2896,18 @@ describe("DiagnosticsPanel smoke test", () => {
     expect(within(section).getByText(/applied:/i)).toBeInTheDocument();
     expect(within(section).getByText("+12")).toBeInTheDocument();
     // Capped vs raw — raw 14 capped at 12
-    expect(within(section).getByText(/raw \+14 capped at \+12/i)).toBeInTheDocument();
+    expect(
+      within(section).getByText(/raw \+14 capped at \+12/i),
+    ).toBeInTheDocument();
     // Number of categories that fired
-    expect(within(section).getByText(/4 categories fired/i)).toBeInTheDocument();
+    expect(
+      within(section).getByText(/4 categories fired/i),
+    ).toBeInTheDocument();
     // Each category id and weight
     expect(within(section).getByText("real_crash_trace")).toBeInTheDocument();
-    expect(within(section).getByText("sql_injection_payload")).toBeInTheDocument();
+    expect(
+      within(section).getByText("sql_injection_payload"),
+    ).toBeInTheDocument();
     expect(within(section).getByText("auth_token")).toBeInTheDocument();
     expect(within(section).getByText("code_diff")).toBeInTheDocument();
 
@@ -2754,7 +2938,9 @@ describe("DiagnosticsPanel smoke test", () => {
     // Task #467 — markdown rows include the same plain-English labels
     // as the panel so triage threads quoting this section stay
     // self-documenting.
-    expect(md).toContain("`real_crash_trace` — Real ASan/sanitizer crash trace");
+    expect(md).toContain(
+      "`real_crash_trace` — Real ASan/sanitizer crash trace",
+    );
     expect(md).toContain("`auth_token` — Authentication footprint");
   });
 
@@ -2781,10 +2967,13 @@ describe("DiagnosticsPanel smoke test", () => {
         ],
       },
     };
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify(underCap),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(JSON.stringify(underCap), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -2797,7 +2986,9 @@ describe("DiagnosticsPanel smoke test", () => {
     const section = screen.getByTestId("gold-signal-bonus-section");
     // "+5" appears twice: once as the applied bonus, once as the per-signal weight.
     expect(within(section).getAllByText("+5")).toHaveLength(2);
-    expect(within(section).getByText(/raw \+5 \(under cap \+12\)/i)).toBeInTheDocument();
+    expect(
+      within(section).getByText(/raw \+5 \(under cap \+12\)/i),
+    ).toBeInTheDocument();
     expect(within(section).getByText(/1 category fired/i)).toBeInTheDocument();
     expect(within(section).getByText("real_crash_trace")).toBeInTheDocument();
   });
@@ -2822,10 +3013,13 @@ describe("DiagnosticsPanel smoke test", () => {
         ],
       },
     };
-    fetchSpy.mockImplementationOnce(async () => new Response(
-      JSON.stringify(noBonus),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ));
+    fetchSpy.mockImplementationOnce(
+      async () =>
+        new Response(JSON.stringify(noBonus), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
 
     const user = userEvent.setup();
     renderWithClient();
@@ -2835,22 +3029,30 @@ describe("DiagnosticsPanel smoke test", () => {
       expect(screen.getByText(/Per-Engine Scores/i)).toBeInTheDocument();
     });
 
-    expect(screen.queryByText(/Strong-Evidence Bonus/i)).not.toBeInTheDocument();
-    expect(screen.queryByTestId("gold-signal-bonus-section")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Strong-Evidence Bonus/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("gold-signal-bonus-section"),
+    ).not.toBeInTheDocument();
 
     const md = buildMarkdownSummary(noBonus);
     expect(md).not.toContain("Strong-Evidence Bonus");
   });
 
   it("surfaces an error message when the diagnostics endpoint fails", async () => {
-    fetchSpy.mockImplementationOnce(async () => new Response("boom", { status: 500 }));
+    fetchSpy.mockImplementationOnce(
+      async () => new Response("boom", { status: 500 }),
+    );
     const user = userEvent.setup();
     renderWithClient();
 
     await user.click(screen.getByRole("button", { name: /show/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Failed to load diagnostics: HTTP 500/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Failed to load diagnostics: HTTP 500/i),
+      ).toBeInTheDocument();
     });
   });
 

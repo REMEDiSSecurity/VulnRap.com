@@ -33,7 +33,9 @@ const POPULATED_SUMMARY = {
 };
 
 function renderWidget() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
     <QueryClientProvider client={client}>
       <TransparencyDriftWidget />
@@ -64,15 +66,23 @@ describe("TransparencyDriftWidget", () => {
     renderWidget();
 
     // The h2 is the section's identifying heading and must always render.
-    expect(screen.getByRole("heading", { level: 2, name: /Calibration Drift Self-Check/i }))
-      .toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: /Calibration Drift Self-Check/i,
+      }),
+    ).toBeInTheDocument();
 
     const empty = await screen.findByTestId("empty-drift-widget");
     expect(empty).toBeInTheDocument();
     expect(empty.textContent).toMatch(/hasn't been computed yet/i);
 
-    expect(screen.queryByTestId("populated-drift-widget")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("text-drift-current-spread")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("populated-drift-widget"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("text-drift-current-spread"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders the sparkline + current/previous/delta when populated", async () => {
@@ -93,13 +103,21 @@ describe("TransparencyDriftWidget", () => {
       );
     });
 
-    expect(await screen.findByTestId("populated-drift-widget")).toBeInTheDocument();
-    expect(screen.getByTestId("text-drift-current-spread").textContent).toMatch(/51\.0/);
-    expect(screen.getByTestId("text-drift-previous-spread").textContent).toMatch(/48\.0/);
+    expect(
+      await screen.findByTestId("populated-drift-widget"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("text-drift-current-spread").textContent).toMatch(
+      /51\.0/,
+    );
+    expect(
+      screen.getByTestId("text-drift-previous-spread").textContent,
+    ).toMatch(/48\.0/);
     const delta = screen.getByTestId("badge-drift-delta");
     expect(delta.textContent).toMatch(/\+3\.0pt vs last week/i);
     // hasCurrentWeek=true so the awaiting badge must not render.
-    expect(screen.queryByTestId("badge-drift-awaiting")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("badge-drift-awaiting"),
+    ).not.toBeInTheDocument();
     // Plain-English caption (no jargon) must be present.
     expect(screen.getByText(/strongest reports/i)).toBeInTheDocument();
   });

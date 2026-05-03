@@ -38,20 +38,30 @@ describe("Multilingual input test battery", () => {
     const englishSlopIdx = tierIndex(englishSlopTier);
 
     for (const lang of LANGUAGES) {
-      const legitFx = FIXTURES.find(f => f.language === lang && f.variant === "legit")!;
-      const slopFx = FIXTURES.find(f => f.language === lang && f.variant === "slop")!;
+      const legitFx = FIXTURES.find(
+        (f) => f.language === lang && f.variant === "legit",
+      )!;
+      const slopFx = FIXTURES.find(
+        (f) => f.language === lang && f.variant === "slop",
+      )!;
 
       it(`${lang}: legit fixture tier within ±1 of English legit (${englishLegitTier})`, () => {
         const tier = classifyTierForText(legitFx.text);
         const idx = tierIndex(tier);
-        expect(idx, `unknown tier '${tier}' for ${lang}-legit`).toBeGreaterThanOrEqual(0);
+        expect(
+          idx,
+          `unknown tier '${tier}' for ${lang}-legit`,
+        ).toBeGreaterThanOrEqual(0);
         expect(Math.abs(idx - englishLegitIdx)).toBeLessThanOrEqual(1);
       });
 
       it(`${lang}: slop fixture tier within ±1 of English slop (${englishSlopTier})`, () => {
         const tier = classifyTierForText(slopFx.text);
         const idx = tierIndex(tier);
-        expect(idx, `unknown tier '${tier}' for ${lang}-slop`).toBeGreaterThanOrEqual(0);
+        expect(
+          idx,
+          `unknown tier '${tier}' for ${lang}-slop`,
+        ).toBeGreaterThanOrEqual(0);
         expect(Math.abs(idx - englishSlopIdx)).toBeLessThanOrEqual(1);
       });
     }
@@ -63,12 +73,16 @@ describe("Multilingual input test battery", () => {
       expect(report.fixtureCount).toBe(12);
       expect(report.perLanguage).toHaveLength(6);
 
-      const langs = report.perLanguage.map(p => p.language).sort();
+      const langs = report.perLanguage.map((p) => p.language).sort();
       expect(langs).toEqual([...LANGUAGES].sort());
 
       for (const entry of report.perLanguage) {
-        expect(TIER_ORDER).toContain(entry.legitTier as typeof TIER_ORDER[number]);
-        expect(TIER_ORDER).toContain(entry.slopTier as typeof TIER_ORDER[number]);
+        expect(TIER_ORDER).toContain(
+          entry.legitTier as (typeof TIER_ORDER)[number],
+        );
+        expect(TIER_ORDER).toContain(
+          entry.slopTier as (typeof TIER_ORDER)[number],
+        );
         expect(entry.legitAgrees).toBe(Math.abs(entry.legitTierDelta) <= 1);
         expect(entry.slopAgrees).toBe(Math.abs(entry.slopTierDelta) <= 1);
       }

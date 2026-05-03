@@ -1,6 +1,12 @@
 import { useMemo } from "react";
 import { Sliders, RotateCcw, VolumeX, Volume2, Equal } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -117,7 +123,10 @@ export function SignalMuteBoostPanel({
   const delta = adjustedScore - baselineScore;
 
   return (
-    <Card className="glass-card rounded-xl" data-testid="signal-mute-boost-panel">
+    <Card
+      className="glass-card rounded-xl"
+      data-testid="signal-mute-boost-panel"
+    >
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
           <Sliders className="w-4 h-4 text-primary" />
@@ -129,16 +138,22 @@ export function SignalMuteBoostPanel({
             <span
               className={cn(
                 "ml-auto text-[10px] font-mono",
-                delta > 0 ? "text-destructive" : delta < 0 ? "text-green-400" : "text-muted-foreground",
+                delta > 0
+                  ? "text-destructive"
+                  : delta < 0
+                    ? "text-green-400"
+                    : "text-muted-foreground",
               )}
               data-testid="signal-mute-boost-delta"
             >
-              {baselineScore} → {adjustedScore} ({delta > 0 ? "+" : ""}{delta})
+              {baselineScore} → {adjustedScore} ({delta > 0 ? "+" : ""}
+              {delta})
             </span>
           )}
         </CardTitle>
         <CardDescription className="text-xs">
-          Mute or boost individual signals to test scoring sensitivity. State is shared via URL.
+          Mute or boost individual signals to test scoring sensitivity. State is
+          shared via URL.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">

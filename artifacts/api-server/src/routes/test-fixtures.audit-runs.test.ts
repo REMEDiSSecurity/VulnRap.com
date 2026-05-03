@@ -21,9 +21,9 @@ import http from "node:http";
 import path from "node:path";
 import os from "node:os";
 import { promises as fs } from "node:fs";
-import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { AddressInfo } from "node:net";
 
 // Mocks must be declared before the dynamic import in beforeAll so the
 // route module picks up the mocked versions of isLLMAvailable +
@@ -32,40 +32,47 @@ vi.mock("../lib/llm-slop", async () => {
   // Pull in the real module so we keep the production evaluateLlmGate /
   // gate reasons / cost-guard / shouldCallLLM exports untouched. Only the
   // two LLM-firing entry points are replaced.
-  const actual = await vi.importActual<Record<string, unknown>>("../lib/llm-slop");
+  const actual =
+    await vi.importActual<Record<string, unknown>>("../lib/llm-slop");
   return {
     ...actual,
-    isLLMAvailable: () => (globalThis as unknown as { __mockLlmAvailable?: boolean }).__mockLlmAvailable ?? false,
+    isLLMAvailable: () =>
+      (globalThis as unknown as { __mockLlmAvailable?: boolean })
+        .__mockLlmAvailable ?? false,
     analyzeSlopWithLLM: vi.fn(async () => null),
-    analyzeSlopWithLLMDetailed: vi.fn(async (_text: string, _opts?: { bypassCache?: boolean }) => {
-      const mode = (globalThis as unknown as { __mockLlmMode?: string }).__mockLlmMode ?? "fail";
-      if (mode === "ok") {
-        return {
-          kind: "ok" as const,
-          cached: false,
-          attempts: 1,
-          result: {
-            llmSlopScore: 35,
-            llmFeedback: ["mock"],
-            llmBreakdown: {
-              technicalAccuracy: 70,
-              specificity: 60,
-              evidenceQuality: 55,
-              actionability: 50,
-              redFlags: [],
-              validityScore: 65,
-              verdict: "PROBABLY VALID",
+    analyzeSlopWithLLMDetailed: vi.fn(
+      async (_text: string, _opts?: { bypassCache?: boolean }) => {
+        const mode =
+          (globalThis as unknown as { __mockLlmMode?: string }).__mockLlmMode ??
+          "fail";
+        if (mode === "ok") {
+          return {
+            kind: "ok" as const,
+            cached: false,
+            attempts: 1,
+            result: {
+              llmSlopScore: 35,
+              llmFeedback: ["mock"],
+              llmBreakdown: {
+                technicalAccuracy: 70,
+                specificity: 60,
+                evidenceQuality: 55,
+                actionability: 50,
+                redFlags: [],
+                validityScore: 65,
+                verdict: "PROBABLY VALID",
+              },
+              llmRedFlags: [],
+              llmTriageGuidance: undefined,
+              llmReproRecipe: undefined,
+              llmClaims: undefined,
+              llmSubstance: 65,
             },
-            llmRedFlags: [],
-            llmTriageGuidance: undefined,
-            llmReproRecipe: undefined,
-            llmClaims: undefined,
-            llmSubstance: 65,
-          },
-        };
-      }
-      return { kind: "failed" as const, error: "mock_failure", attempts: 2 };
-    }),
+          };
+        }
+        return { kind: "failed" as const, error: "mock_failure", attempts: 2 };
+      },
+    ),
   };
 });
 
@@ -77,7 +84,8 @@ const previousHistoryPath = process.env.ARCHETYPE_HISTORY_PATH;
 const previousHistoryConfigPath = process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
 const previousHistoryStatsPath = process.env.ARCHETYPE_HISTORY_STATS_PATH;
 const previousDatasetHistoryPath = process.env.DATASET_HISTORY_PATH;
-const previousDatasetHistoryConfigPath = process.env.DATASET_HISTORY_CONFIG_PATH;
+const previousDatasetHistoryConfigPath =
+  process.env.DATASET_HISTORY_CONFIG_PATH;
 const previousDatasetHistoryStatsPath = process.env.DATASET_HISTORY_STATS_PATH;
 const previousDatasetsDir = process.env.VULNRAP_DATASETS_DIR;
 const previousCalibrationToken = process.env.CALIBRATION_TOKEN;
@@ -87,7 +95,10 @@ beforeAll(async () => {
   delete process.env.CALIBRATION_TOKEN;
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "audit-runs-"));
   process.env.ARCHETYPE_HISTORY_PATH = path.join(tmpDir, "ah.json");
-  process.env.ARCHETYPE_HISTORY_CONFIG_PATH = path.join(tmpDir, "ah-config.json");
+  process.env.ARCHETYPE_HISTORY_CONFIG_PATH = path.join(
+    tmpDir,
+    "ah-config.json",
+  );
   process.env.ARCHETYPE_HISTORY_STATS_PATH = path.join(tmpDir, "ah-stats.json");
   process.env.DATASET_HISTORY_PATH = path.join(tmpDir, "dh.json");
   process.env.DATASET_HISTORY_CONFIG_PATH = path.join(tmpDir, "dh-config.json");
@@ -100,7 +111,7 @@ beforeAll(async () => {
   const app = express();
   app.use(express.json());
   app.use("/api", testFixturesRouter);
-  await new Promise<void>(resolve => {
+  await new Promise<void>((resolve) => {
     server = app.listen(0, "127.0.0.1", () => resolve());
   });
   const addr = server.address() as AddressInfo;
@@ -110,24 +121,37 @@ beforeAll(async () => {
 afterAll(async () => {
   if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = previousNodeEnv;
-  if (previousHistoryPath === undefined) delete process.env.ARCHETYPE_HISTORY_PATH;
+  if (previousHistoryPath === undefined)
+    delete process.env.ARCHETYPE_HISTORY_PATH;
   else process.env.ARCHETYPE_HISTORY_PATH = previousHistoryPath;
-  if (previousHistoryConfigPath === undefined) delete process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
+  if (previousHistoryConfigPath === undefined)
+    delete process.env.ARCHETYPE_HISTORY_CONFIG_PATH;
   else process.env.ARCHETYPE_HISTORY_CONFIG_PATH = previousHistoryConfigPath;
-  if (previousHistoryStatsPath === undefined) delete process.env.ARCHETYPE_HISTORY_STATS_PATH;
+  if (previousHistoryStatsPath === undefined)
+    delete process.env.ARCHETYPE_HISTORY_STATS_PATH;
   else process.env.ARCHETYPE_HISTORY_STATS_PATH = previousHistoryStatsPath;
-  if (previousDatasetHistoryPath === undefined) delete process.env.DATASET_HISTORY_PATH;
+  if (previousDatasetHistoryPath === undefined)
+    delete process.env.DATASET_HISTORY_PATH;
   else process.env.DATASET_HISTORY_PATH = previousDatasetHistoryPath;
-  if (previousDatasetHistoryConfigPath === undefined) delete process.env.DATASET_HISTORY_CONFIG_PATH;
-  else process.env.DATASET_HISTORY_CONFIG_PATH = previousDatasetHistoryConfigPath;
-  if (previousDatasetHistoryStatsPath === undefined) delete process.env.DATASET_HISTORY_STATS_PATH;
+  if (previousDatasetHistoryConfigPath === undefined)
+    delete process.env.DATASET_HISTORY_CONFIG_PATH;
+  else
+    process.env.DATASET_HISTORY_CONFIG_PATH = previousDatasetHistoryConfigPath;
+  if (previousDatasetHistoryStatsPath === undefined)
+    delete process.env.DATASET_HISTORY_STATS_PATH;
   else process.env.DATASET_HISTORY_STATS_PATH = previousDatasetHistoryStatsPath;
-  if (previousDatasetsDir === undefined) delete process.env.VULNRAP_DATASETS_DIR;
+  if (previousDatasetsDir === undefined)
+    delete process.env.VULNRAP_DATASETS_DIR;
   else process.env.VULNRAP_DATASETS_DIR = previousDatasetsDir;
-  if (previousCalibrationToken === undefined) delete process.env.CALIBRATION_TOKEN;
+  if (previousCalibrationToken === undefined)
+    delete process.env.CALIBRATION_TOKEN;
   else process.env.CALIBRATION_TOKEN = previousCalibrationToken;
-  await new Promise<void>(resolve => server.close(() => resolve()));
-  try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  try {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
 });
 
 interface ValidityFusionAggregate {
@@ -159,12 +183,15 @@ interface ValidityFusionAggregate {
 function fetchJson<T>(urlPath: string): Promise<T> {
   return new Promise((resolve, reject) => {
     http
-      .get(`${baseUrl}${urlPath}`, res => {
+      .get(`${baseUrl}${urlPath}`, (res) => {
         const chunks: Buffer[] = [];
-        res.on("data", c => chunks.push(c));
+        res.on("data", (c) => chunks.push(c));
         res.on("end", () => {
-          try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8"))); }
-          catch (err) { reject(err); }
+          try {
+            resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8")));
+          } catch (err) {
+            reject(err);
+          }
         });
       })
       .on("error", reject);
@@ -173,7 +200,9 @@ function fetchJson<T>(urlPath: string): Promise<T> {
 
 describe("GET /api/test/run?withLlm=1&runs=N — Task #445 multi-run audit", () => {
   it("samples N runs per fixture and exposes per-run + variance fields", async () => {
-    (globalThis as unknown as { __mockLlmAvailable: boolean }).__mockLlmAvailable = true;
+    (
+      globalThis as unknown as { __mockLlmAvailable: boolean }
+    ).__mockLlmAvailable = true;
     (globalThis as unknown as { __mockLlmMode: string }).__mockLlmMode = "ok";
     try {
       const body = await fetchJson<{
@@ -196,9 +225,15 @@ describe("GET /api/test/run?withLlm=1&runs=N — Task #445 multi-run audit", () 
       expect(fusion.perRunFloorFireCount.length).toBe(fusion.runs);
       expect(fusion.perRunSuccessCount.length).toBe(fusion.runs);
       expect(fusion.perRunFloorFireRate.length).toBe(fusion.runs);
-      const perRunSuccessSum = fusion.perRunSuccessCount.reduce((a, b) => a + b, 0);
+      const perRunSuccessSum = fusion.perRunSuccessCount.reduce(
+        (a, b) => a + b,
+        0,
+      );
       expect(perRunSuccessSum).toBe(fusion.sampledCount);
-      const perRunFireSum = fusion.perRunFloorFireCount.reduce((a, b) => a + b, 0);
+      const perRunFireSum = fusion.perRunFloorFireCount.reduce(
+        (a, b) => a + b,
+        0,
+      );
       expect(perRunFireSum).toBe(fusion.floorAppliedCount);
 
       // Each per-run rate matches its fires/successes ratio.
@@ -212,9 +247,9 @@ describe("GET /api/test/run?withLlm=1&runs=N — Task #445 multi-run audit", () 
       // Fixture stability buckets sum to fixtureCount (every sampled
       // fixture lands in exactly one bucket since all runs succeeded).
       const distSum =
-        fusion.fixtureFloorFireDistribution.alwaysFired
-        + fusion.fixtureFloorFireDistribution.neverFired
-        + fusion.fixtureFloorFireDistribution.sometimesFired;
+        fusion.fixtureFloorFireDistribution.alwaysFired +
+        fusion.fixtureFloorFireDistribution.neverFired +
+        fusion.fixtureFloorFireDistribution.sometimesFired;
       expect(distSum).toBe(fusion.fixtureCount);
 
       // Variance bounds are coherent — min ≤ mean ≤ max and rangeAcrossRuns
@@ -222,8 +257,12 @@ describe("GET /api/test/run?withLlm=1&runs=N — Task #445 multi-run audit", () 
       expect(fusion.variance.floorFireCountMin).not.toBeNull();
       expect(fusion.variance.floorFireCountMax).not.toBeNull();
       expect(fusion.variance.floorFireCountMean).not.toBeNull();
-      expect(fusion.variance.floorFireCountMin!).toBeLessThanOrEqual(fusion.variance.floorFireCountMean!);
-      expect(fusion.variance.floorFireCountMean!).toBeLessThanOrEqual(fusion.variance.floorFireCountMax!);
+      expect(fusion.variance.floorFireCountMin!).toBeLessThanOrEqual(
+        fusion.variance.floorFireCountMean!,
+      );
+      expect(fusion.variance.floorFireCountMean!).toBeLessThanOrEqual(
+        fusion.variance.floorFireCountMax!,
+      );
       expect(fusion.variance.rangeAcrossRuns).toBe(
         fusion.variance.floorFireCountMax! - fusion.variance.floorFireCountMin!,
       );
@@ -233,12 +272,16 @@ describe("GET /api/test/run?withLlm=1&runs=N — Task #445 multi-run audit", () 
       expect(fusion.note).toMatch(/Stable counters/);
       expect(fusion.note).toMatch(/Variable counters/);
     } finally {
-      (globalThis as unknown as { __mockLlmAvailable: boolean }).__mockLlmAvailable = false;
+      (
+        globalThis as unknown as { __mockLlmAvailable: boolean }
+      ).__mockLlmAvailable = false;
     }
   }, 120_000);
 
   it("counts LLM failures in llmFailureCount instead of folding into 'no LLM signal'", async () => {
-    (globalThis as unknown as { __mockLlmAvailable: boolean }).__mockLlmAvailable = true;
+    (
+      globalThis as unknown as { __mockLlmAvailable: boolean }
+    ).__mockLlmAvailable = true;
     (globalThis as unknown as { __mockLlmMode: string }).__mockLlmMode = "fail";
     try {
       const body = await fetchJson<{
@@ -278,12 +321,16 @@ describe("GET /api/test/run?withLlm=1&runs=N — Task #445 multi-run audit", () 
         sometimesFired: 0,
       });
     } finally {
-      (globalThis as unknown as { __mockLlmAvailable: boolean }).__mockLlmAvailable = false;
+      (
+        globalThis as unknown as { __mockLlmAvailable: boolean }
+      ).__mockLlmAvailable = false;
     }
   }, 120_000);
 
   it("clamps ?runs to [1..10] and defaults to 3 on invalid input", async () => {
-    (globalThis as unknown as { __mockLlmAvailable: boolean }).__mockLlmAvailable = true;
+    (
+      globalThis as unknown as { __mockLlmAvailable: boolean }
+    ).__mockLlmAvailable = true;
     (globalThis as unknown as { __mockLlmMode: string }).__mockLlmMode = "fail";
     try {
       // ?runs=0 is invalid → default 3.
@@ -310,7 +357,9 @@ describe("GET /api/test/run?withLlm=1&runs=N — Task #445 multi-run audit", () 
       }>("/api/test/run?withLlm=1&runs=1");
       expect(one.auditTelemetry.validityFusion.runs).toBe(1);
     } finally {
-      (globalThis as unknown as { __mockLlmAvailable: boolean }).__mockLlmAvailable = false;
+      (
+        globalThis as unknown as { __mockLlmAvailable: boolean }
+      ).__mockLlmAvailable = false;
     }
   }, 180_000);
 });

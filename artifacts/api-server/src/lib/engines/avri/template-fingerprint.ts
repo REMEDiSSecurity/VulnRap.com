@@ -14,7 +14,10 @@ const PENALTY_POINTS = -20;
 // and Sprint 11 spec Part 7: "campaign hit applies within the day").
 // Map key: `${utcDay}|${fingerprint}` — entries from prior days are pruned on
 // access and naturally evicted by the LRU cap.
-const STATE: Map<string, { count: number; firstSeenMs: number; lastSeenMs: number; utcDay: string }> = new Map();
+const STATE: Map<
+  string,
+  { count: number; firstSeenMs: number; lastSeenMs: number; utcDay: string }
+> = new Map();
 
 function utcDay(now = Date.now()): string {
   return new Date(now).toISOString().slice(0, 10);
@@ -63,13 +66,24 @@ export function structuralFingerprint(text: string): string {
     }
     if (inFence) continue;
     if (!line) {
-      if (buf.length > 0) { paragraphs.push(buf); buf = []; }
+      if (buf.length > 0) {
+        paragraphs.push(buf);
+        buf = [];
+      }
       continue;
     }
     const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
     if (headerMatch) {
-      if (buf.length > 0) { paragraphs.push(buf); buf = []; }
-      headers.push(headerMatch[2].toLowerCase().replace(/[^a-z0-9 ]/g, "").trim());
+      if (buf.length > 0) {
+        paragraphs.push(buf);
+        buf = [];
+      }
+      headers.push(
+        headerMatch[2]
+          .toLowerCase()
+          .replace(/[^a-z0-9 ]/g, "")
+          .trim(),
+      );
       continue;
     }
     if (/^\s*\d+[.)]\s+/.test(line)) hasNumberedSteps = true;
@@ -96,7 +110,9 @@ export interface FingerprintResult {
 
 function pruneIfNeeded(): void {
   if (STATE.size <= MAX_ENTRIES) return;
-  const entries = Array.from(STATE.entries()).sort((a, b) => a[1].lastSeenMs - b[1].lastSeenMs);
+  const entries = Array.from(STATE.entries()).sort(
+    (a, b) => a[1].lastSeenMs - b[1].lastSeenMs,
+  );
   const drop = entries.slice(0, entries.length - MAX_ENTRIES + 200);
   for (const [k] of drop) STATE.delete(k);
 }

@@ -91,29 +91,26 @@ test.describe("EmergingArchetypesSection — History file size indicator (Task #
     const SIZE_BYTES = 124 * 1024;
     const SNAPSHOT_COUNT = 487;
 
-    await page.route(
-      "**/api/test/archetype-history/config",
-      async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            effectiveDays: 30,
-            source: "default",
-            envOverride: null,
-            persistedDays: null,
-            defaultDays: 30,
-            min: 7,
-            max: 365,
-            // The Task #288 block under test.
-            historyFile: {
-              sizeBytes: SIZE_BYTES,
-              snapshotCount: SNAPSHOT_COUNT,
-            },
-          }),
-        });
-      },
-    );
+    await page.route("**/api/test/archetype-history/config", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          effectiveDays: 30,
+          source: "default",
+          envOverride: null,
+          persistedDays: null,
+          defaultDays: 30,
+          min: 7,
+          max: 365,
+          // The Task #288 block under test.
+          historyFile: {
+            sizeBytes: SIZE_BYTES,
+            snapshotCount: SNAPSHOT_COUNT,
+          },
+        }),
+      });
+    });
 
     // Bind the response wait BEFORE navigation so a fast roundtrip
     // can't fire-and-resolve before we start listening. The "Done
@@ -122,7 +119,8 @@ test.describe("EmergingArchetypesSection — History file size indicator (Task #
     // (rather than the rendered text) gives a clearer failure mode
     // when the endpoint or the browser-side query never fires.
     const configResponse = page.waitForResponse(
-      (r) => r.url().includes(CONFIG_URL_FRAGMENT) && r.request().method() === "GET",
+      (r) =>
+        r.url().includes(CONFIG_URL_FRAGMENT) && r.request().method() === "GET",
     );
     await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
     await configResponse;
@@ -134,8 +132,9 @@ test.describe("EmergingArchetypesSection — History file size indicator (Task #
     // fails consistently across both specs.
     const section = emergingArchetypesSection(page);
     await expect(section).toBeVisible({ timeout: 15_000 });
-    await expect(section.getByLabel("Compaction window in days"))
-      .toBeVisible({ timeout: 15_000 });
+    await expect(section.getByLabel("Compaction window in days")).toBeVisible({
+      timeout: 15_000,
+    });
 
     // The JSX hangs the raw bytes count on the span's `title`
     // attribute (so reviewers can hover for the exact byte count when
@@ -176,39 +175,38 @@ test.describe("EmergingArchetypesSection — History file size indicator (Task #
     const SIZE_BYTES = 612;
     const SNAPSHOT_COUNT = 1;
 
-    await page.route(
-      "**/api/test/archetype-history/config",
-      async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            effectiveDays: 30,
-            source: "default",
-            envOverride: null,
-            persistedDays: null,
-            defaultDays: 30,
-            min: 7,
-            max: 365,
-            historyFile: {
-              sizeBytes: SIZE_BYTES,
-              snapshotCount: SNAPSHOT_COUNT,
-            },
-          }),
-        });
-      },
-    );
+    await page.route("**/api/test/archetype-history/config", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          effectiveDays: 30,
+          source: "default",
+          envOverride: null,
+          persistedDays: null,
+          defaultDays: 30,
+          min: 7,
+          max: 365,
+          historyFile: {
+            sizeBytes: SIZE_BYTES,
+            snapshotCount: SNAPSHOT_COUNT,
+          },
+        }),
+      });
+    });
 
     const configResponse = page.waitForResponse(
-      (r) => r.url().includes(CONFIG_URL_FRAGMENT) && r.request().method() === "GET",
+      (r) =>
+        r.url().includes(CONFIG_URL_FRAGMENT) && r.request().method() === "GET",
     );
     await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
     await configResponse;
 
     const section = emergingArchetypesSection(page);
     await expect(section).toBeVisible({ timeout: 15_000 });
-    await expect(section.getByLabel("Compaction window in days"))
-      .toBeVisible({ timeout: 15_000 });
+    await expect(section.getByLabel("Compaction window in days")).toBeVisible({
+      timeout: 15_000,
+    });
 
     const historyFileLine = section.locator(
       `span[title="${SIZE_BYTES} bytes on disk"]`,

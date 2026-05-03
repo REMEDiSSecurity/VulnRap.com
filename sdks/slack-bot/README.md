@@ -39,13 +39,13 @@ npm install
 
 Environment variables:
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `SLACK_BOT_TOKEN` | yes | Bot User OAuth Token (`xoxb-…`) from **OAuth & Permissions**. |
-| `SLACK_APP_TOKEN` | yes | App-level token (`xapp-…`) with `connections:write`, used for Socket Mode. |
-| `SLACK_SIGNING_SECRET` | recommended | Signing secret from **Basic Information**. Bolt always validates it when present. |
-| `VULNRAP_API_BASE` | no | Defaults to `https://vulnrap.com/api`. Override for self-hosting. |
-| `VULNRAP_PUBLIC_URL` | no | Defaults to `https://vulnrap.com`. Used to build "Open report" links if the API doesn't return one. |
+| Variable               | Required    | Description                                                                                         |
+| ---------------------- | ----------- | --------------------------------------------------------------------------------------------------- |
+| `SLACK_BOT_TOKEN`      | yes         | Bot User OAuth Token (`xoxb-…`) from **OAuth & Permissions**.                                       |
+| `SLACK_APP_TOKEN`      | yes         | App-level token (`xapp-…`) with `connections:write`, used for Socket Mode.                          |
+| `SLACK_SIGNING_SECRET` | recommended | Signing secret from **Basic Information**. Bolt always validates it when present.                   |
+| `VULNRAP_API_BASE`     | no          | Defaults to `https://vulnrap.com/api`. Override for self-hosting.                                   |
+| `VULNRAP_PUBLIC_URL`   | no          | Defaults to `https://vulnrap.com`. Used to build "Open report" links if the API doesn't return one. |
 
 ## 3. Run
 

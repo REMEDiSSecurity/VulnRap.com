@@ -1,11 +1,42 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
-  Activity, Search, Code, BookOpen, MessageSquare, Menu, X, Github,
-  Clock, GitCompare, UploadCloud, BarChart3, Database, Eye, FileText,
-  ChevronDown, FileEdit, Sparkles, Users, Network, FlaskConical, Library,
-  ScrollText, Scale, Compass, Rocket, Sliders, Images, ShieldAlert, Radar, BadgeCheck, Layers,
-  Map as MapIcon, Siren, HeartPulse, BookA,
+  Activity,
+  Search,
+  Code,
+  BookOpen,
+  MessageSquare,
+  Menu,
+  X,
+  Github,
+  Clock,
+  GitCompare,
+  UploadCloud,
+  BarChart3,
+  Database,
+  Eye,
+  FileText,
+  ChevronDown,
+  FileEdit,
+  Sparkles,
+  Users,
+  Network,
+  FlaskConical,
+  Library,
+  ScrollText,
+  Scale,
+  Compass,
+  Rocket,
+  Sliders,
+  Images,
+  ShieldAlert,
+  Radar,
+  BadgeCheck,
+  Layers,
+  Map as MapIcon,
+  Siren,
+  HeartPulse,
+  BookA,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
@@ -19,7 +50,7 @@ import { t } from "@/lib/i18n";
 function feedbackMailto(page: string) {
   const subject = encodeURIComponent("VulnRap Feedback");
   const body = encodeURIComponent(
-    `Hi VulnRap team,\n\nI wanted to share some feedback:\n\n[Your feedback here]\n\n---\nPage: ${page}`
+    `Hi VulnRap team,\n\nI wanted to share some feedback:\n\n[Your feedback here]\n\n---\nPage: ${page}`,
   );
   return `mailto:remedisllc@gmail.com?subject=${subject}&body=${body}`;
 }
@@ -54,53 +85,249 @@ const NAV: NavEntry[] = [
     icon: <Sparkles className="w-3.5 h-3.5" />,
     matchPrefixes: ["/", "/check", "/batch", "/compare"],
     items: [
-      { to: "/", label: "Submit", icon: <FileEdit className="w-4 h-4" />, description: "Paste or upload a single report for scoring." },
-      { to: "/check", label: "Check", icon: <Search className="w-4 h-4" />, description: "Look up a previously submitted report by ID." },
-      { to: "/batch", label: "Batch", icon: <UploadCloud className="w-4 h-4" />, description: "Upload many reports at once for bulk scoring." },
-      { to: "/compare", label: "Compare", icon: <GitCompare className="w-4 h-4" />, description: "Diff two reports side-by-side." },
+      {
+        to: "/",
+        label: "Submit",
+        icon: <FileEdit className="w-4 h-4" />,
+        description: "Paste or upload a single report for scoring.",
+      },
+      {
+        to: "/check",
+        label: "Check",
+        icon: <Search className="w-4 h-4" />,
+        description: "Look up a previously submitted report by ID.",
+      },
+      {
+        to: "/batch",
+        label: "Batch",
+        icon: <UploadCloud className="w-4 h-4" />,
+        description: "Upload many reports at once for bulk scoring.",
+      },
+      {
+        to: "/compare",
+        label: "Compare",
+        icon: <GitCompare className="w-4 h-4" />,
+        description: "Diff two reports side-by-side.",
+      },
     ],
   },
   { to: "/history", label: "History", icon: <Clock className="w-3.5 h-3.5" /> },
-  { to: "/reports", label: "Reports", icon: <Database className="w-3.5 h-3.5" /> },
+  {
+    to: "/reports",
+    label: "Reports",
+    icon: <Database className="w-3.5 h-3.5" />,
+  },
   {
     label: "Insights",
     icon: <BarChart3 className="w-3.5 h-3.5" />,
-    matchPrefixes: ["/stats", "/transparency", "/corpus-stats", "/test-yourself"],
+    matchPrefixes: [
+      "/stats",
+      "/transparency",
+      "/corpus-stats",
+      "/test-yourself",
+    ],
     items: [
-      { to: "/stats", label: "Stats", icon: <Activity className="w-4 h-4" />, description: "Aggregate scoring stats and engine health." },
-      { to: "/corpus-stats", label: "Corpus Stats", icon: <Database className="w-4 h-4" />, description: "Public corpus totals, top signals, top CWE families, and 90-day volume." },
-      { to: "/transparency", label: "Impact", icon: <Eye className="w-4 h-4" />, description: "Public-good metrics and transparency report." },
-      { to: "/test-yourself", label: "Test Yourself", icon: <FlaskConical className="w-4 h-4" />, description: "Upload your own labeled corpus and see precision/recall/F1 against the live engine." },
+      {
+        to: "/stats",
+        label: "Stats",
+        icon: <Activity className="w-4 h-4" />,
+        description: "Aggregate scoring stats and engine health.",
+      },
+      {
+        to: "/corpus-stats",
+        label: "Corpus Stats",
+        icon: <Database className="w-4 h-4" />,
+        description:
+          "Public corpus totals, top signals, top CWE families, and 90-day volume.",
+      },
+      {
+        to: "/transparency",
+        label: "Impact",
+        icon: <Eye className="w-4 h-4" />,
+        description: "Public-good metrics and transparency report.",
+      },
+      {
+        to: "/test-yourself",
+        label: "Test Yourself",
+        icon: <FlaskConical className="w-4 h-4" />,
+        description:
+          "Upload your own labeled corpus and see precision/recall/F1 against the live engine.",
+      },
     ],
   },
   {
     label: "Docs",
     icon: <BookOpen className="w-3.5 h-3.5" />,
-    matchPrefixes: ["/developers", "/quickstart", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works", "/compare-detectors", "/playground", "/gallery", "/cwe", "/signals", "/badges", "/roadmap", "/status", "/incidents", "/glossary"],
+    matchPrefixes: [
+      "/developers",
+      "/quickstart",
+      "/architecture",
+      "/blog",
+      "/changelog",
+      "/community",
+      "/engines",
+      "/presets",
+      "/whitepaper",
+      "/how-it-works",
+      "/compare-detectors",
+      "/playground",
+      "/gallery",
+      "/cwe",
+      "/signals",
+      "/badges",
+      "/roadmap",
+      "/status",
+      "/incidents",
+      "/glossary",
+    ],
     align: "right",
     items: [
-      { to: "/quickstart", label: "Quickstart", icon: <Rocket className="w-4 h-4" />, description: "Zero to first scored report in five copy-paste steps." },
-      { to: "/how-it-works", label: "How It Works", icon: <Compass className="w-4 h-4" />, description: "Interactive walkthrough of the scoring pipeline, step by step." },
-      { to: "/cwe", label: "CWE Reference", icon: <ShieldAlert className="w-4 h-4" />, description: "Every CWE family the engine recognizes — fingerprints, MITRE links, and per-family corpus stats." },
-      { to: "/signals", label: "Signal Reference", icon: <Radar className="w-4 h-4" />, description: "Every detector that can fire on a report — what it looks for, citations, and hit-rate metrics." },
-      { to: "/developers", label: "API", icon: <Code className="w-4 h-4" />, description: "REST endpoints, schemas, and examples." },
-      { to: "/architecture", label: "Architecture", icon: <Network className="w-4 h-4" />, description: "Pipeline diagram and request flow for integrators." },
-      { to: "/engines/substance", label: "Substance Engine", icon: <FlaskConical className="w-4 h-4" />, description: "Engine 2 deep-dive: technical substance density." },
-      { to: "/engines/cwe-coherence", label: "CWE Coherence Engine", icon: <Network className="w-4 h-4" />, description: "Engine 3 deep-dive: catches reports whose body describes a different CWE than the one claimed." },
-      { to: "/engines/avri", label: "AVRI Engine", icon: <Layers className="w-4 h-4" />, description: "Family-aware rubric: 9 weakness families, gold signals, absence penalties." },
-      { to: "/presets", label: "Presets", icon: <Library className="w-4 h-4" />, description: "Curated sensitivity + per-engine weight profiles for common triage workflows." },
-      { to: "/whitepaper", label: "Whitepaper", icon: <ScrollText className="w-4 h-4" />, description: "Long-form, citation-style methodology document — print-friendly." },
-      { to: "/compare-detectors", label: "Compare Detectors", icon: <Scale className="w-4 h-4" />, description: "Capability matrix vs. generic LLM detectors, plagiarism checkers, and manual triage." },
-      { to: "/playground", label: "Scoring Playground", icon: <Sliders className="w-4 h-4" />, description: "Toggle signals and per-engine weights on a sample report and watch the score recalculate live." },
-      { to: "/gallery", label: "Sample Gallery", icon: <Images className="w-4 h-4" />, description: "12 pre-scored example reports — obvious slop, subtle slop, borderline, clean." },
-      { to: "/badges", label: "Embed Badges", icon: <BadgeCheck className="w-4 h-4" />, description: "Five badge styles + copy-paste markdown for embedding scores in READMEs and advisories." },
-      { to: "/blog", label: "Blog", icon: <FileText className="w-4 h-4" />, description: "Field tests, methodology, and post-mortems." },
-      { to: "/changelog", label: "Changelog", icon: <BookOpen className="w-4 h-4" />, description: "Per-release notes and version history." },
-      { to: "/roadmap", label: "Roadmap", icon: <MapIcon className="w-4 h-4" />, description: "Now / Next / Later — what's being built and what's queued." },
-      { to: "/incidents", label: "Incidents", icon: <Siren className="w-4 h-4" />, description: "Public postmortems for engine outages, scoring regressions, and calibration mistakes." },
-      { to: "/glossary", label: "Glossary", icon: <BookA className="w-4 h-4" />, description: "Working vocabulary for the engine, signals, and report-quality concepts." },
-      { to: "/community", label: "Community", icon: <Users className="w-4 h-4" />, description: "GitHub, mailing list, and how to contribute." },
-      { to: "/status", label: "Status", icon: <HeartPulse className="w-4 h-4" />, description: "Live API uptime, scoring latency, and per-engine health." },
+      {
+        to: "/quickstart",
+        label: "Quickstart",
+        icon: <Rocket className="w-4 h-4" />,
+        description: "Zero to first scored report in five copy-paste steps.",
+      },
+      {
+        to: "/how-it-works",
+        label: "How It Works",
+        icon: <Compass className="w-4 h-4" />,
+        description:
+          "Interactive walkthrough of the scoring pipeline, step by step.",
+      },
+      {
+        to: "/cwe",
+        label: "CWE Reference",
+        icon: <ShieldAlert className="w-4 h-4" />,
+        description:
+          "Every CWE family the engine recognizes — fingerprints, MITRE links, and per-family corpus stats.",
+      },
+      {
+        to: "/signals",
+        label: "Signal Reference",
+        icon: <Radar className="w-4 h-4" />,
+        description:
+          "Every detector that can fire on a report — what it looks for, citations, and hit-rate metrics.",
+      },
+      {
+        to: "/developers",
+        label: "API",
+        icon: <Code className="w-4 h-4" />,
+        description: "REST endpoints, schemas, and examples.",
+      },
+      {
+        to: "/architecture",
+        label: "Architecture",
+        icon: <Network className="w-4 h-4" />,
+        description: "Pipeline diagram and request flow for integrators.",
+      },
+      {
+        to: "/engines/substance",
+        label: "Substance Engine",
+        icon: <FlaskConical className="w-4 h-4" />,
+        description: "Engine 2 deep-dive: technical substance density.",
+      },
+      {
+        to: "/engines/cwe-coherence",
+        label: "CWE Coherence Engine",
+        icon: <Network className="w-4 h-4" />,
+        description:
+          "Engine 3 deep-dive: catches reports whose body describes a different CWE than the one claimed.",
+      },
+      {
+        to: "/engines/avri",
+        label: "AVRI Engine",
+        icon: <Layers className="w-4 h-4" />,
+        description:
+          "Family-aware rubric: 9 weakness families, gold signals, absence penalties.",
+      },
+      {
+        to: "/presets",
+        label: "Presets",
+        icon: <Library className="w-4 h-4" />,
+        description:
+          "Curated sensitivity + per-engine weight profiles for common triage workflows.",
+      },
+      {
+        to: "/whitepaper",
+        label: "Whitepaper",
+        icon: <ScrollText className="w-4 h-4" />,
+        description:
+          "Long-form, citation-style methodology document — print-friendly.",
+      },
+      {
+        to: "/compare-detectors",
+        label: "Compare Detectors",
+        icon: <Scale className="w-4 h-4" />,
+        description:
+          "Capability matrix vs. generic LLM detectors, plagiarism checkers, and manual triage.",
+      },
+      {
+        to: "/playground",
+        label: "Scoring Playground",
+        icon: <Sliders className="w-4 h-4" />,
+        description:
+          "Toggle signals and per-engine weights on a sample report and watch the score recalculate live.",
+      },
+      {
+        to: "/gallery",
+        label: "Sample Gallery",
+        icon: <Images className="w-4 h-4" />,
+        description:
+          "12 pre-scored example reports — obvious slop, subtle slop, borderline, clean.",
+      },
+      {
+        to: "/badges",
+        label: "Embed Badges",
+        icon: <BadgeCheck className="w-4 h-4" />,
+        description:
+          "Five badge styles + copy-paste markdown for embedding scores in READMEs and advisories.",
+      },
+      {
+        to: "/blog",
+        label: "Blog",
+        icon: <FileText className="w-4 h-4" />,
+        description: "Field tests, methodology, and post-mortems.",
+      },
+      {
+        to: "/changelog",
+        label: "Changelog",
+        icon: <BookOpen className="w-4 h-4" />,
+        description: "Per-release notes and version history.",
+      },
+      {
+        to: "/roadmap",
+        label: "Roadmap",
+        icon: <MapIcon className="w-4 h-4" />,
+        description:
+          "Now / Next / Later — what's being built and what's queued.",
+      },
+      {
+        to: "/incidents",
+        label: "Incidents",
+        icon: <Siren className="w-4 h-4" />,
+        description:
+          "Public postmortems for engine outages, scoring regressions, and calibration mistakes.",
+      },
+      {
+        to: "/glossary",
+        label: "Glossary",
+        icon: <BookA className="w-4 h-4" />,
+        description:
+          "Working vocabulary for the engine, signals, and report-quality concepts.",
+      },
+      {
+        to: "/community",
+        label: "Community",
+        icon: <Users className="w-4 h-4" />,
+        description: "GitHub, mailing list, and how to contribute.",
+      },
+      {
+        to: "/status",
+        label: "Status",
+        icon: <HeartPulse className="w-4 h-4" />,
+        description: "Live API uptime, scoring latency, and per-engine health.",
+      },
     ],
   },
 ];
@@ -110,7 +337,7 @@ function isPathActive(pathname: string, target: string): boolean {
 }
 
 function isGroupActive(pathname: string, group: NavGroup): boolean {
-  return group.items.some(item => isPathActive(pathname, item.to));
+  return group.items.some((item) => isPathActive(pathname, item.to));
 }
 
 interface NavDropdownProps {
@@ -140,20 +367,22 @@ function NavDropdown({ group, pathname }: NavDropdownProps) {
   }, [open]);
 
   // Close on route change
-  useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   return (
     <div ref={wrapperRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
         className={cn(
           "text-sm font-medium transition-all px-3 py-1.5 rounded-md flex items-center gap-1.5 whitespace-nowrap",
           active
             ? "text-primary bg-primary/10 glow-text-sm"
-            : "text-muted-foreground hover:text-primary hover:bg-primary/5"
+            : "text-muted-foreground hover:text-primary hover:bg-primary/5",
         )}
       >
         {group.icon}
@@ -168,12 +397,12 @@ function NavDropdown({ group, pathname }: NavDropdownProps) {
           role="menu"
           className={cn(
             "absolute top-full mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-primary/30 bg-popover shadow-2xl shadow-black/60 overflow-hidden",
-            group.align === "right" ? "right-0" : "left-0"
+            group.align === "right" ? "right-0" : "left-0",
           )}
           style={{ zIndex: 80, backgroundColor: "hsl(var(--popover))" }}
         >
           <div className="py-1">
-            {group.items.map(item => {
+            {group.items.map((item) => {
               const itemActive = isPathActive(pathname, item.to);
               return (
                 <Link
@@ -185,14 +414,21 @@ function NavDropdown({ group, pathname }: NavDropdownProps) {
                     "flex items-start gap-3 px-3 py-2.5 transition-colors",
                     itemActive
                       ? "text-primary bg-primary/10"
-                      : "text-foreground/90 hover:text-primary hover:bg-primary/5"
+                      : "text-foreground/90 hover:text-primary hover:bg-primary/5",
                   )}
                 >
-                  <span className={cn("mt-0.5 shrink-0", itemActive ? "text-primary" : "text-muted-foreground")}>
+                  <span
+                    className={cn(
+                      "mt-0.5 shrink-0",
+                      itemActive ? "text-primary" : "text-muted-foreground",
+                    )}
+                  >
                     {item.icon}
                   </span>
                   <span className="flex flex-col gap-0.5 min-w-0">
-                    <span className="text-sm font-medium leading-tight">{item.label}</span>
+                    <span className="text-sm font-medium leading-tight">
+                      {item.label}
+                    </span>
                     {item.description && (
                       <span className="text-[11px] leading-snug text-muted-foreground">
                         {item.description}
@@ -233,7 +469,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     } else {
       document.body.style.overflow = "";
     }
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [mobileMenuOpen]);
 
   return (
@@ -243,15 +481,31 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <CursorBugs />
       <header className="nav-glass sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-          <Link to="/" className="flex items-center gap-2 shrink-0 group" onClick={() => setMobileMenuOpen(false)}>
-            <img src={logoSrc} alt="VulnRap" className="w-7 h-7 rounded-sm transition-transform group-hover:scale-110" />
-            <span className="font-bold text-base tracking-tight uppercase text-primary glow-text-sm transition-all group-hover:glow-text whitespace-nowrap">VulnRap</span>
+          <Link
+            to="/"
+            className="flex items-center gap-2 shrink-0 group"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <img
+              src={logoSrc}
+              alt="VulnRap"
+              className="w-7 h-7 rounded-sm transition-transform group-hover:scale-110"
+            />
+            <span className="font-bold text-base tracking-tight uppercase text-primary glow-text-sm transition-all group-hover:glow-text whitespace-nowrap">
+              VulnRap
+            </span>
           </Link>
 
           <nav className="hidden lg:flex items-center gap-0.5">
             {NAV.map((entry) => {
               if (isGroup(entry)) {
-                return <NavDropdown key={entry.label} group={entry} pathname={pathname} />;
+                return (
+                  <NavDropdown
+                    key={entry.label}
+                    group={entry}
+                    pathname={pathname}
+                  />
+                );
               }
               const active = isPathActive(pathname, entry.to);
               return (
@@ -262,7 +516,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     "text-sm font-medium transition-all px-3 py-1.5 rounded-md flex items-center gap-1.5 whitespace-nowrap",
                     active
                       ? "text-primary bg-primary/10 glow-text-sm"
-                      : "text-muted-foreground hover:text-primary hover:bg-primary/5"
+                      : "text-muted-foreground hover:text-primary hover:bg-primary/5",
                   )}
                 >
                   {entry.icon}
@@ -281,7 +535,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileMenuOpen}
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
             </button>
           </div>
         </div>
@@ -306,15 +564,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 if (isGroup(entry)) {
                   const active = isGroupActive(pathname, entry);
                   return (
-                    <div key={entry.label} className="flex flex-col gap-0.5 pt-1">
-                      <div className={cn(
-                        "flex items-center gap-2 px-4 pt-2 pb-1 text-xs uppercase tracking-wide font-semibold",
-                        active ? "text-primary" : "text-muted-foreground"
-                      )}>
-                        <span className="w-4 flex items-center justify-center">{entry.icon}</span>
+                    <div
+                      key={entry.label}
+                      className="flex flex-col gap-0.5 pt-1"
+                    >
+                      <div
+                        className={cn(
+                          "flex items-center gap-2 px-4 pt-2 pb-1 text-xs uppercase tracking-wide font-semibold",
+                          active ? "text-primary" : "text-muted-foreground",
+                        )}
+                      >
+                        <span className="w-4 flex items-center justify-center">
+                          {entry.icon}
+                        </span>
                         {entry.label}
                       </div>
-                      {entry.items.map(item => {
+                      {entry.items.map((item) => {
                         const itemActive = isPathActive(pathname, item.to);
                         return (
                           <Link
@@ -325,10 +590,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                               "flex items-center gap-3 px-7 py-3 rounded-lg text-base font-medium transition-all",
                               itemActive
                                 ? "text-primary bg-primary/15 glow-text-sm"
-                                : "text-foreground/85 hover:text-primary hover:bg-primary/5"
+                                : "text-foreground/85 hover:text-primary hover:bg-primary/5",
                             )}
                           >
-                            <span className="w-4 flex items-center justify-center">{item.icon}</span>
+                            <span className="w-4 flex items-center justify-center">
+                              {item.icon}
+                            </span>
                             {item.label}
                           </Link>
                         );
@@ -346,10 +613,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       "flex items-center gap-3 px-4 py-3.5 rounded-lg text-base font-semibold transition-all",
                       active
                         ? "text-primary bg-primary/15 glow-text-sm"
-                        : "text-foreground/90 hover:text-primary hover:bg-primary/5"
+                        : "text-foreground/90 hover:text-primary hover:bg-primary/5",
                     )}
                   >
-                    <span className="w-5 flex items-center justify-center">{entry.icon}</span>
+                    <span className="w-5 flex items-center justify-center">
+                      {entry.icon}
+                    </span>
                     {entry.label}
                   </Link>
                 );
@@ -371,8 +640,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-8">
             <div className="col-span-2 sm:col-span-1 flex flex-col items-start gap-2.5">
               <Link to="/" className="flex items-center gap-2 group">
-                <img src={logoSrc} alt="" className="w-6 h-6 rounded-sm opacity-70 group-hover:opacity-100 transition-opacity shrink-0" />
-                <span className="font-bold text-sm tracking-tight uppercase text-primary/80 group-hover:text-primary transition-colors">VulnRap</span>
+                <img
+                  src={logoSrc}
+                  alt=""
+                  className="w-6 h-6 rounded-sm opacity-70 group-hover:opacity-100 transition-opacity shrink-0"
+                />
+                <span className="font-bold text-sm tracking-tight uppercase text-primary/80 group-hover:text-primary transition-colors">
+                  VulnRap
+                </span>
               </Link>
               <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
                 {t("footer.tagline")}
@@ -388,18 +663,57 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">{t("footer.product")}</h4>
-              <Link to="/" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.submit")}</Link>
-              <Link to="/check" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.check")}</Link>
-              <Link to="/batch" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.batch")}</Link>
-              <Link to="/compare" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.compare")}</Link>
-              <Link to="/use-cases" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Use Cases</Link>
-              <Link to="/pricing" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Pricing</Link>
+              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">
+                {t("footer.product")}
+              </h4>
+              <Link
+                to="/"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                {t("nav.submit")}
+              </Link>
+              <Link
+                to="/check"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                {t("nav.check")}
+              </Link>
+              <Link
+                to="/batch"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                {t("nav.batch")}
+              </Link>
+              <Link
+                to="/compare"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                {t("nav.compare")}
+              </Link>
+              <Link
+                to="/use-cases"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Use Cases
+              </Link>
+              <Link
+                to="/pricing"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Pricing
+              </Link>
             </div>
 
             <div className="flex flex-col gap-2">
-              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">{t("footer.resources")}</h4>
-              <Link to="/developers" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.apiDocs")}</Link>
+              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">
+                {t("footer.resources")}
+              </h4>
+              <Link
+                to="/developers"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                {t("nav.apiDocs")}
+              </Link>
               <a
                 href="/agents.md"
                 target="_blank"
@@ -409,16 +723,66 @@ export function Layout({ children }: { children: React.ReactNode }) {
               >
                 Agents Manual
               </a>
-              <Link to="/blog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.blog")}</Link>
-              <Link to="/changelog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.changelog")}</Link>
-              <Link to="/roadmap" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Roadmap</Link>
-              <Link to="/incidents" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Incidents</Link>
-              <Link to="/stats" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Stats</Link>
-              <Link to="/transparency" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Impact</Link>
-              <Link to="/status" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.status")}</Link>
-              <Link to="/showcase" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Showcase</Link>
-              <Link to="/community" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Community</Link>
-              <Link to="/press" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Press Kit</Link>
+              <Link
+                to="/blog"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                {t("nav.blog")}
+              </Link>
+              <Link
+                to="/changelog"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                {t("nav.changelog")}
+              </Link>
+              <Link
+                to="/roadmap"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Roadmap
+              </Link>
+              <Link
+                to="/incidents"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Incidents
+              </Link>
+              <Link
+                to="/stats"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Stats
+              </Link>
+              <Link
+                to="/transparency"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Impact
+              </Link>
+              <Link
+                to="/status"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                {t("nav.status")}
+              </Link>
+              <Link
+                to="/showcase"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Showcase
+              </Link>
+              <Link
+                to="/community"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Community
+              </Link>
+              <Link
+                to="/press"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Press Kit
+              </Link>
               <button
                 type="button"
                 onClick={handleRestartTour}
@@ -430,11 +794,33 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">{t("footer.legal")}</h4>
-              <Link to="/security" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Security</Link>
-              <Link to="/privacy" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Privacy</Link>
-              <Link to="/terms" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Terms</Link>
-              <Link to="/accessibility" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Accessibility</Link>
+              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">
+                {t("footer.legal")}
+              </h4>
+              <Link
+                to="/security"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Security
+              </Link>
+              <Link
+                to="/privacy"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Privacy
+              </Link>
+              <Link
+                to="/terms"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Terms
+              </Link>
+              <Link
+                to="/accessibility"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Accessibility
+              </Link>
               <a
                 href="https://github.com/REMEDiSSecurity/VulnRap.Com"
                 target="_blank"
@@ -461,9 +847,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </a>
             <span className="text-muted-foreground/40 text-center leading-relaxed">
               Funded and developed by the creators of{" "}
-              <a href="https://complitt.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/70 transition-colors">COMPLiTT.com</a>
-              {" "}and{" "}
-              <a href="https://remedissecurity.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/70 transition-colors">REMEDiSSecurity.com</a>
+              <a
+                href="https://complitt.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-muted-foreground/70 transition-colors"
+              >
+                COMPLiTT.com
+              </a>{" "}
+              and{" "}
+              <a
+                href="https://remedissecurity.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-muted-foreground/70 transition-colors"
+              >
+                REMEDiSSecurity.com
+              </a>
             </span>
           </div>
         </div>

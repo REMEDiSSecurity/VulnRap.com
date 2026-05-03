@@ -60,10 +60,10 @@ test.describe("FLAT hand-wavy phrase panel + calibration card — mutations bloc
       const row = page
         .locator(`[data-testid="handwavy-row"]`)
         .filter({ hasText: phrase });
-      await expect(row, "seeded phrase should appear in the active list").toHaveCount(
-        1,
-        { timeout: 15_000 },
-      );
+      await expect(
+        row,
+        "seeded phrase should appear in the active list",
+      ).toHaveCount(1, { timeout: 15_000 });
 
       // Per-row controls (Edit / Remove) on the seeded phrase should be
       // disabled with the shared blocked-title tooltip + the
@@ -200,9 +200,14 @@ test.describe("FLAT hand-wavy phrase panel + calibration card — mutations bloc
       await expect(activeRow).toHaveCount(1, { timeout: 15_000 });
       const rowHint = activeRow.getByTestId("handwavy-row-disabled-hint");
       await expect(rowHint).toBeVisible();
-      await expect(rowHint).toContainText(/reviewer token is missing or invalid/i);
+      await expect(rowHint).toContainText(
+        /reviewer token is missing or invalid/i,
+      );
       const rowHintId = await rowHint.getAttribute("id");
-      expect(rowHintId, "row hint must carry an id for aria-describedby").toBeTruthy();
+      expect(
+        rowHintId,
+        "row hint must carry an id for aria-describedby",
+      ).toBeTruthy();
       await expect(activeRow.getByTestId("handwavy-edit")).toHaveAttribute(
         "aria-describedby",
         rowHintId!,
@@ -263,10 +268,9 @@ test.describe("FLAT hand-wavy phrase panel + calibration card — mutations bloc
       );
       const reinstateHintId = await reinstateHint.getAttribute("id");
       expect(reinstateHintId).toBeTruthy();
-      await expect(historyRow.getByTestId("handwavy-reinstate")).toHaveAttribute(
-        "aria-describedby",
-        reinstateHintId!,
-      );
+      await expect(
+        historyRow.getByTestId("handwavy-reinstate"),
+      ).toHaveAttribute("aria-describedby", reinstateHintId!);
 
       // 4) Batch reinstate cluster (Preview reinstate / Reinstate all)
       // — the seed-removed phrase becomes its own single-row batch

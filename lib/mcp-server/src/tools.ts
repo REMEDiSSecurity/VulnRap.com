@@ -59,7 +59,9 @@ export const ScoreReportInput = z
 
 export type ScoreReportInputType = z.infer<typeof ScoreReportInput>;
 
-export async function scoreReport(input: ScoreReportInputType): Promise<unknown> {
+export async function scoreReport(
+  input: ScoreReportInputType,
+): Promise<unknown> {
   return apiRequest("/api/reports/check", {
     method: "POST",
     form: {
@@ -97,7 +99,9 @@ export async function lookupReport(
 export const QueryStatsInput = z.object({}).describe("No inputs required.");
 export type QueryStatsInputType = z.infer<typeof QueryStatsInput>;
 
-export async function queryStats(_input: QueryStatsInputType): Promise<unknown> {
+export async function queryStats(
+  _input: QueryStatsInputType,
+): Promise<unknown> {
   return apiRequest("/api/stats");
 }
 
@@ -149,7 +153,9 @@ export const QueryGalleryInput = z
       .optional()
       .describe("Optional triage tier filter, e.g. AUTO_CLOSE or PRIORITIZE."),
   })
-  .describe("Optional pagination and filter knobs for the curated report feed.");
+  .describe(
+    "Optional pagination and filter knobs for the curated report feed.",
+  );
 
 export type QueryGalleryInputType = z.infer<typeof QueryGalleryInput>;
 
@@ -254,10 +260,10 @@ export function percentileRankFromBins(
 export async function getCohortBaseline(
   input: GetCohortBaselineInputType,
 ): Promise<unknown> {
-  const payload = (await apiRequest<CohortBaselinePayload>(
-    "/api/cohort/baseline",
-    { query: { cwe: input.cwe ?? undefined } },
-  )) ?? {};
+  const payload =
+    (await apiRequest<CohortBaselinePayload>("/api/cohort/baseline", {
+      query: { cwe: input.cwe ?? undefined },
+    })) ?? {};
   if (typeof input.score !== "number") return payload;
   const bins = Array.isArray(payload.bins) ? payload.bins : [];
   const total =

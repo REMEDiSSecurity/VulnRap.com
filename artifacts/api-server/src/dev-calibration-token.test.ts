@@ -9,10 +9,10 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { Request, Response, NextFunction } from "express";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { requireCalibrationAuthStrict } from "./middlewares/require-calibration-auth";
+import type { Request, Response, NextFunction } from "express";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // src -> api-server -> artifacts -> repo root

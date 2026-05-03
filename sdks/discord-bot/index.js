@@ -1,18 +1,22 @@
-import 'dotenv/config';
+import "dotenv/config";
 import {
   Client,
   Events,
   GatewayIntentBits,
   EmbedBuilder,
   MessageFlags,
-} from 'discord.js';
+} from "discord.js";
 
 const TOKEN = process.env.DISCORD_TOKEN;
-const API_BASE = (process.env.VULNRAP_API_BASE || 'https://vulnrap.com/api').replace(/\/$/, '');
-const PUBLIC_URL = (process.env.VULNRAP_PUBLIC_URL || 'https://vulnrap.com').replace(/\/$/, '');
+const API_BASE = (
+  process.env.VULNRAP_API_BASE || "https://vulnrap.com/api"
+).replace(/\/$/, "");
+const PUBLIC_URL = (
+  process.env.VULNRAP_PUBLIC_URL || "https://vulnrap.com"
+).replace(/\/$/, "");
 
 if (!TOKEN) {
-  console.error('Missing DISCORD_TOKEN in environment.');
+  console.error("Missing DISCORD_TOKEN in environment.");
   process.exit(1);
 }
 
@@ -28,15 +32,17 @@ const TIER_COLORS = {
 
 function colorForTier(tier) {
   if (!tier) return 0x6366f1;
-  const key = String(tier).toUpperCase().replace(/[^A-Z_]/g, '_');
+  const key = String(tier)
+    .toUpperCase()
+    .replace(/[^A-Z_]/g, "_");
   return TIER_COLORS[key] ?? 0x6366f1;
 }
 
 function parseReportId(raw) {
-  const value = String(raw ?? '').trim();
+  const value = String(raw ?? "").trim();
   if (!value) return null;
   // Accept numeric id, "VR-000B", "#1234", "1234"
-  const stripped = value.replace(/^#/, '').replace(/^VR[-_]?/i, '');
+  const stripped = value.replace(/^#/, "").replace(/^VR[-_]?/i, "");
   // If it's all digits, treat as numeric id; otherwise pass through (server resolves codes via lookup endpoints).
   if (/^\d+$/.test(stripped)) return stripped;
   // For codes like "000B" or "VR-000B" we still pass the original to API; but verify endpoint expects integer id.
@@ -47,10 +53,13 @@ function parseReportId(raw) {
 async function fetchVerification(reportId) {
   const url = `${API_BASE}/reports/${encodeURIComponent(reportId)}/verify`;
   const res = await fetch(url, {
-    headers: { Accept: 'application/json', 'User-Agent': 'vulnrap-discord-bot/0.1' },
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "vulnrap-discord-bot/0.1",
+    },
   });
   if (res.status === 404) {
-    const err = new Error('Report not found.');
+    const err = new Error("Report not found.");
     err.status = 404;
     throw err;
   }
@@ -63,8 +72,8 @@ async function fetchVerification(reportId) {
 }
 
 function buildEmbed(badge) {
-  const tier = badge.slopTier ?? 'UNKNOWN';
-  const score = typeof badge.slopScore === 'number' ? badge.slopScore : null;
+  const tier = badge.slopTier ?? "UNKNOWN";
+  const score = typeof badge.slopScore === "number" ? badge.slopScore : null;
   const reportUrl = badge.verifyUrl || `${PUBLIC_URL}/results/${badge.id}`;
   const code = badge.reportCode || `#${badge.id}`;
 
@@ -74,27 +83,29 @@ function buildEmbed(badge) {
     .setURL(reportUrl)
     .addFields(
       {
-        name: 'Slop score',
-        value: score === null ? '—' : `**${score} / 100**`,
+        name: "Slop score",
+        value: score === null ? "—" : `**${score} / 100**`,
         inline: true,
       },
       {
-        name: 'Tier',
+        name: "Tier",
         value: `\`${tier}\``,
         inline: true,
       },
       {
-        name: 'Similarity',
+        name: "Similarity",
         value: `${badge.similarityMatchCount ?? 0} match(es)`,
         inline: true,
       },
       {
-        name: 'Section reuse',
+        name: "Section reuse",
         value: `${badge.sectionMatchCount ?? 0} block(s)`,
         inline: true,
       },
     )
-    .setFooter({ text: 'vulnrap.com — open the report for the full breakdown' });
+    .setFooter({
+      text: "vulnrap.com — open the report for the full breakdown",
+    });
 
   if (badge.createdAt) {
     const ts = Date.parse(badge.createdAt);
@@ -112,9 +123,9 @@ client.once(Events.ClientReady, (c) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName !== 'vulnrap-score') return;
+  if (interaction.commandName !== "vulnrap-score") return;
 
-  const raw = interaction.options.getString('id', true);
+  const raw = interaction.options.getString("id", true);
   const reportId = parseReportId(raw);
 
   if (!reportId) {
@@ -142,7 +153,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.Error, (err) => {
-  console.error('Discord client error:', err);
+  console.error("Discord client error:", err);
 });
 
 await client.login(TOKEN);

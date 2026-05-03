@@ -6,7 +6,13 @@
 // If none match with sufficient confidence, returns FLAT.
 
 import { detectVulnerabilityType } from "../extractors";
-import { FAMILIES, FLAT_FAMILY, familyForCweNumber, type FamilyId, type FamilyRubric } from "./families";
+import {
+  FAMILIES,
+  FLAT_FAMILY,
+  familyForCweNumber,
+  type FamilyId,
+  type FamilyRubric,
+} from "./families";
 import { ancestorsOf, normalizeCweId } from "./hierarchy";
 
 export type ClassificationConfidence = "HIGH" | "MEDIUM" | "LOW";
@@ -37,22 +43,48 @@ export interface ClassificationResult {
 }
 
 const TECH_PATTERNS: Array<{ tech: string; pattern: RegExp }> = [
-  { tech: "python", pattern: /\b(?:python|django|flask|fastapi|\.py\b|pip\s+install|venv|requirements\.txt)\b/i },
-  { tech: "node", pattern: /\b(?:node\.?js|npm\s|yarn\s|express|nestjs|next\.?js|package\.json|\.js\b|\.ts\b)\b/i },
-  { tech: "go", pattern: /\b(?:golang|\bgo\s+(?:run|build|test|mod)\b|go\.mod|\.go\b)\b/i },
+  {
+    tech: "python",
+    pattern:
+      /\b(?:python|django|flask|fastapi|\.py\b|pip\s+install|venv|requirements\.txt)\b/i,
+  },
+  {
+    tech: "node",
+    pattern:
+      /\b(?:node\.?js|npm\s|yarn\s|express|nestjs|next\.?js|package\.json|\.js\b|\.ts\b)\b/i,
+  },
+  {
+    tech: "go",
+    pattern: /\b(?:golang|\bgo\s+(?:run|build|test|mod)\b|go\.mod|\.go\b)\b/i,
+  },
   { tech: "rust", pattern: /\b(?:rust|cargo|crates?\.io|\.rs\b)\b/i },
-  { tech: "java", pattern: /\b(?:java|spring(?:\s|\.boot)|jvm|jar|maven|gradle|\.java\b|servlet|tomcat|jetty)\b/i },
+  {
+    tech: "java",
+    pattern:
+      /\b(?:java|spring(?:\s|\.boot)|jvm|jar|maven|gradle|\.java\b|servlet|tomcat|jetty)\b/i,
+  },
   { tech: "ruby", pattern: /\b(?:ruby|rails|rack|sinatra|gemfile|\.rb\b)\b/i },
-  { tech: "php", pattern: /\b(?:php|laravel|symfony|composer|wordpress|drupal|\.php\b)\b/i },
-  { tech: "c_cpp", pattern: /\b(?:libcurl|openssl|nginx\b|kernel|\.c\b|\.cpp\b|\.cc\b|\.h\b|gcc\b|clang\b)\b/i },
-  { tech: "kotlin_swift", pattern: /\b(?:kotlin|swift|xcode|android sdk|\.kt\b|\.swift\b)\b/i },
+  {
+    tech: "php",
+    pattern: /\b(?:php|laravel|symfony|composer|wordpress|drupal|\.php\b)\b/i,
+  },
+  {
+    tech: "c_cpp",
+    pattern:
+      /\b(?:libcurl|openssl|nginx\b|kernel|\.c\b|\.cpp\b|\.cc\b|\.h\b|gcc\b|clang\b)\b/i,
+  },
+  {
+    tech: "kotlin_swift",
+    pattern: /\b(?:kotlin|swift|xcode|android sdk|\.kt\b|\.swift\b)\b/i,
+  },
 ];
 
 function detectTechnology(text: string): string | null {
   const hits: Array<{ tech: string; count: number }> = [];
   for (const { tech, pattern } of TECH_PATTERNS) {
     const matches = text.match(new RegExp(pattern, "g"));
-    if (matches && matches.length >= 1) hits.push({ tech, count: matches.length });
+    if (matches && matches.length >= 1)
+      hits.push({ tech, count: matches.length });
   }
   if (hits.length === 0) return null;
   hits.sort((a, b) => b.count - a.count);
@@ -161,8 +193,12 @@ const FALLBACK_KEYWORDS: FallbackKeywords[] = [
 /** Walk the cited CWEs and return the first one that maps to any rubric family,
  * along with that family. Used so engine 3 can apply same-family vs off-family
  * scoring even when the *detected* family (via keywords/extractors) differs. */
-function citedCweFamily(claimedCwes: string[] | undefined): { cweId: string | null; family: FamilyId | null } {
-  if (!claimedCwes || claimedCwes.length === 0) return { cweId: null, family: null };
+function citedCweFamily(claimedCwes: string[] | undefined): {
+  cweId: string | null;
+  family: FamilyId | null;
+} {
+  if (!claimedCwes || claimedCwes.length === 0)
+    return { cweId: null, family: null };
   // Walk *all* claimed CWEs in order looking for the first that maps to a
   // family (directly or via ancestors). Only fall back to the first cited
   // CWE with no family after exhausting every candidate, so a multi-CWE
@@ -183,7 +219,9 @@ function citedCweFamily(claimedCwes: string[] | undefined): { cweId: string | nu
   return { cweId: firstCitedId, family: null };
 }
 
-function classifyByCwe(claimedCwes: string[] | undefined): ClassificationResult | null {
+function classifyByCwe(
+  claimedCwes: string[] | undefined,
+): ClassificationResult | null {
   if (!claimedCwes || claimedCwes.length === 0) return null;
   for (const raw of claimedCwes) {
     const id = normalizeCweId(raw);
@@ -281,7 +319,8 @@ function classifyByVulnType(text: string): ClassificationResult | null {
 
 function classifyByKeywords(text: string): ClassificationResult | null {
   const lowered = text.toLowerCase();
-  let best: { fam: FamilyRubric; score: number; matches: string[] } | null = null;
+  let best: { fam: FamilyRubric; score: number; matches: string[] } | null =
+    null;
   for (const fk of FALLBACK_KEYWORDS) {
     const matches: string[] = [];
     for (const re of fk.keywords) {
@@ -313,9 +352,12 @@ function classifyByKeywords(text: string): ClassificationResult | null {
  * content (vulnerability-type detector first, then keyword fallback). Used by
  * Engine 3 so the off-family ceiling can fire when the cited CWE belongs to a
  * different family than the actual content. */
-function classifyByEvidenceOnly(text: string): { family: FamilyId; confidence: ClassificationConfidence } | null {
+function classifyByEvidenceOnly(
+  text: string,
+): { family: FamilyId; confidence: ClassificationConfidence } | null {
   const byType = classifyByVulnType(text);
-  if (byType) return { family: byType.family.id, confidence: byType.confidence };
+  if (byType)
+    return { family: byType.family.id, confidence: byType.confidence };
   const byKw = classifyByKeywords(text);
   if (byKw) return { family: byKw.family.id, confidence: byKw.confidence };
   return null;
@@ -334,15 +376,33 @@ export function classifyReport(
   const evidenceConfidence = evidence?.confidence ?? null;
 
   const byCwe = classifyByCwe(claimedCwes);
-  if (byCwe) return { ...byCwe, technology, evidenceFamily, evidenceConfidence };
+  if (byCwe)
+    return { ...byCwe, technology, evidenceFamily, evidenceConfidence };
   const byType = classifyByVulnType(text);
-  if (byType) return { ...byType, technology, cweId: cited.cweId, citedFamily: cited.family, evidenceFamily, evidenceConfidence };
+  if (byType)
+    return {
+      ...byType,
+      technology,
+      cweId: cited.cweId,
+      citedFamily: cited.family,
+      evidenceFamily,
+      evidenceConfidence,
+    };
   const byKw = classifyByKeywords(text);
-  if (byKw) return { ...byKw, technology, cweId: cited.cweId, citedFamily: cited.family, evidenceFamily, evidenceConfidence };
+  if (byKw)
+    return {
+      ...byKw,
+      technology,
+      cweId: cited.cweId,
+      citedFamily: cited.family,
+      evidenceFamily,
+      evidenceConfidence,
+    };
   return {
     family: FLAT_FAMILY,
     confidence: "LOW",
-    reason: "No CWE / vulnerability-type / keyword evidence — falling back to generic rubric.",
+    reason:
+      "No CWE / vulnerability-type / keyword evidence — falling back to generic rubric.",
     evidence: [],
     technology,
     cweId: cited.cweId,

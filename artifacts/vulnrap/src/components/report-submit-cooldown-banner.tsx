@@ -32,8 +32,8 @@ export function ReportSubmitCooldownBanner({
       hint={
         <>
           The submit limiter is per-IP — if you're behind a shared egress,
-          another user on the same network may be using the bucket. No
-          action is needed; the limiter resets automatically.
+          another user on the same network may be using the bucket. No action is
+          needed; the limiter resets automatically.
         </>
       }
       testIdBase="report-submit-cooldown"

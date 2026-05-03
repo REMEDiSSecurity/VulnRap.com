@@ -30,7 +30,7 @@ function drawBug(
   size: number,
   opacity: number,
   wobble: number,
-  flipX: boolean
+  flipX: boolean,
 ) {
   ctx.save();
   ctx.translate(x, y);
@@ -82,7 +82,7 @@ function drawBug(
       leg.bodyX + s * 0.05,
       s * (0.4 + phase * 0.3),
       leg.bodyX - s * 0.05,
-      s * endSpread
+      s * endSpread,
     );
     ctx.stroke();
 
@@ -92,7 +92,7 @@ function drawBug(
       leg.bodyX + s * 0.05,
       -s * (0.4 + phase * 0.3),
       leg.bodyX - s * 0.05,
-      -s * endSpread
+      -s * endSpread,
     );
     ctx.stroke();
   }
@@ -146,7 +146,9 @@ export function CursorBugs() {
   }, []);
 
   useEffect(() => {
-    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const prefersReduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
     if (prefersReduced) return;
 
     const canvas = canvasRef.current;
@@ -177,7 +179,10 @@ export function CursorBugs() {
       if (path.length > MAX_PATH_POINTS) {
         path.splice(0, path.length - MAX_PATH_POINTS);
         for (const bug of bugsRef.current) {
-          bug.pathIndex = Math.max(0, bug.pathIndex - (path.length - MAX_PATH_POINTS));
+          bug.pathIndex = Math.max(
+            0,
+            bug.pathIndex - (path.length - MAX_PATH_POINTS),
+          );
         }
       }
 

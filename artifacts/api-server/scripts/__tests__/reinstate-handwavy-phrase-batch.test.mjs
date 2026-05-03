@@ -1,11 +1,15 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCRIPT_PATH = resolve(__dirname, "..", "reinstate-handwavy-phrase-batch.mjs");
+const SCRIPT_PATH = resolve(
+  __dirname,
+  "..",
+  "reinstate-handwavy-phrase-batch.mjs",
+);
 
 let server;
 let baseUrl;
@@ -33,7 +37,11 @@ beforeAll(async () => {
       const token = req.headers["x-calibration-token"] ?? null;
       let parsedBody = null;
       if (body) {
-        try { parsedBody = JSON.parse(body); } catch { parsedBody = body; }
+        try {
+          parsedBody = JSON.parse(body);
+        } catch {
+          parsedBody = body;
+        }
       }
       state.requests.push({
         method: req.method,
@@ -50,7 +58,9 @@ beforeAll(async () => {
       // detail URL first so it doesn't fall through to the picker handler.
       if (
         req.method === "GET" &&
-        /^\/api\/feedback\/calibration\/handwavy-phrases\/removal-batches\/[^?]+/.test(req.url)
+        /^\/api\/feedback\/calibration\/handwavy-phrases\/removal-batches\/[^?]+/.test(
+          req.url,
+        )
       ) {
         if (state.requireToken && token !== state.requireToken) {
           res.writeHead(401, { "Content-Type": "application/json" });
@@ -71,7 +81,9 @@ beforeAll(async () => {
       // Task #160 — CLI picker hits the new GET endpoint to populate the menu.
       if (
         req.method === "GET" &&
-        req.url.startsWith("/api/feedback/calibration/handwavy-phrases/removal-batches")
+        req.url.startsWith(
+          "/api/feedback/calibration/handwavy-phrases/removal-batches",
+        )
       ) {
         if (state.requireToken && token !== state.requireToken) {
           res.writeHead(401, { "Content-Type": "application/json" });
@@ -89,7 +101,9 @@ beforeAll(async () => {
         return;
       }
 
-      if (req.url !== "/api/feedback/calibration/handwavy-phrases/reinstate-batch") {
+      if (
+        req.url !== "/api/feedback/calibration/handwavy-phrases/reinstate-batch"
+      ) {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "not found" }));
         return;
@@ -165,7 +179,11 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
             { phrase: "rb b", reinstated: true },
             { phrase: "rb c", reinstated: false, reason: "already-reinstated" },
           ],
-          historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
+          historyEntry: {
+            removedAt: "2026-04-22T12:34:56.000Z",
+            reinstated: true,
+            phrases: [],
+          },
           phrases: [],
           history: [],
         },
@@ -176,8 +194,10 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
     // round-trip itself; the preview path has its own dedicated coverage
     // further down.
     const res = await runScript([
-      "--removed-at", "2026-04-22T12:34:56.000Z",
-      "--reviewer", "carol@team.com",
+      "--removed-at",
+      "2026-04-22T12:34:56.000Z",
+      "--reviewer",
+      "carol@team.com",
       "--yes",
       "--no-preview",
     ]);
@@ -192,8 +212,8 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
     expect(res.stdout).toMatch(/Reinstated:\s+2/);
     expect(res.stdout).toMatch(/Skipped:\s+1/);
     expect(res.stdout).toMatch(/Active list size now:\s+17/);
-    expect(res.stdout).toMatch(/reinstated         "rb a"/);
-    expect(res.stdout).toMatch(/reinstated         "rb b"/);
+    expect(res.stdout).toMatch(/reinstated {9}"rb a"/);
+    expect(res.stdout).toMatch(/reinstated {9}"rb b"/);
     expect(res.stdout).toMatch(/already-reinstated "rb c"/);
   });
 
@@ -209,29 +229,57 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
           skipped: 2,
           total: 12,
           results: [
-            { phrase: "rb skip a", reinstated: false, reason: "already-reinstated" },
-            { phrase: "rb skip b", reinstated: false, reason: "already-active" },
+            {
+              phrase: "rb skip a",
+              reinstated: false,
+              reason: "already-reinstated",
+            },
+            {
+              phrase: "rb skip b",
+              reinstated: false,
+              reason: "already-active",
+            },
           ],
-          historyEntry: { removedAt: "2026-04-22T01:02:03.000Z", reinstated: true, phrases: [] },
+          historyEntry: {
+            removedAt: "2026-04-22T01:02:03.000Z",
+            reinstated: true,
+            phrases: [],
+          },
           phrases: [],
           history: [],
         },
       },
     ];
 
-    const res = await runScript(["--removed-at", "2026-04-22T01:02:03.000Z", "--yes", "--no-preview"]);
+    const res = await runScript([
+      "--removed-at",
+      "2026-04-22T01:02:03.000Z",
+      "--yes",
+      "--no-preview",
+    ]);
     expect(res.code).toBe(0);
     expect(res.stdout).toMatch(/Reinstated:\s+0/);
     expect(res.stdout).toMatch(/Skipped:\s+2/);
     expect(res.stdout).toMatch(/already-reinstated "rb skip a"/);
-    expect(res.stdout).toMatch(/already-active     "rb skip b"/);
+    expect(res.stdout).toMatch(/already-active {5}"rb skip b"/);
   });
 
   it("exits 1 with a clear message when --removed-at does not match any history entry (404)", async () => {
     state.postResponses = [
-      { status: 404, body: { error: "No matching removal-history entry found for that removedAt.", reason: "history-not-found" } },
+      {
+        status: 404,
+        body: {
+          error: "No matching removal-history entry found for that removedAt.",
+          reason: "history-not-found",
+        },
+      },
     ];
-    const res = await runScript(["--removed-at", "2099-01-01T00:00:00.000Z", "--yes", "--no-preview"]);
+    const res = await runScript([
+      "--removed-at",
+      "2099-01-01T00:00:00.000Z",
+      "--yes",
+      "--no-preview",
+    ]);
     expect(res.code).toBe(1);
     expect(res.stderr).toMatch(/No matching removal-history entry/);
     expect(res.stderr).toMatch(/no removal-history entry matched/);
@@ -239,9 +287,21 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
 
   it("exits 1 with a clear message when the matched entry is not a batch (409)", async () => {
     state.postResponses = [
-      { status: 409, body: { error: "That history entry is not a batch removal — use /reinstate for single-phrase entries.", reason: "not-a-batch" } },
+      {
+        status: 409,
+        body: {
+          error:
+            "That history entry is not a batch removal — use /reinstate for single-phrase entries.",
+          reason: "not-a-batch",
+        },
+      },
     ];
-    const res = await runScript(["--removed-at", "2026-01-01T00:00:00.000Z", "--yes", "--no-preview"]);
+    const res = await runScript([
+      "--removed-at",
+      "2026-01-01T00:00:00.000Z",
+      "--yes",
+      "--no-preview",
+    ]);
     expect(res.code).toBe(1);
     expect(res.stderr).toMatch(/not a batch removal/);
     expect(res.stderr).toMatch(/use the per-phrase \/reinstate endpoint/);
@@ -249,7 +309,12 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
 
   it("exits 1 when the calibration token is rejected (401)", async () => {
     state.postResponses = [{ status: 401, body: { error: "unauthorized" } }];
-    const res = await runScript(["--removed-at", "2026-01-01T00:00:00.000Z", "--yes", "--no-preview"]);
+    const res = await runScript([
+      "--removed-at",
+      "2026-01-01T00:00:00.000Z",
+      "--yes",
+      "--no-preview",
+    ]);
     expect(res.code).toBe(1);
     expect(res.stderr).toMatch(/rejected as unauthorized/);
   });
@@ -275,7 +340,9 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
         },
       },
     ];
-    const res = await runScript(["--removed-at", "2026-04-22T12:34:56.000Z"], { stdin: "n\n" });
+    const res = await runScript(["--removed-at", "2026-04-22T12:34:56.000Z"], {
+      stdin: "n\n",
+    });
     expect(res.code).toBe(1);
     const posts = state.requests.filter((r) => r.method === "POST");
     expect(posts).toHaveLength(0);
@@ -326,7 +393,11 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
               { phrase: "pick b", reinstated: true },
               { phrase: "pick c", reinstated: true },
             ],
-            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
+            historyEntry: {
+              removedAt: "2026-04-22T12:34:56.000Z",
+              reinstated: true,
+              phrases: [],
+            },
             phrases: [],
             history: [],
           },
@@ -382,11 +453,20 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
         {
           status: 201,
           body: {
-            reinstated: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
-            reinstatedCount: 1, skipped: 0, total: 5,
+            reinstated: true,
+            batch: true,
+            removedAt: "2026-04-22T12:34:56.000Z",
+            reinstatedCount: 1,
+            skipped: 0,
+            total: 5,
             results: [{ phrase: "only one", reinstated: true }],
-            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
-            phrases: [], history: [],
+            historyEntry: {
+              removedAt: "2026-04-22T12:34:56.000Z",
+              reinstated: true,
+              phrases: [],
+            },
+            phrases: [],
+            history: [],
           },
         },
       ];
@@ -397,7 +477,9 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
       expect(res.code).toBe(0);
       const gets = state.requests.filter((r) => r.method === "GET");
       expect(gets).toHaveLength(1);
-      expect(gets[0].url).toBe("/api/feedback/calibration/handwavy-phrases/removal-batches?limit=3");
+      expect(gets[0].url).toBe(
+        "/api/feedback/calibration/handwavy-phrases/removal-batches?limit=3",
+      );
     });
 
     it("aborts cleanly when the picker prompt is answered with q (no POST issued)", async () => {
@@ -495,18 +577,29 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
         {
           status: 201,
           body: {
-            reinstated: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
-            reinstatedCount: 2, skipped: 0, total: 4,
+            reinstated: true,
+            batch: true,
+            removedAt: "2026-04-22T12:34:56.000Z",
+            reinstatedCount: 2,
+            skipped: 0,
+            total: 4,
             results: [
               { phrase: "scripted a", reinstated: true },
               { phrase: "scripted b", reinstated: true },
             ],
-            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
-            phrases: [], history: [],
+            historyEntry: {
+              removedAt: "2026-04-22T12:34:56.000Z",
+              reinstated: true,
+              phrases: [],
+            },
+            phrases: [],
+            history: [],
           },
         },
       ];
-      const res = await runScript(["--pick", "--yes", "--no-preview"], { stdin: "1\n" });
+      const res = await runScript(["--pick", "--yes", "--no-preview"], {
+        stdin: "1\n",
+      });
       expect(res.code).toBe(0);
       const posts = state.requests.filter((r) => r.method === "POST");
       expect(posts).toHaveLength(1);
@@ -514,7 +607,9 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
     });
 
     it("rejects non-positive --limit with exit code 2 before hitting the network", async () => {
-      const res = await runScript(["--pick", "--limit", "0"], { stdin: "1\ny\n" });
+      const res = await runScript(["--pick", "--limit", "0"], {
+        stdin: "1\ny\n",
+      });
       expect(res.code).toBe(2);
       expect(state.requests).toHaveLength(0);
       expect(res.stderr).toMatch(/--limit must be a positive integer/);
@@ -534,16 +629,26 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
       {
         status: 200,
         body: {
-          reinstated: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
-          reinstatedCount: 1, skipped: 0, total: 5,
+          reinstated: true,
+          batch: true,
+          removedAt: "2026-04-22T12:34:56.000Z",
+          reinstatedCount: 1,
+          skipped: 0,
+          total: 5,
           results: [{ phrase: "rb only", reinstated: true }],
-          historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
-          phrases: [], history: [],
+          historyEntry: {
+            removedAt: "2026-04-22T12:34:56.000Z",
+            reinstated: true,
+            phrases: [],
+          },
+          phrases: [],
+          history: [],
         },
       },
     ];
     const res = await runScript([
-      "--removed-at", "2026-04-22T12:34:56.000Z",
+      "--removed-at",
+      "2026-04-22T12:34:56.000Z",
       "--yes",
       "--no-preview",
     ]);
@@ -568,7 +673,11 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
           results: [
             { phrase: "rb dry a", reinstated: true },
             { phrase: "rb dry b", reinstated: true },
-            { phrase: "rb dry c", reinstated: false, reason: "already-reinstated" },
+            {
+              phrase: "rb dry c",
+              reinstated: false,
+              reason: "already-reinstated",
+            },
           ],
           historyEntry: {
             removedAt: "2026-04-22T12:34:56.000Z",
@@ -582,7 +691,8 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
     ];
 
     const res = await runScript([
-      "--removed-at", "2026-04-22T12:34:56.000Z",
+      "--removed-at",
+      "2026-04-22T12:34:56.000Z",
       "--dry-run",
     ]);
     expect(res.code).toBe(0);
@@ -624,9 +734,23 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
             phraseCount: 3,
             reinstatedCount: 1,
             phrases: [
-              { phrase: "preview phrase one", category: "absence", reinstated: false },
-              { phrase: "preview phrase two", category: "hedging", reinstated: true, reinstatedAt: "2026-04-23T00:00:00.000Z", reinstatedBy: "carol@team.com" },
-              { phrase: "preview phrase three", category: "buzzword", reinstated: false },
+              {
+                phrase: "preview phrase one",
+                category: "absence",
+                reinstated: false,
+              },
+              {
+                phrase: "preview phrase two",
+                category: "hedging",
+                reinstated: true,
+                reinstatedAt: "2026-04-23T00:00:00.000Z",
+                reinstatedBy: "carol@team.com",
+              },
+              {
+                phrase: "preview phrase three",
+                category: "buzzword",
+                reinstated: false,
+              },
             ],
           },
         },
@@ -635,22 +759,37 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
         {
           status: 200,
           body: {
-            reinstated: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
-            reinstatedCount: 2, skipped: 1, total: 7,
+            reinstated: true,
+            batch: true,
+            removedAt: "2026-04-22T12:34:56.000Z",
+            reinstatedCount: 2,
+            skipped: 1,
+            total: 7,
             results: [
               { phrase: "preview phrase one", reinstated: true },
-              { phrase: "preview phrase two", reinstated: false, reason: "already-reinstated" },
+              {
+                phrase: "preview phrase two",
+                reinstated: false,
+                reason: "already-reinstated",
+              },
               { phrase: "preview phrase three", reinstated: true },
             ],
-            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
-            phrases: [], history: [],
+            historyEntry: {
+              removedAt: "2026-04-22T12:34:56.000Z",
+              reinstated: true,
+              phrases: [],
+            },
+            phrases: [],
+            history: [],
           },
         },
       ];
 
       const res = await runScript([
-        "--removed-at", "2026-04-22T12:34:56.000Z",
-        "--reviewer", "carol@team.com",
+        "--removed-at",
+        "2026-04-22T12:34:56.000Z",
+        "--reviewer",
+        "carol@team.com",
         "--yes",
       ]);
       expect(res.code).toBe(0);
@@ -664,7 +803,9 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
       );
 
       // Preview header surfaces timestamp + reviewer + counts.
-      expect(res.stdout).toMatch(/Batch removed at 2026-04-22T12:34:56\.000Z by alice@team\.com/);
+      expect(res.stdout).toMatch(
+        /Batch removed at 2026-04-22T12:34:56\.000Z by alice@team\.com/,
+      );
       expect(res.stdout).toMatch(/Total phrases:\s+3/);
       expect(res.stdout).toMatch(/Already reinstated:\s+1/);
       expect(res.stdout).toMatch(/Would be reinstated:\s+2/);
@@ -688,17 +829,27 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
         {
           status: 200,
           body: {
-            reinstated: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
-            reinstatedCount: 1, skipped: 0, total: 5,
+            reinstated: true,
+            batch: true,
+            removedAt: "2026-04-22T12:34:56.000Z",
+            reinstatedCount: 1,
+            skipped: 0,
+            total: 5,
             results: [{ phrase: "skip preview", reinstated: true }],
-            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: true, phrases: [] },
-            phrases: [], history: [],
+            historyEntry: {
+              removedAt: "2026-04-22T12:34:56.000Z",
+              reinstated: true,
+              phrases: [],
+            },
+            phrases: [],
+            history: [],
           },
         },
       ];
 
       const res = await runScript([
-        "--removed-at", "2026-04-22T12:34:56.000Z",
+        "--removed-at",
+        "2026-04-22T12:34:56.000Z",
         "--yes",
         "--no-preview",
       ]);
@@ -715,17 +866,27 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
         {
           status: 200,
           body: {
-            dryRun: true, batch: true, removedAt: "2026-04-22T12:34:56.000Z",
-            reinstatedCount: 1, skipped: 0, total: 5,
+            dryRun: true,
+            batch: true,
+            removedAt: "2026-04-22T12:34:56.000Z",
+            reinstatedCount: 1,
+            skipped: 0,
+            total: 5,
             results: [{ phrase: "dr only", reinstated: true }],
-            historyEntry: { removedAt: "2026-04-22T12:34:56.000Z", reinstated: false, phrases: [] },
-            phrases: [], history: [],
+            historyEntry: {
+              removedAt: "2026-04-22T12:34:56.000Z",
+              reinstated: false,
+              phrases: [],
+            },
+            phrases: [],
+            history: [],
           },
         },
       ];
 
       const res = await runScript([
-        "--removed-at", "2026-04-22T12:34:56.000Z",
+        "--removed-at",
+        "2026-04-22T12:34:56.000Z",
         "--dry-run",
       ]);
       expect(res.code).toBe(0);
@@ -738,14 +899,16 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
         {
           status: 404,
           body: {
-            error: "No matching removal-history entry found for that removedAt.",
+            error:
+              "No matching removal-history entry found for that removedAt.",
             reason: "history-not-found",
           },
         },
       ];
 
       const res = await runScript([
-        "--removed-at", "2099-01-01T00:00:00.000Z",
+        "--removed-at",
+        "2099-01-01T00:00:00.000Z",
         "--yes",
       ]);
       expect(res.code).toBe(1);
@@ -759,14 +922,16 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
         {
           status: 404,
           body: {
-            error: "That history entry is a single-phrase removal — use /reinstate for single-phrase entries.",
+            error:
+              "That history entry is a single-phrase removal — use /reinstate for single-phrase entries.",
             reason: "not-a-batch",
           },
         },
       ];
 
       const res = await runScript([
-        "--removed-at", "2026-04-22T12:34:56.000Z",
+        "--removed-at",
+        "2026-04-22T12:34:56.000Z",
         "--yes",
       ]);
       expect(res.code).toBe(1);
@@ -777,9 +942,12 @@ describe("reinstate-handwavy-phrase-batch CLI", () => {
     });
 
     it("exits 1 with an unauthorized message when the preview detail fetch returns 401", async () => {
-      state.getDetailResponses = [{ status: 401, body: { error: "unauthorized" } }];
+      state.getDetailResponses = [
+        { status: 401, body: { error: "unauthorized" } },
+      ];
       const res = await runScript([
-        "--removed-at", "2026-04-22T12:34:56.000Z",
+        "--removed-at",
+        "2026-04-22T12:34:56.000Z",
         "--yes",
       ]);
       expect(res.code).toBe(1);

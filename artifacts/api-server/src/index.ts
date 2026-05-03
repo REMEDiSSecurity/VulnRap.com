@@ -88,7 +88,8 @@ const server = app.listen(port, (err) => {
   //      restart loop and the OS will reclaim sockets / DB connections)
   //      and longer in prod (give in-flight requests a chance to finish
   //      before the process dies).
-  const SHUTDOWN_TIMEOUT_MS = process.env.NODE_ENV === "production" ? 5_000 : 50;
+  const SHUTDOWN_TIMEOUT_MS =
+    process.env.NODE_ENV === "production" ? 5_000 : 50;
   let shuttingDown = false;
   const shutdown = (signal: NodeJS.Signals) => {
     if (shuttingDown) return;

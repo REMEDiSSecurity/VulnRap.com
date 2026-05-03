@@ -86,7 +86,10 @@ export interface AggregateMetrics {
 }
 
 export function computeAggregate(
-  rows: ReadonlyArray<{ expectedLabel: "valid" | "invalid"; predictedLabel: "valid" | "invalid" }>,
+  rows: ReadonlyArray<{
+    expectedLabel: "valid" | "invalid";
+    predictedLabel: "valid" | "invalid";
+  }>,
 ): AggregateMetrics {
   let tp = 0,
     fp = 0,
@@ -94,8 +97,10 @@ export function computeAggregate(
     fn = 0;
   for (const r of rows) {
     if (r.expectedLabel === "valid" && r.predictedLabel === "valid") tp++;
-    else if (r.expectedLabel === "invalid" && r.predictedLabel === "valid") fp++;
-    else if (r.expectedLabel === "invalid" && r.predictedLabel === "invalid") tn++;
+    else if (r.expectedLabel === "invalid" && r.predictedLabel === "valid")
+      fp++;
+    else if (r.expectedLabel === "invalid" && r.predictedLabel === "invalid")
+      tn++;
     else fn++;
   }
   const total = rows.length;
@@ -103,14 +108,21 @@ export function computeAggregate(
   const precision = tp + fp === 0 ? 0 : tp / (tp + fp);
   const recall = tp + fn === 0 ? 0 : tp / (tp + fn);
   const f1 =
-    precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
+    precision + recall === 0
+      ? 0
+      : (2 * precision * recall) / (precision + recall);
   return {
     total,
     accuracy: round4(accuracy),
     precision: round4(precision),
     recall: round4(recall),
     f1: round4(f1),
-    confusionMatrix: { truePositive: tp, falsePositive: fp, trueNegative: tn, falseNegative: fn },
+    confusionMatrix: {
+      truePositive: tp,
+      falsePositive: fp,
+      trueNegative: tn,
+      falseNegative: fn,
+    },
   };
 }
 

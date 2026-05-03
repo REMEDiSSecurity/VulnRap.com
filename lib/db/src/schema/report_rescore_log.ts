@@ -10,7 +10,14 @@
 // `code_version` is whatever the running process reports (env-supplied or
 // best-effort from `package.json`) so an alert that fires after a deploy
 // can be traced back to the exact build that flipped tiers.
-import { pgTable, serial, integer, varchar, timestamp, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  serial,
+  integer,
+  varchar,
+  timestamp,
+  index,
+} from "drizzle-orm/pg-core";
 import { reportsTable } from "./reports";
 
 export const reportRescoreLogTable = pgTable(
@@ -27,7 +34,9 @@ export const reportRescoreLogTable = pgTable(
     scoredAt: timestamp("scored_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    codeVersion: varchar("code_version", { length: 64 }).notNull().default("unknown"),
+    codeVersion: varchar("code_version", { length: 64 })
+      .notNull()
+      .default("unknown"),
   },
   (table) => [
     index("idx_report_rescore_log_scored_at").on(table.scoredAt),

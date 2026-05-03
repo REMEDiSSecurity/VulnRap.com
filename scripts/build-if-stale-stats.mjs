@@ -195,9 +195,7 @@ export function formatSummary(byTarget) {
     const { hits, cacheable } = hitRate(s);
     out.push("");
     const span = s.first === s.last ? s.first : `${s.first} → ${s.last}`;
-    out.push(
-      `${target}: ${s.total} run${s.total === 1 ? "" : "s"} (${span})`,
-    );
+    out.push(`${target}: ${s.total} run${s.total === 1 ? "" : "s"} (${span})`);
     out.push(
       `  hit-rate: ${formatPercent(hits, cacheable)} ` +
         `(${hits}/${cacheable} cacheable invocations hit)`,
@@ -291,7 +289,9 @@ async function main() {
   }
   const byTarget = summariseStats(records);
   if (opts.json) {
-    process.stdout.write(JSON.stringify(summaryToJson(byTarget), null, 2) + "\n");
+    process.stdout.write(
+      JSON.stringify(summaryToJson(byTarget), null, 2) + "\n",
+    );
     return;
   }
   process.stdout.write(

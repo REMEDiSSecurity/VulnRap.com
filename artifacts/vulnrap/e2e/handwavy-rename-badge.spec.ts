@@ -194,9 +194,9 @@ test.describe("FLAT hand-wavy phrase panel — rename badge (Task #505)", () => 
       await expect(badge).toHaveCount(1);
       await expect(badge).toBeVisible();
       await expect(badge).toContainText("Renamed");
-      await expect(
-        historyRow.getByTestId("handwavy-rename-badge"),
-      ).toHaveCount(0);
+      await expect(historyRow.getByTestId("handwavy-rename-badge")).toHaveCount(
+        0,
+      );
 
       await badge.hover();
       const tooltip = page.getByTestId("handwavy-history-rename-tooltip");
@@ -245,9 +245,7 @@ test.describe("FLAT hand-wavy phrase panel — rename badge (Task #505)", () => 
         "handwavy-history-batch-rows-details",
       );
       if ((await rowsDetails.getAttribute("open")) === null) {
-        await group
-          .getByTestId("handwavy-history-batch-rows-summary")
-          .click();
+        await group.getByTestId("handwavy-history-batch-rows-summary").click();
       }
       await expect(rowsDetails).toHaveAttribute("open", /.*/);
 

@@ -147,7 +147,10 @@ const CANDIDATE_PATHS = [
   path.resolve(__dirname, "../../../../data/handwavy-phrases.json"),
   // pkg-root fallback
   path.resolve(process.cwd(), "data/handwavy-phrases.json"),
-  path.resolve(process.cwd(), "artifacts/api-server/data/handwavy-phrases.json"),
+  path.resolve(
+    process.cwd(),
+    "artifacts/api-server/data/handwavy-phrases.json",
+  ),
 ];
 
 const DEFAULT_MARKERS: HandwavyMarker[] = [
@@ -156,7 +159,10 @@ const DEFAULT_MARKERS: HandwavyMarker[] = [
   { phrase: "private fuzzing harness", category: "absence" },
   { phrase: "private poc", category: "absence" },
   { phrase: "structural rather than", category: "absence" },
-  { phrase: "structural vulnerability follows from the design", category: "absence" },
+  {
+    phrase: "structural vulnerability follows from the design",
+    category: "absence",
+  },
   { phrase: "i have not enumerated", category: "absence" },
   { phrase: "have not been able to confirm", category: "absence" },
   { phrase: "no working proof-of-concept", category: "absence" },
@@ -285,7 +291,9 @@ function coerceMarker(entry: unknown): HandwavyMarker | null {
     if (typeof obj.phrase !== "string") return null;
     const phrase = normalizePhrase(obj.phrase);
     if (!phrase) return null;
-    const category: HandwavyCategory = isCategory(obj.category) ? obj.category : "absence";
+    const category: HandwavyCategory = isCategory(obj.category)
+      ? obj.category
+      : "absence";
     const marker: HandwavyMarker = { phrase, category };
     const addedBy = trimOrUndefined(obj.addedBy, 200);
     if (addedBy) marker.addedBy = addedBy;
@@ -305,7 +313,9 @@ function coerceBatchPhrase(entry: unknown): HandwavyBatchHistoryPhrase | null {
   if (typeof obj.phrase !== "string") return null;
   const phrase = normalizePhrase(obj.phrase);
   if (!phrase) return null;
-  const category: HandwavyCategory = isCategory(obj.category) ? obj.category : "absence";
+  const category: HandwavyCategory = isCategory(obj.category)
+    ? obj.category
+    : "absence";
   const out: HandwavyBatchHistoryPhrase = { phrase, category };
   const addedBy = trimOrUndefined(obj.addedBy, 200);
   if (addedBy) out.addedBy = addedBy;
@@ -343,7 +353,9 @@ function coerceHistory(entry: unknown): HandwavyHistoryEntry | null {
   if (typeof obj.phrase !== "string") return null;
   const phrase = normalizePhrase(obj.phrase);
   if (!phrase) return null;
-  const category: HandwavyCategory = isCategory(obj.category) ? obj.category : "absence";
+  const category: HandwavyCategory = isCategory(obj.category)
+    ? obj.category
+    : "absence";
   const out: HandwavyHistoryEntry = { phrase, category, removedAt };
   const removedBy = trimOrUndefined(obj.removedBy, 200);
   if (removedBy) out.removedBy = removedBy;
@@ -364,7 +376,10 @@ function coerceHistory(entry: unknown): HandwavyHistoryEntry | null {
   return out;
 }
 
-function load(): { markers: HandwavyMarker[]; history: HandwavyHistoryEntry[] } {
+function load(): {
+  markers: HandwavyMarker[];
+  history: HandwavyHistoryEntry[];
+} {
   if (CACHED_MARKERS && CACHED_HISTORY) {
     return { markers: CACHED_MARKERS, history: CACHED_HISTORY };
   }
@@ -389,7 +404,10 @@ function load(): { markers: HandwavyMarker[]; history: HandwavyHistoryEntry[] } 
     }
   }
   if (!markers || markers.length === 0) {
-    markers = DEFAULT_MARKERS.map((m) => ({ phrase: normalizePhrase(m.phrase), category: m.category }));
+    markers = DEFAULT_MARKERS.map((m) => ({
+      phrase: normalizePhrase(m.phrase),
+      category: m.category,
+    }));
   }
   // Dedupe by phrase while preserving order; first occurrence wins.
   const seen = new Set<string>();
@@ -411,7 +429,10 @@ function trimHistory(history: HandwavyHistoryEntry[]): HandwavyHistoryEntry[] {
     : history;
 }
 
-function persist(markers: HandwavyMarker[], history: HandwavyHistoryEntry[]): HandwavyHistoryEntry[] {
+function persist(
+  markers: HandwavyMarker[],
+  history: HandwavyHistoryEntry[],
+): HandwavyHistoryEntry[] {
   const p = resolvePath();
   const dir = path.dirname(p);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -458,12 +479,16 @@ export function addHandwavyPhrase(
 ): AddPhraseResult {
   const phrase = normalizePhrase(rawPhrase);
   if (phrase.length < 3) {
-    throw new Error("Phrase must be at least 3 characters after normalization.");
+    throw new Error(
+      "Phrase must be at least 3 characters after normalization.",
+    );
   }
   if (phrase.length > 200) {
     throw new Error("Phrase must be at most 200 characters.");
   }
-  const category: HandwavyCategory = isCategory(rawCategory) ? rawCategory : "absence";
+  const category: HandwavyCategory = isCategory(rawCategory)
+    ? rawCategory
+    : "absence";
   const reviewer = trimOrUndefined(options.reviewer, 200);
   const rationale = trimOrUndefined(options.rationale, 500);
   if (rationale && rationale.length < 3) {
@@ -472,9 +497,17 @@ export function addHandwavyPhrase(
   const { markers: current, history } = load();
   const existing = current.find((m) => m.phrase === phrase);
   if (existing) {
-    return { added: false, phrase, category: existing.category, total: current.length, marker: { ...existing } };
+    return {
+      added: false,
+      phrase,
+      category: existing.category,
+      total: current.length,
+      marker: { ...existing },
+    };
   }
-  const addedAt = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+  const addedAt = isIsoTimestamp(options.now)
+    ? options.now
+    : new Date().toISOString();
   const marker: HandwavyMarker = { phrase, category };
   if (reviewer) marker.addedBy = reviewer;
   marker.addedAt = addedAt;
@@ -483,7 +516,13 @@ export function addHandwavyPhrase(
   const trimmed = persist(next, history);
   CACHED_MARKERS = next;
   CACHED_HISTORY = trimmed;
-  return { added: true, phrase, category, total: next.length, marker: { ...marker } };
+  return {
+    added: true,
+    phrase,
+    category,
+    total: next.length,
+    marker: { ...marker },
+  };
 }
 
 export interface RemovePhraseOptions {
@@ -509,7 +548,9 @@ export function removeHandwavyPhrase(
     return { removed: false, phrase, total: current.length };
   }
   const reviewer = trimOrUndefined(options.reviewer, 200);
-  const removedAt = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+  const removedAt = isIsoTimestamp(options.now)
+    ? options.now
+    : new Date().toISOString();
   const removed = current[idx];
   const next = current.slice(0, idx).concat(current.slice(idx + 1));
   const historyEntry: HandwavyHistoryEntry = {
@@ -528,7 +569,12 @@ export function removeHandwavyPhrase(
   const trimmed = persist(next, nextHistory);
   CACHED_MARKERS = next;
   CACHED_HISTORY = trimmed;
-  return { removed: true, phrase, total: next.length, historyEntry: { ...historyEntry } };
+  return {
+    removed: true,
+    phrase,
+    total: next.length,
+    historyEntry: { ...historyEntry },
+  };
 }
 
 export interface BatchRemovePhraseEntryResult {
@@ -567,7 +613,9 @@ export function removeHandwavyPhrasesBatch(
   options: RemovePhraseOptions = {},
 ): BatchRemovePhraseResult {
   const reviewer = trimOrUndefined(options.reviewer, 200);
-  const removedAt = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+  const removedAt = isIsoTimestamp(options.now)
+    ? options.now
+    : new Date().toISOString();
   const { markers: current, history } = load();
 
   const results: BatchRemovePhraseEntryResult[] = [];
@@ -580,13 +628,23 @@ export function removeHandwavyPhrasesBatch(
   for (const raw of rawPhrases) {
     const normalized = normalizePhrase(raw);
     if (seenInBatch.has(normalized)) {
-      results.push({ raw, phrase: normalized, removed: false, reason: "duplicate-in-batch" });
+      results.push({
+        raw,
+        phrase: normalized,
+        removed: false,
+        reason: "duplicate-in-batch",
+      });
       continue;
     }
     seenInBatch.add(normalized);
     const idx = current.findIndex((m) => m.phrase === normalized);
     if (idx < 0) {
-      results.push({ raw, phrase: normalized, removed: false, reason: "not-found" });
+      results.push({
+        raw,
+        phrase: normalized,
+        removed: false,
+        reason: "not-found",
+      });
       continue;
     }
     toRemoveIndexes.add(idx);
@@ -612,7 +670,8 @@ export function removeHandwavyPhrasesBatch(
     if (m.addedBy) entry.addedBy = m.addedBy;
     if (m.addedAt) entry.addedAt = m.addedAt;
     if (m.rationale) entry.rationale = m.rationale;
-    if (m.edits && m.edits.length > 0) entry.edits = m.edits.map((e) => ({ ...e }));
+    if (m.edits && m.edits.length > 0)
+      entry.edits = m.edits.map((e) => ({ ...e }));
     return entry;
   });
   const historyEntry: HandwavyHistoryEntry = {
@@ -672,13 +731,23 @@ export function previewRemoveHandwavyPhrasesBatch(
   for (const raw of rawPhrases) {
     const normalized = normalizePhrase(raw);
     if (seenInBatch.has(normalized)) {
-      results.push({ raw, phrase: normalized, removed: false, reason: "duplicate-in-batch" });
+      results.push({
+        raw,
+        phrase: normalized,
+        removed: false,
+        reason: "duplicate-in-batch",
+      });
       continue;
     }
     seenInBatch.add(normalized);
     const idx = current.findIndex((m) => m.phrase === normalized);
     if (idx < 0) {
-      results.push({ raw, phrase: normalized, removed: false, reason: "not-found" });
+      results.push({
+        raw,
+        phrase: normalized,
+        removed: false,
+        reason: "not-found",
+      });
       continue;
     }
     toRemoveIndexes.add(idx);
@@ -692,7 +761,8 @@ export function previewRemoveHandwavyPhrasesBatch(
     results,
     wouldRemove: removedMarkers.length,
     notFound: results.filter((r) => r.reason === "not-found").length,
-    duplicateInBatch: results.filter((r) => r.reason === "duplicate-in-batch").length,
+    duplicateInBatch: results.filter((r) => r.reason === "duplicate-in-batch")
+      .length,
     removedMarkers: removedMarkers.map((m) => ({ ...m })),
   };
 }
@@ -800,7 +870,9 @@ export function reinstateHandwavyPhrase(
   }
 
   const reviewer = trimOrUndefined(options.reviewer, 200);
-  const at = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+  const at = isIsoTimestamp(options.now)
+    ? options.now
+    : new Date().toISOString();
 
   if (singleIdx >= 0) {
     const entry = history[singleIdx];
@@ -880,7 +952,10 @@ export function reinstateHandwavyPhrase(
     category: inner.category,
     total: nextMarkers.length,
     marker: { ...marker },
-    historyEntry: { ...updatedEntry, phrases: nextInnerPhrases.map((p) => ({ ...p })) },
+    historyEntry: {
+      ...updatedEntry,
+      phrases: nextInnerPhrases.map((p) => ({ ...p })),
+    },
   };
 }
 
@@ -938,7 +1013,9 @@ export function reinstateHandwavyPhrasesBatch(
   }
 
   const reviewer = trimOrUndefined(options.reviewer, 200);
-  const at = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+  const at = isIsoTimestamp(options.now)
+    ? options.now
+    : new Date().toISOString();
 
   // Optional allow-list of inner phrases. Normalize each entry the same
   // way the active list is normalized (lowercase + collapsed whitespace)
@@ -972,14 +1049,25 @@ export function reinstateHandwavyPhrasesBatch(
       matchedAllowList!.add(inner.phrase);
     }
     if (inner.reinstated) {
-      results.push({ phrase: inner.phrase, reinstated: false, reason: "already-reinstated" });
+      results.push({
+        phrase: inner.phrase,
+        reinstated: false,
+        reason: "already-reinstated",
+      });
       continue;
     }
     if (activePhrases.has(inner.phrase)) {
-      results.push({ phrase: inner.phrase, reinstated: false, reason: "already-active" });
+      results.push({
+        phrase: inner.phrase,
+        reinstated: false,
+        reason: "already-active",
+      });
       continue;
     }
-    const marker: HandwavyMarker = { phrase: inner.phrase, category: inner.category };
+    const marker: HandwavyMarker = {
+      phrase: inner.phrase,
+      category: inner.category,
+    };
     if (reviewer) marker.addedBy = reviewer;
     marker.addedAt = at;
     if (inner.rationale) marker.rationale = inner.rationale;
@@ -1001,7 +1089,11 @@ export function reinstateHandwavyPhrasesBatch(
   if (useAllowList) {
     for (const requested of allowList!) {
       if (!matchedAllowList!.has(requested)) {
-        results.push({ phrase: requested, reinstated: false, reason: "not-in-batch" });
+        results.push({
+          phrase: requested,
+          reinstated: false,
+          reason: "not-in-batch",
+        });
       }
     }
   }
@@ -1040,7 +1132,10 @@ export function reinstateHandwavyPhrasesBatch(
     reinstated: reinstatedCount,
     skipped: results.length - reinstatedCount,
     total: nextMarkers.length,
-    historyEntry: { ...updatedEntry, phrases: nextInnerPhrases.map((p) => ({ ...p })) },
+    historyEntry: {
+      ...updatedEntry,
+      phrases: nextInnerPhrases.map((p) => ({ ...p })),
+    },
     results,
   };
 }
@@ -1094,7 +1189,9 @@ export function editHandwavyPhrase(
   const target = current[idx];
 
   const editEntry: HandwavyEditEntry = {
-    editedAt: isIsoTimestamp(options.now) ? options.now : new Date().toISOString(),
+    editedAt: isIsoTimestamp(options.now)
+      ? options.now
+      : new Date().toISOString(),
   };
   const reviewer = trimOrUndefined(options.reviewer, 200);
   if (reviewer) editEntry.editedBy = reviewer;
@@ -1103,7 +1200,9 @@ export function editHandwavyPhrase(
 
   if (updates.category !== undefined) {
     if (!isCategory(updates.category)) {
-      throw new Error("category must be one of 'absence', 'hedging', 'buzzword'.");
+      throw new Error(
+        "category must be one of 'absence', 'hedging', 'buzzword'.",
+      );
     }
     if (updates.category !== target.category) {
       editEntry.category = { from: target.category, to: updates.category };
@@ -1119,7 +1218,9 @@ export function editHandwavyPhrase(
     } else {
       const trimmed = updates.rationale.trim();
       if (trimmed.length < 3) {
-        throw new Error("Rationale must be at least 3 characters when provided.");
+        throw new Error(
+          "Rationale must be at least 3 characters when provided.",
+        );
       }
       if (trimmed.length > 500) {
         throw new Error("Rationale must be at most 500 characters.");
@@ -1145,7 +1246,9 @@ export function editHandwavyPhrase(
   if (updates.newPhrase !== undefined) {
     const renamedTo = normalizePhrase(updates.newPhrase);
     if (renamedTo.length < 3) {
-      throw new Error("Phrase must be at least 3 characters after normalization.");
+      throw new Error(
+        "Phrase must be at least 3 characters after normalization.",
+      );
     }
     if (renamedTo.length > 200) {
       throw new Error("Phrase must be at most 200 characters.");
@@ -1166,7 +1269,12 @@ export function editHandwavyPhrase(
 
   // No effective change — short-circuit without persisting an audit entry.
   if (!editEntry.category && !editEntry.rationale && !editEntry.phrase) {
-    return { edited: false, phrase, marker: { ...target }, total: current.length };
+    return {
+      edited: false,
+      phrase,
+      marker: { ...target },
+      total: current.length,
+    };
   }
 
   const existingEdits = target.edits ?? [];
@@ -1187,7 +1295,10 @@ export function editHandwavyPhrase(
     // Task #247 — when the marker was renamed, the result should report
     // the marker's NEW identity so callers can keep referencing it.
     phrase: updated.phrase,
-    marker: { ...updated, edits: updated.edits ? updated.edits.map((e) => ({ ...e })) : undefined },
+    marker: {
+      ...updated,
+      edits: updated.edits ? updated.edits.map((e) => ({ ...e })) : undefined,
+    },
     total: next.length,
     editEntry: { ...editEntry },
   };
@@ -1257,10 +1368,13 @@ export function undoHandwavyPhrase(
   if (marker.addedAt !== addedAt) {
     return { ok: false, reason: "addedAt-mismatch", phrase };
   }
-  const windowMs = typeof options.windowMs === "number" && options.windowMs >= 0
-    ? options.windowMs
-    : UNDO_WINDOW_MS;
-  const nowIso = isIsoTimestamp(options.now) ? options.now : new Date().toISOString();
+  const windowMs =
+    typeof options.windowMs === "number" && options.windowMs >= 0
+      ? options.windowMs
+      : UNDO_WINDOW_MS;
+  const nowIso = isIsoTimestamp(options.now)
+    ? options.now
+    : new Date().toISOString();
   const elapsed = Date.parse(nowIso) - Date.parse(marker.addedAt);
   if (!Number.isFinite(elapsed) || elapsed > windowMs) {
     return { ok: false, reason: "window-expired", phrase };
@@ -1284,7 +1398,12 @@ export function undoHandwavyPhrase(
   const trimmed = persist(next, nextHistory);
   CACHED_MARKERS = next;
   CACHED_HISTORY = trimmed;
-  return { ok: true, phrase, total: next.length, historyEntry: { ...historyEntry } };
+  return {
+    ok: true,
+    phrase,
+    total: next.length,
+    historyEntry: { ...historyEntry },
+  };
 }
 
 /**
@@ -1392,7 +1511,11 @@ export function undoHandwavyPhrasesBatch(
  */
 export type RevertEditResult =
   | (EditPhraseResult & { ok: true; revertedEntry: HandwavyEditEntry })
-  | { ok: false; reason: "phrase-not-found" | "edit-not-found"; phrase: string };
+  | {
+      ok: false;
+      reason: "phrase-not-found" | "edit-not-found";
+      phrase: string;
+    };
 
 export function revertHandwavyPhraseEdit(
   rawPhrase: string,

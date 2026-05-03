@@ -28,33 +28,99 @@ describe("compactSnapshots", () => {
     const recent = new Date(now.getTime() - 1 * DAY_MS);
 
     const oldDay1Iso = (h: number) =>
-      new Date(Date.UTC(
-        oldDay1.getUTCFullYear(), oldDay1.getUTCMonth(), oldDay1.getUTCDate(), h,
-      )).toISOString();
+      new Date(
+        Date.UTC(
+          oldDay1.getUTCFullYear(),
+          oldDay1.getUTCMonth(),
+          oldDay1.getUTCDate(),
+          h,
+        ),
+      ).toISOString();
     const oldDay2Iso = (h: number) =>
-      new Date(Date.UTC(
-        oldDay2.getUTCFullYear(), oldDay2.getUTCMonth(), oldDay2.getUTCDate(), h,
-      )).toISOString();
+      new Date(
+        Date.UTC(
+          oldDay2.getUTCFullYear(),
+          oldDay2.getUTCMonth(),
+          oldDay2.getUTCDate(),
+          h,
+        ),
+      ).toISOString();
 
     const snaps: ArchetypeSnapshot[] = [
-      { timestamp: oldDay1Iso(2), archetype: "A", count: 2, avriOnMean: 10, avriOnMax: 12, minDistanceToCeiling: 23, ceiling: 35 },
-      { timestamp: oldDay1Iso(8), archetype: "A", count: 2, avriOnMean: 14, avriOnMax: 18, minDistanceToCeiling: 17, ceiling: 35 },
-      { timestamp: oldDay1Iso(20), archetype: "A", count: 2, avriOnMean: 12, avriOnMax: 15, minDistanceToCeiling: 20, ceiling: 35 },
-      { timestamp: oldDay2Iso(3), archetype: "B", count: 1, avriOnMean: 8,  avriOnMax: 9,  minDistanceToCeiling: 26, ceiling: 35 },
-      { timestamp: oldDay2Iso(15), archetype: "B", count: 1, avriOnMean: 16, avriOnMax: 22, minDistanceToCeiling: 13, ceiling: 35 },
-      { timestamp: recent.toISOString(), archetype: "A", count: 2, avriOnMean: 11, avriOnMax: 14, minDistanceToCeiling: 21, ceiling: 35 },
-      { timestamp: recent.toISOString(), archetype: "B", count: 1, avriOnMean: 9,  avriOnMax: 10, minDistanceToCeiling: 25, ceiling: 35 },
+      {
+        timestamp: oldDay1Iso(2),
+        archetype: "A",
+        count: 2,
+        avriOnMean: 10,
+        avriOnMax: 12,
+        minDistanceToCeiling: 23,
+        ceiling: 35,
+      },
+      {
+        timestamp: oldDay1Iso(8),
+        archetype: "A",
+        count: 2,
+        avriOnMean: 14,
+        avriOnMax: 18,
+        minDistanceToCeiling: 17,
+        ceiling: 35,
+      },
+      {
+        timestamp: oldDay1Iso(20),
+        archetype: "A",
+        count: 2,
+        avriOnMean: 12,
+        avriOnMax: 15,
+        minDistanceToCeiling: 20,
+        ceiling: 35,
+      },
+      {
+        timestamp: oldDay2Iso(3),
+        archetype: "B",
+        count: 1,
+        avriOnMean: 8,
+        avriOnMax: 9,
+        minDistanceToCeiling: 26,
+        ceiling: 35,
+      },
+      {
+        timestamp: oldDay2Iso(15),
+        archetype: "B",
+        count: 1,
+        avriOnMean: 16,
+        avriOnMax: 22,
+        minDistanceToCeiling: 13,
+        ceiling: 35,
+      },
+      {
+        timestamp: recent.toISOString(),
+        archetype: "A",
+        count: 2,
+        avriOnMean: 11,
+        avriOnMax: 14,
+        minDistanceToCeiling: 21,
+        ceiling: 35,
+      },
+      {
+        timestamp: recent.toISOString(),
+        archetype: "B",
+        count: 1,
+        avriOnMean: 9,
+        avriOnMax: 10,
+        minDistanceToCeiling: 25,
+        ceiling: 35,
+      },
     ];
 
     const out = compactSnapshots(snaps, now, 30);
     // 2 aggregated daily rows (A on day1, B on day2) + 2 recent raw rows.
     expect(out.length).toBe(4);
-    const agg = out.filter(s => s.aggregated === true);
-    const raw = out.filter(s => s.aggregated !== true);
+    const agg = out.filter((s) => s.aggregated === true);
+    const raw = out.filter((s) => s.aggregated !== true);
     expect(agg.length).toBe(2);
     expect(raw.length).toBe(2);
 
-    const aggA = agg.find(s => s.archetype === "A")!;
+    const aggA = agg.find((s) => s.archetype === "A")!;
     expect(aggA.timestamp.endsWith("T00:00:00.000Z")).toBe(true);
     expect(aggA.avriOnMax).toBeCloseTo(18, 5);
     // Weighted mean by count (all 2): (10+14+12)/3 = 12.0
@@ -62,7 +128,7 @@ describe("compactSnapshots", () => {
     expect(aggA.minDistanceToCeiling).toBeCloseTo(35 - 18, 5);
     expect(aggA.count).toBe(6);
 
-    const aggB = agg.find(s => s.archetype === "B")!;
+    const aggB = agg.find((s) => s.archetype === "B")!;
     expect(aggB.avriOnMax).toBeCloseTo(22, 5);
     expect(aggB.avriOnMean).toBeCloseTo(12, 5); // (8+16)/2
     expect(aggB.minDistanceToCeiling).toBeCloseTo(13, 5);
@@ -73,14 +139,22 @@ describe("compactSnapshots", () => {
     }
 
     // Output is chronologically ordered (aggregated days first, then recent).
-    const ts = out.map(s => Date.parse(s.timestamp));
+    const ts = out.map((s) => Date.parse(s.timestamp));
     expect(ts).toEqual([...ts].sort((a, b) => a - b));
   });
 
   it("is a no-op when no snapshots are older than the window", () => {
     const now = new Date("2026-04-22T12:00:00.000Z");
     const snaps: ArchetypeSnapshot[] = [
-      { timestamp: new Date(now.getTime() - 5 * DAY_MS).toISOString(), archetype: "A", count: 1, avriOnMean: 5, avriOnMax: 5, minDistanceToCeiling: 30, ceiling: 35 },
+      {
+        timestamp: new Date(now.getTime() - 5 * DAY_MS).toISOString(),
+        archetype: "A",
+        count: 1,
+        avriOnMean: 5,
+        avriOnMax: 5,
+        minDistanceToCeiling: 30,
+        ceiling: 35,
+      },
     ];
     const out = compactSnapshots(snaps, now, 30);
     expect(out).toEqual(snaps);
@@ -89,7 +163,16 @@ describe("compactSnapshots", () => {
   it("is idempotent — re-running compaction on already-aggregated rows preserves their numbers", () => {
     const now = new Date("2026-04-22T12:00:00.000Z");
     const snaps: ArchetypeSnapshot[] = [
-      { timestamp: "2026-01-10T00:00:00.000Z", archetype: "A", count: 4, avriOnMean: 10, avriOnMax: 18, minDistanceToCeiling: 17, ceiling: 35, aggregated: true },
+      {
+        timestamp: "2026-01-10T00:00:00.000Z",
+        archetype: "A",
+        count: 4,
+        avriOnMean: 10,
+        avriOnMax: 18,
+        minDistanceToCeiling: 17,
+        ceiling: 35,
+        aggregated: true,
+      },
     ];
     const out = compactSnapshots(snaps, now, 30);
     expect(out.length).toBe(1);
@@ -106,7 +189,9 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
   let prevStatsPath: string | undefined;
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "archetype-history-compact-"));
+    tmpDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "archetype-history-compact-"),
+    );
     prevPath = process.env.ARCHETYPE_HISTORY_PATH;
     prevDays = process.env.ARCHETYPE_HISTORY_COMPACT_DAYS;
     prevStatsPath = process.env.ARCHETYPE_HISTORY_STATS_PATH;
@@ -119,9 +204,11 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
   afterEach(async () => {
     if (prevPath === undefined) delete process.env.ARCHETYPE_HISTORY_PATH;
     else process.env.ARCHETYPE_HISTORY_PATH = prevPath;
-    if (prevDays === undefined) delete process.env.ARCHETYPE_HISTORY_COMPACT_DAYS;
+    if (prevDays === undefined)
+      delete process.env.ARCHETYPE_HISTORY_COMPACT_DAYS;
     else process.env.ARCHETYPE_HISTORY_COMPACT_DAYS = prevDays;
-    if (prevStatsPath === undefined) delete process.env.ARCHETYPE_HISTORY_STATS_PATH;
+    if (prevStatsPath === undefined)
+      delete process.env.ARCHETYPE_HISTORY_STATS_PATH;
     else process.env.ARCHETYPE_HISTORY_STATS_PATH = prevStatsPath;
     statsTesting.resetCache();
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -158,12 +245,19 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
 
     // Append a fresh "today" snapshot — this triggers compaction.
     await appendArchetypeSnapshots([
-      { archetype: "fabricated_diff", count: 3, avriOnMean: 8, avriOnMax: 10, minDistanceToCeiling: 25, ceiling: 35 },
+      {
+        archetype: "fabricated_diff",
+        count: 3,
+        avriOnMean: 8,
+        avriOnMax: 10,
+        minDistanceToCeiling: 25,
+        ceiling: 35,
+      },
     ]);
 
     const file = await readArchetypeHistory();
-    const aggregated = file.snapshots.filter(s => s.aggregated === true);
-    const raw = file.snapshots.filter(s => s.aggregated !== true);
+    const aggregated = file.snapshots.filter((s) => s.aggregated === true);
+    const raw = file.snapshots.filter((s) => s.aggregated !== true);
 
     // 21 distinct old days were seeded → 21 daily aggregates after compaction
     // (well below the original 21*6 = 126 raw rows).
@@ -204,8 +298,22 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
 
   it("readArchetypeHistoryFileStats reports the on-disk size and snapshot count after appends", async () => {
     await appendArchetypeSnapshots([
-      { archetype: "fabricated_diff", count: 1, avriOnMean: 5, avriOnMax: 6, minDistanceToCeiling: 29, ceiling: 35 },
-      { archetype: "paraphrased_cve", count: 1, avriOnMean: 7, avriOnMax: 9, minDistanceToCeiling: 26, ceiling: 35 },
+      {
+        archetype: "fabricated_diff",
+        count: 1,
+        avriOnMean: 5,
+        avriOnMax: 6,
+        minDistanceToCeiling: 29,
+        ceiling: 35,
+      },
+      {
+        archetype: "paraphrased_cve",
+        count: 1,
+        avriOnMean: 7,
+        avriOnMax: 9,
+        minDistanceToCeiling: 26,
+        ceiling: 35,
+      },
     ]);
     const stats = await readArchetypeHistoryFileStats();
     expect(stats).not.toBeNull();
@@ -222,7 +330,14 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
     // benefits from seeing "Last compacted Xs ago — removed 0 snapshots"
     // (vs. silence) as proof the routine is alive.
     await appendArchetypeSnapshots([
-      { archetype: "fabricated_diff", count: 1, avriOnMean: 5, avriOnMax: 6, minDistanceToCeiling: 29, ceiling: 35 },
+      {
+        archetype: "fabricated_diff",
+        count: 1,
+        avriOnMean: 5,
+        avriOnMax: 6,
+        minDistanceToCeiling: 29,
+        ceiling: 35,
+      },
     ]);
     const stats = readCompactionStats();
     expect(stats).not.toBeNull();
@@ -238,13 +353,20 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
   it("appends each successive compaction outcome to the recentRuns ring buffer", async () => {
     for (let i = 0; i < 3; i++) {
       await appendArchetypeSnapshots([
-        { archetype: "fabricated_diff", count: 1, avriOnMean: 5, avriOnMax: 6, minDistanceToCeiling: 29, ceiling: 35 },
+        {
+          archetype: "fabricated_diff",
+          count: 1,
+          avriOnMean: 5,
+          avriOnMax: 6,
+          minDistanceToCeiling: 29,
+          ceiling: 35,
+        },
       ]);
     }
     const stats = readCompactionStats();
     expect(stats).not.toBeNull();
     expect(stats!.recentRuns).toHaveLength(3);
-    const timestamps = stats!.recentRuns.map(r => Date.parse(r.at));
+    const timestamps = stats!.recentRuns.map((r) => Date.parse(r.at));
     for (const t of timestamps) expect(Number.isFinite(t)).toBe(true);
     expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
     // Tail mirrors the legacy "last run" fields.
@@ -257,14 +379,24 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
     const cap = statsTesting.MAX_RECENT_RUNS;
     for (let i = 0; i < cap + 5; i++) {
       await appendArchetypeSnapshots([
-        { archetype: "fabricated_diff", count: 1, avriOnMean: 5, avriOnMax: 6, minDistanceToCeiling: 29, ceiling: 35 },
+        {
+          archetype: "fabricated_diff",
+          count: 1,
+          avriOnMean: 5,
+          avriOnMax: 6,
+          minDistanceToCeiling: 29,
+          ceiling: 35,
+        },
       ]);
     }
     const stats = readCompactionStats();
     expect(stats).not.toBeNull();
     expect(stats!.recentRuns.length).toBe(cap);
     // Cap must hold on disk too, so a process restart can't resurrect dropped entries.
-    const raw = await fs.readFile(process.env.ARCHETYPE_HISTORY_STATS_PATH!, "utf-8");
+    const raw = await fs.readFile(
+      process.env.ARCHETYPE_HISTORY_STATS_PATH!,
+      "utf-8",
+    );
     const persisted = JSON.parse(raw) as { recentRuns?: unknown[] };
     expect(Array.isArray(persisted.recentRuns)).toBe(true);
     expect(persisted.recentRuns!.length).toBe(cap);
@@ -291,7 +423,14 @@ describe("appendArchetypeSnapshots — compaction integration", () => {
     ]);
     // Subsequent passes extend the synthesized buffer rather than restarting it.
     await appendArchetypeSnapshots([
-      { archetype: "fabricated_diff", count: 1, avriOnMean: 5, avriOnMax: 6, minDistanceToCeiling: 29, ceiling: 35 },
+      {
+        archetype: "fabricated_diff",
+        count: 1,
+        avriOnMean: 5,
+        avriOnMax: 6,
+        minDistanceToCeiling: 29,
+        ceiling: 35,
+      },
     ]);
     const after = readCompactionStats();
     expect(after!.recentRuns.length).toBe(2);

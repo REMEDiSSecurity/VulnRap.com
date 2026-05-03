@@ -16,7 +16,9 @@ import {
 } from "./calibration-cooldown-banner";
 import type { CalibrationCooldownState } from "@/lib/calibration-cooldown";
 
-function makeState(overrides: Partial<CalibrationCooldownState> = {}): CalibrationCooldownState {
+function makeState(
+  overrides: Partial<CalibrationCooldownState> = {},
+): CalibrationCooldownState {
   return {
     active: false,
     secondsRemaining: 0,
@@ -97,7 +99,8 @@ describe("CalibrationCooldownBanner", () => {
           active: true,
           secondsRemaining: 5,
           resetAt: Date.now() + 5000,
-          serverMessage: "Too many failed calibration auth attempts. Try again in 5s.",
+          serverMessage:
+            "Too many failed calibration auth attempts. Try again in 5s.",
         })}
       />,
     );
@@ -262,11 +265,7 @@ describe("CalibrationCooldownBanner", () => {
         })}
       />,
     );
-    expect(
-      screen.getByText(/Confirm the reviewer token/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/VITE_CALIBRATION_TOKEN/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Confirm the reviewer token/i)).toBeInTheDocument();
+    expect(screen.getByText(/VITE_CALIBRATION_TOKEN/)).toBeInTheDocument();
   });
 });

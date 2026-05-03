@@ -35,12 +35,36 @@ describe("productionLabelToTier", () => {
 
 describe("scoreProductionRows", () => {
   const rows = [
-    { id: 1, label: "STRONG", contentText: "Use of unsafe FOO function in handler" },
-    { id: 2, label: "PROMISING", contentText: "Memory corruption via unsafe FOO copy" },
-    { id: 3, label: "REASONABLE", contentText: "Possibly unsafe foo path with limited evidence" },
-    { id: 4, label: "NEEDS REVIEW", contentText: "Reviewer flagged unsafe FOO behavior" },
-    { id: 5, label: "LIKELY INVALID", contentText: "comprehensive zero-trust assessment" },
-    { id: 6, label: "HIGH RISK", contentText: "fabricated CVE chain with no proof" },
+    {
+      id: 1,
+      label: "STRONG",
+      contentText: "Use of unsafe FOO function in handler",
+    },
+    {
+      id: 2,
+      label: "PROMISING",
+      contentText: "Memory corruption via unsafe FOO copy",
+    },
+    {
+      id: 3,
+      label: "REASONABLE",
+      contentText: "Possibly unsafe foo path with limited evidence",
+    },
+    {
+      id: 4,
+      label: "NEEDS REVIEW",
+      contentText: "Reviewer flagged unsafe FOO behavior",
+    },
+    {
+      id: 5,
+      label: "LIKELY INVALID",
+      contentText: "comprehensive zero-trust assessment",
+    },
+    {
+      id: 6,
+      label: "HIGH RISK",
+      contentText: "fabricated CVE chain with no proof",
+    },
     // skipped: null label
     { id: 7, label: null, contentText: "should be ignored" },
     // skipped: null content
@@ -119,13 +143,43 @@ describe("scoreProductionRows", () => {
   describe("createdAt window", () => {
     it("reports oldest/newest createdAt over rows that survive label/content filtering", () => {
       const out = scoreProductionRows("xxx-no-match-xxx", [
-        { id: 1, label: "STRONG", contentText: "alpha", createdAt: new Date("2026-04-22T10:00:00Z") },
-        { id: 2, label: "REASONABLE", contentText: "beta", createdAt: new Date("2026-02-01T08:30:00Z") },
-        { id: 3, label: "HIGH RISK", contentText: "gamma", createdAt: new Date("2026-03-15T14:45:00Z") },
+        {
+          id: 1,
+          label: "STRONG",
+          contentText: "alpha",
+          createdAt: new Date("2026-04-22T10:00:00Z"),
+        },
+        {
+          id: 2,
+          label: "REASONABLE",
+          contentText: "beta",
+          createdAt: new Date("2026-02-01T08:30:00Z"),
+        },
+        {
+          id: 3,
+          label: "HIGH RISK",
+          contentText: "gamma",
+          createdAt: new Date("2026-03-15T14:45:00Z"),
+        },
         // Filtered out — should NOT widen the window.
-        { id: 4, label: null, contentText: "delta", createdAt: new Date("2020-01-01T00:00:00Z") },
-        { id: 5, label: "STRONG", contentText: null, createdAt: new Date("2030-01-01T00:00:00Z") },
-        { id: 6, label: "WAT", contentText: "epsilon", createdAt: new Date("2050-01-01T00:00:00Z") },
+        {
+          id: 4,
+          label: null,
+          contentText: "delta",
+          createdAt: new Date("2020-01-01T00:00:00Z"),
+        },
+        {
+          id: 5,
+          label: "STRONG",
+          contentText: null,
+          createdAt: new Date("2030-01-01T00:00:00Z"),
+        },
+        {
+          id: 6,
+          label: "WAT",
+          contentText: "epsilon",
+          createdAt: new Date("2050-01-01T00:00:00Z"),
+        },
       ]);
       expect(out.corpusSize).toBe(3);
       expect(out.oldestCreatedAt).toBe("2026-02-01T08:30:00.000Z");
@@ -134,7 +188,12 @@ describe("scoreProductionRows", () => {
 
     it("collapses to a single instant when only one eligible row contributes", () => {
       const out = scoreProductionRows("anything", [
-        { id: 1, label: "STRONG", contentText: "only one", createdAt: new Date("2026-04-22T10:00:00Z") },
+        {
+          id: 1,
+          label: "STRONG",
+          contentText: "only one",
+          createdAt: new Date("2026-04-22T10:00:00Z"),
+        },
       ]);
       expect(out.oldestCreatedAt).toBe("2026-04-22T10:00:00.000Z");
       expect(out.newestCreatedAt).toBe("2026-04-22T10:00:00.000Z");
@@ -142,8 +201,18 @@ describe("scoreProductionRows", () => {
 
     it("accepts ISO-string createdAt values too (not just Date instances)", () => {
       const out = scoreProductionRows("anything", [
-        { id: 1, label: "STRONG", contentText: "one", createdAt: "2026-04-22T10:00:00Z" },
-        { id: 2, label: "STRONG", contentText: "two", createdAt: "2026-02-01T00:00:00Z" },
+        {
+          id: 1,
+          label: "STRONG",
+          contentText: "one",
+          createdAt: "2026-04-22T10:00:00Z",
+        },
+        {
+          id: 2,
+          label: "STRONG",
+          contentText: "two",
+          createdAt: "2026-02-01T00:00:00Z",
+        },
       ]);
       expect(out.oldestCreatedAt).toBe("2026-02-01T00:00:00.000Z");
       expect(out.newestCreatedAt).toBe("2026-04-22T10:00:00.000Z");
@@ -232,7 +301,9 @@ describe("buildSnippetForMatch", () => {
     );
     expect(out).not.toBeNull();
     expect(out!.match).toBe("OBVIOUS slop");
-    expect(`${out!.before}${out!.match}${out!.after}`).toContain("OBVIOUS slop");
+    expect(`${out!.before}${out!.match}${out!.after}`).toContain(
+      "OBVIOUS slop",
+    );
   });
 
   it("highlights the match where it actually occurs (substring positioning, not the start of the row)", () => {
@@ -310,8 +381,16 @@ describe("computeRemovalImpactOnRows snippet threading", () => {
       ["obvious slop"],
       [],
       [
-        { id: "a", tier: "T3_SLOP" as const, text: "definitely an OBVIOUS slop claim, no proof" },
-        { id: "b", tier: "T4_HALLUCINATED" as const, text: "see also: obvious   slop here" },
+        {
+          id: "a",
+          tier: "T3_SLOP" as const,
+          text: "definitely an OBVIOUS slop claim, no proof",
+        },
+        {
+          id: "b",
+          tier: "T4_HALLUCINATED" as const,
+          text: "see also: obvious   slop here",
+        },
       ],
       "the curated benchmark corpus",
     );
@@ -321,7 +400,9 @@ describe("computeRemovalImpactOnRows snippet threading", () => {
     expect(a?.snippet?.match).toBe("OBVIOUS slop");
     expect(b?.snippet?.match).toBe("obvious slop");
     // The before/after carry the surrounding text from the original row.
-    expect(`${a!.snippet!.before}${a!.snippet!.match}${a!.snippet!.after}`).toContain("no proof");
+    expect(
+      `${a!.snippet!.before}${a!.snippet!.match}${a!.snippet!.after}`,
+    ).toContain("no proof");
   });
 
   it("attributes the snippet to the SPECIFIC removed phrase that fired (not just any removed phrase)", () => {
@@ -329,7 +410,11 @@ describe("computeRemovalImpactOnRows snippet threading", () => {
       ["alpha phrase", "beta phrase"],
       [],
       [
-        { id: "row-1", tier: "T3_SLOP" as const, text: "the BETA phrase is what flagged this row" },
+        {
+          id: "row-1",
+          tier: "T3_SLOP" as const,
+          text: "the BETA phrase is what flagged this row",
+        },
       ],
       "the curated benchmark corpus",
     );
@@ -369,10 +454,12 @@ describe("Task #495 add-phrase dry-run snippet threading", () => {
     expect(b?.snippet?.match).toBe("unsafe foo");
     // Surrounding text carries the row's original wording so reviewers can
     // judge each match in place without opening /verify/:id.
-    expect(`${a!.snippet!.before}${a!.snippet!.match}${a!.snippet!.after}`)
-      .toContain("function");
-    expect(`${b!.snippet!.before}${b!.snippet!.match}${b!.snippet!.after}`)
-      .toContain("limited evidence");
+    expect(
+      `${a!.snippet!.before}${a!.snippet!.match}${a!.snippet!.after}`,
+    ).toContain("function");
+    expect(
+      `${b!.snippet!.before}${b!.snippet!.match}${b!.snippet!.after}`,
+    ).toContain("limited evidence");
   });
 
   it("previewHandwavyPhrase (curated cohorts) attaches a snippet to each sample fixture the candidate would flag", () => {

@@ -16,7 +16,7 @@ Critical severity.`;
     const result = parseSections(text);
     expect(result.sections.length).toBeGreaterThanOrEqual(3);
 
-    const titles = result.sections.map(s => s.title);
+    const titles = result.sections.map((s) => s.title);
     expect(titles).toContain("Summary");
     expect(titles).toContain("Steps to Reproduce");
     expect(titles).toContain("Impact");
@@ -33,9 +33,13 @@ Data breach possible.
 Payload here.`;
 
     const result = parseSections(text);
-    const vulnSection = result.sections.find(s => s.title === "Vulnerability");
-    const impactSection = result.sections.find(s => s.title === "Impact");
-    const pocSection = result.sections.find(s => s.title === "Proof of Concept");
+    const vulnSection = result.sections.find(
+      (s) => s.title === "Vulnerability",
+    );
+    const impactSection = result.sections.find((s) => s.title === "Impact");
+    const pocSection = result.sections.find(
+      (s) => s.title === "Proof of Concept",
+    );
 
     expect(vulnSection?.weight).toBe(3);
     expect(impactSection?.weight).toBe(3);
@@ -50,7 +54,7 @@ Ubuntu 22.04, nginx 1.24
 Discovered 2024-01-15`;
 
     const result = parseSections(text);
-    const envSection = result.sections.find(s => s.title === "Environment");
+    const envSection = result.sections.find((s) => s.title === "Environment");
     expect(envSection?.weight).toBe(2);
   });
 
@@ -77,7 +81,8 @@ More content.`;
   });
 
   it("handles text with no headers", () => {
-    const text = "This is just a plain text report with no markdown headers at all.";
+    const text =
+      "This is just a plain text report with no markdown headers at all.";
     const result = parseSections(text);
     expect(result.sections.length).toBeGreaterThanOrEqual(1);
   });
@@ -119,10 +124,9 @@ Denial of service only.`;
     const analysis1 = parseSections(report1);
     const analysis2 = parseSections(report2);
 
-    const matches = findSectionMatches(
-      analysis1.sectionHashes,
-      [{ id: 1, sectionHashes: analysis2.sectionHashes }],
-    );
+    const matches = findSectionMatches(analysis1.sectionHashes, [
+      { id: 1, sectionHashes: analysis2.sectionHashes },
+    ]);
     expect(matches.length).toBeGreaterThan(0);
     expect(matches[0].matchedReportId).toBe(1);
   });

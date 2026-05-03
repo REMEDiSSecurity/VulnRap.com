@@ -6,8 +6,16 @@
 // anchor. Sourced from `GET /api/incidents`. Empty-state friendly.
 import { Link } from "react-router-dom";
 import {
-  ShieldAlert, Loader2, AlertCircle, Calendar, Clock, FileText,
-  GitBranch, Wrench, ScrollText, CheckCircle2,
+  ShieldAlert,
+  Loader2,
+  AlertCircle,
+  Calendar,
+  Clock,
+  FileText,
+  GitBranch,
+  Wrench,
+  ScrollText,
+  CheckCircle2,
 } from "lucide-react";
 import {
   useListIncidents,
@@ -50,7 +58,9 @@ function formatDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString(undefined, {
-    year: "numeric", month: "short", day: "numeric",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   });
 }
 
@@ -137,7 +147,9 @@ export default function Incidents() {
           Incident History
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-          Every operational incident on the public record — engine outages, scoring regressions, calibration mistakes — with what happened, root cause, and what we changed to prevent it from happening again.
+          Every operational incident on the public record — engine outages,
+          scoring regressions, calibration mistakes — with what happened, root
+          cause, and what we changed to prevent it from happening again.
         </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-4" />
       </div>
@@ -154,12 +166,16 @@ export default function Incidents() {
           <CardContent className="py-6 flex flex-col sm:flex-row items-start gap-3">
             <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
             <div className="flex-1 text-sm">
-              <div className="font-semibold text-destructive mb-1">Failed to load incident log</div>
+              <div className="font-semibold text-destructive mb-1">
+                Failed to load incident log
+              </div>
               <div className="text-muted-foreground text-xs leading-relaxed">
                 {error instanceof Error ? error.message : "Unknown error"}
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Retry
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -178,7 +194,10 @@ export default function Incidents() {
                 No incidents yet
               </h2>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                This is the page where we'd be honest if there were any. When something operational goes wrong — an engine outage, a scoring regression, a calibration mistake — it gets a postmortem here with root cause and remediation.
+                This is the page where we'd be honest if there were any. When
+                something operational goes wrong — an engine outage, a scoring
+                regression, a calibration mistake — it gets a postmortem here
+                with root cause and remediation.
               </p>
               <div className="pt-2 flex flex-wrap gap-2 justify-center">
                 <Button asChild variant="outline" size="sm">

@@ -8,14 +8,28 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Library, Loader2, AlertCircle, ArrowRight, Sparkles, Flag, Zap, Scale, Leaf,
+  Library,
+  Loader2,
+  AlertCircle,
+  ArrowRight,
+  Sparkles,
+  Flag,
+  Zap,
+  Scale,
+  Leaf,
 } from "lucide-react";
 import {
   useListGallery,
   type GallerySample,
   GallerySampleLabel,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -62,16 +76,33 @@ const LABEL_META: Record<Label, LabelMeta> = {
   },
 };
 
-const FILTER_ORDER: FilterValue[] = ["all", "obvious_slop", "subtle_slop", "borderline", "clean"];
+const FILTER_ORDER: FilterValue[] = [
+  "all",
+  "obvious_slop",
+  "subtle_slop",
+  "borderline",
+  "clean",
+];
 
 function GalleryCard({ sample }: { sample: GallerySample }) {
   const meta = LABEL_META[sample.label];
   return (
-    <Card className="glass-card rounded-xl flex flex-col h-full" data-testid={`gallery-card-${sample.id}`}>
+    <Card
+      className="glass-card rounded-xl flex flex-col h-full"
+      data-testid={`gallery-card-${sample.id}`}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base leading-tight">{sample.title}</CardTitle>
-          <Badge variant="outline" className={cn("text-[9px] uppercase tracking-wider shrink-0 inline-flex items-center gap-1", meta.tone)}>
+          <CardTitle className="text-base leading-tight">
+            {sample.title}
+          </CardTitle>
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[9px] uppercase tracking-wider shrink-0 inline-flex items-center gap-1",
+              meta.tone,
+            )}
+          >
             {meta.icon}
             {meta.short}
           </Badge>
@@ -96,7 +127,10 @@ function GalleryCard({ sample }: { sample: GallerySample }) {
           </div>
           <ul className="space-y-1">
             {sample.topSignals.map((sig, idx) => (
-              <li key={`${sig}-${idx}`} className="text-[11px] text-foreground/85 flex items-start gap-1.5">
+              <li
+                key={`${sig}-${idx}`}
+                className="text-[11px] text-foreground/85 flex items-start gap-1.5"
+              >
                 <span className="text-primary/70 mt-0.5">›</span>
                 <span className="leading-snug">{sig}</span>
               </li>
@@ -126,7 +160,11 @@ export default function Gallery() {
 
   const counts = useMemo(() => {
     const out: Record<FilterValue, number> = {
-      all: 0, obvious_slop: 0, subtle_slop: 0, borderline: 0, clean: 0,
+      all: 0,
+      obvious_slop: 0,
+      subtle_slop: 0,
+      borderline: 0,
+      clean: 0,
     };
     if (!data) return out;
     out.all = data.samples.length;
@@ -148,7 +186,9 @@ export default function Gallery() {
           Sample Report Gallery
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-          A dozen pre-scored examples spanning obvious slop, subtle slop, borderline reports, and clean human submissions. Pick a card to see the full breakdown — no submission required.
+          A dozen pre-scored examples spanning obvious slop, subtle slop,
+          borderline reports, and clean human submissions. Pick a card to see
+          the full breakdown — no submission required.
         </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-4" />
       </div>
@@ -162,10 +202,15 @@ export default function Gallery() {
         </CardHeader>
         <CardContent className="text-xs sm:text-sm text-muted-foreground leading-relaxed space-y-2">
           <p>
-            Each card shows a curated sample with its final score and the top signals that fired. Clicking <span className="font-mono text-primary">Open full breakdown</span> takes you to the same results page you'd get after submitting your own report.
+            Each card shows a curated sample with its final score and the top
+            signals that fired. Clicking{" "}
+            <span className="font-mono text-primary">Open full breakdown</span>{" "}
+            takes you to the same results page you'd get after submitting your
+            own report.
           </p>
           <p className="text-[11px] text-muted-foreground/70">
-            Samples are curated by the VulnRap team — community-submitted samples are not accepted in v1.
+            Samples are curated by the VulnRap team — community-submitted
+            samples are not accepted in v1.
           </p>
         </CardContent>
       </Card>
@@ -182,12 +227,16 @@ export default function Gallery() {
           <CardContent className="py-6 flex flex-col sm:flex-row items-start gap-3">
             <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
             <div className="flex-1 text-sm">
-              <div className="font-semibold text-destructive mb-1">Failed to load gallery</div>
+              <div className="font-semibold text-destructive mb-1">
+                Failed to load gallery
+              </div>
               <div className="text-muted-foreground text-xs leading-relaxed">
                 {error instanceof Error ? error.message : "Unknown error"}
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Retry
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -208,7 +257,8 @@ export default function Gallery() {
           >
             {FILTER_ORDER.map((value) => {
               const active = filter === value;
-              const label = value === "all" ? "All" : LABEL_META[value as Label].label;
+              const label =
+                value === "all" ? "All" : LABEL_META[value as Label].label;
               return (
                 <button
                   key={value}
@@ -225,10 +275,12 @@ export default function Gallery() {
                 >
                   {value !== "all" && LABEL_META[value as Label].icon}
                   {label}
-                  <span className={cn(
-                    "text-[10px] font-mono px-1.5 py-0.5 rounded",
-                    active ? "bg-primary/20" : "bg-muted/40",
-                  )}>
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono px-1.5 py-0.5 rounded",
+                      active ? "bg-primary/20" : "bg-muted/40",
+                    )}
+                  >
                     {counts[value]}
                   </span>
                 </button>

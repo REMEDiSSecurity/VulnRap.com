@@ -38,7 +38,8 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
     const phrases = uniquePhrases(3, "task233 undo-all happy");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -97,7 +98,9 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
       // renders the text twice (visual + aria-live mirror).
       await expect(
         page
-          .getByText(`Undid ${phrases.length} adds. Skipped 0`, { exact: false })
+          .getByText(`Undid ${phrases.length} adds. Skipped 0`, {
+            exact: false,
+          })
           .first(),
       ).toBeVisible({ timeout: 15_000 });
       for (const p of phrases) {
@@ -153,7 +156,9 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
 
       // The single phrase row is visible in the active list.
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrases[0] }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: phrases[0] }),
       ).toHaveCount(1, { timeout: 15_000 });
 
       // The per-row Undo affordance is enough for a single eligible
@@ -188,7 +193,8 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
     const phrases = uniquePhrases(3, "task488 undo-all mixed");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -235,9 +241,12 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
       // mirror) so we anchor on `.first()`.
       await expect(
         page
-          .getByText("Undid 2 adds. Skipped 1 (0 no longer in window, 1 other)", {
-            exact: false,
-          })
+          .getByText(
+            "Undid 2 adds. Skipped 1 (0 no longer in window, 1 other)",
+            {
+              exact: false,
+            },
+          )
           .first(),
       ).toBeVisible({ timeout: 15_000 });
       await expect(
@@ -299,7 +308,8 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
     const phrases = uniquePhrases(2, "task488 undo-all none");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -342,9 +352,12 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
       ).toBeVisible({ timeout: 15_000 });
       await expect(
         page
-          .getByText("Undid 0 adds. Skipped 2 (0 no longer in window, 2 other)", {
-            exact: false,
-          })
+          .getByText(
+            "Undid 0 adds. Skipped 2 (0 no longer in window, 2 other)",
+            {
+              exact: false,
+            },
+          )
           .first(),
       ).toBeVisible({ timeout: 15_000 });
       await expect(
@@ -383,7 +396,8 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
     const phrases = uniquePhrases(2, "task233 undo-all cancel");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -438,7 +452,8 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
     const phrases = uniquePhrases(2, "task487 undo-all drift");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
+      for (const p of phrases)
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -477,16 +492,18 @@ test.describe("Panel-level Undo last N adds (Task #233)", () => {
       // The summary toast splits the count and surfaces the skipped
       // breakdown including the drift ("other") count.
       await expect(
-        page
-          .getByText("Undid 1 add. Skipped 1", { exact: false })
-          .first(),
+        page.getByText("Undid 1 add. Skipped 1", { exact: false }).first(),
       ).toBeVisible({ timeout: 15_000 });
       await expect(
-        page.getByText("0 no longer in window, 1 other", { exact: false }).first(),
+        page
+          .getByText("0 no longer in window, 1 other", { exact: false })
+          .first(),
       ).toBeVisible({ timeout: 15_000 });
 
       // The drift case carries the toast action affordance.
-      const jumpButton = page.getByTestId("handwavy-undo-all-toast-jump-skipped");
+      const jumpButton = page.getByTestId(
+        "handwavy-undo-all-toast-jump-skipped",
+      );
       await expect(jumpButton).toBeVisible({ timeout: 15_000 });
       await expect(jumpButton).toHaveText(/View skipped/);
 

@@ -41,7 +41,8 @@ CWE-89 (SQL Injection).
 `.repeat(2);
 
 function makeLargeReport(targetWords: number): string {
-  const sentence = "The vulnerability allows an attacker to inject arbitrary SQL through the user-supplied query parameter without proper sanitization. ";
+  const sentence =
+    "The vulnerability allows an attacker to inject arbitrary SQL through the user-supplied query parameter without proper sanitization. ";
   const wordsPerSentence = sentence.trim().split(/\s+/).length;
   const need = Math.ceil(targetWords / wordsPerSentence);
   return TYPICAL_REPORT + "\n\n" + sentence.repeat(need);
@@ -85,7 +86,7 @@ describe("Sprint 9 v3 — Engine performance", () => {
 
   it("default (AVRI) trace exposes per-stage timings, feature flags, and signals summary", () => {
     const { trace } = analyzeWithEnginesTraced(TYPICAL_REPORT);
-    const stageNames = trace.stages.map(s => s.stage);
+    const stageNames = trace.stages.map((s) => s.stage);
     expect(stageNames).toContain("extract_signals");
     expect(stageNames).toContain("perplexity");
     expect(stageNames).toContain("avri_composite");
@@ -96,8 +97,10 @@ describe("Sprint 9 v3 — Engine performance", () => {
   });
 
   it("legacy (AVRI off) trace exposes per-engine stage timings", () => {
-    const { trace } = analyzeWithEnginesTraced(TYPICAL_REPORT, { forceAvri: false });
-    const stageNames = trace.stages.map(s => s.stage);
+    const { trace } = analyzeWithEnginesTraced(TYPICAL_REPORT, {
+      forceAvri: false,
+    });
+    const stageNames = trace.stages.map((s) => s.stage);
     expect(stageNames).toContain("extract_signals");
     expect(stageNames).toContain("perplexity");
     expect(stageNames).toContain("engine1_ai_authorship");
@@ -140,7 +143,9 @@ describe("Sprint 9 v3 — Engine performance", () => {
   });
 
   it("legacy (AVRI off) trace omits avriBreakdown", () => {
-    const { trace } = analyzeWithEnginesTraced(TYPICAL_REPORT, { forceAvri: false });
+    const { trace } = analyzeWithEnginesTraced(TYPICAL_REPORT, {
+      forceAvri: false,
+    });
     expect(trace.avriBreakdown).toBeUndefined();
   });
 });

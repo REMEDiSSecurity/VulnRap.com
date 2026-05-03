@@ -49,13 +49,13 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { setCalibrationToken } from "@workspace/api-client-react";
+import { resetCalibrationCooldown } from "@/lib/calibration-cooldown";
+import { HandwavyPhrasesAdmin } from "./feedback-analytics";
 import type {
   HandwavyMarker,
   HandwavyPhrasesList,
   HandwavyPhraseRemovalBatchesList,
 } from "@workspace/api-client-react";
-import { HandwavyPhrasesAdmin } from "./feedback-analytics";
-import { resetCalibrationCooldown } from "@/lib/calibration-cooldown";
 
 // ---------- fixtures -------------------------------------------------------
 
@@ -243,10 +243,7 @@ function installFetchMock(failures: Record<string, FailureSpec>): MockHandle {
             notFound: 0,
             duplicateInBatch: 0,
             total: PHRASES.length,
-            projectedTotal: Math.max(
-              0,
-              PHRASES.length - requested.length,
-            ),
+            projectedTotal: Math.max(0, PHRASES.length - requested.length),
             results: requested.map((p) => ({
               raw: p,
               phrase: p,
@@ -379,8 +376,9 @@ describe("Task #475 — bulk-results banner stamps handwavy-bulk-retry-hint afte
     // Sanity: the retry button is mounted so the click in a moment
     // exercises the real handler (otherwise the assertion below would
     // pass for the wrong reason).
-    const retryBtn =
-      within(initialBanner).getByTestId("handwavy-bulk-retry-failed");
+    const retryBtn = within(initialBanner).getByTestId(
+      "handwavy-bulk-retry-failed",
+    );
     expect(retryBtn.textContent ?? "").toMatch(/Retry failed \(1\)/);
     // Pin the per-phrase DELETE counters before retry so the
     // post-retry assertion is unambiguous: the retry path must

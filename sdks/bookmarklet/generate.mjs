@@ -35,16 +35,18 @@ function minify(src) {
   // Conservative, deterministic minifier for our tiny IIFE source. We do not
   // pull in terser to keep this script dependency-free; the input is hand-
   // written and stays small enough that this is safe.
-  return src
-    // strip // line comments
-    .replace(/^\s*\/\/.*$/gm, "")
-    // strip /* */ block comments
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    // collapse runs of whitespace (incl. newlines) to single space
-    .replace(/\s+/g, " ")
-    // tighten around punctuation
-    .replace(/\s*([{}();,:=<>!+\-*/?&|])\s*/g, "$1")
-    .trim();
+  return (
+    src
+      // strip // line comments
+      .replace(/^\s*\/\/.*$/gm, "")
+      // strip /* */ block comments
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      // collapse runs of whitespace (incl. newlines) to single space
+      .replace(/\s+/g, " ")
+      // tighten around punctuation
+      .replace(/\s*([{}();,:=<>!+\-*/?&|])\s*/g, "$1")
+      .trim()
+  );
 }
 
 const src = await readFile(srcPath, "utf8");
@@ -56,6 +58,10 @@ await writeFile(outUrl, href + "\n", "utf8");
 await mkdir(path.dirname(publicMirror), { recursive: true });
 await writeFile(publicMirror, minified + "\n", "utf8");
 
-console.log("Wrote", path.relative(repoRoot, outJs), `(${minified.length} bytes)`);
+console.log(
+  "Wrote",
+  path.relative(repoRoot, outJs),
+  `(${minified.length} bytes)`,
+);
 console.log("Wrote", path.relative(repoRoot, outUrl), `(${href.length} bytes)`);
 console.log("Mirrored to", path.relative(repoRoot, publicMirror));

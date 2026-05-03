@@ -31,12 +31,12 @@ with Client() as c:
 
 ## Methods
 
-| Method                                      | HTTP                    | Returns           |
-| ------------------------------------------- | ----------------------- | ----------------- |
-| `score_report(...)`                         | `POST /reports`         | `ReportAnalysis`  |
-| `lookup_report(report_id)`                  | `GET /reports/{id}`     | `ReportAnalysis`  |
-| `query_stats()`                             | `GET /stats`            | `PlatformStats`   |
-| `test_yourself(...)`                        | `POST /reports/check`   | `CheckResult`     |
+| Method                     | HTTP                  | Returns          |
+| -------------------------- | --------------------- | ---------------- |
+| `score_report(...)`        | `POST /reports`       | `ReportAnalysis` |
+| `lookup_report(report_id)` | `GET /reports/{id}`   | `ReportAnalysis` |
+| `query_stats()`            | `GET /stats`          | `PlatformStats`  |
+| `test_yourself(...)`       | `POST /reports/check` | `CheckResult`    |
 
 `score_report` stores the report; `test_yourself` runs the same pipeline
 but persists nothing — use it for read-only PSIRT-side validation of

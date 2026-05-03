@@ -188,9 +188,7 @@ test.describe("Per-row Trash preview — fresh-vs-cached badge (Task #493)", () 
       // may have already elapsed by the time we assert here, so accept the
       // post-boundary "Ns ago" form too — the explicit advancement check
       // below still pins the 1Hz tick contract.
-      await expect(badge).toHaveText(
-        /^Reused scan · (just now|\d+s ago)$/,
-      );
+      await expect(badge).toHaveText(/^Reused scan · (just now|\d+s ago)$/);
       expect(
         counters.dryRunForPhrase,
         "re-Trash within the same active-list version must reuse the cache (no second dryRun)",

@@ -1,6 +1,18 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { FileText, ChevronDown, ChevronUp, AlertCircle, Leaf } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  Leaf,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -79,7 +91,7 @@ export function HighlightedReport({
         if (!item.matched) return;
         const needle = item.matched.toLowerCase();
         if (needle.length < 3) return;
-        let searchFrom = 0;
+        const searchFrom = 0;
         const escaped = escapeRegex(needle);
         try {
           const re = new RegExp(escaped, "gi");
@@ -89,7 +101,8 @@ export function HighlightedReport({
             const s = match.index;
             const e = s + match[0].length;
             const overlaps = spans.some(
-              (sp) => (s >= sp.start && s < sp.end) || (e > sp.start && e <= sp.end)
+              (sp) =>
+                (s >= sp.start && s < sp.end) || (e > sp.start && e <= sp.end),
             );
             if (!overlaps) {
               spans.push({
@@ -108,7 +121,10 @@ export function HighlightedReport({
           const idx = lowerText.indexOf(needle, searchFrom);
           if (idx >= 0) {
             const overlaps = spans.some(
-              (sp) => (idx >= sp.start && idx < sp.end) || (idx + needle.length > sp.start && idx + needle.length <= sp.end)
+              (sp) =>
+                (idx >= sp.start && idx < sp.end) ||
+                (idx + needle.length > sp.start &&
+                  idx + needle.length <= sp.end),
             );
             if (!overlaps) {
               spans.push({
@@ -231,12 +247,14 @@ export function HighlightedReport({
     // We deliberately depend on `scrollTarget?.nonce` (not `flashLine`) so
     // re-clicking the same marker resets the timer. `flashLine` is in the
     // dep list so the effect runs when it transitions from null to a line.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flashLine, scrollTarget?.nonce]);
 
   return (
     <Card className="glass-card rounded-xl">
-      <CardHeader className="cursor-pointer" onClick={() => setExpanded(!expanded)}>
+      <CardHeader
+        className="cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
         <CardTitle className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary" />
           Report Text
@@ -248,33 +266,51 @@ export function HighlightedReport({
           <span className="ml-auto flex items-center gap-2">
             {slopHighlights > 0 && (
               <span className="flex items-center gap-1 text-[10px] text-destructive/70">
-                <AlertCircle className="w-3 h-3" />{slopHighlights} flag{slopHighlights !== 1 ? "s" : ""}
+                <AlertCircle className="w-3 h-3" />
+                {slopHighlights} flag{slopHighlights !== 1 ? "s" : ""}
               </span>
             )}
             {humanHighlights > 0 && (
               <span className="flex items-center gap-1 text-[10px] text-green-400/70">
-                <Leaf className="w-3 h-3" />{humanHighlights} human
+                <Leaf className="w-3 h-3" />
+                {humanHighlights} human
               </span>
             )}
-            {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+            {expanded ? (
+              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            )}
           </span>
         </CardTitle>
         <CardDescription>
-          {expanded ? "Redacted report with evidence highlighted inline" : "Click to view report text with evidence citations"}
+          {expanded
+            ? "Redacted report with evidence highlighted inline"
+            : "Click to view report text with evidence citations"}
         </CardDescription>
       </CardHeader>
       {expanded && (
         <CardContent>
           {hoveredIdx !== null && highlights[hoveredIdx] && (
-            <div className={cn(
-              "mb-3 rounded-lg border p-2.5 text-xs flex items-center gap-2 animate-in fade-in duration-150",
-              highlights[hoveredIdx].isHuman
-                ? "bg-green-500/10 border-green-500/20 text-green-400"
-                : "bg-destructive/10 border-destructive/20 text-destructive"
-            )}>
-              {highlights[hoveredIdx].isHuman ? <Leaf className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-              <span className="font-medium">{highlights[hoveredIdx].label}</span>
-              <span className="text-muted-foreground">weight: {highlights[hoveredIdx].weight}</span>
+            <div
+              className={cn(
+                "mb-3 rounded-lg border p-2.5 text-xs flex items-center gap-2 animate-in fade-in duration-150",
+                highlights[hoveredIdx].isHuman
+                  ? "bg-green-500/10 border-green-500/20 text-green-400"
+                  : "bg-destructive/10 border-destructive/20 text-destructive",
+              )}
+            >
+              {highlights[hoveredIdx].isHuman ? (
+                <Leaf className="w-3.5 h-3.5" />
+              ) : (
+                <AlertCircle className="w-3.5 h-3.5" />
+              )}
+              <span className="font-medium">
+                {highlights[hoveredIdx].label}
+              </span>
+              <span className="text-muted-foreground">
+                weight: {highlights[hoveredIdx].weight}
+              </span>
             </div>
           )}
           <pre
@@ -296,7 +332,11 @@ export function HighlightedReport({
                   if (!seg.span) {
                     // `\u200B` keeps an empty line from collapsing to zero
                     // visual height inside the surrounding `<pre>`.
-                    return <span key={si}>{seg.text === "" ? "\u200B" : seg.text}</span>;
+                    return (
+                      <span key={si}>
+                        {seg.text === "" ? "\u200B" : seg.text}
+                      </span>
+                    );
                   }
                   const span = seg.span;
                   const idx = seg.spanIdx ?? -1;
@@ -308,7 +348,10 @@ export function HighlightedReport({
                         span.isHuman
                           ? "bg-green-500/15 border-green-400/60 hover:bg-green-500/25"
                           : "bg-destructive/15 border-destructive/60 hover:bg-destructive/25",
-                        hoveredIdx === idx && (span.isHuman ? "bg-green-500/30 ring-1 ring-green-400/40" : "bg-destructive/30 ring-1 ring-destructive/40"),
+                        hoveredIdx === idx &&
+                          (span.isHuman
+                            ? "bg-green-500/30 ring-1 ring-green-400/40"
+                            : "bg-destructive/30 ring-1 ring-destructive/40"),
                       )}
                       onMouseEnter={() => setHoveredIdx(idx)}
                       onMouseLeave={() => setHoveredIdx(null)}

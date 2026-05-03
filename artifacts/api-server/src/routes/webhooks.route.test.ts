@@ -9,10 +9,18 @@
 // row.
 
 import http from "node:http";
-import type { AddressInfo } from "node:net";
-import express from "express";
 import crypto from "node:crypto";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import express from "express";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import type { AddressInfo } from "node:net";
 
 interface FakeWebhookRow {
   id: number;
@@ -51,13 +59,23 @@ vi.mock("@workspace/db", () => {
     select(_shape?: unknown) {
       let predicate: Pred = () => true;
       const builder = {
-        from() { return builder; },
-        where(t: Token) { predicate = toPred(t); return builder; },
-        orderBy() { return builder; },
+        from() {
+          return builder;
+        },
+        where(t: Token) {
+          predicate = toPred(t);
+          return builder;
+        },
+        orderBy() {
+          return builder;
+        },
         then<T>(onF: (rows: unknown[]) => T) {
           const sorted = [...webhookRows]
             .filter(predicate)
-            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id);
+            .sort(
+              (a, b) =>
+                b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id,
+            );
           return Promise.resolve(sorted).then(onF);
         },
       };
@@ -65,7 +83,13 @@ vi.mock("@workspace/db", () => {
     },
     insert(_t: unknown) {
       return {
-        values(row: Omit<FakeWebhookRow, "id" | "createdAt" | "lastDeliveredAt" | "failureCount"> & Partial<FakeWebhookRow>) {
+        values(
+          row: Omit<
+            FakeWebhookRow,
+            "id" | "createdAt" | "lastDeliveredAt" | "failureCount"
+          > &
+            Partial<FakeWebhookRow>,
+        ) {
           return {
             returning() {
               const inserted: FakeWebhookRow = {
@@ -96,9 +120,15 @@ vi.mock("@workspace/db", () => {
             then<T>(onF: (v: unknown) => T) {
               for (const r of webhookRows) {
                 if (predicate(r)) {
-                  if (values.lastDeliveredAt !== undefined) r.lastDeliveredAt = values.lastDeliveredAt;
-                  if (typeof values.failureCount === "number") r.failureCount = values.failureCount;
-                  else if (values.failureCount && typeof values.failureCount === "object" && "__incrFailure" in (values.failureCount as object)) {
+                  if (values.lastDeliveredAt !== undefined)
+                    r.lastDeliveredAt = values.lastDeliveredAt;
+                  if (typeof values.failureCount === "number")
+                    r.failureCount = values.failureCount;
+                  else if (
+                    values.failureCount &&
+                    typeof values.failureCount === "object" &&
+                    "__incrFailure" in (values.failureCount as object)
+                  ) {
                     r.failureCount = r.failureCount + 1;
                   }
                 }
@@ -113,7 +143,10 @@ vi.mock("@workspace/db", () => {
     delete(_t: unknown) {
       let predicate: Pred = () => true;
       const chain = {
-        where(t: Token) { predicate = toPred(t); return chain; },
+        where(t: Token) {
+          predicate = toPred(t);
+          return chain;
+        },
         returning() {
           const removed: { id: number }[] = [];
           for (let i = webhookRows.length - 1; i >= 0; i--) {
@@ -131,17 +164,23 @@ vi.mock("@workspace/db", () => {
 
   const eq = (col: { __field: string }, val: unknown) => ({
     kind: "predicate" as const,
-    fn: (r: FakeWebhookRow) => (r as unknown as Record<string, unknown>)[col.__field] === val,
+    fn: (r: FakeWebhookRow) =>
+      (r as unknown as Record<string, unknown>)[col.__field] === val,
   });
   const desc = (_x: unknown) => _x;
   // The webhook-delivery worker calls .set({ failureCount: sql`... + 1` }).
   // Returning a tagged object lets the fake update branch increment instead
   // of overwriting.
   const sql = Object.assign(
-    (_strings: TemplateStringsArray, ..._values: unknown[]) => ({ __incrFailure: true }),
+    (_strings: TemplateStringsArray, ..._values: unknown[]) => ({
+      __incrFailure: true,
+    }),
     { raw: (_s: string) => ({ __raw: true }) },
   );
-  const and = (...preds: Array<{ fn: Pred }>) => ({ kind: "and" as const, parts: preds.map((p) => p.fn) });
+  const and = (...preds: Array<{ fn: Pred }>) => ({
+    kind: "and" as const,
+    parts: preds.map((p) => p.fn),
+  });
 
   return { db, webhooksTable, eq, desc, sql, and };
 });
@@ -178,24 +217,46 @@ beforeEach(() => {
   nextId = 1;
 });
 
-interface HttpResponse<T> { status: number; body: T }
+interface HttpResponse<T> {
+  status: number;
+  body: T;
+}
 
-function request<T>(method: string, urlPath: string, body?: unknown, headers: Record<string, string> = {}): Promise<HttpResponse<T>> {
+function request<T>(
+  method: string,
+  urlPath: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const baseHeaders: Record<string, string> = data
-      ? { "content-type": "application/json", "content-length": String(data.length) }
+      ? {
+          "content-type": "application/json",
+          "content-length": String(data.length),
+        }
       : {};
     const req = http.request(
-      { method, hostname: url.hostname, port: url.port, path: url.pathname + url.search, headers: { ...baseHeaders, ...headers } },
+      {
+        method,
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname + url.search,
+        headers: { ...baseHeaders, ...headers },
+      },
       (res) => {
         const chunks: Buffer[] = [];
         res.on("data", (c) => chunks.push(c));
         res.on("end", () => {
           const text = Buffer.concat(chunks).toString("utf8");
           let parsed: unknown = text;
-          try { parsed = JSON.parse(text); } catch { /* keep raw */ }
+          try {
+            parsed = JSON.parse(text);
+          } catch {
+            /* keep raw */
+          }
           resolve({ status: res.statusCode ?? 0, body: parsed as T });
         });
       },
@@ -208,12 +269,19 @@ function request<T>(method: string, urlPath: string, body?: unknown, headers: Re
 
 describe("POST /api/webhooks", () => {
   it("rejects without a reviewer token", async () => {
-    const res = await request<{ error: string }>("POST", "/api/webhooks", { url: "https://example.com/hook" });
+    const res = await request<{ error: string }>("POST", "/api/webhooks", {
+      url: "https://example.com/hook",
+    });
     expect(res.status).toBe(401);
   });
 
   it("rejects an invalid url", async () => {
-    const res = await request<{ error: string }>("POST", "/api/webhooks", { url: "not-a-url" }, { "x-calibration-token": TOKEN });
+    const res = await request<{ error: string }>(
+      "POST",
+      "/api/webhooks",
+      { url: "not-a-url" },
+      { "x-calibration-token": TOKEN },
+    );
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/url/i);
   });
@@ -230,7 +298,13 @@ describe("POST /api/webhooks", () => {
   });
 
   it("registers a webhook, returns the secret once, and stores only its hash", async () => {
-    const res = await request<{ id: number; url: string; eventTypes: string[]; secret: string; failureCount: number }>(
+    const res = await request<{
+      id: number;
+      url: string;
+      eventTypes: string[];
+      secret: string;
+      failureCount: number;
+    }>(
       "POST",
       "/api/webhooks",
       { url: "https://example.com/hook" },
@@ -247,8 +321,12 @@ describe("POST /api/webhooks", () => {
     expect(webhookRows).toHaveLength(1);
     const stored = webhookRows[0];
     // Plaintext secret is NOT stored — only its sha256 hash.
-    expect(stored.secretHash).toBe(crypto.createHash("sha256").update(res.body.secret, "utf8").digest("hex"));
-    expect((stored as unknown as Record<string, unknown>).secret).toBeUndefined();
+    expect(stored.secretHash).toBe(
+      crypto.createHash("sha256").update(res.body.secret, "utf8").digest("hex"),
+    );
+    expect(
+      (stored as unknown as Record<string, unknown>).secret,
+    ).toBeUndefined();
   });
 });
 
@@ -260,16 +338,29 @@ describe("GET /api/webhooks", () => {
 
   it("lists registered webhooks newest-first when authed", async () => {
     webhookRows.push(
-      { id: 1, url: "https://a.example/hook", secretHash: "x", eventTypes: ["report.scored"], createdAt: new Date("2026-01-01"), lastDeliveredAt: null, failureCount: 0 },
-      { id: 2, url: "https://b.example/hook", secretHash: "y", eventTypes: ["report.scored"], createdAt: new Date("2026-02-01"), lastDeliveredAt: null, failureCount: 3 },
+      {
+        id: 1,
+        url: "https://a.example/hook",
+        secretHash: "x",
+        eventTypes: ["report.scored"],
+        createdAt: new Date("2026-01-01"),
+        lastDeliveredAt: null,
+        failureCount: 0,
+      },
+      {
+        id: 2,
+        url: "https://b.example/hook",
+        secretHash: "y",
+        eventTypes: ["report.scored"],
+        createdAt: new Date("2026-02-01"),
+        lastDeliveredAt: null,
+        failureCount: 3,
+      },
     );
     nextId = 3;
-    const res = await request<{ webhooks: Array<{ id: number; url: string; failureCount: number }> }>(
-      "GET",
-      "/api/webhooks",
-      undefined,
-      { "x-calibration-token": TOKEN },
-    );
+    const res = await request<{
+      webhooks: Array<{ id: number; url: string; failureCount: number }>;
+    }>("GET", "/api/webhooks", undefined, { "x-calibration-token": TOKEN });
     expect(res.status).toBe(200);
     expect(res.body.webhooks).toHaveLength(2);
     expect(res.body.webhooks[0].id).toBe(2);
@@ -284,14 +375,32 @@ describe("DELETE /api/webhooks/:id", () => {
   });
 
   it("404s when the id does not exist", async () => {
-    const res = await request<{ error: string }>("DELETE", "/api/webhooks/999", undefined, { "x-calibration-token": TOKEN });
+    const res = await request<{ error: string }>(
+      "DELETE",
+      "/api/webhooks/999",
+      undefined,
+      { "x-calibration-token": TOKEN },
+    );
     expect(res.status).toBe(404);
   });
 
   it("deletes a registered webhook", async () => {
-    webhookRows.push({ id: 1, url: "https://a.example/hook", secretHash: "x", eventTypes: ["report.scored"], createdAt: new Date(), lastDeliveredAt: null, failureCount: 0 });
+    webhookRows.push({
+      id: 1,
+      url: "https://a.example/hook",
+      secretHash: "x",
+      eventTypes: ["report.scored"],
+      createdAt: new Date(),
+      lastDeliveredAt: null,
+      failureCount: 0,
+    });
     nextId = 2;
-    const res = await request<{ id: number }>("DELETE", "/api/webhooks/1", undefined, { "x-calibration-token": TOKEN });
+    const res = await request<{ id: number }>(
+      "DELETE",
+      "/api/webhooks/1",
+      undefined,
+      { "x-calibration-token": TOKEN },
+    );
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(1);
     expect(webhookRows).toHaveLength(0);
@@ -313,13 +422,19 @@ describe("dispatchReportScoredEvent", () => {
     });
     delivery.rememberWebhookSecret(7, secret);
 
-    const calls: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
+    const calls: Array<{
+      url: string;
+      headers: Record<string, string>;
+      body: string;
+    }> = [];
     const fakeFetch = vi.fn(async (url: string, init: RequestInit) => {
       const headers = init.headers as Record<string, string>;
       calls.push({ url, headers, body: String(init.body) });
       return new Response("", { status: 200 });
     });
-    delivery.__setWebhookDeliveryDepsForTests({ fetch: fakeFetch as unknown as typeof fetch });
+    delivery.__setWebhookDeliveryDepsForTests({
+      fetch: fakeFetch as unknown as typeof fetch,
+    });
 
     await delivery.dispatchReportScoredEvent({
       event: "report.scored",
@@ -334,9 +449,18 @@ describe("dispatchReportScoredEvent", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe("https://hook-a.example/in");
     expect(calls[0].headers["x-vulnrap-event"]).toBe("report.scored");
-    const expected = "sha256=" + crypto.createHmac("sha256", secret).update(calls[0].body, "utf8").digest("hex");
+    const expected =
+      "sha256=" +
+      crypto
+        .createHmac("sha256", secret)
+        .update(calls[0].body, "utf8")
+        .digest("hex");
     expect(calls[0].headers["x-vulnrap-signature"]).toBe(expected);
-    expect(JSON.parse(calls[0].body)).toMatchObject({ event: "report.scored", reportId: 42, slopScore: 80 });
+    expect(JSON.parse(calls[0].body)).toMatchObject({
+      event: "report.scored",
+      reportId: 42,
+      slopScore: 80,
+    });
     expect(webhookRows[0].lastDeliveredAt).not.toBeNull();
     expect(webhookRows[0].failureCount).toBe(0);
 
@@ -363,7 +487,10 @@ describe("dispatchReportScoredEvent", () => {
       Promise.resolve().then(cb);
       return 0 as unknown as ReturnType<typeof setTimeout>;
     }) as unknown as typeof setTimeout;
-    delivery.__setWebhookDeliveryDepsForTests({ fetch: fakeFetch as unknown as typeof fetch, setTimeout: fakeSetTimeout });
+    delivery.__setWebhookDeliveryDepsForTests({
+      fetch: fakeFetch as unknown as typeof fetch,
+      setTimeout: fakeSetTimeout,
+    });
 
     await delivery.dispatchReportScoredEvent({
       event: "report.scored",
@@ -396,7 +523,9 @@ describe("dispatchReportScoredEvent", () => {
     delivery.forgetWebhookSecret(11);
 
     const fakeFetch = vi.fn(async () => new Response("", { status: 200 }));
-    delivery.__setWebhookDeliveryDepsForTests({ fetch: fakeFetch as unknown as typeof fetch });
+    delivery.__setWebhookDeliveryDepsForTests({
+      fetch: fakeFetch as unknown as typeof fetch,
+    });
 
     await delivery.dispatchReportScoredEvent({
       event: "report.scored",

@@ -90,13 +90,26 @@ describe("evaluateLlmGate — composite-driven cost gate (Task #442)", () => {
     it.each([
       ["lower bound", COST_GUARD_LOW, "fired_borderline_composite", true],
       ["upper bound", COST_GUARD_HIGH, "fired_borderline_composite", true],
-      ["just above upper bound", COST_GUARD_HIGH + 1, "skipped_above_borderline_composite", false],
-      ["just below lower bound", COST_GUARD_LOW - 1, "skipped_below_borderline_composite", false],
-    ])("composite boundary case %s (composite=%i)", (_label, composite, reason, shouldCall) => {
-      const decision = evaluateLlmGate(0, 1.0, composite);
-      expect(decision.shouldCall).toBe(shouldCall);
-      expect(decision.reason).toBe(reason);
-    });
+      [
+        "just above upper bound",
+        COST_GUARD_HIGH + 1,
+        "skipped_above_borderline_composite",
+        false,
+      ],
+      [
+        "just below lower bound",
+        COST_GUARD_LOW - 1,
+        "skipped_below_borderline_composite",
+        false,
+      ],
+    ])(
+      "composite boundary case %s (composite=%i)",
+      (_label, composite, reason, shouldCall) => {
+        const decision = evaluateLlmGate(0, 1.0, composite);
+        expect(decision.shouldCall).toBe(shouldCall);
+        expect(decision.reason).toBe(reason);
+      },
+    );
 
     it("low confidence overrides composite-skip (still fires)", () => {
       // Today reports.ts always passes confidence=1.0, so this branch is

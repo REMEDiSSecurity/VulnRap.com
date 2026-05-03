@@ -17,11 +17,11 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { setCalibrationToken } from "@workspace/api-client-react";
-import FeedbackAnalytics from "./feedback-analytics";
 import {
   applyRateLimitNotice,
   resetCalibrationCooldown,
 } from "@/lib/calibration-cooldown";
+import FeedbackAnalytics from "./feedback-analytics";
 
 const SERVER_TOKEN = "server-side-reviewer-token";
 
@@ -233,9 +233,9 @@ describe("AvriDriftSection — calibration cooldown banner + re-arm gating (Task
     );
 
     // The banner should be entirely absent in the common idle case.
-    expect(
-      screen.queryAllByTestId("calibration-cooldown-banner"),
-    ).toHaveLength(0);
+    expect(screen.queryAllByTestId("calibration-cooldown-banner")).toHaveLength(
+      0,
+    );
 
     // Re-arm buttons should be enabled and reading "Re-arm".
     const buttons = screen.getAllByTestId("avri-drift-rearm-button");
@@ -347,9 +347,9 @@ describe("AvriDriftSection — calibration cooldown banner + re-arm gating (Task
 
     // The banner should stay absent — the unrelated throttle is not the
     // calibration cooldown's concern.
-    expect(
-      screen.queryAllByTestId("calibration-cooldown-banner"),
-    ).toHaveLength(0);
+    expect(screen.queryAllByTestId("calibration-cooldown-banner")).toHaveLength(
+      0,
+    );
 
     // Re-arm buttons stay enabled with the normal label.
     for (const btn of screen.getAllByTestId("avri-drift-rearm-button")) {

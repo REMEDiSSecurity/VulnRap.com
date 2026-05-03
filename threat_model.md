@@ -41,6 +41,7 @@ Production-relevant external dependencies are GitHub/NVD lookups for active veri
 This application stores vulnerability-report material that may still be sensitive even after redaction. Public result URLs, report IDs, diagnostics endpoints, similarity endpoints, feedback analytics, and calibration read APIs all risk exposing report content, corpus relationships, reviewer comments, or internal tuning state if response shaping is too broad or identifiers are guessable.
 
 Required guarantees:
+
 - Public report retrieval endpoints MUST enforce the intended privacy model for non-public submissions.
 - Guessable identifiers MUST NOT be sufficient to enumerate sensitive report content or derived analysis.
 - Public analytics endpoints MUST avoid exposing per-report or reviewer-sensitive data unless that exposure is an explicit, documented product guarantee.
@@ -51,6 +52,7 @@ Required guarantees:
 Public analysis endpoints accept large user-controlled inputs and can trigger PDF parsing, similarity scans, database lookups, outbound verification, and optional LLM inference. Weak or missing throttling here creates an availability and cost-amplification risk.
 
 Required guarantees:
+
 - Every expensive public analysis path MUST have meaningful abuse controls, not just broad global middleware.
 - Request size, parsing work, external fetches, and LLM usage MUST be bounded for unauthenticated callers.
 - External calls MUST have tight allow-lists and timeouts so attacker input cannot turn the service into a resource amplifier.
@@ -60,6 +62,7 @@ Required guarantees:
 The scoring pipeline depends on configuration, phrase lists, and feedback-driven calibration. If public callers can mutate or unduly influence reviewer state, the platform’s output can be poisoned.
 
 Required guarantees:
+
 - Calibration and tuning mutations MUST require a server-enforced reviewer secret in production.
 - Public input MUST NOT directly rewrite shared scoring state without explicit authorization.
 - Stored report data and traces MUST be deleted only with an unguessable delete credential.
@@ -69,6 +72,7 @@ Required guarantees:
 The main privileged action in this codebase is reviewer calibration control rather than end-user accounts. If reviewer authorization is missing, weak, or optional in production, any public caller can impersonate a reviewer.
 
 Required guarantees:
+
 - Reviewer-only routes MUST validate a strong secret server-side before applying state changes.
 - Production deployments MUST configure required secrets for privileged routes and identity-derived hashing.
 - Reviewer credentials MUST NOT be embedded in public client code, build-time browser env vars, or network flows available to anonymous visitors.
@@ -78,6 +82,7 @@ Required guarantees:
 The service behavior changes materially when environment variables are missing (`CALIBRATION_TOKEN`, `VISITOR_HMAC_KEY`, LLM keys). Missing secrets should degrade safely without exposing privileged mutation or weakening privacy guarantees.
 
 Required guarantees:
+
 - Production-sensitive secrets MUST fail closed where omission would expose privileged functionality.
 - Optional analytics/privacy secrets MUST not silently create broader tracking or disclosure risk.
 - Server-only secrets MUST never be shipped in `VITE_*` or any other browser-readable bundle variable.
@@ -126,4 +131,3 @@ The following threats are called out individually because they capture the highe
 - **Current mitigation.** Public retrieval respects `showInFeed` and `contentMode`. Hash-mode submissions store only section hashes, not raw text. Identifiers are random and not sequential.
 - **Residual risk.** Similarity and duplicate endpoints are inherently oracle-shaped: they can confirm "your candidate text matches a stored report" without exposing the stored text. Aggregate stats can move measurably in response to a single submission on a quiet day.
 - **Planned remediation.** Add a minimum-cohort threshold before similarity endpoints will return any signal for non-public reports, batch-update public stats counters on a fixed cadence rather than per-submission, and document this side-channel posture explicitly on `/privacy` so submitters can make an informed choice.
-

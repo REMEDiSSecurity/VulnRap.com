@@ -2,9 +2,9 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { rm, copyFile } from "node:fs/promises";
 import { build as esbuild, context as esbuildContext } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm, copyFile } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -48,11 +48,10 @@ function makeRestartPlugin() {
 
   function spawnChild() {
     const entry = path.resolve(artifactDir, "dist/index.mjs");
-    child = spawn(
-      process.execPath,
-      ["--enable-source-maps", entry],
-      { stdio: "inherit", env: process.env },
-    );
+    child = spawn(process.execPath, ["--enable-source-maps", entry], {
+      stdio: "inherit",
+      env: process.env,
+    });
     child.once("exit", (code, signal) => {
       // Only log unexpected exits; expected restarts null `child` first.
       if (child && code !== 0 && !signal) {
@@ -207,7 +206,7 @@ async function buildAll() {
     sourcemap: "linked",
     plugins: [
       // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
-      esbuildPluginPino({ transports: ["pino-pretty"] })
+      esbuildPluginPino({ transports: ["pino-pretty"] }),
     ],
     // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {
@@ -234,7 +233,14 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
 }
 
 async function copyOpenApiSpec() {
-  const specSrc = path.resolve(artifactDir, "..", "..", "lib", "api-spec", "openapi.yaml");
+  const specSrc = path.resolve(
+    artifactDir,
+    "..",
+    "..",
+    "lib",
+    "api-spec",
+    "openapi.yaml",
+  );
   const specDst = path.resolve(artifactDir, "dist", "openapi.yaml");
   try {
     await copyFile(specSrc, specDst);

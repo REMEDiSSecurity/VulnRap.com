@@ -1,7 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "fs";
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+} from "fs";
 import { tmpdir } from "os";
 import path from "path";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   dedupKeyForFlag,
   selectNewFlags,
@@ -46,19 +52,22 @@ function makeReport(overrides: Partial<AvriDriftReport> = {}): AvriDriftReport {
 const GAP_FLAG: DriftFlag = {
   weekStart: "2026-04-20",
   kind: "GAP_BELOW_45",
-  detail: "T1−T3 composite gap 40 < 45pt threshold (T1 n=5 mean=70, T3 n=5 mean=30).",
+  detail:
+    "T1−T3 composite gap 40 < 45pt threshold (T1 n=5 mean=70, T3 n=5 mean=30).",
 };
 
 const FAM_FLAG_T1_INJ: DriftFlag = {
   weekStart: "2026-04-20",
   kind: "FAMILY_MEAN_SHIFT",
-  detail: "T1 family INJECTION mean shifted by -7pt vs 2026-04-13 (was 80, now 73).",
+  detail:
+    "T1 family INJECTION mean shifted by -7pt vs 2026-04-13 (was 80, now 73).",
 };
 
 const FAM_FLAG_T3_MEM: DriftFlag = {
   weekStart: "2026-04-20",
   kind: "FAMILY_MEAN_SHIFT",
-  detail: "T3 family MEMORY_CORRUPTION mean shifted by +6pt vs 2026-04-13 (was 30, now 36).",
+  detail:
+    "T3 family MEMORY_CORRUPTION mean shifted by +6pt vs 2026-04-13 (was 30, now 36).",
 };
 
 describe("dedupKeyForFlag", () => {
@@ -78,7 +87,8 @@ describe("dedupKeyForFlag", () => {
   it("treats the same flag with different numeric values in detail as the same key", () => {
     const refreshed: DriftFlag = {
       ...FAM_FLAG_T1_INJ,
-      detail: "T1 family INJECTION mean shifted by -9pt vs 2026-04-13 (was 80, now 71).",
+      detail:
+        "T1 family INJECTION mean shifted by -9pt vs 2026-04-13 (was 80, now 71).",
     };
     expect(dedupKeyForFlag(refreshed)).toBe(dedupKeyForFlag(FAM_FLAG_T1_INJ));
   });
@@ -155,7 +165,8 @@ describe("notifyDriftFlagsIfNew", () => {
   });
 
   afterEach(() => {
-    if (originalEnv.url === undefined) delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    if (originalEnv.url === undefined)
+      delete process.env.AVRI_DRIFT_WEBHOOK_URL;
     else process.env.AVRI_DRIFT_WEBHOOK_URL = originalEnv.url;
     if (originalEnv.statePath === undefined)
       delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
@@ -293,7 +304,11 @@ describe("notifyDriftFlagsIfNew", () => {
       dispatch: rec.dispatch,
     });
     expect(outcome.dispatched).toBe(false);
-    expect(outcome.dispatchResult).toEqual({ ok: false, status: 503, error: "HTTP 503" });
+    expect(outcome.dispatchResult).toEqual({
+      ok: false,
+      status: 503,
+      error: "HTTP 503",
+    });
     expect(outcome.notified).toHaveLength(0);
     // State file must not have been written / must remain empty so the next
     // dispatch will retry the same flag.
@@ -317,11 +332,15 @@ describe("notifyDriftFlagsIfNew", () => {
     expect(outcome.webhookSkipped).toBe(true);
     // Critical: we DID record the flag so a future webhook hookup doesn't
     // retroactively spam reviewers with a backlog.
-    expect(outcome.notified.map((f) => f.key)).toEqual(["2026-04-20|GAP_BELOW_45"]);
+    expect(outcome.notified.map((f) => f.key)).toEqual([
+      "2026-04-20|GAP_BELOW_45",
+    ]);
     const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
       notified: NotifiedFlagRecord[];
     };
-    expect(persisted.notified.map((n) => n.key)).toEqual(["2026-04-20|GAP_BELOW_45"]);
+    expect(persisted.notified.map((n) => n.key)).toEqual([
+      "2026-04-20|GAP_BELOW_45",
+    ]);
   });
 
   it("returns a no-op outcome when the report has no flags", async () => {
@@ -340,12 +359,17 @@ describe("notifyDriftFlagsIfNew", () => {
   it("falls back to PUBLIC_URL or vulnrap.com when no link override is provided", async () => {
     const rec = recordingDispatcher();
     process.env.PUBLIC_URL = "https://prod.example.com/";
-    const outcome = await notifyDriftFlagsIfNew(makeReport({ flags: [GAP_FLAG] }), {
-      webhookUrl: "https://example.com/hook",
-      dispatch: rec.dispatch,
-    });
+    const outcome = await notifyDriftFlagsIfNew(
+      makeReport({ flags: [GAP_FLAG] }),
+      {
+        webhookUrl: "https://example.com/hook",
+        dispatch: rec.dispatch,
+      },
+    );
     // Trailing slash in PUBLIC_URL must be stripped.
-    expect(outcome.calibrationUrl).toBe("https://prod.example.com/feedback-analytics");
+    expect(outcome.calibrationUrl).toBe(
+      "https://prod.example.com/feedback-analytics",
+    );
     expect(outcome.runbookUrl).toBe(
       "https://prod.example.com/docs/avri-drift-runbook.md",
     );
@@ -356,11 +380,16 @@ describe("notifyDriftFlagsIfNew", () => {
     process.env.PUBLIC_URL = "https://prod.example.com";
     process.env.AVRI_DRIFT_RUNBOOK_URL =
       "https://github.com/example/vulnrap/blob/main/docs/avri-drift-runbook.md";
-    const outcome = await notifyDriftFlagsIfNew(makeReport({ flags: [GAP_FLAG] }), {
-      webhookUrl: "https://example.com/hook",
-      dispatch: rec.dispatch,
-    });
-    expect(outcome.calibrationUrl).toBe("https://prod.example.com/feedback-analytics");
+    const outcome = await notifyDriftFlagsIfNew(
+      makeReport({ flags: [GAP_FLAG] }),
+      {
+        webhookUrl: "https://example.com/hook",
+        dispatch: rec.dispatch,
+      },
+    );
+    expect(outcome.calibrationUrl).toBe(
+      "https://prod.example.com/feedback-analytics",
+    );
     expect(outcome.runbookUrl).toBe(
       "https://github.com/example/vulnrap/blob/main/docs/avri-drift-runbook.md",
     );
@@ -373,11 +402,14 @@ describe("notifyDriftFlagsIfNew", () => {
   it("prefers an explicit runbookUrl option over the env override", async () => {
     const rec = recordingDispatcher();
     process.env.AVRI_DRIFT_RUNBOOK_URL = "https://env.example.com/runbook";
-    const outcome = await notifyDriftFlagsIfNew(makeReport({ flags: [GAP_FLAG] }), {
-      webhookUrl: "https://example.com/hook",
-      runbookUrl: "https://opt.example.com/runbook",
-      dispatch: rec.dispatch,
-    });
+    const outcome = await notifyDriftFlagsIfNew(
+      makeReport({ flags: [GAP_FLAG] }),
+      {
+        webhookUrl: "https://example.com/hook",
+        runbookUrl: "https://opt.example.com/runbook",
+        dispatch: rec.dispatch,
+      },
+    );
     expect(outcome.runbookUrl).toBe("https://opt.example.com/runbook");
   });
 });
@@ -650,7 +682,9 @@ describe("listNotifiedFlags / removeNotifiedFlags", () => {
     ]);
 
     const result = removeNotifiedFlags(["2026-04-20|GAP_BELOW_45"]);
-    expect(result.removed.map((r) => r.key)).toEqual(["2026-04-20|GAP_BELOW_45"]);
+    expect(result.removed.map((r) => r.key)).toEqual([
+      "2026-04-20|GAP_BELOW_45",
+    ]);
     expect(result.notFound).toEqual([]);
     expect(result.remaining).toBe(2);
 
@@ -714,7 +748,9 @@ describe("listNotifiedFlags / removeNotifiedFlags", () => {
       },
     ]);
     const result = removeNotifiedFlags(["", "   ", "2026-04-20|GAP_BELOW_45"]);
-    expect(result.removed.map((r) => r.key)).toEqual(["2026-04-20|GAP_BELOW_45"]);
+    expect(result.removed.map((r) => r.key)).toEqual([
+      "2026-04-20|GAP_BELOW_45",
+    ]);
     expect(result.notFound).toEqual([]);
   });
 
@@ -737,10 +773,13 @@ describe("listNotifiedFlags / removeNotifiedFlags", () => {
     };
 
     // Pre-condition: dispatching now suppresses the gap flag.
-    let outcome = await notifyDriftFlagsIfNew(makeReport({ flags: [GAP_FLAG] }), {
-      webhookUrl: "https://example.com/hook",
-      dispatch,
-    });
+    let outcome = await notifyDriftFlagsIfNew(
+      makeReport({ flags: [GAP_FLAG] }),
+      {
+        webhookUrl: "https://example.com/hook",
+        dispatch,
+      },
+    );
     expect(outcome.dispatched).toBe(false);
     expect(calls).toHaveLength(0);
 
@@ -755,7 +794,9 @@ describe("listNotifiedFlags / removeNotifiedFlags", () => {
       dispatch,
     });
     expect(outcome.dispatched).toBe(true);
-    expect(outcome.notified.map((f) => f.key)).toEqual(["2026-04-20|GAP_BELOW_45"]);
+    expect(outcome.notified.map((f) => f.key)).toEqual([
+      "2026-04-20|GAP_BELOW_45",
+    ]);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.payload.flags.map((f) => f.key)).toEqual([
       "2026-04-20|GAP_BELOW_45",
@@ -1092,8 +1133,14 @@ describe("removeNotifiedFlags audit log + listRearmHistory", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function seedState(records: NotifiedFlagRecord[], history?: RearmAuditEntry[]) {
-    const payload: { notified: NotifiedFlagRecord[]; rearmHistory?: RearmAuditEntry[] } = {
+  function seedState(
+    records: NotifiedFlagRecord[],
+    history?: RearmAuditEntry[],
+  ) {
+    const payload: {
+      notified: NotifiedFlagRecord[];
+      rearmHistory?: RearmAuditEntry[];
+    } = {
       notified: records,
     };
     if (history !== undefined) payload.rearmHistory = history;
@@ -1142,7 +1189,9 @@ describe("removeNotifiedFlags audit log + listRearmHistory", () => {
     const byKey = new Map(result.auditEntries.map((e) => [e.key, e]));
     expect(byKey.get("k1")?.kind).toBe("GAP_BELOW_45");
     expect(byKey.get("k1")?.originalDetail).toBe("gap detail");
-    expect(byKey.get("k1")?.originalNotifiedAt).toBe("2026-04-21T00:00:00.000Z");
+    expect(byKey.get("k1")?.originalNotifiedAt).toBe(
+      "2026-04-21T00:00:00.000Z",
+    );
     expect(byKey.get("k2")?.kind).toBe("FAMILY_MEAN_SHIFT");
 
     // Persisted to disk.
@@ -1197,7 +1246,9 @@ describe("removeNotifiedFlags audit log + listRearmHistory", () => {
       ],
     );
     const before = readFileSync(statePath, "utf8");
-    const result = removeNotifiedFlags(["does-not-exist"], { reviewer: "alice" });
+    const result = removeNotifiedFlags(["does-not-exist"], {
+      reviewer: "alice",
+    });
     expect(result.auditEntries).toEqual([]);
     // Existing log unchanged AND file untouched (no churn on a no-op).
     expect(readFileSync(statePath, "utf8")).toBe(before);
@@ -1237,7 +1288,9 @@ describe("removeNotifiedFlags audit log + listRearmHistory", () => {
     expect(result.rearmHistory).toHaveLength(limit);
     // Oldest seeded entry was dropped, newest call is at the end.
     expect(result.rearmHistory[0]!.key).toBe("seeded-1");
-    expect(result.rearmHistory[result.rearmHistory.length - 1]!.key).toBe("fresh");
+    expect(result.rearmHistory[result.rearmHistory.length - 1]!.key).toBe(
+      "fresh",
+    );
     // Persisted file is also trimmed (we don't want unbounded growth).
     const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
       rearmHistory: RearmAuditEntry[];
@@ -1295,7 +1348,9 @@ describe("removeNotifiedFlags audit log + listRearmHistory", () => {
     // notifyDriftFlagsIfNew, that re-arm's audit entry (and removal)
     // is overwritten by the stale snapshot.
     let resolveDispatch!: () => void;
-    const dispatchGate = new Promise<void>((r) => { resolveDispatch = r; });
+    const dispatchGate = new Promise<void>((r) => {
+      resolveDispatch = r;
+    });
     const dispatch: WebhookDispatcher = async () => {
       await dispatchGate;
       return { ok: true, status: 200 };
@@ -1457,7 +1512,8 @@ describe("detectAndNotifyStalledScheduler", () => {
   });
 
   afterEach(() => {
-    if (originalEnv.url === undefined) delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    if (originalEnv.url === undefined)
+      delete process.env.AVRI_DRIFT_WEBHOOK_URL;
     else process.env.AVRI_DRIFT_WEBHOOK_URL = originalEnv.url;
     if (originalEnv.statePath === undefined)
       delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
@@ -1732,7 +1788,9 @@ describe("detectAndNotifyStalledScheduler", () => {
     const snap = listSchedulerStalls();
     expect(snap).toHaveLength(1);
     snap[0]!.key = "MUTATED";
-    expect(listSchedulerStalls()[0]!.key).toBe("STALL|2026-04-29T00:00:00.000Z");
+    expect(listSchedulerStalls()[0]!.key).toBe(
+      "STALL|2026-04-29T00:00:00.000Z",
+    );
   });
 });
 
@@ -1758,7 +1816,8 @@ describe("startStalledSchedulerWatchdog", () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    if (originalEnv.url === undefined) delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    if (originalEnv.url === undefined)
+      delete process.env.AVRI_DRIFT_WEBHOOK_URL;
     else process.env.AVRI_DRIFT_WEBHOOK_URL = originalEnv.url;
     if (originalEnv.statePath === undefined)
       delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;

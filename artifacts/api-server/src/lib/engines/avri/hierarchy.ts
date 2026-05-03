@@ -53,7 +53,9 @@ function loadHierarchy(): Map<string, string[]> {
  * Normalize a CWE label like "CWE-79", "cwe79", "79" to the bare numeric id.
  * Returns null when the input does not contain a CWE number.
  */
-export function normalizeCweId(input: string | null | undefined): string | null {
+export function normalizeCweId(
+  input: string | null | undefined,
+): string | null {
   if (!input) return null;
   const m = String(input).match(/(?:cwe[-_]?)?(\d{1,4})/i);
   return m ? m[1] : null;
@@ -67,7 +69,9 @@ export function normalizeCweId(input: string | null | undefined): string | null 
 export function ancestorsOf(cweNumber: string, maxDepth = 6): string[] {
   const hierarchy = loadHierarchy();
   const visited = new Set<string>();
-  const queue: Array<{ cwe: string; depth: number }> = [{ cwe: cweNumber, depth: 0 }];
+  const queue: Array<{ cwe: string; depth: number }> = [
+    { cwe: cweNumber, depth: 0 },
+  ];
   while (queue.length > 0) {
     const { cwe, depth } = queue.shift()!;
     if (visited.has(cwe)) continue;

@@ -21,7 +21,11 @@
 //      score assertion).
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { runEngine2, type EngineResult, type TriggeredIndicator } from "./engines";
+import {
+  runEngine2,
+  type EngineResult,
+  type TriggeredIndicator,
+} from "./engines";
 import { extractSignals } from "./extractors";
 import { analyzeWithEnginesTraced } from "./index";
 
@@ -192,7 +196,8 @@ describe("Task #239: strong-evidence GOLD_SIGNAL categories — full default pip
   afterEach(() => {
     if (originalAvri === undefined) delete process.env.VULNRAP_USE_AVRI;
     else process.env.VULNRAP_USE_AVRI = originalAvri;
-    if (originalSubstanceCap === undefined) delete process.env.VULNRAP_E3_SUBSTANCE_CAP;
+    if (originalSubstanceCap === undefined)
+      delete process.env.VULNRAP_E3_SUBSTANCE_CAP;
     else process.env.VULNRAP_E3_SUBSTANCE_CAP = originalSubstanceCap;
   });
 
@@ -202,8 +207,10 @@ describe("Task #239: strong-evidence GOLD_SIGNAL categories — full default pip
 
     const golds = goldIds(e2.triggeredIndicators);
     for (const expected of EXPECTED_NEW_CATEGORIES) {
-      expect(golds, `missing GOLD_SIGNAL=${expected}; got [${golds.join(", ")}]`)
-        .toContain(expected);
+      expect(
+        golds,
+        `missing GOLD_SIGNAL=${expected}; got [${golds.join(", ")}]`,
+      ).toContain(expected);
     }
     // Curated code_diff stays alongside the new categories.
     expect(golds).toContain("code_diff");
@@ -215,7 +222,9 @@ describe("Task #239: strong-evidence GOLD_SIGNAL categories — full default pip
     // Every GOLD_SIGNAL indicator carries a HIGH or MEDIUM strength and
     // a non-empty explanation, since downstream UI surfaces these
     // verbatim in the diagnostics panel.
-    for (const ind of e2.triggeredIndicators.filter((i) => i.signal === "GOLD_SIGNAL")) {
+    for (const ind of e2.triggeredIndicators.filter(
+      (i) => i.signal === "GOLD_SIGNAL",
+    )) {
       expect(["HIGH", "MEDIUM"]).toContain(ind.strength);
       expect(typeof ind.explanation).toBe("string");
       expect((ind.explanation ?? "").length).toBeGreaterThan(0);
@@ -231,8 +240,10 @@ describe("Task #239: strong-evidence GOLD_SIGNAL categories — full default pip
     const e2 = e2From(composite.engineResults);
     const golds = goldIds(e2.triggeredIndicators);
     for (const expected of EXPECTED_NEW_CATEGORIES) {
-      expect(golds, `missing GOLD_SIGNAL=${expected} in composite output; got [${golds.join(", ")}]`)
-        .toContain(expected);
+      expect(
+        golds,
+        `missing GOLD_SIGNAL=${expected} in composite output; got [${golds.join(", ")}]`,
+      ).toContain(expected);
     }
 
     // Sanity: the composite uses the legacy (non-AVRI) engine list.
@@ -248,8 +259,10 @@ describe("Task #239: strong-evidence GOLD_SIGNAL categories — full default pip
     const e2 = runEngine2(signals, PLACEHOLDER_REPORT);
     const golds = goldIds(e2.triggeredIndicators);
     for (const blocked of EXPECTED_NEW_CATEGORIES) {
-      expect(golds, `placeholder-only report leaked GOLD_SIGNAL=${blocked}`)
-        .not.toContain(blocked);
+      expect(
+        golds,
+        `placeholder-only report leaked GOLD_SIGNAL=${blocked}`,
+      ).not.toContain(blocked);
     }
   });
 
@@ -276,7 +289,9 @@ describe("Task #239: strong-evidence GOLD_SIGNAL categories — full default pip
     const placeholderE2 = e2From(placeholder.composite.engineResults);
 
     const realGoldCount = goldIds(realE2.triggeredIndicators).length;
-    const placeholderGoldCount = goldIds(placeholderE2.triggeredIndicators).length;
+    const placeholderGoldCount = goldIds(
+      placeholderE2.triggeredIndicators,
+    ).length;
     expect(realGoldCount).toBeGreaterThan(placeholderGoldCount);
     // Real report should surface at least the five expected new
     // categories + code_diff = 6 gold signals minimum.

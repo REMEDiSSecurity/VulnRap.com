@@ -53,7 +53,13 @@ const TIER_SEEDS: Record<string, { dates: string[]; rotations: number }> = {
   // intentionally do NOT count as a rotation, exercising the "key
   // differs" branch of summarizeDatasetHistory.
   T1_LEGIT: {
-    dates: ["2026-04-20", "2026-04-21", "2026-04-22", "2026-04-22", "2026-04-23"],
+    dates: [
+      "2026-04-20",
+      "2026-04-21",
+      "2026-04-22",
+      "2026-04-22",
+      "2026-04-23",
+    ],
     rotations: 3,
   },
   // 3 snapshots spanning 3 distinct UTC days → 2 adjacent rotations.
@@ -89,7 +95,8 @@ function buildHistoryPayload() {
       // Spread the means so the sparkline span is non-zero (avoids the
       // "no history" / "1 snapshot" early-returns in
       // DatasetHistoryMeanSparkline).
-      compositeMean: 60 + idx + (tier === "T1_LEGIT" ? 10 : tier === "T3_SLOP" ? -10 : 0),
+      compositeMean:
+        60 + idx + (tier === "T1_LEGIT" ? 10 : tier === "T3_SLOP" ? -10 : 0),
       gap: 18 + idx,
       sampleDateKey: dateKey,
     }));
@@ -155,7 +162,9 @@ test.describe("DatasetCohortDriftSection — slice-rotation marker (Task #358)",
       // robust against future whitespace tweaks while still failing
       // hard if the count is wrong or the literal "rot" word
       // disappears.
-      const rotChip = tierCard.getByTestId(`dataset-cohort-drift-rotations-${tier}`);
+      const rotChip = tierCard.getByTestId(
+        `dataset-cohort-drift-rotations-${tier}`,
+      );
       await expect(rotChip).toBeVisible();
       await expect(rotChip).toContainText(`${rotations} rot`);
     }

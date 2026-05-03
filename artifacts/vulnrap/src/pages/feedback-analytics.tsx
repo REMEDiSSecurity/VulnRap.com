@@ -1,19 +1,36 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  useGetFeedbackAnalytics, getGetFeedbackAnalyticsQueryKey,
-  useGetHoldoutEval, getGetHoldoutEvalQueryKey,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  useGetFeedbackAnalytics,
+  getGetFeedbackAnalyticsQueryKey,
+  useGetHoldoutEval,
+  getGetHoldoutEvalQueryKey,
   type HoldoutEvalResponse,
   type HoldoutEvalPartition,
-  useGetCalibrationReport, getGetCalibrationReportQueryKey,
-  useGetScoringConfig, getGetScoringConfigQueryKey,
-  useGetAvriDriftReport, getGetAvriDriftReportQueryKey,
-  useGetAvriDriftNotifications, getGetAvriDriftNotificationsQueryKey,
-  useGetAvriDriftSchedulerStatus, getGetAvriDriftSchedulerStatusQueryKey,
-  useGetAvriDriftRearmHistory, getGetAvriDriftRearmHistoryQueryKey,
-  useGetScoreStabilitySummary, getGetScoreStabilitySummaryQueryKey,
+  useGetCalibrationReport,
+  getGetCalibrationReportQueryKey,
+  useGetScoringConfig,
+  getGetScoringConfigQueryKey,
+  useGetAvriDriftReport,
+  getGetAvriDriftReportQueryKey,
+  useGetAvriDriftNotifications,
+  getGetAvriDriftNotificationsQueryKey,
+  useGetAvriDriftSchedulerStatus,
+  getGetAvriDriftSchedulerStatusQueryKey,
+  useGetAvriDriftRearmHistory,
+  getGetAvriDriftRearmHistoryQueryKey,
+  useGetScoreStabilitySummary,
+  getGetScoreStabilitySummaryQueryKey,
   type ScoreStabilitySummary,
   type ScoreStabilityDailyBucket,
-  useGetShadowDrift, getGetShadowDriftQueryKey,
+  useGetShadowDrift,
+  getGetShadowDriftQueryKey,
   type ShadowDriftReport,
   type ShadowDriftRow,
   useGetCalibrationAuthBruteForceAlerts,
@@ -24,13 +41,22 @@ import {
   type AvriDriftSchedulerStatus,
   type AvriDriftRearmAuditEntry,
   type CalibrationAuthBruteForceAlertEntry,
-  useGetCalibrationAuthStatus, getGetCalibrationAuthStatusQueryKey,
-  useGetReportFeed, getGetReportFeedQueryKey,
-  useGetHandwavyPhrases, getGetHandwavyPhrasesQueryKey,
-  useListHandwavyPhraseRemovalBatches, getListHandwavyPhraseRemovalBatchesQueryKey,
+  useGetCalibrationAuthStatus,
+  getGetCalibrationAuthStatusQueryKey,
+  useGetReportFeed,
+  getGetReportFeedQueryKey,
+  useGetHandwavyPhrases,
+  getGetHandwavyPhrasesQueryKey,
+  useListHandwavyPhraseRemovalBatches,
+  getListHandwavyPhraseRemovalBatchesQueryKey,
   getHandwavyPhraseRemovalBatch,
-  addHandwavyPhrase, removeHandwavyPhrase, reinstateHandwavyPhrase, reinstateHandwavyPhrasesBatch,
-  editHandwavyPhrase, undoHandwavyPhrase, undoHandwavyPhrasesBatch,
+  addHandwavyPhrase,
+  removeHandwavyPhrase,
+  reinstateHandwavyPhrase,
+  reinstateHandwavyPhrasesBatch,
+  editHandwavyPhrase,
+  undoHandwavyPhrase,
+  undoHandwavyPhrasesBatch,
   revertHandwavyPhraseEdit,
   type HandwavyPhraseDryRunMatches,
   type HandwavyPhraseDryRunOverlaps,
@@ -59,17 +85,75 @@ import {
   type AvriDriftFlag,
   type AvriDriftFamilyMean,
   getCalibrationToken,
-  useListWebhooks, getListWebhooksQueryKey,
+  useListWebhooks,
+  getListWebhooksQueryKey,
   useCreateWebhook,
   useDeleteWebhook,
   type Webhook,
   type WebhookCreateResponse,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Link,
+  useNavigate,
+  useSearchParams,
+  type NavigateFunction,
+} from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  MessageSquare,
+  Star,
+  ThumbsUp,
+  ThumbsDown,
+  TrendingUp,
+  AlertTriangle,
+  BarChart3,
+  Users,
+  ArrowRight,
+  Clock,
+  Hash,
+  Settings,
+  Shield,
+  Zap,
+  CheckCircle2,
+  XCircle,
+  Info,
+  Play,
+  Layers,
+  Activity,
+  BookOpen,
+  ExternalLink,
+  Plus,
+  Trash2,
+  MessageCircleQuestion,
+  RotateCcw,
+  Pencil,
+  Save,
+  X as XIcon,
+  Undo2,
+  KeyRound,
+  Calendar,
+  ChevronDown,
+  ChevronRight,
+  RefreshCw,
+  Download,
+  Plug,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -80,17 +164,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Link, useNavigate, useSearchParams, type NavigateFunction } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  MessageSquare, Star, ThumbsUp, ThumbsDown, TrendingUp, AlertTriangle,
-  BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
-  CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
-  Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon, Undo2,
-  KeyRound, Calendar, ChevronDown, ChevronRight, RefreshCw, Download, Plug,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCalibrationCooldown } from "@/lib/calibration-cooldown";
 import { formatAuditTimestamp } from "@/lib/audit-format";
@@ -118,7 +193,13 @@ import {
 } from "@/lib/archetype-history";
 import PhraseSuggestionsQueue from "@/components/phrase-suggestions-queue";
 
-function StatCard({ title, value, subtitle, icon, color }: {
+function StatCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  color,
+}: {
   title: string;
   value: string | number;
   subtitle?: string;
@@ -129,24 +210,46 @@ function StatCard({ title, value, subtitle, icon, color }: {
     <Card className="glass-card rounded-xl">
       <CardContent className="p-5">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{title}</span>
+          <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
+            {title}
+          </span>
           <div className={cn("p-2 rounded-lg", color)}>{icon}</div>
         </div>
-        <div className="text-2xl font-bold text-foreground tabular-nums">{value}</div>
-        {subtitle && <div className="text-xs text-muted-foreground mt-1">{subtitle}</div>}
+        <div className="text-2xl font-bold text-foreground tabular-nums">
+          {value}
+        </div>
+        {subtitle && (
+          <div className="text-xs text-muted-foreground mt-1">{subtitle}</div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-function RatingBar({ rating, count, maxCount }: { rating: number; count: number; maxCount: number }) {
+function RatingBar({
+  rating,
+  count,
+  maxCount,
+}: {
+  rating: number;
+  count: number;
+  maxCount: number;
+}) {
   const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
   const labels = ["", "Way off", "Needs work", "Decent", "Solid", "Nailed it"];
   return (
     <div className="flex items-center gap-3">
       <div className="flex items-center gap-1 w-16 shrink-0">
-        {[1, 2, 3, 4, 5].map(s => (
-          <Star key={s} className={cn("w-3 h-3", s <= rating ? "text-yellow-400 fill-yellow-400" : "text-muted-foreground/20")} />
+        {[1, 2, 3, 4, 5].map((s) => (
+          <Star
+            key={s}
+            className={cn(
+              "w-3 h-3",
+              s <= rating
+                ? "text-yellow-400 fill-yellow-400"
+                : "text-muted-foreground/20",
+            )}
+          />
         ))}
       </div>
       <div className="flex-1 h-5 bg-muted/30 rounded-full overflow-hidden">
@@ -155,16 +258,32 @@ function RatingBar({ rating, count, maxCount }: { rating: number; count: number;
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs text-muted-foreground w-8 text-right tabular-nums">{count}</span>
-      <span className="text-xs text-muted-foreground/60 w-20 hidden sm:block">{labels[rating]}</span>
+      <span className="text-xs text-muted-foreground w-8 text-right tabular-nums">
+        {count}
+      </span>
+      <span className="text-xs text-muted-foreground/60 w-20 hidden sm:block">
+        {labels[rating]}
+      </span>
     </div>
   );
 }
 
-function CorrelationScatter({ data }: {
-  data: Array<{ scoreBucket: string; avgRating: number; helpfulPct: number; count: number }>;
+function CorrelationScatter({
+  data,
+}: {
+  data: Array<{
+    scoreBucket: string;
+    avgRating: number;
+    helpfulPct: number;
+    count: number;
+  }>;
 }) {
-  if (data.length === 0) return <p className="text-xs text-muted-foreground/50 py-4 text-center">No linked feedback yet</p>;
+  if (data.length === 0)
+    return (
+      <p className="text-xs text-muted-foreground/50 py-4 text-center">
+        No linked feedback yet
+      </p>
+    );
 
   const W = 300;
   const H = 200;
@@ -181,11 +300,12 @@ function CorrelationScatter({ data }: {
     "81-100": "#ef4444",
   };
 
-  const maxCount = Math.max(...data.map(d => d.count), 1);
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
 
-  const points = data.map(d => {
+  const points = data.map((d) => {
     const bIdx = bucketOrder.indexOf(d.scoreBucket);
-    const x = PAD.left + ((bIdx >= 0 ? bIdx : 0) / (bucketOrder.length - 1)) * pw;
+    const x =
+      PAD.left + ((bIdx >= 0 ? bIdx : 0) / (bucketOrder.length - 1)) * pw;
     const y = PAD.top + ph - ((d.avgRating - 1) / 4) * ph;
     const r = 4 + (d.count / maxCount) * 10;
     const color = bucketColors[d.scoreBucket] || "#06b6d4";
@@ -194,13 +314,33 @@ function CorrelationScatter({ data }: {
 
   return (
     <div className="space-y-2">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: "220px" }}>
-        {[1, 2, 3, 4, 5].map(rating => {
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full"
+        style={{ maxHeight: "220px" }}
+      >
+        {[1, 2, 3, 4, 5].map((rating) => {
           const y = PAD.top + ph - ((rating - 1) / 4) * ph;
           return (
             <g key={rating}>
-              <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth={0.5} />
-              <text x={PAD.left - 4} y={y + 3} textAnchor="end" fill="rgba(255,255,255,0.3)" fontSize={8} fontFamily="monospace">{rating}★</text>
+              <line
+                x1={PAD.left}
+                y1={y}
+                x2={W - PAD.right}
+                y2={y}
+                stroke="rgba(255,255,255,0.05)"
+                strokeWidth={0.5}
+              />
+              <text
+                x={PAD.left - 4}
+                y={y + 3}
+                textAnchor="end"
+                fill="rgba(255,255,255,0.3)"
+                fontSize={8}
+                fontFamily="monospace"
+              >
+                {rating}★
+              </text>
             </g>
           );
         })}
@@ -208,15 +348,39 @@ function CorrelationScatter({ data }: {
         {bucketOrder.map((label, i) => {
           const x = PAD.left + (i / (bucketOrder.length - 1)) * pw;
           return (
-            <text key={label} x={x} y={H - 4} textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize={7} fontFamily="monospace">{label}</text>
+            <text
+              key={label}
+              x={x}
+              y={H - 4}
+              textAnchor="middle"
+              fill="rgba(255,255,255,0.3)"
+              fontSize={7}
+              fontFamily="monospace"
+            >
+              {label}
+            </text>
           );
         })}
 
-        <text x={W / 2} y={H + 2} textAnchor="middle" fill="rgba(255,255,255,0.2)" fontSize={7}>Slop Score Range</text>
+        <text
+          x={W / 2}
+          y={H + 2}
+          textAnchor="middle"
+          fill="rgba(255,255,255,0.2)"
+          fontSize={7}
+        >
+          Slop Score Range
+        </text>
 
         {points.map((p, i) => (
           <g key={i} className="group">
-            <circle cx={p.x} cy={p.y} r={p.r + 6} fill="transparent" className="cursor-default" />
+            <circle
+              cx={p.x}
+              cy={p.y}
+              r={p.r + 6}
+              fill="transparent"
+              className="cursor-default"
+            />
             <circle
               cx={p.x}
               cy={p.y}
@@ -230,23 +394,75 @@ function CorrelationScatter({ data }: {
             <circle cx={p.x} cy={p.y} r={2} fill={p.color} />
 
             <g className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              <rect x={p.x - 40} y={p.y - 42} width={80} height={36} rx={4} fill="rgba(0,0,0,0.85)" stroke={p.color} strokeWidth={0.5} />
-              <text x={p.x} y={p.y - 28} textAnchor="middle" fill={p.color} fontSize={8} fontWeight={700} fontFamily="monospace">{p.avgRating.toFixed(1)}★ · {p.helpfulPct}%</text>
-              <text x={p.x} y={p.y - 16} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize={7}>{p.count} entries · {p.scoreBucket}</text>
+              <rect
+                x={p.x - 40}
+                y={p.y - 42}
+                width={80}
+                height={36}
+                rx={4}
+                fill="rgba(0,0,0,0.85)"
+                stroke={p.color}
+                strokeWidth={0.5}
+              />
+              <text
+                x={p.x}
+                y={p.y - 28}
+                textAnchor="middle"
+                fill={p.color}
+                fontSize={8}
+                fontWeight={700}
+                fontFamily="monospace"
+              >
+                {p.avgRating.toFixed(1)}★ · {p.helpfulPct}%
+              </text>
+              <text
+                x={p.x}
+                y={p.y - 16}
+                textAnchor="middle"
+                fill="rgba(255,255,255,0.5)"
+                fontSize={7}
+              >
+                {p.count} entries · {p.scoreBucket}
+              </text>
             </g>
           </g>
         ))}
       </svg>
       <div className="grid grid-cols-5 gap-1 text-center">
-        {data.map(d => {
+        {data.map((d) => {
           const color = bucketColors[d.scoreBucket] || "#06b6d4";
-          const ratingColor = d.avgRating >= 4 ? "text-green-400" : d.avgRating >= 3 ? "text-yellow-400" : "text-red-400";
+          const ratingColor =
+            d.avgRating >= 4
+              ? "text-green-400"
+              : d.avgRating >= 3
+                ? "text-yellow-400"
+                : "text-red-400";
           return (
-            <div key={d.scoreBucket} className="space-y-0.5 py-1.5 px-1 rounded-md" style={{ borderLeft: `2px solid ${color}` }}>
-              <div className="text-[10px] font-mono font-bold" style={{ color }}>{d.scoreBucket}</div>
-              <div className={cn("text-[10px] font-bold tabular-nums", ratingColor)}>{d.avgRating.toFixed(1)}★</div>
-              <div className="text-[9px] text-muted-foreground/50">{d.helpfulPct}% helpful</div>
-              <div className="text-[9px] text-muted-foreground/30">{d.count} entries</div>
+            <div
+              key={d.scoreBucket}
+              className="space-y-0.5 py-1.5 px-1 rounded-md"
+              style={{ borderLeft: `2px solid ${color}` }}
+            >
+              <div
+                className="text-[10px] font-mono font-bold"
+                style={{ color }}
+              >
+                {d.scoreBucket}
+              </div>
+              <div
+                className={cn(
+                  "text-[10px] font-bold tabular-nums",
+                  ratingColor,
+                )}
+              >
+                {d.avgRating.toFixed(1)}★
+              </div>
+              <div className="text-[9px] text-muted-foreground/50">
+                {d.helpfulPct}% helpful
+              </div>
+              <div className="text-[9px] text-muted-foreground/30">
+                {d.count} entries
+              </div>
             </div>
           );
         })}
@@ -255,7 +471,9 @@ function CorrelationScatter({ data }: {
   );
 }
 
-function OutlierCard({ outlier }: {
+function OutlierCard({
+  outlier,
+}: {
   outlier: {
     feedbackId: number;
     rating: number;
@@ -266,18 +484,21 @@ function OutlierCard({ outlier }: {
     qualityScore: number;
   };
 }) {
-  const mismatch = (outlier.rating <= 2 && outlier.slopScore >= 60)
-    ? "User rated low, engine scored high"
-    : (outlier.rating >= 4 && outlier.slopScore <= 20)
-      ? "User rated high, engine scored low"
-      : "Marked not helpful";
+  const mismatch =
+    outlier.rating <= 2 && outlier.slopScore >= 60
+      ? "User rated low, engine scored high"
+      : outlier.rating >= 4 && outlier.slopScore <= 20
+        ? "User rated high, engine scored low"
+        : "Marked not helpful";
 
   return (
     <div className="p-4 rounded-lg glass-card border border-border/50 space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0" />
-          <span className="text-xs font-medium text-orange-400">{mismatch}</span>
+          <span className="text-xs font-medium text-orange-400">
+            {mismatch}
+          </span>
         </div>
       </div>
       <div className="flex flex-wrap gap-3 text-xs">
@@ -285,12 +506,25 @@ function OutlierCard({ outlier }: {
           <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
           {outlier.rating}/5
         </span>
-        <span className={cn("flex items-center gap-1", outlier.helpful ? "text-green-400" : "text-red-400")}>
-          {outlier.helpful ? <ThumbsUp className="w-3 h-3" /> : <ThumbsDown className="w-3 h-3" />}
+        <span
+          className={cn(
+            "flex items-center gap-1",
+            outlier.helpful ? "text-green-400" : "text-red-400",
+          )}
+        >
+          {outlier.helpful ? (
+            <ThumbsUp className="w-3 h-3" />
+          ) : (
+            <ThumbsDown className="w-3 h-3" />
+          )}
           {outlier.helpful ? "Helpful" : "Not helpful"}
         </span>
-        <Badge variant="outline" className="text-[10px]">Slop: {outlier.slopScore}%</Badge>
-        <Badge variant="outline" className="text-[10px]">{outlier.slopTier}</Badge>
+        <Badge variant="outline" className="text-[10px]">
+          Slop: {outlier.slopScore}%
+        </Badge>
+        <Badge variant="outline" className="text-[10px]">
+          {outlier.slopTier}
+        </Badge>
       </div>
       {outlier.comment && (
         <p className="text-xs text-muted-foreground italic leading-relaxed border-l-2 border-primary/30 pl-3 mt-2">
@@ -301,7 +535,9 @@ function OutlierCard({ outlier }: {
   );
 }
 
-function RecentRow({ item }: {
+function RecentRow({
+  item,
+}: {
   item: {
     feedbackId: number;
     rating: number;
@@ -315,25 +551,49 @@ function RecentRow({ item }: {
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0">
       <div className="flex items-center gap-0.5 w-16 shrink-0">
-        {[1, 2, 3, 4, 5].map(s => (
-          <Star key={s} className={cn("w-2.5 h-2.5", s <= item.rating ? "text-yellow-400 fill-yellow-400" : "text-muted-foreground/20")} />
+        {[1, 2, 3, 4, 5].map((s) => (
+          <Star
+            key={s}
+            className={cn(
+              "w-2.5 h-2.5",
+              s <= item.rating
+                ? "text-yellow-400 fill-yellow-400"
+                : "text-muted-foreground/20",
+            )}
+          />
         ))}
       </div>
-      <div className={cn("w-5 shrink-0", item.helpful ? "text-green-400" : "text-red-400")}>
-        {item.helpful ? <ThumbsUp className="w-3.5 h-3.5" /> : <ThumbsDown className="w-3.5 h-3.5" />}
+      <div
+        className={cn(
+          "w-5 shrink-0",
+          item.helpful ? "text-green-400" : "text-red-400",
+        )}
+      >
+        {item.helpful ? (
+          <ThumbsUp className="w-3.5 h-3.5" />
+        ) : (
+          <ThumbsDown className="w-3.5 h-3.5" />
+        )}
       </div>
       <div className="flex-1 min-w-0">
         {item.comment ? (
-          <p className="text-xs text-muted-foreground truncate">{item.comment}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {item.comment}
+          </p>
         ) : (
           <p className="text-xs text-muted-foreground/40 italic">No comment</p>
         )}
       </div>
       {item.slopScore != null && (
-        <Badge variant="outline" className="text-[10px] tabular-nums shrink-0">{item.slopScore}%</Badge>
+        <Badge variant="outline" className="text-[10px] tabular-nums shrink-0">
+          {item.slopScore}%
+        </Badge>
       )}
       <span className="text-[10px] text-muted-foreground/50 shrink-0 w-16 text-right">
-        {new Date(item.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+        {new Date(item.createdAt).toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        })}
       </span>
     </div>
   );
@@ -341,38 +601,75 @@ function RecentRow({ item }: {
 
 function BucketRow({ bucket }: { bucket: BucketAnalysis }) {
   const signalConfig = {
-    "accurate": { color: "text-green-400", bg: "bg-green-400/10", icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
-    "over-scoring": { color: "text-red-400", bg: "bg-red-400/10", icon: <XCircle className="w-3.5 h-3.5" /> },
-    "under-scoring": { color: "text-orange-400", bg: "bg-orange-400/10", icon: <AlertTriangle className="w-3.5 h-3.5" /> },
-    "insufficient-data": { color: "text-muted-foreground/50", bg: "bg-muted/10", icon: <Info className="w-3.5 h-3.5" /> },
+    accurate: {
+      color: "text-green-400",
+      bg: "bg-green-400/10",
+      icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+    },
+    "over-scoring": {
+      color: "text-red-400",
+      bg: "bg-red-400/10",
+      icon: <XCircle className="w-3.5 h-3.5" />,
+    },
+    "under-scoring": {
+      color: "text-orange-400",
+      bg: "bg-orange-400/10",
+      icon: <AlertTriangle className="w-3.5 h-3.5" />,
+    },
+    "insufficient-data": {
+      color: "text-muted-foreground/50",
+      bg: "bg-muted/10",
+      icon: <Info className="w-3.5 h-3.5" />,
+    },
   };
   const cfg = signalConfig[bucket.signal];
-  const signalLabel = bucket.signal.replace("-", " ").replace(/\b\w/g, c => c.toUpperCase());
+  const signalLabel = bucket.signal
+    .replace("-", " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
     <div className="flex items-center gap-3 py-3 border-b border-border/20 last:border-0">
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-foreground">{bucket.bucket}</div>
+        <div className="text-sm font-medium text-foreground">
+          {bucket.bucket}
+        </div>
         <div className="text-[10px] text-muted-foreground">
-          {bucket.feedbackCount} feedback · {bucket.meetsThreshold ? "threshold met" : `needs ${10 - bucket.feedbackCount} more`}
+          {bucket.feedbackCount} feedback ·{" "}
+          {bucket.meetsThreshold
+            ? "threshold met"
+            : `needs ${10 - bucket.feedbackCount} more`}
         </div>
       </div>
       <div className="text-right w-16">
-        <div className="text-sm font-bold tabular-nums">{bucket.avgRating > 0 ? bucket.avgRating.toFixed(1) : "—"}</div>
+        <div className="text-sm font-bold tabular-nums">
+          {bucket.avgRating > 0 ? bucket.avgRating.toFixed(1) : "—"}
+        </div>
         <div className="text-[10px] text-muted-foreground">rating</div>
       </div>
       <div className="text-right w-16">
-        <div className="text-sm font-bold tabular-nums">{bucket.feedbackCount > 0 ? `${bucket.helpfulPct}%` : "—"}</div>
+        <div className="text-sm font-bold tabular-nums">
+          {bucket.feedbackCount > 0 ? `${bucket.helpfulPct}%` : "—"}
+        </div>
         <div className="text-[10px] text-muted-foreground">helpful</div>
       </div>
-      <Badge variant="outline" className={cn("text-[10px] gap-1", cfg.color, cfg.bg)}>
+      <Badge
+        variant="outline"
+        className={cn("text-[10px] gap-1", cfg.color, cfg.bg)}
+      >
         {cfg.icon} {signalLabel}
       </Badge>
     </div>
   );
 }
 
-export function SuggestionCard({ suggestion, onApply, applying, cooldownActive, cooldownSecondsRemaining, mutationsAllowed }: {
+export function SuggestionCard({
+  suggestion,
+  onApply,
+  applying,
+  cooldownActive,
+  cooldownSecondsRemaining,
+  mutationsAllowed,
+}: {
   suggestion: CalibrationSuggestion;
   onApply: (s: CalibrationSuggestion) => void;
   applying: boolean;
@@ -386,7 +683,12 @@ export function SuggestionCard({ suggestion, onApply, applying, cooldownActive, 
   // burn a click on a guaranteed-401 round-trip.
   mutationsAllowed: boolean;
 }) {
-  const confColor = suggestion.confidence === "high" ? "text-green-400" : suggestion.confidence === "medium" ? "text-yellow-400" : "text-muted-foreground";
+  const confColor =
+    suggestion.confidence === "high"
+      ? "text-green-400"
+      : suggestion.confidence === "medium"
+        ? "text-yellow-400"
+        : "text-muted-foreground";
 
   const buttonLabel = cooldownActive
     ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
@@ -399,21 +701,29 @@ export function SuggestionCard({ suggestion, onApply, applying, cooldownActive, 
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <Zap className="w-4 h-4 text-primary shrink-0" />
-          <code className="text-xs font-mono text-primary">{suggestion.parameter}</code>
+          <code className="text-xs font-mono text-primary">
+            {suggestion.parameter}
+          </code>
         </div>
         <Badge variant="outline" className={cn("text-[10px]", confColor)}>
           {suggestion.confidence} confidence
         </Badge>
       </div>
       <div className="flex items-center gap-3 text-sm">
-        <span className="tabular-nums text-muted-foreground">{suggestion.currentValue}</span>
+        <span className="tabular-nums text-muted-foreground">
+          {suggestion.currentValue}
+        </span>
         <ArrowRight className="w-3 h-3 text-muted-foreground" />
-        <span className="tabular-nums font-bold text-foreground">{suggestion.suggestedValue}</span>
+        <span className="tabular-nums font-bold text-foreground">
+          {suggestion.suggestedValue}
+        </span>
         <span className="text-[10px] text-muted-foreground ml-auto">
           based on {suggestion.basedOnCount} entries
         </span>
       </div>
-      <p className="text-xs text-muted-foreground leading-relaxed">{suggestion.reason}</p>
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        {suggestion.reason}
+      </p>
       <Button
         size="sm"
         variant="outline"
@@ -444,10 +754,10 @@ export function SuggestionCard({ suggestion, onApply, applying, cooldownActive, 
 // burn a bunch of clicks finding out the hard way.
 type CalibrationAuthStateKind =
   | "loading"
-  | "open"        // server doesn't require a token; UI is fine either way
-  | "valid"       // server requires a token and the UI is sending the right one
-  | "missing"     // server requires a token and the UI isn't sending one at all
-  | "invalid"     // server requires a token and the UI is sending the wrong one
+  | "open" // server doesn't require a token; UI is fine either way
+  | "valid" // server requires a token and the UI is sending the right one
+  | "missing" // server requires a token and the UI isn't sending one at all
+  | "invalid" // server requires a token and the UI is sending the wrong one
   | "probe-failed"; // the auth-status probe itself failed (network/server error)
 
 interface CalibrationAuthState {
@@ -500,7 +810,10 @@ export function describeHandwavyDisabledReason(opts: {
     return "A bulk removal preview is open or in flight — finish or cancel it first.";
   }
   if (opts.inFlight) {
-    return opts.inFlightLabel ?? "Another action is in progress — wait for it to finish.";
+    return (
+      opts.inFlightLabel ??
+      "Another action is in progress — wait for it to finish."
+    );
   }
   if (opts.extraReason) return opts.extraReason;
   return null;
@@ -608,7 +921,8 @@ function useCalibrationAuthState(): CalibrationAuthState {
   });
   if (isLoading) return { kind: "loading", mutationsAllowed: true };
   if (isError || !data) return { kind: "probe-failed", mutationsAllowed: true };
-  if (!data.serverRequiresToken) return { kind: "open", mutationsAllowed: true };
+  if (!data.serverRequiresToken)
+    return { kind: "open", mutationsAllowed: true };
   if (data.tokenValid) return { kind: "valid", mutationsAllowed: true };
   if (data.tokenPresented) return { kind: "invalid", mutationsAllowed: false };
   return { kind: "missing", mutationsAllowed: false };
@@ -622,36 +936,46 @@ function CalibrationAuthBadge({ state }: { state: CalibrationAuthState }) {
     case "loading":
       className = "text-muted-foreground bg-muted/20";
       label = "Reviewer token: checking…";
-      title = "Probing the calibration auth endpoint to see whether a reviewer token is required.";
+      title =
+        "Probing the calibration auth endpoint to see whether a reviewer token is required.";
       break;
     case "open":
       className = "text-muted-foreground bg-muted/20";
       label = "Reviewer token: not required";
-      title = "The API server has no CALIBRATION_TOKEN configured, so calibration mutations are open to any caller.";
+      title =
+        "The API server has no CALIBRATION_TOKEN configured, so calibration mutations are open to any caller.";
       break;
     case "valid":
       className = "text-green-400 bg-green-400/10";
       label = "Reviewer token: configured";
-      title = "The API server requires a reviewer token and the dashboard build supplies the correct one. Mutations will be accepted.";
+      title =
+        "The API server requires a reviewer token and the dashboard build supplies the correct one. Mutations will be accepted.";
       break;
     case "missing":
       className = "text-red-400 bg-red-400/10";
       label = "Reviewer token: missing";
-      title = "The API server requires a reviewer token but this UI build is not sending one (VITE_CALIBRATION_TOKEN unset). Calibration mutations will be rejected with 401.";
+      title =
+        "The API server requires a reviewer token but this UI build is not sending one (VITE_CALIBRATION_TOKEN unset). Calibration mutations will be rejected with 401.";
       break;
     case "invalid":
       className = "text-red-400 bg-red-400/10";
       label = "Reviewer token: invalid";
-      title = "The API server requires a reviewer token and this UI build is sending one, but the server rejected it. Calibration mutations will be rejected with 401.";
+      title =
+        "The API server requires a reviewer token and this UI build is sending one, but the server rejected it. Calibration mutations will be rejected with 401.";
       break;
     case "probe-failed":
       className = "text-yellow-400 bg-yellow-400/10";
       label = "Reviewer token: probe failed";
-      title = "Could not reach the auth-status endpoint to check whether a reviewer token is required. Mutations will still attempt — watch for 401 toasts.";
+      title =
+        "Could not reach the auth-status endpoint to check whether a reviewer token is required. Mutations will still attempt — watch for 401 toasts.";
       break;
   }
   return (
-    <Badge variant="outline" className={cn("text-[10px] gap-1", className)} title={title}>
+    <Badge
+      variant="outline"
+      className={cn("text-[10px] gap-1", className)}
+      title={title}
+    >
       <KeyRound className="w-3 h-3" /> {label}
     </Badge>
   );
@@ -671,11 +995,17 @@ function CalibrationAuthBanner({ state }: { state: CalibrationAuthState }) {
           <div className="text-sm font-semibold text-red-300">
             Calibration mutations will be rejected
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">{detail}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {detail}
+          </p>
           <p className="text-xs text-muted-foreground/70 leading-relaxed">
-            Read-only views (analytics, reports, version history) still work. To enable
-            mutations, rebuild the UI with <code className="font-mono text-[11px]">VITE_CALIBRATION_TOKEN</code> set
-            to the same value as the server's <code className="font-mono text-[11px]">CALIBRATION_TOKEN</code>.
+            Read-only views (analytics, reports, version history) still work. To
+            enable mutations, rebuild the UI with{" "}
+            <code className="font-mono text-[11px]">
+              VITE_CALIBRATION_TOKEN
+            </code>{" "}
+            set to the same value as the server's{" "}
+            <code className="font-mono text-[11px]">CALIBRATION_TOKEN</code>.
           </p>
         </div>
       </CardContent>
@@ -749,8 +1079,12 @@ function CalibrationTokenRejectedBanner({
             {detail}
           </p>
           <p className="text-xs text-muted-foreground/70 leading-relaxed">
-            Confirm the reviewer token (<code className="font-mono text-[11px]">VITE_CALIBRATION_TOKEN</code>)
-            matches the server's <code className="font-mono text-[11px]">CALIBRATION_TOKEN</code>{" "}
+            Confirm the reviewer token (
+            <code className="font-mono text-[11px]">
+              VITE_CALIBRATION_TOKEN
+            </code>
+            ) matches the server's{" "}
+            <code className="font-mono text-[11px]">CALIBRATION_TOKEN</code>{" "}
             before retrying — every wrong-token attempt eats into the per-IP
             throttle and will eventually trigger the cooldown.
           </p>
@@ -819,14 +1153,25 @@ function CalibrationSection() {
         description: `Auto-calibration: ${suggestion.parameter} ${suggestion.currentValue} → ${suggestion.suggestedValue}. ${suggestion.reason}`,
       });
 
-      toast({ title: "Config updated", description: `${suggestion.parameter} changed to ${suggestion.suggestedValue}. New version applied.` });
-      queryClient.invalidateQueries({ queryKey: getGetCalibrationReportQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetScoringConfigQueryKey() });
+      toast({
+        title: "Config updated",
+        description: `${suggestion.parameter} changed to ${suggestion.suggestedValue}. New version applied.`,
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetCalibrationReportQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetScoringConfigQueryKey(),
+      });
     } catch (err) {
       // Task #297 — the dedicated rejected-token banner already names
       // VITE_CALIBRATION_TOKEN; suppress the duplicate destructive toast.
       if (!isCalibrationMutationAuthError(err)) {
-        toast({ title: "Error", description: "Failed to apply calibration change.", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: "Failed to apply calibration change.",
+          variant: "destructive",
+        });
       }
     } finally {
       setApplying(false);
@@ -839,12 +1184,15 @@ function CalibrationSection() {
 
   if (!calibration) return null;
 
-  const healthColor = calibration.overallHealth === "good"
-    ? "text-green-400 bg-green-400/10"
-    : calibration.overallHealth === "needs-attention"
-      ? "text-yellow-400 bg-yellow-400/10"
-      : "text-red-400 bg-red-400/10";
-  const healthLabel = calibration.overallHealth.replace("-", " ").replace(/\b\w/g, c => c.toUpperCase());
+  const healthColor =
+    calibration.overallHealth === "good"
+      ? "text-green-400 bg-green-400/10"
+      : calibration.overallHealth === "needs-attention"
+        ? "text-yellow-400 bg-yellow-400/10"
+        : "text-red-400 bg-red-400/10";
+  const healthLabel = calibration.overallHealth
+    .replace("-", " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
     <div className="space-y-6">
@@ -866,7 +1214,10 @@ function CalibrationSection() {
             </CardTitle>
             <div className="flex items-center gap-2">
               <CalibrationAuthBadge state={authState} />
-              <Badge variant="outline" className={cn("text-[10px] gap-1", healthColor)}>
+              <Badge
+                variant="outline"
+                className={cn("text-[10px] gap-1", healthColor)}
+              >
                 <Shield className="w-3 h-3" /> {healthLabel}
               </Badge>
               {configData?.current && (
@@ -880,8 +1231,9 @@ function CalibrationSection() {
             Feedback-driven analysis of scoring accuracy per score range.
             {calibration.totalFeedbackAnalyzed > 0
               ? ` Analyzing ${calibration.totalFeedbackAnalyzed} feedback entries.`
-              : " No linked feedback to analyze yet."}
-            {" "}Minimum {calibration.minFeedbackThreshold} entries per bucket before suggesting changes.
+              : " No linked feedback to analyze yet."}{" "}
+            Minimum {calibration.minFeedbackThreshold} entries per bucket before
+            suggesting changes.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -897,24 +1249,29 @@ function CalibrationSection() {
             <CardTitle className="text-base flex items-center gap-2">
               <Zap className="w-4 h-4 text-primary" />
               Suggested Adjustments
-              <Badge variant="secondary" className="ml-auto text-[10px]">{calibration.suggestions.length}</Badge>
+              <Badge variant="secondary" className="ml-auto text-[10px]">
+                {calibration.suggestions.length}
+              </Badge>
             </CardTitle>
             <CardDescription>
-              Data-driven tuning suggestions based on feedback patterns. Each change creates a new scoring config version.
+              Data-driven tuning suggestions based on feedback patterns. Each
+              change creates a new scoring config version.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {calibration.suggestions.map((s: CalibrationSuggestion, i: number) => (
-              <SuggestionCard
-                key={i}
-                suggestion={s}
-                onApply={handleApply}
-                applying={applying}
-                cooldownActive={cooldown.active}
-                cooldownSecondsRemaining={cooldown.secondsRemaining}
-                mutationsAllowed={authState.mutationsAllowed}
-              />
-            ))}
+            {calibration.suggestions.map(
+              (s: CalibrationSuggestion, i: number) => (
+                <SuggestionCard
+                  key={i}
+                  suggestion={s}
+                  onApply={handleApply}
+                  applying={applying}
+                  cooldownActive={cooldown.active}
+                  cooldownSecondsRemaining={cooldown.secondsRemaining}
+                  mutationsAllowed={authState.mutationsAllowed}
+                />
+              ),
+            )}
           </CardContent>
         </Card>
       )}
@@ -934,17 +1291,28 @@ function CalibrationSection() {
           <CardContent>
             <div className="space-y-2">
               {[...configData.history].reverse().map((cfg, i) => (
-                <div key={cfg.version} className={cn(
-                  "flex items-center gap-3 py-2 border-b border-border/20 last:border-0",
-                  i === 0 && "text-foreground",
-                  i > 0 && "text-muted-foreground"
-                )}>
-                  <Badge variant={i === 0 ? "default" : "outline"} className="text-[10px]">
+                <div
+                  key={cfg.version}
+                  className={cn(
+                    "flex items-center gap-3 py-2 border-b border-border/20 last:border-0",
+                    i === 0 && "text-foreground",
+                    i > 0 && "text-muted-foreground",
+                  )}
+                >
+                  <Badge
+                    variant={i === 0 ? "default" : "outline"}
+                    className="text-[10px]"
+                  >
                     v{cfg.version}
                   </Badge>
                   <span className="text-xs flex-1">{cfg.description}</span>
                   <span className="text-[10px] text-muted-foreground/50 shrink-0">
-                    {new Date(cfg.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    {new Date(cfg.createdAt).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </span>
                 </div>
               ))}
@@ -959,7 +1327,15 @@ function CalibrationSection() {
 // Task #114 — small per-tier counter chip rendered inside the dry-run preview
 // panel. `negative` flips the palette to red so GREEN/YELLOW (legitimate)
 // matches stand out as bad-news rather than blending in with the slop totals.
-function PreviewTierBadge({ label, count, negative }: { label: string; count: number; negative?: boolean }) {
+function PreviewTierBadge({
+  label,
+  count,
+  negative,
+}: {
+  label: string;
+  count: number;
+  negative?: boolean;
+}) {
   const danger = negative === true && count > 0;
   return (
     <div
@@ -968,11 +1344,13 @@ function PreviewTierBadge({ label, count, negative }: { label: string; count: nu
         danger
           ? "border-red-500/40 bg-red-500/10 text-red-200"
           : count > 0
-          ? "border-amber-500/30 bg-amber-500/5 text-amber-100"
-          : "border-border/30 bg-background/30 text-muted-foreground",
+            ? "border-amber-500/30 bg-amber-500/5 text-amber-100"
+            : "border-border/30 bg-background/30 text-muted-foreground",
       )}
     >
-      <span className="uppercase tracking-wide text-[9px] opacity-80">{label}</span>
+      <span className="uppercase tracking-wide text-[9px] opacity-80">
+        {label}
+      </span>
       <span className="font-bold tabular-nums text-sm">{count}</span>
     </div>
   );
@@ -999,7 +1377,9 @@ function normalizeHandwavyPhrase(raw: string): string {
   return raw.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function isHandwavyCategory(value: unknown): value is HandwavyOverlapMatch["category"] {
+function isHandwavyCategory(
+  value: unknown,
+): value is HandwavyOverlapMatch["category"] {
   return value === "absence" || value === "hedging" || value === "buzzword";
 }
 
@@ -1084,7 +1464,9 @@ function pushHistoryOverlapCandidate(
   }
   if (!relation) return;
   if (!candidate.removedAt) return;
-  const category = isHandwavyCategory(candidate.category) ? candidate.category : "absence";
+  const category = isHandwavyCategory(candidate.category)
+    ? candidate.category
+    : "absence";
   const m: HandwavyHistoryOverlapMatch = {
     phrase: existing,
     category,
@@ -1165,8 +1547,10 @@ const HANDWAVY_SORT_THRASH_KEY = "vulnrap.handwavy.sortByThrash";
 // broader scope. The legacy `vulnrap.handwavy.productionScanLimit` key is
 // migrated once at first read so reviewers who tuned the window before this
 // change keep their tuned value automatically.
-const CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY = "vulnrap.calibration.productionScanLimit";
-const CALIBRATION_PRODUCTION_SCAN_LIMIT_LEGACY_KEY = "vulnrap.handwavy.productionScanLimit";
+const CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY =
+  "vulnrap.calibration.productionScanLimit";
+const CALIBRATION_PRODUCTION_SCAN_LIMIT_LEGACY_KEY =
+  "vulnrap.handwavy.productionScanLimit";
 const CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT = 2000;
 const CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN = 100;
 const CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX = 10000;
@@ -1176,21 +1560,30 @@ const CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX = 10000;
 function readPersistedProductionScanLimit(): number | null {
   if (typeof window === "undefined") return null;
   try {
-    let stored = window.localStorage.getItem(CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY);
+    let stored = window.localStorage.getItem(
+      CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY,
+    );
     if (stored == null) {
       // One-time migration from the pre-#230 handwavy-namespaced key. We
       // copy the value across (so the next write under the new key keeps
       // it) and clear the legacy entry so we don't keep re-reading it.
-      const legacy = window.localStorage.getItem(CALIBRATION_PRODUCTION_SCAN_LIMIT_LEGACY_KEY);
+      const legacy = window.localStorage.getItem(
+        CALIBRATION_PRODUCTION_SCAN_LIMIT_LEGACY_KEY,
+      );
       if (legacy != null) {
         try {
-          window.localStorage.setItem(CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY, legacy);
+          window.localStorage.setItem(
+            CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY,
+            legacy,
+          );
         } catch {
           // ignore write failures (private mode, quota); we'll still
           // return the legacy value below so the session honors it.
         }
         try {
-          window.localStorage.removeItem(CALIBRATION_PRODUCTION_SCAN_LIMIT_LEGACY_KEY);
+          window.localStorage.removeItem(
+            CALIBRATION_PRODUCTION_SCAN_LIMIT_LEGACY_KEY,
+          );
         } catch {
           // ignore
         }
@@ -1240,8 +1633,13 @@ export function formatProductionScanRange(
   if (!oldestIso || !newestIso) return null;
   const oldest = new Date(oldestIso);
   const newest = new Date(newestIso);
-  if (Number.isNaN(oldest.getTime()) || Number.isNaN(newest.getTime())) return null;
-  const fmt: Intl.DateTimeFormatOptions = { year: "numeric", month: "short", day: "numeric" };
+  if (Number.isNaN(oldest.getTime()) || Number.isNaN(newest.getTime()))
+    return null;
+  const fmt: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  };
   const oldestStr = oldest.toLocaleDateString(undefined, fmt);
   const newestStr = newest.toLocaleDateString(undefined, fmt);
   if (oldestStr === newestStr) return `on ${oldestStr}`;
@@ -1301,7 +1699,10 @@ export function computeHandwavyActiveListVersion(
   phrases: ReadonlyArray<{ phrase: string }>,
 ): string {
   if (phrases.length === 0) return "0:";
-  const sorted = phrases.map((p) => p.phrase).slice().sort();
+  const sorted = phrases
+    .map((p) => p.phrase)
+    .slice()
+    .sort();
   // Length prefix + NUL-joined sorted phrases. The NUL separator (`\u0001`)
   // can't appear in a normalized hand-wavy phrase, so two distinct lists
   // can never accidentally collide on the same version string.
@@ -1457,7 +1858,10 @@ function PreviewMatchBlock({
 }) {
   // Task #124 — only the production block carries a createdAt window; the
   // curated block has no wall-clock timestamps so this returns null there.
-  const scanRange = formatProductionScanRange(matches.oldestCreatedAt, matches.newestCreatedAt);
+  const scanRange = formatProductionScanRange(
+    matches.oldestCreatedAt,
+    matches.newestCreatedAt,
+  );
   // Task #219 — Compute staleness only for the production block. The curated
   // block has no wall-clock timestamps (its fixtures aren't time-bound), so
   // freshness is meaningless there. We compute against `Date.now()` at render
@@ -1465,10 +1869,12 @@ function PreviewMatchBlock({
   // stable across re-renders within the same calendar day. We delegate the
   // threshold comparison to `isProductionScanStale` so there's a single
   // source of truth for the staleness predicate.
-  const stalenessDays = kind === "production"
-    ? productionScanStalenessDays(matches.newestCreatedAt)
-    : null;
-  const isStale = kind === "production" && isProductionScanStale(matches.newestCreatedAt);
+  const stalenessDays =
+    kind === "production"
+      ? productionScanStalenessDays(matches.newestCreatedAt)
+      : null;
+  const isStale =
+    kind === "production" && isProductionScanStale(matches.newestCreatedAt);
   const fp = matches.falsePositives;
   const sourceNoun = kind === "curated" ? "fixture" : "report";
   return (
@@ -1511,13 +1917,15 @@ function PreviewMatchBlock({
           <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
           <div>
             <div className="font-semibold text-amber-200">
-              Production sample is {stalenessDays} day{stalenessDays === 1 ? "" : "s"} old
-              {" "}— may not reflect current reporter behavior
+              Production sample is {stalenessDays} day
+              {stalenessDays === 1 ? "" : "s"} old — may not reflect current
+              reporter behavior
             </div>
             <div className="text-amber-100/80 mt-0.5">
-              The newest report in this scan is older than the {PRODUCTION_SCAN_FRESHNESS_DAYS}-day
-              freshness window. Production traffic may have dropped or the table may not be
-              up-to-date — discount the false-positive count accordingly.
+              The newest report in this scan is older than the{" "}
+              {PRODUCTION_SCAN_FRESHNESS_DAYS}-day freshness window. Production
+              traffic may have dropped or the table may not be up-to-date —
+              discount the false-positive count accordingly.
             </div>
           </div>
         </div>
@@ -1538,10 +1946,21 @@ function PreviewMatchBlock({
         </div>
       )}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5 text-[11px]">
-        <PreviewTierBadge label="GREEN (T1 legit)" count={matches.byTier.t1Legit} negative />
-        <PreviewTierBadge label="YELLOW (T2 borderline)" count={matches.byTier.t2Borderline} negative />
+        <PreviewTierBadge
+          label="GREEN (T1 legit)"
+          count={matches.byTier.t1Legit}
+          negative
+        />
+        <PreviewTierBadge
+          label="YELLOW (T2 borderline)"
+          count={matches.byTier.t2Borderline}
+          negative
+        />
         <PreviewTierBadge label="RED (T3 slop)" count={matches.byTier.t3Slop} />
-        <PreviewTierBadge label="RED (T4 hallucinated)" count={matches.byTier.t4Hallucinated} />
+        <PreviewTierBadge
+          label="RED (T4 hallucinated)"
+          count={matches.byTier.t4Hallucinated}
+        />
       </div>
       {matches.sampleMatches.length > 0 && (
         <details className="text-[10px] text-muted-foreground">
@@ -1588,7 +2007,9 @@ function PreviewMatchBlock({
 // for the preview callout. Mirrors `describeOverlapRelation` in the CLI
 // script (preview-handwavy-phrase.mjs) so the web UI and the CLI surface
 // the same wording for the same `relation` value.
-export function describeOverlapRelation(rel: HandwavyPhraseDryRunOverlapsMatchesItemRelation): string {
+export function describeOverlapRelation(
+  rel: HandwavyPhraseDryRunOverlapsMatchesItemRelation,
+): string {
   switch (rel) {
     case "equal":
       return "exact duplicate of";
@@ -1865,11 +2286,13 @@ export function PreviewOverlapsBlock({
         <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-red-300" />
         <div className="flex-1">
           <div className="font-semibold text-red-100">
-            Overlaps with {overlaps.total} existing curated {noun} — adding may be redundant
+            Overlaps with {overlaps.total} existing curated {noun} — adding may
+            be redundant
           </div>
           <div className="text-[10px] text-red-200/80 mt-0.5">
-            &ldquo;{candidate}&rdquo; matches phrases already on the active list. Reinstating
-            or editing the existing entry is usually preferable to a near-duplicate add.
+            &ldquo;{candidate}&rdquo; matches phrases already on the active
+            list. Reinstating or editing the existing entry is usually
+            preferable to a near-duplicate add.
           </div>
         </div>
         {showBulkCollapseToggle && (
@@ -1900,14 +2323,16 @@ export function PreviewOverlapsBlock({
         {showRemoveAllOverlapping && (
           <button
             type="button"
-            onClick={() =>
-              onRequestRemoveAllOverlapping?.(overlappingForBulk)
+            onClick={() => onRequestRemoveAllOverlapping?.(overlappingForBulk)}
+            disabled={
+              mutationsAllowed === false || bulkOverlappingBusy === true
             }
-            disabled={mutationsAllowed === false || bulkOverlappingBusy === true}
             className="shrink-0 inline-flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] font-semibold text-red-100 bg-red-500/20 hover:bg-red-500/30 hover:text-red-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-300/70 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-500/20 disabled:hover:text-red-100"
             data-testid="handwavy-preview-overlap-remove-all"
             data-handwavy-overlap-remove-all-count={overlappingForBulk.length}
-            data-mutations-blocked={mutationsAllowed === false ? "true" : "false"}
+            data-mutations-blocked={
+              mutationsAllowed === false ? "true" : "false"
+            }
             aria-label={`Open the bulk removal preview for ${overlappingForBulk.length} overlapping curated phrases`}
             title={
               mutationsAllowed === false
@@ -1934,7 +2359,8 @@ export function PreviewOverlapsBlock({
               title={`Combined corpus + production dry-run impact for the ${overlappingForBulk.length} eligible overlap phrases, summed from the per-row removal-impact preview cache. Open the bulk preview to confirm before removing.`}
             >
               (would un-flag {cachedRemoveAllOverlappingValidLost}{" "}
-              {cachedRemoveAllOverlappingValidLost === 1 ? "report" : "reports"})
+              {cachedRemoveAllOverlappingValidLost === 1 ? "report" : "reports"}
+              )
             </span>
           )}
       </div>
@@ -2088,7 +2514,9 @@ function PreviewOverlapBucketBlock({
                     <span className="text-red-200 font-medium">
                       {describeOverlapRelation(o.relation)}
                     </span>{" "}
-                    <span className="text-foreground/90 break-all">&ldquo;{o.phrase}&rdquo;</span>{" "}
+                    <span className="text-foreground/90 break-all">
+                      &ldquo;{o.phrase}&rdquo;
+                    </span>{" "}
                     <span className="text-[10px] text-red-200/70 uppercase tracking-wide">
                       [{o.category}]
                     </span>
@@ -2103,7 +2531,8 @@ function PreviewOverlapBucketBlock({
                     The handler props are optional (Task #228 unit tests render
                     the component without wiring up the host page), so each
                     button only shows when its handler is provided. */}
-                {(onJumpToActivePhrase || (canRemoveExisting && onRequestRemoveExisting)) && (
+                {(onJumpToActivePhrase ||
+                  (canRemoveExisting && onRequestRemoveExisting)) && (
                   <div className="flex items-center gap-1 shrink-0 sm:pt-0.5">
                     {onJumpToActivePhrase && (
                       <button
@@ -2125,7 +2554,9 @@ function PreviewOverlapBucketBlock({
                         disabled={mutationsAllowed === false || removeInFlight}
                         className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium text-red-200 hover:bg-red-500/20 hover:text-red-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-300/70 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-red-200"
                         data-testid="handwavy-preview-overlap-remove"
-                        data-mutations-blocked={mutationsAllowed === false ? "true" : "false"}
+                        data-mutations-blocked={
+                          mutationsAllowed === false ? "true" : "false"
+                        }
                         aria-label={`Open removal-impact preview for existing phrase "${o.phrase}"`}
                         title={
                           mutationsAllowed === false
@@ -2212,10 +2643,12 @@ export function BulkRemovalImpactBlock({
   // Task #414 — gated on `kind === "production"` because the curated
   // block has no wall-clock timestamps. Helpers floor to whole days so
   // the rendered string is stable within a calendar day.
-  const stalenessDays = kind === "production"
-    ? productionScanStalenessDays(impact.newestCreatedAt)
-    : null;
-  const isStale = kind === "production" && isProductionScanStale(impact.newestCreatedAt);
+  const stalenessDays =
+    kind === "production"
+      ? productionScanStalenessDays(impact.newestCreatedAt)
+      : null;
+  const isStale =
+    kind === "production" && isProductionScanStale(impact.newestCreatedAt);
   // Task #323 — coverage-gap notice. The bulk-removal toolbar lets reviewers
   // pick any production-scan window between 100 and 10,000. A reviewer who
   // tightens the window to 100 to "see fewer matches" may not realize they
@@ -2272,64 +2705,67 @@ export function BulkRemovalImpactBlock({
           <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
           <div>
             <div className="font-semibold text-amber-200">
-              Production sample is {stalenessDays} day{stalenessDays === 1 ? "" : "s"} old
-              {" "}— may not reflect current reporter behavior
+              Production sample is {stalenessDays} day
+              {stalenessDays === 1 ? "" : "s"} old — may not reflect current
+              reporter behavior
             </div>
             <div className="text-amber-100/80 mt-0.5">
-              The newest report in this scan is older than the {PRODUCTION_SCAN_FRESHNESS_DAYS}-day
-              freshness window. Production traffic may have dropped or the table may not be
-              up-to-date — discount the un-flag count accordingly.
+              The newest report in this scan is older than the{" "}
+              {PRODUCTION_SCAN_FRESHNESS_DAYS}-day freshness window. Production
+              traffic may have dropped or the table may not be up-to-date —
+              discount the un-flag count accordingly.
             </div>
           </div>
         </div>
       )}
-      {showCoverageGap && (() => {
-        // Task #464 — only render the inline rescan button when the
-        // panel-scoped callback is wired in AND there is still room to
-        // widen the scan window. When the window already sits at the
-        // cap (e.g. the reviewer just rescanned and the archive is
-        // larger than the cap, or they manually maxed the dropdown),
-        // the banner re-renders with the higher numbers but the button
-        // is suppressed — there is nothing more to fetch.
-        const showRescanButton =
-          onRescanFullArchive != null &&
-          rescanCap != null &&
-          productionLimit! < rescanCap;
-        return (
-          <div
-            className="flex items-start gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200"
-            data-testid="handwavy-bulk-preview-production-coverage-gap"
-          >
-            <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0 text-amber-300" />
-            <div className="flex-1 min-w-0 space-y-1">
-              <div>
-                Scanning {productionLimit!.toLocaleString()} of ~
-                {impact.archiveTotal!.toLocaleString()} archived reports —
-                recent reporter behavior only. Older reports are not in this
-                preview and could still be un-flagged by the bulk removal.
+      {showCoverageGap &&
+        (() => {
+          // Task #464 — only render the inline rescan button when the
+          // panel-scoped callback is wired in AND there is still room to
+          // widen the scan window. When the window already sits at the
+          // cap (e.g. the reviewer just rescanned and the archive is
+          // larger than the cap, or they manually maxed the dropdown),
+          // the banner re-renders with the higher numbers but the button
+          // is suppressed — there is nothing more to fetch.
+          const showRescanButton =
+            onRescanFullArchive != null &&
+            rescanCap != null &&
+            productionLimit! < rescanCap;
+          return (
+            <div
+              className="flex items-start gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200"
+              data-testid="handwavy-bulk-preview-production-coverage-gap"
+            >
+              <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0 text-amber-300" />
+              <div className="flex-1 min-w-0 space-y-1">
+                <div>
+                  Scanning {productionLimit!.toLocaleString()} of ~
+                  {impact.archiveTotal!.toLocaleString()} archived reports —
+                  recent reporter behavior only. Older reports are not in this
+                  preview and could still be un-flagged by the bulk removal.
+                </div>
+                {showRescanButton && (
+                  <button
+                    type="button"
+                    onClick={onRescanFullArchive}
+                    disabled={rescanning}
+                    className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-100 hover:bg-amber-500/20 hover:text-amber-50 focus:outline-none focus:ring-1 focus:ring-amber-300/60 disabled:opacity-60 disabled:cursor-not-allowed"
+                    data-testid="handwavy-bulk-preview-production-coverage-gap-rescan"
+                    aria-label={`Rescan with the production-scan window widened to ${rescanCap!.toLocaleString()} reports`}
+                    title="Re-run the bulk-remove dry-run with the widest production-scan window"
+                  >
+                    <RefreshCw
+                      className={cn("w-3 h-3", rescanning && "animate-spin")}
+                    />
+                    {rescanning
+                      ? "Rescanning…"
+                      : `Rescan up to ${rescanCap!.toLocaleString()} reports`}
+                  </button>
+                )}
               </div>
-              {showRescanButton && (
-                <button
-                  type="button"
-                  onClick={onRescanFullArchive}
-                  disabled={rescanning}
-                  className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-100 hover:bg-amber-500/20 hover:text-amber-50 focus:outline-none focus:ring-1 focus:ring-amber-300/60 disabled:opacity-60 disabled:cursor-not-allowed"
-                  data-testid="handwavy-bulk-preview-production-coverage-gap-rescan"
-                  aria-label={`Rescan with the production-scan window widened to ${rescanCap!.toLocaleString()} reports`}
-                  title="Re-run the bulk-remove dry-run with the widest production-scan window"
-                >
-                  <RefreshCw
-                    className={cn("w-3 h-3", rescanning && "animate-spin")}
-                  />
-                  {rescanning
-                    ? "Rescanning…"
-                    : `Rescan up to ${rescanCap!.toLocaleString()} reports`}
-                </button>
-              )}
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
       {impact.warning ? (
         <div
           className="text-red-200 text-[11px]"
@@ -2339,17 +2775,27 @@ export function BulkRemovalImpactBlock({
         </div>
       ) : impact.total > 0 ? (
         <div className="text-amber-200 text-[11px]">
-          {impact.total} false-positive {sourceNoun}{impact.total === 1 ? "" : "s"} would no longer be flagged — informational only, no real detections lost here.
+          {impact.total} false-positive {sourceNoun}
+          {impact.total === 1 ? "" : "s"} would no longer be flagged —
+          informational only, no real detections lost here.
         </div>
       ) : (
-        <div className="text-emerald-200 text-[11px]">
-          {emptyHint}.
-        </div>
+        <div className="text-emerald-200 text-[11px]">{emptyHint}.</div>
       )}
       <div className="grid grid-cols-2 gap-1.5 pt-0.5 text-[11px]">
-        <PreviewTierBadge label="GREEN (T1 legit) dropped" count={impact.byTier.t1Legit} />
-        <PreviewTierBadge label="YELLOW (T2 borderline) dropped" count={impact.byTier.t2Borderline} />
-        <PreviewTierBadge label="RED (T3 slop) lost" count={impact.byTier.t3Slop} negative />
+        <PreviewTierBadge
+          label="GREEN (T1 legit) dropped"
+          count={impact.byTier.t1Legit}
+        />
+        <PreviewTierBadge
+          label="YELLOW (T2 borderline) dropped"
+          count={impact.byTier.t2Borderline}
+        />
+        <PreviewTierBadge
+          label="RED (T3 slop) lost"
+          count={impact.byTier.t3Slop}
+          negative
+        />
         <PreviewTierBadge
           label="RED (T4 hallucinated) lost"
           count={impact.byTier.t4Hallucinated}
@@ -2456,7 +2902,11 @@ function HandwavyRemovePreviewMatches({
 }: {
   kind: "curated" | "production";
   title: string;
-  matches: Array<{ id: string; tier: string; snippet?: SampleMatchSnippet | null }>;
+  matches: Array<{
+    id: string;
+    tier: string;
+    snippet?: SampleMatchSnippet | null;
+  }>;
 }) {
   // The BrowserRouter is mounted with `basename={import.meta.env.BASE_URL}`
   // (see App.tsx), so production report links must be prefixed with the
@@ -2478,7 +2928,10 @@ function HandwavyRemovePreviewMatches({
   useEffect(() => {
     setExpandedTiers({});
   }, [matches]);
-  const grouped = new Map<string, Array<{ id: string; snippet: SampleMatchSnippet | null }>>();
+  const grouped = new Map<
+    string,
+    Array<{ id: string; snippet: SampleMatchSnippet | null }>
+  >();
   for (const m of matches) {
     const key = normalizeSampleMatchTier(m.tier);
     const bucket = grouped.get(key) ?? [];
@@ -2618,10 +3071,15 @@ type RationaleDiffOp = { type: "eq" | "add" | "del"; text: string };
 function diffTokens(a: string[], b: string[]): RationaleDiffOp[] {
   const n = a.length;
   const m = b.length;
-  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  const dp: number[][] = Array.from({ length: n + 1 }, () =>
+    new Array(m + 1).fill(0),
+  );
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      dp[i][j] =
+        a[i] === b[j]
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
     }
   }
   const ops: RationaleDiffOp[] = [];
@@ -2683,7 +3141,9 @@ function RationaleDiff({
         data-testid="handwavy-edit-rationale-diff"
       >
         {isEmptyFrom && !isEmptyTo && (
-          <span className="italic text-muted-foreground/60 mr-1">(was empty)</span>
+          <span className="italic text-muted-foreground/60 mr-1">
+            (was empty)
+          </span>
         )}
         {ops.map((op, idx) => {
           if (op.type === "eq") {
@@ -2715,7 +3175,9 @@ function RationaleDiff({
           );
         })}
         {!isEmptyFrom && isEmptyTo && (
-          <span className="italic text-muted-foreground/60 ml-1">(cleared)</span>
+          <span className="italic text-muted-foreground/60 ml-1">
+            (cleared)
+          </span>
         )}
       </div>
       {longish && (
@@ -2805,7 +3267,11 @@ export function renderHandwavyEditEntries({
       // or the entry recorded no tracked field changes). Reviewers see an
       // explanatory tooltip instead of a "nothing to undo" toast they only
       // discover after firing.
-      const isNoop = revertWouldBeNoop(entry, currentCategory, currentRationale);
+      const isNoop = revertWouldBeNoop(
+        entry,
+        currentCategory,
+        currentRationale,
+      );
       // Task #506 — distinguish "this button cannot revert this kind of
       // edit" from "the marker already matches this edit's prior values".
       // The server-side `revertHandwavyPhraseEdit` only restores category
@@ -2833,14 +3299,24 @@ export function renderHandwavyEditEntries({
       // the screen-reader link. We slugify the phrase (alphanumerics only,
       // collapsed) and combine it with the entry timestamp + index — together
       // these are unique within the panel without leaking unsafe characters.
-      const phraseSlug = phrase.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "phrase";
-      const editedAtSlug = editedAtKey.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "entry";
-      const hintId = isNoop ? `handwavy-revert-noop-${phraseSlug}-${editedAtSlug}-${idx}` : undefined;
+      const phraseSlug =
+        phrase.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") ||
+        "phrase";
+      const editedAtSlug =
+        editedAtKey.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") ||
+        "entry";
+      const hintId = isNoop
+        ? `handwavy-revert-noop-${phraseSlug}-${editedAtSlug}-${idx}`
+        : undefined;
       return (
         <li
           key={`${editedAtKey}-${idx}`}
           className="flex flex-col gap-1 text-[10px] text-muted-foreground"
-          data-testid={showHistoryTestIds ? "handwavy-edit-history-row" : "handwavy-edit-entry"}
+          data-testid={
+            showHistoryTestIds
+              ? "handwavy-edit-history-row"
+              : "handwavy-edit-entry"
+          }
         >
           <div className="flex items-start gap-2">
             <div className="flex-1 space-y-1">
@@ -2851,13 +3327,19 @@ export function renderHandwavyEditEntries({
                     {entry.editedBy || "anonymous"}
                   </span>
                 </span>
-                {editedAtLabel && <span>{showHistoryTestIds ? editedAtLabel : `• ${editedAtLabel}`}</span>}
+                {editedAtLabel && (
+                  <span>
+                    {showHistoryTestIds ? editedAtLabel : `• ${editedAtLabel}`}
+                  </span>
+                )}
               </div>
               {entry.category && (
                 <div
                   className="flex items-center gap-1 flex-wrap"
                   data-testid={
-                    showHistoryTestIds ? "handwavy-edit-history-category" : "handwavy-edit-category"
+                    showHistoryTestIds
+                      ? "handwavy-edit-history-category"
+                      : "handwavy-edit-category"
                   }
                 >
                   <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px] font-semibold mr-1">
@@ -2877,7 +3359,9 @@ export function renderHandwavyEditEntries({
                   from={entry.rationale.from ?? ""}
                   to={entry.rationale.to ?? ""}
                   wrapperTestId={
-                    showHistoryTestIds ? "handwavy-edit-history-rationale" : "handwavy-edit-rationale"
+                    showHistoryTestIds
+                      ? "handwavy-edit-history-rationale"
+                      : "handwavy-edit-rationale"
                   }
                 />
               )}
@@ -2891,7 +3375,9 @@ export function renderHandwavyEditEntries({
                 <div
                   className="flex items-start gap-1 flex-wrap"
                   data-testid={
-                    showHistoryTestIds ? "handwavy-edit-history-rename" : "handwavy-edit-rename"
+                    showHistoryTestIds
+                      ? "handwavy-edit-history-rename"
+                      : "handwavy-edit-rename"
                   }
                 >
                   <span className="text-muted-foreground/60 uppercase tracking-wider text-[9px] font-semibold mr-1 mt-0.5">
@@ -2906,9 +3392,14 @@ export function renderHandwavyEditEntries({
                   </span>
                 </div>
               )}
-              {showHistoryTestIds && !entry.category && !entry.rationale && !entry.phrase && (
-                <div className="italic">No tracked field changes recorded.</div>
-              )}
+              {showHistoryTestIds &&
+                !entry.category &&
+                !entry.rationale &&
+                !entry.phrase && (
+                  <div className="italic">
+                    No tracked field changes recorded.
+                  </div>
+                )}
             </div>
             <Button
               variant="ghost"
@@ -2958,7 +3449,9 @@ export function renderHandwavyEditEntries({
               id={hintId}
               className="flex items-start gap-1 text-[10px] text-muted-foreground/80 pl-0.5"
               data-testid="handwavy-revert-noop-hint"
-              data-noop-kind={isRenameOnlyEntry ? "rename-only" : "values-match"}
+              data-noop-kind={
+                isRenameOnlyEntry ? "rename-only" : "values-match"
+              }
             >
               <Info className="w-3 h-3 mt-0.5 shrink-0" aria-hidden="true" />
               <span>
@@ -3044,9 +3537,9 @@ type HandwavyCategoryGroup<T> = {
 function groupHandwavyPhrasesByCategory<T extends { category?: unknown }>(
   items: ReadonlyArray<T>,
 ): HandwavyCategoryGroup<T>[] {
-  const knownOrder = Object.keys(
-    HANDWAVY_CATEGORY_LABELS,
-  ) as ReadonlyArray<keyof typeof HANDWAVY_CATEGORY_LABELS>;
+  const knownOrder = Object.keys(HANDWAVY_CATEGORY_LABELS) as ReadonlyArray<
+    keyof typeof HANDWAVY_CATEGORY_LABELS
+  >;
   const knownSet = new Set<string>(knownOrder);
   const groups = new Map<string, T[]>();
   for (const it of items) {
@@ -3093,7 +3586,11 @@ function shortHandwavyCategoryChipLabel(key: string): string {
   return key === HANDWAVY_UNCATEGORIZED_KEY ? "uncategorized" : key;
 }
 
-export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: boolean }) {
+export function HandwavyPhrasesAdmin({
+  mutationsAllowed,
+}: {
+  mutationsAllowed: boolean;
+}) {
   // Task #214 — when the calibration auth probe says mutations would be
   // rejected (reviewer token missing or invalid), every mutating control on
   // this admin panel is disabled with a tooltip pointing reviewers back at
@@ -3135,26 +3632,27 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // sharper false-positive signal; small installs can dial it down to
   // focus on recent reporter behavior. Defaults to 2000, matching the
   // server-side default so existing reviewers see no behavior change.
-  const [productionScanLimitInput, setProductionScanLimitInput] = useState<string>(() => {
-    const persisted = readPersistedProductionScanLimit();
-    return String(persisted ?? CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT);
-  });
+  const [productionScanLimitInput, setProductionScanLimitInput] =
+    useState<string>(() => {
+      const persisted = readPersistedProductionScanLimit();
+      return String(persisted ?? CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT);
+    });
   const [busy, setBusy] = useState<string | null>(null);
   // Task #146 — confirmation prompt for the per-edit Revert button. We hold
   // the (phrase, entry) pair the reviewer clicked so the dialog can summarize
   // exactly which fields will change and to what values before we actually
   // call the server. `null` = closed.
-  const [revertConfirm, setRevertConfirm] = useState<
-    { phrase: string; entry: HandwavyEditEntry } | null
-  >(null);
+  const [revertConfirm, setRevertConfirm] = useState<{
+    phrase: string;
+    entry: HandwavyEditEntry;
+  } | null>(null);
   // Task #153 — same shape of confirmation prompt for the per-row Reinstate
   // button on the removal-history list. Reinstating restores a phrase to
   // active use, so we hold the row the reviewer clicked and summarize the
   // phrase, category, and original rationale before calling the server.
   // `null` = closed.
-  const [reinstateConfirm, setReinstateConfirm] = useState<
-    DisplayHistoryRow | null
-  >(null);
+  const [reinstateConfirm, setReinstateConfirm] =
+    useState<DisplayHistoryRow | null>(null);
   // Task #177 — dry-run preview for the per-batch "Reinstate all" flow. The
   // server's /reinstate-batch endpoint accepts `dryRun: true` (Task #159) and
   // returns the same per-phrase outcome shape as the mutating call without
@@ -3211,15 +3709,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // least one row we fall back to per-phrase /reinstate calls so the
   // server-side batch route (which currently has no allow-list parameter)
   // doesn't reinstate the dropped rows behind the reviewer's back.
-  const [reinstateBatchConfirm, setReinstateBatchConfirm] = useState<
-    {
-      removedAtIso: string;
-      removedBy?: string;
-      batchSize: number;
-      phrasesToReinstate: string[];
-      originalPhraseCount: number;
-    } | null
-  >(null);
+  const [reinstateBatchConfirm, setReinstateBatchConfirm] = useState<{
+    removedAtIso: string;
+    removedBy?: string;
+    batchSize: number;
+    phrasesToReinstate: string[];
+    originalPhraseCount: number;
+  } | null>(null);
   // Task #233 — confirmation prompt for the panel-level "Undo last N adds"
   // button. Mirrors the per-batch reinstate confirm: holds the snapshot of
   // the `(phrase, addedAt)` pairs that were inside their per-marker undo
@@ -3228,12 +3724,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // from `undoCandidates` inside the dialog) so a window expiry that
   // happens between the click and the confirm doesn't silently shrink the
   // batch the dialog is summarizing. `null` = closed.
-  const [undoAllConfirm, setUndoAllConfirm] = useState<
-    {
-      entries: { phrase: string; addedAtIso: string }[];
-      count: number;
-    } | null
-  >(null);
+  const [undoAllConfirm, setUndoAllConfirm] = useState<{
+    entries: { phrase: string; addedAtIso: string }[];
+    count: number;
+  } | null>(null);
   // Picker preview-and-confirm dialog state. `null` = closed; `status`
   // discriminates loading / ready / error.
   const [pickerBatchPreview, setPickerBatchPreview] = useState<
@@ -3354,8 +3848,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // alongside the high-thrash summary banner. Initialized once per
   // panel session below (after `thrashByPhrase` is computed) and
   // tracked through `onToggle` so a manual collapse sticks.
-  const [bulkPreviewOutcomesOpen, setBulkPreviewOutcomesOpen] =
-    useState(false);
+  const [bulkPreviewOutcomesOpen, setBulkPreviewOutcomesOpen] = useState(false);
   // Tracks whether the bulk-remove panel was open on the previous render
   // so we can re-initialize `bulkPreviewOutcomesOpen` exactly once when
   // the panel transitions from closed → open.
@@ -3415,7 +3908,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // Task #349 — 1Hz tick to keep the cached badge's "Ns ago" label
   // current while the panel is open. Only runs when the panel is
   // showing a cached preview; fresh previews have a static label.
-  const [removePreviewNow, setRemovePreviewNow] = useState<number>(() => Date.now());
+  const [removePreviewNow, setRemovePreviewNow] = useState<number>(() =>
+    Date.now(),
+  );
   const cachedPreviewOpen = removePreview?.source === "cached";
   useEffect(() => {
     if (!cachedPreviewOpen) return;
@@ -3469,7 +3964,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // Task #133 — track which phrase rows have their full edit history
   // expanded. Multiple rows can be open at once so reviewers can compare
   // how different phrases evolved side-by-side.
-  const [openEditHistory, setOpenEditHistory] = useState<Set<string>>(() => new Set());
+  const [openEditHistory, setOpenEditHistory] = useState<Set<string>>(
+    () => new Set(),
+  );
   // Task #138 — optional sort that floats the most-thrashed phrases to the
   // top of the active list. Default is OFF so the curated insertion order is
   // preserved (reviewers who haven't opted in still see the familiar list);
@@ -3528,7 +4025,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     if (typeof window === "undefined") return;
     if (!productionScanLimitValid) return;
     try {
-      if (effectiveProductionScanLimit === CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT) {
+      if (
+        effectiveProductionScanLimit ===
+        CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+      ) {
         window.localStorage.removeItem(CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY);
       } else {
         window.localStorage.setItem(
@@ -3585,7 +4085,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // "Ns ago" label current while the panel is open. Only runs when
   // showing a cached preview; fresh previews have a static label.
   // Mirrors the Trash preview's `removePreviewNow` (Task #349).
-  const [editPreviewNow, setEditPreviewNow] = useState<number>(() => Date.now());
+  const [editPreviewNow, setEditPreviewNow] = useState<number>(() =>
+    Date.now(),
+  );
   const cachedEditPreviewOpen = editPreview?.source === "cached";
   useEffect(() => {
     if (!cachedEditPreviewOpen) return;
@@ -3779,7 +4281,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     null,
   );
   const toggleConflictExpanded = (removedAtIso: string) => {
-    setOpenConflictBatch((prev) => (prev === removedAtIso ? null : removedAtIso));
+    setOpenConflictBatch((prev) =>
+      prev === removedAtIso ? null : removedAtIso,
+    );
   };
 
   // Task #243 — let reviewers expand a "Recent batch removals" row to see
@@ -3866,7 +4370,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       return next;
     });
   };
-  const [draftCategory, setDraftCategory] = useState<"absence" | "hedging" | "buzzword">("absence");
+  const [draftCategory, setDraftCategory] = useState<
+    "absence" | "hedging" | "buzzword"
+  >("absence");
   // Task #129 — pre-preview overlap hint. Recompute every render against the
   // current draft + active phrase list so the reviewer sees the warning the
   // moment they finish typing the candidate, before the dry-run round-trip.
@@ -3894,8 +4400,12 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // entries on a busy reviewer day, so closing this loop saves a long scroll
   // and a Ctrl-F. The phrase store key is the normalized phrase string —
   // `m.phrase` on the row matches `draftOverlaps[i].phrase`.
-  const [highlightedPhrase, setHighlightedPhrase] = useState<string | null>(null);
-  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [highlightedPhrase, setHighlightedPhrase] = useState<string | null>(
+    null,
+  );
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   useEffect(() => {
     return () => {
       if (highlightTimeoutRef.current !== null) {
@@ -3953,7 +4463,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     phrase: string;
     removedAt: string;
   } | null>(null);
-  const historyHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historyHighlightTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   useEffect(() => {
     return () => {
       if (historyHighlightTimeoutRef.current !== null) {
@@ -4024,9 +4536,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   const [highlightedHistoryPhrases, setHighlightedHistoryPhrases] = useState<
     ReadonlySet<string>
   >(() => new Set());
-  const historyPhrasesHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const historyPhrasesHighlightTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   useEffect(() => {
     return () => {
       if (historyPhrasesHighlightTimeoutRef.current !== null) {
@@ -4108,7 +4620,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   };
 
   const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: getGetHandwavyPhrasesQueryKey() });
+    queryClient.invalidateQueries({
+      queryKey: getGetHandwavyPhrasesQueryKey(),
+    });
     // Task #175 — also refresh the dedicated removal-batches picker so the
     // "already reinstated" badge / disabled state flips in lock-step with
     // the active phrase list after any add/remove/reinstate round-trip.
@@ -4161,7 +4675,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         phrase,
         category: draftCategory,
         dryRun: true,
-        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+        ...(effectiveProductionScanLimit !==
+        CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
           ? { productionScanLimit: effectiveProductionScanLimit }
           : {}),
       });
@@ -4172,14 +4687,18 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         // mutation, so degraded API responses must surface as an error.
         toast({
           title: "Preview unavailable",
-          description: "The server did not return a corpus impact preview. The phrase was not added — please retry.",
+          description:
+            "The server did not return a corpus impact preview. The phrase was not added — please retry.",
           variant: "destructive",
         });
         return;
       }
       setPreview({
         phrase: dry.phrase,
-        category: (dry.category ?? draftCategory) as "absence" | "hedging" | "buzzword",
+        category: (dry.category ?? draftCategory) as
+          | "absence"
+          | "hedging"
+          | "buzzword",
         matches: dry.dryRunMatches,
         reviewer: reviewer.trim() || undefined,
         rationale: draftRationale.trim() || undefined,
@@ -4195,7 +4714,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to preview phrase.";
+        const msg =
+          err instanceof Error ? err.message : "Failed to preview phrase.";
         toast({ title: "Error", description: msg, variant: "destructive" });
       }
     } finally {
@@ -4215,9 +4735,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         rationale: preview.rationale,
       });
       if (result.added === false) {
-        toast({ title: "Already in the list", description: `"${result.phrase}" was already a hand-wavy marker.` });
+        toast({
+          title: "Already in the list",
+          description: `"${result.phrase}" was already a hand-wavy marker.`,
+        });
       } else {
-        toast({ title: "Phrase added", description: `New triages will flag "${result.phrase}" (${HANDWAVY_CATEGORY_LABELS[preview.category]}) immediately.` });
+        toast({
+          title: "Phrase added",
+          description: `New triages will flag "${result.phrase}" (${HANDWAVY_CATEGORY_LABELS[preview.category]}) immediately.`,
+        });
       }
       setDraft("");
       setDraftRationale("");
@@ -4226,7 +4752,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to add phrase.";
+        const msg =
+          err instanceof Error ? err.message : "Failed to add phrase.";
         toast({ title: "Error", description: msg, variant: "destructive" });
       }
     } finally {
@@ -4238,11 +4765,20 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     setPreview(null);
   };
 
-  const handleStartEdit = (phrase: string, category: "absence" | "hedging" | "buzzword", rationale: string | undefined) => {
+  const handleStartEdit = (
+    phrase: string,
+    category: "absence" | "hedging" | "buzzword",
+    rationale: string | undefined,
+  ) => {
     // Task #247 — initialize newPhrase to the existing phrase so a save
     // that didn't touch the phrase input falls into the no-rename
     // branch (no dry-run preview round-trip is needed).
-    setEditing({ phrase, newPhrase: phrase, category, rationale: rationale ?? "" });
+    setEditing({
+      phrase,
+      newPhrase: phrase,
+      category,
+      rationale: rationale ?? "",
+    });
   };
 
   const handleCancelEdit = () => {
@@ -4281,14 +4817,20 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         reviewer: reviewer.trim() || undefined,
       });
       if (result.edited === false) {
-        toast({ title: "No changes", description: `"${original}" already matched the supplied values.` });
+        toast({
+          title: "No changes",
+          description: `"${original}" already matched the supplied values.`,
+        });
       } else if (renamed) {
         toast({
           title: "Phrase renamed",
           description: `"${original}" was renamed to "${result.phrase}". Edit recorded in the audit trail.`,
         });
       } else {
-        toast({ title: "Phrase updated", description: `"${original}" was updated. Edit recorded in the audit trail.` });
+        toast({
+          title: "Phrase updated",
+          description: `"${original}" was updated. Edit recorded in the audit trail.`,
+        });
       }
       setEditing(null);
       setEditPreview(null);
@@ -4307,7 +4849,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to edit phrase.";
+        const msg =
+          err instanceof Error ? err.message : "Failed to edit phrase.";
         toast({ title: "Error", description: msg, variant: "destructive" });
       }
     } finally {
@@ -4343,7 +4886,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     if (renamedNormalized.length < 3) {
       toast({
         title: "Phrase too short",
-        description: "The new phrase must be at least 3 characters after normalization.",
+        description:
+          "The new phrase must be at least 3 characters after normalization.",
         variant: "destructive",
       });
       return;
@@ -4398,7 +4942,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       const resp = await removeHandwavyPhrase({
         phrase: editing.phrase,
         dryRun: true,
-        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+        ...(effectiveProductionScanLimit !==
+        CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
           ? { productionScanLimit: effectiveProductionScanLimit }
           : {}),
       });
@@ -4440,7 +4985,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           handwavyActiveListVersion,
         )?.scannedAt ?? Date.now();
       const corpusLost = single.dryRunImpact.corpus.validDetectionsLost;
-      const productionLost = single.dryRunImpact.production?.validDetectionsLost ?? 0;
+      const productionLost =
+        single.dryRunImpact.production?.validDetectionsLost ?? 0;
       const totalValidLost = corpusLost + productionLost;
       // Zero-impact renames stay a single click — no extra confirmation
       // friction when the original phrase isn't doing real work.
@@ -4459,8 +5005,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to preview rename.";
-        toast({ title: "Preview failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error ? err.message : "Failed to preview rename.";
+        toast({
+          title: "Preview failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -4513,8 +5064,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to revert edit.";
-        toast({ title: "Revert failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error ? err.message : "Failed to revert edit.";
+        toast({
+          title: "Revert failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -4554,7 +5110,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         phrase: candidate,
         category,
         dryRun: true,
-        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+        ...(effectiveProductionScanLimit !==
+        CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
           ? { productionScanLimit: effectiveProductionScanLimit }
           : {}),
       });
@@ -4566,7 +5123,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         // changed while the refetch was in flight — in any of those cases
         // the snapshot we just fetched is no longer the right one to land.
         if (!prev) return prev;
-        if (prev.phrase !== candidate || prev.category !== category) return prev;
+        if (prev.phrase !== candidate || prev.category !== category)
+          return prev;
         return {
           ...prev,
           matches: refreshedMatches,
@@ -4594,7 +5152,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         phrase,
         reviewer: reviewer.trim() || undefined,
       });
-      toast({ title: "Phrase removed", description: `"${phrase}" will no longer trigger the FLAT haircut.` });
+      toast({
+        title: "Phrase removed",
+        description: `"${phrase}" will no longer trigger the FLAT haircut.`,
+      });
       // Drop the now-removed phrase from the selection so the bulk button
       // doesn't carry stale entries forward.
       setSelected((prev) => {
@@ -4635,7 +5196,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to remove phrase.";
+        const msg =
+          err instanceof Error ? err.message : "Failed to remove phrase.";
         toast({ title: "Error", description: msg, variant: "destructive" });
       }
     } finally {
@@ -4697,8 +5259,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         void refreshOpenAddPreview();
       } else if (!isCalibrationMutationAuthError(err)) {
         // Task #297 — skip duplicate toast when the rejected-token banner is showing.
-        const msg = err instanceof Error ? err.message : "Failed to reinstate phrase.";
-        toast({ title: "Undo failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error ? err.message : "Failed to reinstate phrase.";
+        toast({
+          title: "Undo failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -4706,7 +5273,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   };
 
   const dismissSingleUndo = (entry: SingleUndoEntry) => {
-    setSingleUndo((prev) => prev.filter((e) => e.removedAt !== entry.removedAt));
+    setSingleUndo((prev) =>
+      prev.filter((e) => e.removedAt !== entry.removedAt),
+    );
   };
 
   // Task #472 — bulk wrapper around the per-row Undo stack. The stack
@@ -4816,13 +5385,12 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       const parts: string[] = [];
       if (notFound > 0) parts.push(`${notFound} already reinstated elsewhere`);
       if (authFailed > 0) parts.push(`${authFailed} auth-failed`);
-      if (errored > 0) parts.push(`${errored} error${errored === 1 ? "" : "s"}`);
+      if (errored > 0)
+        parts.push(`${errored} error${errored === 1 ? "" : "s"}`);
       const noun = reinstated === 1 ? "phrase" : "phrases";
       toast({
         title:
-          reinstated > 0
-            ? `Undid ${reinstated} ${noun}`
-            : "Nothing to undo",
+          reinstated > 0 ? `Undid ${reinstated} ${noun}` : "Nothing to undo",
         description:
           reinstated > 0
             ? `Skipped ${failures} (${parts.join(", ")}). Failed entries stay in the stack so you can retry them.`
@@ -4936,7 +5504,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       const resp = await removeHandwavyPhrase({
         phrase,
         dryRun: true,
-        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+        ...(effectiveProductionScanLimit !==
+        CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
           ? { productionScanLimit: effectiveProductionScanLimit }
           : {}),
       });
@@ -4984,7 +5553,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           handwavyActiveListVersion,
         )?.scannedAt ?? Date.now();
       const corpusLost = single.dryRunImpact.corpus.validDetectionsLost;
-      const productionLost = single.dryRunImpact.production?.validDetectionsLost ?? 0;
+      const productionLost =
+        single.dryRunImpact.production?.validDetectionsLost ?? 0;
       const totalValidLost = corpusLost + productionLost;
       // Zero-impact removals stay one-click: no extra confirmation
       // friction for phrases that aren't doing real work in either
@@ -5003,8 +5573,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to preview removal.";
-        toast({ title: "Preview failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error ? err.message : "Failed to preview removal.";
+        toast({
+          title: "Preview failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -5076,7 +5651,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       const resp = await removeHandwavyPhrase({
         phrase,
         dryRun: true,
-        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+        ...(effectiveProductionScanLimit !==
+        CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
           ? { productionScanLimit: effectiveProductionScanLimit }
           : {}),
       });
@@ -5126,8 +5702,15 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       );
     } catch (err) {
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to re-scan removal preview.";
-        toast({ title: "Re-scan failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "Failed to re-scan removal preview.";
+        toast({
+          title: "Re-scan failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -5147,7 +5730,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   };
   const allPhrases = phrases.map((p) => p.phrase);
   const selectedInList = allPhrases.filter((p) => selected.has(p));
-  const allSelected = allPhrases.length > 0 && selectedInList.length === allPhrases.length;
+  const allSelected =
+    allPhrases.length > 0 && selectedInList.length === allPhrases.length;
   const someSelected = selectedInList.length > 0 && !allSelected;
   const toggleSelectAll = () => {
     if (allSelected) {
@@ -5216,7 +5800,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         results.push({
           phrase: row.phrase,
           status: "error",
-          message: "missing history identifier; reinstate manually from the history log",
+          message:
+            "missing history identifier; reinstate manually from the history log",
         });
         continue;
       }
@@ -5291,7 +5876,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       if (reinstated > 0) parts.push(`${reinstated} reinstated`);
       if (notFound > 0) parts.push(`${notFound} not-found`);
       if (authFailed > 0) parts.push(`${authFailed} auth-failed`);
-      if (errored > 0) parts.push(`${errored} error${errored === 1 ? "" : "s"}`);
+      if (errored > 0)
+        parts.push(`${errored} error${errored === 1 ? "" : "s"}`);
       toast({
         title: "Batch undo finished with issues",
         description: parts.join(" · "),
@@ -5325,7 +5911,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       const resp = await removeHandwavyPhrase({
         phrases: phrasesToPreview,
         dryRun: true,
-        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+        ...(effectiveProductionScanLimit !==
+        CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
           ? { productionScanLimit: effectiveProductionScanLimit }
           : {}),
       });
@@ -5353,8 +5940,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to preview removal.";
-        toast({ title: "Preview failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error ? err.message : "Failed to preview removal.";
+        toast({
+          title: "Preview failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -5375,9 +5967,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // active-list checkboxes already reflect what the panel was scored
   // against, so re-firing through the regular `Remove selected` button
   // will produce the same dry-run.
-  const previewBulkRemoveOverlapping = async (
-    overlappingPhrases: string[],
-  ) => {
+  const previewBulkRemoveOverlapping = async (overlappingPhrases: string[]) => {
     if (overlappingPhrases.length === 0) return;
     if (bailOnCooldown("Preview bulk removal")) return;
     if (!mutationsAllowed) return;
@@ -5391,7 +5981,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       const resp = await removeHandwavyPhrase({
         phrases: phrasesToPreview,
         dryRun: true,
-        ...(effectiveProductionScanLimit !== CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
+        ...(effectiveProductionScanLimit !==
+        CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT
           ? { productionScanLimit: effectiveProductionScanLimit }
           : {}),
       });
@@ -5417,7 +6008,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       if (!isCalibrationMutationAuthError(err)) {
         const msg =
           err instanceof Error ? err.message : "Failed to preview removal.";
-        toast({ title: "Preview failed", description: msg, variant: "destructive" });
+        toast({
+          title: "Preview failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -5466,8 +6061,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // notice). Flips `true` while the widened-window dry-run is in flight
   // so the button shows a spinner and disables itself, preventing a
   // double-click from firing two rescans against the same selection.
-  const [bulkPreviewRescanningFullArchive, setBulkPreviewRescanningFullArchive] =
-    useState(false);
+  const [
+    bulkPreviewRescanningFullArchive,
+    setBulkPreviewRescanningFullArchive,
+  ] = useState(false);
 
   // `keepIndicator` is set when the cancel is part of a chained re-schedule
   // (a second drop arriving before the first refetch lands) — clearing
@@ -5644,9 +6241,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     if (bailOnCooldown("Rescan bulk removal")) return;
     cancelBulkPreviewRefetch();
     setBulkPreviewRescanningFullArchive(true);
-    setProductionScanLimitInput(
-      String(CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX),
-    );
+    setProductionScanLimitInput(String(CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX));
     const phrasesToScan = [...bulkPreview.requestedPhrases];
     try {
       const resp = await removeHandwavyPhrase({
@@ -5847,7 +6442,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         // single-phrase DELETE response so the per-batch "Undo this batch"
         // action on the results banner can reinstate using the same
         // history-row identifier the existing per-row Reinstate uses.
-        const resp = await removeHandwavyPhrase({ phrase, reviewer: reviewerName });
+        const resp = await removeHandwavyPhrase({
+          phrase,
+          reviewer: reviewerName,
+        });
         const removedAtRaw =
           ("historyEntry" in resp && resp.historyEntry?.removedAt) || undefined;
         const removedAt = removedAtRaw ? String(removedAtRaw) : undefined;
@@ -5917,7 +6515,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       if (removed > 0) parts.push(`${removed} removed`);
       if (notFound > 0) parts.push(`${notFound} not-found`);
       if (authFailed > 0) parts.push(`${authFailed} auth-failed`);
-      if (errored > 0) parts.push(`${errored} error${errored === 1 ? "" : "s"}`);
+      if (errored > 0)
+        parts.push(`${errored} error${errored === 1 ? "" : "s"}`);
       toast({
         title: "Bulk removal finished with issues",
         description: parts.join(" · "),
@@ -5976,7 +6575,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       // the banner with the new per-phrase outcomes" behaviour the task
       // calls for. Cooldown / busy / refresh handling all match the
       // original bulk-remove path.
-      await confirmBulkRemove(failedRows.map((r) => r.phrase), retriedFrom);
+      await confirmBulkRemove(
+        failedRows.map((r) => r.phrase),
+        retriedFrom,
+      );
     } else {
       // Undo retries route back through handleUndoBulkBatch with an
       // explicit row list so we don't depend on bulkResults.kind ===
@@ -5995,7 +6597,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // distinct removes of the same phrase can be reinstated independently. The
   // server pulls the original category and rationale from that history row,
   // so the reviewer doesn't have to retype anything.
-  const handleReinstate = async (entry: { phrase: string; removedAt: HandwavyHistoryEntry["removedAt"]; category?: HandwavyHistoryEntry["category"] }) => {
+  const handleReinstate = async (entry: {
+    phrase: string;
+    removedAt: HandwavyHistoryEntry["removedAt"];
+    category?: HandwavyHistoryEntry["category"];
+  }) => {
     if (bailOnCooldown("Reinstate phrase")) return;
     const key = `reinstate:${entry.phrase}:${entry.removedAt}`;
     setBusy(key);
@@ -6019,8 +6625,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to reinstate phrase.";
-        toast({ title: "Reinstate failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error ? err.message : "Failed to reinstate phrase.";
+        toast({
+          title: "Reinstate failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -6134,7 +6745,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         );
       }
       toast({
-        title: reinstatedCount > 0 ? "Subset reinstated" : "Nothing to reinstate",
+        title:
+          reinstatedCount > 0 ? "Subset reinstated" : "Nothing to reinstate",
         description:
           reinstatedCount > 0
             ? `${reinstatedCount} of ${phrases.length} ${noun} from this batch are back on the active list. The phrases you dropped stay on the removal-history list${skipNote}.`
@@ -6154,8 +6766,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to reinstate batch.";
-        toast({ title: "Subset reinstate failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error ? err.message : "Failed to reinstate batch.";
+        toast({
+          title: "Subset reinstate failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -6167,7 +6784,10 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // reinstates every inner phrase that hasn't already been reinstated (and
   // isn't currently active). Per-phrase reinstate buttons still work for
   // partial undos.
-  const handleReinstateBatch = async (removedAtIso: string, batchSize: number) => {
+  const handleReinstateBatch = async (
+    removedAtIso: string,
+    batchSize: number,
+  ) => {
     if (bailOnCooldown("Reinstate batch")) return;
     const key = `reinstate-batch:${removedAtIso}`;
     setBusy(key);
@@ -6180,9 +6800,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         typeof resp.reinstatedCount === "number" ? resp.reinstatedCount : 0;
       const skipped = typeof resp.skipped === "number" ? resp.skipped : 0;
       const noun = reinstatedCount === 1 ? "phrase" : "phrases";
-      const skipNote = skipped > 0 ? ` (${skipped} already active or already reinstated)` : "";
+      const skipNote =
+        skipped > 0 ? ` (${skipped} already active or already reinstated)` : "";
       toast({
-        title: reinstatedCount > 0 ? "Batch reinstated" : "Nothing to reinstate",
+        title:
+          reinstatedCount > 0 ? "Batch reinstated" : "Nothing to reinstate",
         description:
           reinstatedCount > 0
             ? `${reinstatedCount} of ${batchSize} ${noun} from this batch are back on the active list${skipNote}.`
@@ -6202,8 +6824,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to reinstate batch.";
-        toast({ title: "Batch reinstate failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error ? err.message : "Failed to reinstate batch.";
+        toast({
+          title: "Batch reinstate failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -6220,7 +6847,12 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     if (bailOnCooldown("Reinstate preview")) return;
     const key = `picker-preview:${removedAtIso}`;
     setBusy(key);
-    setPickerBatchPreview({ removedAtIso, removedBy, phraseCount, status: "loading" });
+    setPickerBatchPreview({
+      removedAtIso,
+      removedBy,
+      phraseCount,
+      status: "loading",
+    });
     try {
       // Task #489 — issue the GET, and on a transient failure (transport
       // error or 5xx) re-issue it once silently before flipping the dialog
@@ -6251,7 +6883,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         err instanceof ApiError &&
         err.data &&
         typeof (err.data as { reason?: unknown }).reason === "string"
-          ? ((err.data as { reason: string }).reason)
+          ? (err.data as { reason: string }).reason
           : undefined;
       const msg =
         err instanceof Error ? err.message : "Failed to load batch preview.";
@@ -6414,10 +7046,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       { addedAtIso: string; addedAtMs: number; remainingMs: number }
     >();
     for (const [phrase, entry] of reviewerAddedByPhrase) {
-      const remainingMs = Math.max(
-        0,
-        entry.addedAtMs + UNDO_WINDOW_MS - nowMs,
-      );
+      const remainingMs = Math.max(0, entry.addedAtMs + UNDO_WINDOW_MS - nowMs);
       if (remainingMs <= 0) continue;
       map.set(phrase, { ...entry, remainingMs });
     }
@@ -6448,9 +7077,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // copy ("You still have Xm Ys to undo \"foo\"…") so the reviewer sees
   // exactly what they're about to lock in.
   const mostRecentUndoCandidate = useMemo(() => {
-    let best:
-      | { phrase: string; addedAtMs: number; remainingMs: number }
-      | null = null;
+    let best: {
+      phrase: string;
+      addedAtMs: number;
+      remainingMs: number;
+    } | null = null;
     for (const [phrase, entry] of undoCandidates) {
       if (best === null || entry.addedAtMs > best.addedAtMs) {
         best = {
@@ -6470,9 +7101,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   // by hand: a beforeunload listener for tab close / refresh, a
   // capture-phase click interceptor for in-app <Link> clicks, and a
   // popstate sentinel for back/forward.
-  const [pendingNavigation, setPendingNavigation] = useState<
-    HandwavyPendingNavigation | null
-  >(null);
+  const [pendingNavigation, setPendingNavigation] =
+    useState<HandwavyPendingNavigation | null>(null);
   // Refs shadow the latest values so the long-lived listeners don't have
   // to re-bind on every state tick (the 1Hz countdown re-renders this
   // component every second; rebinding `beforeunload` / `popstate` /
@@ -6521,7 +7151,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       if (!hasActiveUndoRef.current) return;
       if (event.defaultPrevented) return;
       if (event.button !== 0) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+        return;
       let node: HTMLElement | null = event.target as HTMLElement | null;
       while (node && node !== document.body) {
         if (node.tagName === "A") break;
@@ -6714,8 +7345,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to undo phrase.";
-        toast({ title: "Undo failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error ? err.message : "Failed to undo phrase.";
+        toast({
+          title: "Undo failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -6746,10 +7382,14 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     setBusy(key);
     try {
       const resp = await undoHandwavyPhrasesBatch({
-        entries: entries.map((e) => ({ phrase: e.phrase, addedAt: e.addedAtIso })),
+        entries: entries.map((e) => ({
+          phrase: e.phrase,
+          addedAt: e.addedAtIso,
+        })),
         reviewer: reviewer.trim() || undefined,
       });
-      const undoneCount = typeof resp.undoneCount === "number" ? resp.undoneCount : 0;
+      const undoneCount =
+        typeof resp.undoneCount === "number" ? resp.undoneCount : 0;
       const skipped = typeof resp.skipped === "number" ? resp.skipped : 0;
       const results = Array.isArray(resp.results) ? resp.results : [];
       // Task #347 — split per-entry failures into window-expired (the
@@ -6768,7 +7408,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           : `Skipped ${skipped} (${windowExpiredCount} no longer in window, ${otherFailureCount} other).`;
       const parts = [`Undid ${undoneCount} ${noun}.`, skipDetail];
       if (failureResults.length > 0) {
-        parts.push("Check the removal history below for the per-phrase audit row.");
+        parts.push(
+          "Check the removal history below for the per-phrase audit row.",
+        );
       }
       // Task #487 — when at least one phrase was skipped for a
       // non-window-expired reason (drift between the captured candidate
@@ -6793,7 +7435,8 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
           </ToastAction>
         ) : undefined;
       toast({
-        title: undoneCount > 0 ? `Undid ${undoneCount} ${noun}` : "Nothing to undo",
+        title:
+          undoneCount > 0 ? `Undid ${undoneCount} ${noun}` : "Nothing to undo",
         description: parts.join(" "),
         ...(action ? { action } : {}),
         ...(undoneCount === 0 ? { variant: "destructive" as const } : {}),
@@ -6802,8 +7445,13 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     } catch (err) {
       // Task #297 — skip duplicate toast when the rejected-token banner is showing.
       if (!isCalibrationMutationAuthError(err)) {
-        const msg = err instanceof Error ? err.message : "Failed to undo recent adds.";
-        toast({ title: "Bulk undo failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error ? err.message : "Failed to undo recent adds.";
+        toast({
+          title: "Bulk undo failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusy(null);
@@ -6882,7 +7530,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         removedBy: h.removedBy,
         batchSize: rows.length,
         reinstatedCount,
-        allReinstated: h.reinstated === true || (rows.length > 0 && reinstatedCount === rows.length),
+        allReinstated:
+          h.reinstated === true ||
+          (rows.length > 0 && reinstatedCount === rows.length),
         rows,
       });
     } else if (typeof h.phrase === "string" && h.phrase.length > 0) {
@@ -6910,7 +7560,9 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
       });
     }
   }
-  const sortedHistoryGroups = historyGroups.sort((a, b) => b.sortKey - a.sortKey);
+  const sortedHistoryGroups = historyGroups.sort(
+    (a, b) => b.sortKey - a.sortKey,
+  );
   const totalHistoryRowCount = historyGroups.reduce(
     (sum, g) => sum + (g.kind === "single" ? 1 : g.rows.length),
     0,
@@ -6923,7 +7575,11 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
   let runningRowCount = 0;
   for (const g of sortedHistoryGroups) {
     const rowsInGroup = g.kind === "single" ? 1 : g.rows.length;
-    if (visibleHistoryGroups.length > 0 && runningRowCount + rowsInGroup > HISTORY_ROW_CAP) break;
+    if (
+      visibleHistoryGroups.length > 0 &&
+      runningRowCount + rowsInGroup > HISTORY_ROW_CAP
+    )
+      break;
     visibleHistoryGroups.push(g);
     runningRowCount += rowsInGroup;
   }
@@ -7011,8 +7667,7 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
     if (bulkPreviewIsOpenForInit && bulkPreview) {
       const HIGH_THRASH_MIN_INIT = 2;
       const hasHighThrashInBatch = bulkPreview.requestedPhrases.some(
-        (p) =>
-          (thrashByPhrase.get(p)?.length ?? 0) >= HIGH_THRASH_MIN_INIT,
+        (p) => (thrashByPhrase.get(p)?.length ?? 0) >= HIGH_THRASH_MIN_INIT,
       );
       setBulkPreviewOutcomesOpen(hasHighThrashInBatch);
       // Task #365 — only schedule the auto-scroll when the panel is
@@ -7058,50 +7713,55 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
 
   return (
     <>
-    {/* Task #215 — same missing/invalid banner the calibration card renders,
+      {/* Task #215 — same missing/invalid banner the calibration card renders,
         repeated above the phrase editor so reviewers who scroll past the
         calibration section still see it before attempting an add/remove. */}
-    <CalibrationAuthBanner state={authState} />
-    {/* Task #297 — live 401 banner mirrored here so a reviewer who scrolls
+      <CalibrationAuthBanner state={authState} />
+      {/* Task #297 — live 401 banner mirrored here so a reviewer who scrolls
         past the calibration card still sees the env-var diagnosis the
         moment their first handwavy mutation 401s. Hidden when the cooldown
         banner below is showing — the throttle countdown wins once it trips. */}
-    <CalibrationTokenRejectedBanner
-      rejection={tokenRejection}
-      cooldownActive={cooldown.active}
-      authStateKind={authState.kind}
-    />
-    {/* Task #212 — wrong-token throttle countdown banner, mirrored above the
+      <CalibrationTokenRejectedBanner
+        rejection={tokenRejection}
+        cooldownActive={cooldown.active}
+        authStateKind={authState.kind}
+      />
+      {/* Task #212 — wrong-token throttle countdown banner, mirrored above the
         admin card so reviewers see it before attempting any handwavy mutation. */}
-    <CalibrationCooldownBanner state={cooldown} />
-    <Card className="glass-card rounded-xl border-primary/10" data-testid="handwavy-admin">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <MessageCircleQuestion className="w-4 h-4 text-primary" />
-            FLAT Hand-wavy Marker Phrases
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <CalibrationAuthBadge state={authState} />
-            <Badge variant="secondary" className="text-[10px]">{phrases.length} active</Badge>
-            {/* Task #310 — small "back to home" affordance that programmatically
+      <CalibrationCooldownBanner state={cooldown} />
+      <Card
+        className="glass-card rounded-xl border-primary/10"
+        data-testid="handwavy-admin"
+      >
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <MessageCircleQuestion className="w-4 h-4 text-primary" />
+              FLAT Hand-wavy Marker Phrases
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <CalibrationAuthBadge state={authState} />
+              <Badge variant="secondary" className="text-[10px]">
+                {phrases.length} active
+              </Badge>
+              {/* Task #310 — small "back to home" affordance that programmatically
                 navigates via `guardedNavigate`. Routed through the Task #222
                 navigate-away guard so a misclick mid-Undo prompts the same
                 confirm dialog as a real <Link> click; without the wrapper this
                 button's onClick would silently take the reviewer off the FLAT
                 panel and turn any subsequent removal into a manual-removal
                 history entry instead of "added then undone". */}
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-[11px]"
-              onClick={() => guardedNavigate("/")}
-              data-testid="handwavy-back-home"
-            >
-              Done
-            </Button>
-            {/* Task #444 — sr-only test surfaces that exercise the rest of the
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[11px]"
+                onClick={() => guardedNavigate("/")}
+                data-testid="handwavy-back-home"
+              >
+                Done
+              </Button>
+              {/* Task #444 — sr-only test surfaces that exercise the rest of the
                 NavigateFunction overload set so a regression that drops the
                 options arg or mishandles the numeric-delta path cannot slip
                 past CI. The plain `navigate(path)` form is already covered by
@@ -7118,156 +7778,179 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 `{ replace: true }` would leave /feedback-analytics dangling
                 in the back stack so `page.goBack()` would land on it
                 instead of the entry below. */}
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="sr-only"
-              onClick={() => guardedNavigate(-1)}
-              data-testid="handwavy-back-delta"
-              aria-hidden="true"
-              tabIndex={-1}
-            >
-              Back (test-only)
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="sr-only"
-              onClick={() => guardedNavigate("/stats", { replace: true })}
-              data-testid="handwavy-back-replace"
-              aria-hidden="true"
-              tabIndex={-1}
-            >
-              Stats with replace (test-only)
-            </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="sr-only"
+                onClick={() => guardedNavigate(-1)}
+                data-testid="handwavy-back-delta"
+                aria-hidden="true"
+                tabIndex={-1}
+              >
+                Back (test-only)
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="sr-only"
+                onClick={() => guardedNavigate("/stats", { replace: true })}
+                data-testid="handwavy-back-replace"
+                aria-hidden="true"
+                tabIndex={-1}
+              >
+                Stats with replace (test-only)
+              </Button>
+            </div>
           </div>
-        </div>
-        <CardDescription>
-          Curated list of buzzword-soup framings the FLAT haircut looks for. Add a new
-          phrase here and it takes effect on the very next triage — no engineer or
-          redeploy needed. Phrases are matched as case-insensitive substrings against a
-          whitespace-collapsed copy of the report text. Each entry records who added it,
-          when, and (optionally) why, so reviewers can spot accidental over-reach later.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col sm:flex-row gap-2 items-stretch">
-          <input
-            type="text"
-            value={reviewer}
-            onChange={(e) => persistReviewer(e.target.value)}
-            placeholder="Your name or email (recorded in the audit trail)"
-            maxLength={200}
-            className="flex-1 h-9 px-3 rounded-md border border-border/40 bg-background/40 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40"
-            data-testid="handwavy-reviewer"
-            aria-label="Reviewer name or email"
-          />
-          {reviewer.trim() ? (
-            <Badge variant="outline" className="text-[10px] self-center px-2 py-1">
-              Audited as {reviewer.trim()}
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-[10px] self-center px-2 py-1 text-muted-foreground">
-              No reviewer set — entries will be marked anonymous
-            </Badge>
-          )}
-        </div>
-        <form onSubmit={handleAdd} className="space-y-2">
-          <div className="flex flex-col sm:flex-row gap-2">
+          <CardDescription>
+            Curated list of buzzword-soup framings the FLAT haircut looks for.
+            Add a new phrase here and it takes effect on the very next triage —
+            no engineer or redeploy needed. Phrases are matched as
+            case-insensitive substrings against a whitespace-collapsed copy of
+            the report text. Each entry records who added it, when, and
+            (optionally) why, so reviewers can spot accidental over-reach later.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-2 items-stretch">
             <input
               type="text"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="e.g. comprehensive zero-trust assessment"
+              value={reviewer}
+              onChange={(e) => persistReviewer(e.target.value)}
+              placeholder="Your name or email (recorded in the audit trail)"
               maxLength={200}
               className="flex-1 h-9 px-3 rounded-md border border-border/40 bg-background/40 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40"
-              data-testid="handwavy-input"
-              disabled={busy === "preview" || busy === "confirm" || preview !== null}
+              data-testid="handwavy-reviewer"
+              aria-label="Reviewer name or email"
             />
-            <select
-              value={draftCategory}
-              onChange={(e) => setDraftCategory(e.target.value as "absence" | "hedging" | "buzzword")}
-              className="h-9 px-2 rounded-md border border-border/40 bg-background/40 text-xs"
-              data-testid="handwavy-category"
-              disabled={busy === "preview" || busy === "confirm" || preview !== null}
-              aria-label="Theme category"
-            >
-              <option value="absence">Absence of evidence</option>
-              <option value="hedging">Generic hedging</option>
-              <option value="buzzword">Buzzword soup</option>
-            </select>
-            {(() => {
-              const addReason = describeHandwavyDisabledReason({
-                mutationsAllowed,
-                cooldownActive: cooldown.active,
-                cooldownSecondsRemaining: cooldown.secondsRemaining,
-                inFlight:
-                  busy === "preview" ||
-                  busy === "confirm" ||
-                  preview !== null,
-                inFlightLabel:
-                  busy === "preview"
-                    ? "Checking the corpus — wait for the preview to load."
-                    : busy === "confirm"
-                      ? "Adding the previewed phrase — wait for it to finish."
-                      : "Finish or back out of the open add preview first.",
-                extraReason:
-                  draft.trim().length < 3
-                    ? "Type a phrase of at least 3 characters first."
-                    : null,
-              });
-              const addHintId = addReason
-                ? "handwavy-add-disabled-hint-id"
-                : undefined;
-              return (
-                <>
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={
-                      busy === "preview" ||
-                      busy === "confirm" ||
-                      preview !== null ||
-                      draft.trim().length < 3 ||
-                      cooldown.active ||
-                      !mutationsAllowed
-                    }
-                    title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                    data-testid="handwavy-add"
-                    data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                    aria-describedby={addHintId}
-                  >
-                    <Plus className="w-3.5 h-3.5 mr-1" />
-                    {cooldown.active
-                      ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
-                      : busy === "preview" ? "Checking corpus…" : "Preview impact"}
-                  </Button>
-                  {addHintId && (
-                    <div className="basis-full">
-                      <HandwavyDisabledHint
-                        id={addHintId}
-                        reason={addReason}
-                        testId="handwavy-add-disabled-hint"
-                      />
-                    </div>
-                  )}
-                </>
-              );
-            })()}
+            {reviewer.trim() ? (
+              <Badge
+                variant="outline"
+                className="text-[10px] self-center px-2 py-1"
+              >
+                Audited as {reviewer.trim()}
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="text-[10px] self-center px-2 py-1 text-muted-foreground"
+              >
+                No reviewer set — entries will be marked anonymous
+              </Badge>
+            )}
           </div>
-          <textarea
-            value={draftRationale}
-            onChange={(e) => setDraftRationale(e.target.value)}
-            placeholder="Optional rationale — why is this phrase a hand-wavy marker? (recorded in the audit trail)"
-            maxLength={500}
-            rows={2}
-            className="w-full px-3 py-2 rounded-md border border-border/40 bg-background/40 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y"
-            data-testid="handwavy-rationale"
-            disabled={busy === "preview" || busy === "confirm" || preview !== null}
-          />
-          {/* Task #125 — reviewer-tunable production-scan window. The dry-run
+          <form onSubmit={handleAdd} className="space-y-2">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="e.g. comprehensive zero-trust assessment"
+                maxLength={200}
+                className="flex-1 h-9 px-3 rounded-md border border-border/40 bg-background/40 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                data-testid="handwavy-input"
+                disabled={
+                  busy === "preview" || busy === "confirm" || preview !== null
+                }
+              />
+              <select
+                value={draftCategory}
+                onChange={(e) =>
+                  setDraftCategory(
+                    e.target.value as "absence" | "hedging" | "buzzword",
+                  )
+                }
+                className="h-9 px-2 rounded-md border border-border/40 bg-background/40 text-xs"
+                data-testid="handwavy-category"
+                disabled={
+                  busy === "preview" || busy === "confirm" || preview !== null
+                }
+                aria-label="Theme category"
+              >
+                <option value="absence">Absence of evidence</option>
+                <option value="hedging">Generic hedging</option>
+                <option value="buzzword">Buzzword soup</option>
+              </select>
+              {(() => {
+                const addReason = describeHandwavyDisabledReason({
+                  mutationsAllowed,
+                  cooldownActive: cooldown.active,
+                  cooldownSecondsRemaining: cooldown.secondsRemaining,
+                  inFlight:
+                    busy === "preview" ||
+                    busy === "confirm" ||
+                    preview !== null,
+                  inFlightLabel:
+                    busy === "preview"
+                      ? "Checking the corpus — wait for the preview to load."
+                      : busy === "confirm"
+                        ? "Adding the previewed phrase — wait for it to finish."
+                        : "Finish or back out of the open add preview first.",
+                  extraReason:
+                    draft.trim().length < 3
+                      ? "Type a phrase of at least 3 characters first."
+                      : null,
+                });
+                const addHintId = addReason
+                  ? "handwavy-add-disabled-hint-id"
+                  : undefined;
+                return (
+                  <>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={
+                        busy === "preview" ||
+                        busy === "confirm" ||
+                        preview !== null ||
+                        draft.trim().length < 3 ||
+                        cooldown.active ||
+                        !mutationsAllowed
+                      }
+                      title={
+                        !mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined
+                      }
+                      data-testid="handwavy-add"
+                      data-mutations-blocked={
+                        !mutationsAllowed ? "true" : "false"
+                      }
+                      aria-describedby={addHintId}
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1" />
+                      {cooldown.active
+                        ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
+                        : busy === "preview"
+                          ? "Checking corpus…"
+                          : "Preview impact"}
+                    </Button>
+                    {addHintId && (
+                      <div className="basis-full">
+                        <HandwavyDisabledHint
+                          id={addHintId}
+                          reason={addReason}
+                          testId="handwavy-add-disabled-hint"
+                        />
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+            <textarea
+              value={draftRationale}
+              onChange={(e) => setDraftRationale(e.target.value)}
+              placeholder="Optional rationale — why is this phrase a hand-wavy marker? (recorded in the audit trail)"
+              maxLength={500}
+              rows={2}
+              className="w-full px-3 py-2 rounded-md border border-border/40 bg-background/40 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y"
+              data-testid="handwavy-rationale"
+              disabled={
+                busy === "preview" || busy === "confirm" || preview !== null
+              }
+            />
+            {/* Task #125 — reviewer-tunable production-scan window. The dry-run
               preview's second signal scores the candidate against the most
               recent N production reports (capped server-side at 10000).
               Heavy-user installs can widen the window for a sharper false-
@@ -7282,33 +7965,36 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
               broader scope. The reviewer's value is persisted under
               `vulnrap.calibration.productionScanLimit` and is echoed back
               in each consumer's "last X of up to Y reports" subtitle. */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-[11px] text-muted-foreground">
-            <label
-              htmlFor="handwavy-production-scan-limit"
-              className="shrink-0"
-            >
-              Production scan window (shared):
-            </label>
-            <input
-              id="handwavy-production-scan-limit"
-              type="number"
-              inputMode="numeric"
-              min={CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}
-              max={CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}
-              step={100}
-              value={productionScanLimitInput}
-              onChange={(e) => setProductionScanLimitInput(e.target.value)}
-              className={cn(
-                "h-7 w-24 px-2 rounded-md border bg-background/40 text-xs focus:outline-none focus:ring-1",
-                productionScanLimitValid || productionScanLimitInput.trim() === ""
-                  ? "border-border/40 focus:ring-primary/40"
-                  : "border-red-500/60 focus:ring-red-500/60",
-              )}
-              data-testid="handwavy-production-scan-limit"
-              aria-label="Production scan window (most recent N reports). Applies to add-phrase, single-phrase removal, and bulk-removal previews."
-              disabled={busy === "preview" || busy === "confirm" || preview !== null}
-            />
-            {/* Task #459 — one-click restore for the documented default. The
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-[11px] text-muted-foreground">
+              <label
+                htmlFor="handwavy-production-scan-limit"
+                className="shrink-0"
+              >
+                Production scan window (shared):
+              </label>
+              <input
+                id="handwavy-production-scan-limit"
+                type="number"
+                inputMode="numeric"
+                min={CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}
+                max={CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}
+                step={100}
+                value={productionScanLimitInput}
+                onChange={(e) => setProductionScanLimitInput(e.target.value)}
+                className={cn(
+                  "h-7 w-24 px-2 rounded-md border bg-background/40 text-xs focus:outline-none focus:ring-1",
+                  productionScanLimitValid ||
+                    productionScanLimitInput.trim() === ""
+                    ? "border-border/40 focus:ring-primary/40"
+                    : "border-red-500/60 focus:ring-red-500/60",
+                )}
+                data-testid="handwavy-production-scan-limit"
+                aria-label="Production scan window (most recent N reports). Applies to add-phrase, single-phrase removal, and bulk-removal previews."
+                disabled={
+                  busy === "preview" || busy === "confirm" || preview !== null
+                }
+              />
+              {/* Task #459 — one-click restore for the documented default. The
                 input/help block already explains the 100..10000 range and
                 the 2000 fallback, but reverting a heavy-handed tweak still
                 forced reviewers to retype the magic number. This button
@@ -7320,394 +8006,434 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 clear isn't gated on the validity-tracking effect re-firing).
                 Disabled set matches the input above so we can't reset while
                 a preview/confirm mutation is in flight. */}
-            <button
-              type="button"
-              onClick={() => {
-                setProductionScanLimitInput(
-                  String(CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT),
-                );
-                if (typeof window !== "undefined") {
-                  try {
-                    window.localStorage.removeItem(
-                      CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY,
-                    );
-                  } catch {
-                    // ignore storage failures (private mode, quota)
+              <button
+                type="button"
+                onClick={() => {
+                  setProductionScanLimitInput(
+                    String(CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT),
+                  );
+                  if (typeof window !== "undefined") {
+                    try {
+                      window.localStorage.removeItem(
+                        CALIBRATION_PRODUCTION_SCAN_LIMIT_KEY,
+                      );
+                    } catch {
+                      // ignore storage failures (private mode, quota)
+                    }
                   }
+                }}
+                className="h-7 px-2 rounded-md border border-border/40 bg-background/40 text-[11px] text-muted-foreground hover:text-foreground hover:border-border/70 focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-muted-foreground disabled:hover:border-border/40"
+                data-testid="handwavy-production-scan-limit-reset"
+                aria-label={`Reset production scan window to the default of ${CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT} reports`}
+                title={`Reset to default (${CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT})`}
+                disabled={
+                  busy === "preview" || busy === "confirm" || preview !== null
                 }
-              }}
-              className="h-7 px-2 rounded-md border border-border/40 bg-background/40 text-[11px] text-muted-foreground hover:text-foreground hover:border-border/70 focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-muted-foreground disabled:hover:border-border/40"
-              data-testid="handwavy-production-scan-limit-reset"
-              aria-label={`Reset production scan window to the default of ${CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT} reports`}
-              title={`Reset to default (${CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT})`}
-              disabled={busy === "preview" || busy === "confirm" || preview !== null}
-            >
-              Reset to default ({CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT})
-            </button>
-            <span className="text-muted-foreground/70">
-              most recent reports ({CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}–
-              {CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}; default{" "}
-              {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT}) — applies to add,
-              single-phrase removal, and bulk-removal previews
-            </span>
-            {!productionScanLimitValid && productionScanLimitInput.trim() !== "" && (
-              <span
-                className="text-red-400"
-                data-testid="handwavy-production-scan-limit-warning"
               >
-                Out of range — the next preview will use{" "}
-                {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT} until you fix this.
+                Reset to default ({CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT})
+              </button>
+              <span className="text-muted-foreground/70">
+                most recent reports ({CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}–
+                {CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}; default{" "}
+                {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT}) — applies to add,
+                single-phrase removal, and bulk-removal previews
               </span>
-            )}
-          </div>
-          {/* Task #326 — reviewer cheat-sheet for the shared production-scan
+              {!productionScanLimitValid &&
+                productionScanLimitInput.trim() !== "" && (
+                  <span
+                    className="text-red-400"
+                    data-testid="handwavy-production-scan-limit-warning"
+                  >
+                    Out of range — the next preview will use{" "}
+                    {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT} until you fix
+                    this.
+                  </span>
+                )}
+            </div>
+            {/* Task #326 — reviewer cheat-sheet for the shared production-scan
               window: shared scope across all production-archive previews,
               the {MIN}..{MAX} bounds with a {DEFAULT} fallback, and the
               one-time migration from the pre-#230 legacy localStorage key. */}
-          <div
-            className="rounded-md border border-border/40 bg-background/30 p-2 text-[11px] text-muted-foreground/80 space-y-1"
-            data-testid="handwavy-production-scan-limit-help"
-          >
-            <div className="font-semibold text-muted-foreground">
-              About the production scan window
+            <div
+              className="rounded-md border border-border/40 bg-background/30 p-2 text-[11px] text-muted-foreground/80 space-y-1"
+              data-testid="handwavy-production-scan-limit-help"
+            >
+              <div className="font-semibold text-muted-foreground">
+                About the production scan window
+              </div>
+              <ul className="list-disc list-outside pl-4 space-y-0.5">
+                <li>
+                  One shared preference — the number you pick here is reused by
+                  every production-archive preview on this page (add-phrase,
+                  single-phrase removal, and bulk-removal). Changing it in one
+                  place re-tunes them all.
+                </li>
+                <li>
+                  Accepts {CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}–
+                  {CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX} reports. Leaving the
+                  field blank or out of range falls back to the default of{" "}
+                  {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT}.
+                </li>
+                <li>
+                  Migrated from the pre-#230 per-tool key — any value you saved
+                  under the old{" "}
+                  <code className="font-mono text-[10px]">
+                    vulnrap.handwavy.productionScanLimit
+                  </code>{" "}
+                  localStorage entry is copied over to{" "}
+                  <code className="font-mono text-[10px]">
+                    vulnrap.calibration.productionScanLimit
+                  </code>{" "}
+                  on first load, so no re-entry is needed.
+                </li>
+              </ul>
             </div>
-            <ul className="list-disc list-outside pl-4 space-y-0.5">
-              <li>
-                One shared preference — the number you pick here is reused by
-                every production-archive preview on this page (add-phrase,
-                single-phrase removal, and bulk-removal). Changing it in one
-                place re-tunes them all.
-              </li>
-              <li>
-                Accepts {CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}–
-                {CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX} reports. Leaving the
-                field blank or out of range falls back to the default of{" "}
-                {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT}.
-              </li>
-              <li>
-                Migrated from the pre-#230 per-tool key — any value you saved
-                under the old <code className="font-mono text-[10px]">vulnrap.handwavy.productionScanLimit</code>{" "}
-                localStorage entry is copied over to{" "}
-                <code className="font-mono text-[10px]">vulnrap.calibration.productionScanLimit</code>{" "}
-                on first load, so no re-entry is needed.
-              </li>
-            </ul>
-          </div>
-        </form>
-        {/* Task #129 — pre-preview overlap hint. Surfaces inline as the
+          </form>
+          {/* Task #129 — pre-preview overlap hint. Surfaces inline as the
             reviewer types the candidate, *before* they click "Preview impact",
             so an obvious near-duplicate can be caught without paying for the
             full dry-run round-trip (corpus scan + production DB hit). The
             hint is suppressed once the preview block is open so the two
             warnings don't stack — the dry-run already includes its own
             overlap detection on the server side. */}
-        {preview === null && draftOverlaps.length > 0 && (
-          <div
-            className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[11px] text-amber-100 flex items-start gap-2"
-            data-testid="handwavy-overlap-hint"
-            role="status"
-          >
-            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
-            <div className="flex-1">
-              <span className="font-semibold">
-                Likely redundant — overlaps with {draftOverlaps.length} existing curated{" "}
-                {draftOverlaps.length === 1 ? "phrase" : "phrases"}:
-              </span>{" "}
-              <span data-testid="handwavy-overlap-hint-top">
-                {describeHandwavyOverlapRelation(draftOverlaps[0].relation)}{" "}
-                {/* Task #220 — clickable jump target. Works the same way for
+          {preview === null && draftOverlaps.length > 0 && (
+            <div
+              className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[11px] text-amber-100 flex items-start gap-2"
+              data-testid="handwavy-overlap-hint"
+              role="status"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
+              <div className="flex-1">
+                <span className="font-semibold">
+                  Likely redundant — overlaps with {draftOverlaps.length}{" "}
+                  existing curated{" "}
+                  {draftOverlaps.length === 1 ? "phrase" : "phrases"}:
+                </span>{" "}
+                <span data-testid="handwavy-overlap-hint-top">
+                  {describeHandwavyOverlapRelation(draftOverlaps[0].relation)}{" "}
+                  {/* Task #220 — clickable jump target. Works the same way for
                     all three overlap relations (equal / broader / covered)
                     because the hint always names a single concrete colliding
                     phrase, regardless of which relation surfaced it. */}
-                <button
-                  type="button"
-                  onClick={() => jumpToActivePhrase(draftOverlaps[0].phrase)}
-                  className="font-mono underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm"
-                  data-testid="handwavy-overlap-hint-jump"
-                  aria-label={`Jump to "${draftOverlaps[0].phrase}" in the active phrase list`}
-                >
-                  &ldquo;{draftOverlaps[0].phrase}&rdquo;
-                </button>{" "}
-                <span className="text-amber-200/70">
-                  [{HANDWAVY_CATEGORY_LABELS[draftOverlaps[0].category]}]
+                  <button
+                    type="button"
+                    onClick={() => jumpToActivePhrase(draftOverlaps[0].phrase)}
+                    className="font-mono underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm"
+                    data-testid="handwavy-overlap-hint-jump"
+                    aria-label={`Jump to "${draftOverlaps[0].phrase}" in the active phrase list`}
+                  >
+                    &ldquo;{draftOverlaps[0].phrase}&rdquo;
+                  </button>{" "}
+                  <span className="text-amber-200/70">
+                    [{HANDWAVY_CATEGORY_LABELS[draftOverlaps[0].category]}]
+                  </span>
                 </span>
-              </span>
-              {draftOverlaps.length > 1 && (
-                <span className="text-amber-200/60">
-                  {" "}
-                  (+{draftOverlaps.length - 1} more — full list shown in the dry-run preview)
-                </span>
-              )}
+                {draftOverlaps.length > 1 && (
+                  <span className="text-amber-200/60">
+                    {" "}
+                    (+{draftOverlaps.length - 1} more — full list shown in the
+                    dry-run preview)
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-        {/* Task #221 — pre-preview hint that warns the reviewer when the
+          )}
+          {/* Task #221 — pre-preview hint that warns the reviewer when the
             candidate matches a phrase that was deliberately retired in the
             past. Sits next to (not in place of) the active-list overlap
             hint so a candidate that overlaps both surfaces both warnings.
             Like that hint, it's suppressed once the dry-run preview is
             open; the preview block already shows the full removal-history
             list separately. */}
-        {preview === null && draftHistoryOverlaps.length > 0 && (() => {
-          const top = draftHistoryOverlaps[0];
-          const removedAtLabel = formatAuditTimestamp(top.removedAt) ?? "an unknown date";
-          const verb = top.undone ? "undone" : "removed";
-          return (
-            <div
-              className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[11px] text-amber-100 flex items-start gap-2"
-              data-testid="handwavy-history-overlap-hint"
-              role="status"
-            >
-              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
-              <div className="flex-1">
-                <span className="font-semibold">
-                  Previously {verb} — overlaps with {draftHistoryOverlaps.length} entr{draftHistoryOverlaps.length === 1 ? "y" : "ies"} in the removal log:
-                </span>{" "}
-                <span data-testid="handwavy-history-overlap-hint-top">
-                  {describeHandwavyOverlapRelation(top.relation)}{" "}
-                  {/* Task #412 — mirrors `handwavy-overlap-hint-jump`
+          {preview === null &&
+            draftHistoryOverlaps.length > 0 &&
+            (() => {
+              const top = draftHistoryOverlaps[0];
+              const removedAtLabel =
+                formatAuditTimestamp(top.removedAt) ?? "an unknown date";
+              const verb = top.undone ? "undone" : "removed";
+              return (
+                <div
+                  className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[11px] text-amber-100 flex items-start gap-2"
+                  data-testid="handwavy-history-overlap-hint"
+                  role="status"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
+                  <div className="flex-1">
+                    <span className="font-semibold">
+                      Previously {verb} — overlaps with{" "}
+                      {draftHistoryOverlaps.length} entr
+                      {draftHistoryOverlaps.length === 1 ? "y" : "ies"} in the
+                      removal log:
+                    </span>{" "}
+                    <span data-testid="handwavy-history-overlap-hint-top">
+                      {describeHandwavyOverlapRelation(top.relation)}{" "}
+                      {/* Task #412 — mirrors `handwavy-overlap-hint-jump`
                       on the active-list hint. */}
-                  <button
-                    type="button"
-                    onClick={() => jumpToHistoryRow(top.phrase, top.removedAt)}
-                    className="font-mono underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm"
-                    data-testid="handwavy-history-overlap-hint-jump"
-                    aria-label={`Jump to "${top.phrase}" in the removal history`}
-                  >
-                    &ldquo;{top.phrase}&rdquo;
-                  </button>{" "}
-                  <span className="text-amber-200/70">
-                    [{HANDWAVY_CATEGORY_LABELS[top.category]}]
-                  </span>
-                  {" — "}
-                  {verb} by{" "}
-                  <span className="font-medium">{top.removedBy ?? "unknown reviewer"}</span>{" "}
-                  on {removedAtLabel}
-                  {top.rationale ? (
-                    <>
-                      {" — rationale: "}
-                      <span className="italic">&ldquo;{top.rationale}&rdquo;</span>
-                    </>
-                  ) : null}
-                </span>
-                {draftHistoryOverlaps.length > 1 && (
-                  <span className="text-amber-200/60">
-                    {" "}
-                    (+{draftHistoryOverlaps.length - 1} more — see the removal log below)
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })()}
-        {preview && (() => {
-          // Task #119 — combined false-positive count across BOTH the curated
-          // benchmark cohorts and the production-archive scan. Either signal
-          // turning red flips the outer card + confirm button to destructive
-          // styling so a phrase that's clean against the curated set but
-          // catastrophic against production still trips the warning UI.
-          const curatedFp = preview.matches.falsePositives;
-          const productionFp = preview.productionMatches?.falsePositives ?? 0;
-          const anyFp = curatedFp + productionFp;
-          // Task #128 — surface curated-phrase overlap (Task #123) the same
-          // way the CLI does. Overlaps don't crater AVRI like a false
-          // positive does, but they DO mean the add is redundant, so we
-          // tint the outer card red on an overlap as well and switch the
-          // confirm button copy to "Add anyway".
-          const overlapCount = preview.overlaps?.total ?? 0;
-          const hasWarning = anyFp > 0 || overlapCount > 0;
-          return (
-          <div
-            className={cn(
-              "rounded-md border p-3 space-y-3",
-              hasWarning
-                ? "border-red-500/40 bg-red-500/5"
-                : "border-emerald-500/40 bg-emerald-500/5",
-            )}
-            data-testid="handwavy-preview"
-          >
-            <div className="flex items-start gap-2">
-              {hasWarning ? (
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
-              ) : (
-                <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-400" />
-              )}
-              <div className="text-xs flex-1">
-                <div className="font-semibold text-foreground">
-                  Corpus impact for &ldquo;{preview.phrase}&rdquo;
+                      <button
+                        type="button"
+                        onClick={() =>
+                          jumpToHistoryRow(top.phrase, top.removedAt)
+                        }
+                        className="font-mono underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm"
+                        data-testid="handwavy-history-overlap-hint-jump"
+                        aria-label={`Jump to "${top.phrase}" in the removal history`}
+                      >
+                        &ldquo;{top.phrase}&rdquo;
+                      </button>{" "}
+                      <span className="text-amber-200/70">
+                        [{HANDWAVY_CATEGORY_LABELS[top.category]}]
+                      </span>
+                      {" — "}
+                      {verb} by{" "}
+                      <span className="font-medium">
+                        {top.removedBy ?? "unknown reviewer"}
+                      </span>{" "}
+                      on {removedAtLabel}
+                      {top.rationale ? (
+                        <>
+                          {" — rationale: "}
+                          <span className="italic">
+                            &ldquo;{top.rationale}&rdquo;
+                          </span>
+                        </>
+                      ) : null}
+                    </span>
+                    {draftHistoryOverlaps.length > 1 && (
+                      <span className="text-amber-200/60">
+                        {" "}
+                        (+{draftHistoryOverlaps.length - 1} more — see the
+                        removal log below)
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Two signals: the curated benchmark cohorts (T1–T4 fixtures) and the
-                  most recent production reports bucketed by their composite label.
-                </div>
-              </div>
-            </div>
-            {/* Task #128 — Overlap with already-curated phrases callout
+              );
+            })()}
+          {preview &&
+            (() => {
+              // Task #119 — combined false-positive count across BOTH the curated
+              // benchmark cohorts and the production-archive scan. Either signal
+              // turning red flips the outer card + confirm button to destructive
+              // styling so a phrase that's clean against the curated set but
+              // catastrophic against production still trips the warning UI.
+              const curatedFp = preview.matches.falsePositives;
+              const productionFp =
+                preview.productionMatches?.falsePositives ?? 0;
+              const anyFp = curatedFp + productionFp;
+              // Task #128 — surface curated-phrase overlap (Task #123) the same
+              // way the CLI does. Overlaps don't crater AVRI like a false
+              // positive does, but they DO mean the add is redundant, so we
+              // tint the outer card red on an overlap as well and switch the
+              // confirm button copy to "Add anyway".
+              const overlapCount = preview.overlaps?.total ?? 0;
+              const hasWarning = anyFp > 0 || overlapCount > 0;
+              return (
+                <div
+                  className={cn(
+                    "rounded-md border p-3 space-y-3",
+                    hasWarning
+                      ? "border-red-500/40 bg-red-500/5"
+                      : "border-emerald-500/40 bg-emerald-500/5",
+                  )}
+                  data-testid="handwavy-preview"
+                >
+                  <div className="flex items-start gap-2">
+                    {hasWarning ? (
+                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-400" />
+                    )}
+                    <div className="text-xs flex-1">
+                      <div className="font-semibold text-foreground">
+                        Corpus impact for &ldquo;{preview.phrase}&rdquo;
+                      </div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        Two signals: the curated benchmark cohorts (T1–T4
+                        fixtures) and the most recent production reports
+                        bucketed by their composite label.
+                      </div>
+                    </div>
+                  </div>
+                  {/* Task #128 — Overlap with already-curated phrases callout
                 (mirrors the CLI's `renderOverlaps` block). Rendered ABOVE
                 the corpus-impact grid so reviewers see redundancy warnings
                 before they scroll the false-positive numbers. The block
                 self-hides when there are no overlaps to keep the panel
                 compact for the common (non-overlapping) case. */}
-            <PreviewOverlapsBlock
-              overlaps={preview.overlaps}
-              candidate={preview.phrase}
-              onJumpToActivePhrase={jumpToActivePhrase}
-              // Task #226 — route the "Remove existing" quick-action through
-              // the same entry point the per-row trash button uses so the
-              // thrash gate (Task #139) AND the impact-preview dialog
-              // (Task #173) both fire exactly the way they would for a
-              // hand-clicked row. Cycles are looked up from the same
-              // `thrashByPhrase` map the active list uses; if the colliding
-              // phrase isn't found in the active list (shouldn't happen,
-              // but the overlap snapshot could outlive a concurrent remove)
-              // we pass an empty array so the request still flows through
-              // the normal preview rather than failing closed.
-              onRequestRemoveExisting={(phrase) =>
-                requestRemove(phrase, thrashByPhrase.get(phrase) ?? [])
-              }
-              // Task #315 — route the header "Remove all overlapping" action
-              // through a dedicated handler that pre-fills the existing
-              // bulk-remove dry-run panel with the eligible overlap phrases.
-              // The reviewer then sees the same combined corpus + production
-              // impact summary the regular bulk-remove flow uses and confirms
-              // once instead of firing one single-phrase dialog per overlap.
-              onRequestRemoveAllOverlapping={(phrases) =>
-                void previewBulkRemoveOverlapping(phrases)
-              }
-              mutationsAllowed={mutationsAllowed}
-              removeBusyPhrase={
-                busy && busy.startsWith("rm-preview:")
-                  ? busy.slice("rm-preview:".length)
-                  : busy && busy.startsWith("rm:")
-                    ? busy.slice("rm:".length)
-                    : null
-              }
-              // Disable the header bulk action while a bulk-remove dry-run
-              // is in flight or its preview panel is already open, so a
-              // second click can't stack a duplicate request on top of an
-              // existing one.
-              bulkOverlappingBusy={busy === "bulk-preview" || bulkPreview !== null}
-              // Task #453 — surface the combined "would un-flag N reports"
-              // hint next to the bulk button when every eligible overlap
-              // phrase already has a fresh entry in the per-row remove-
-              // impact cache (Task #246). The cache is keyed by phrase +
-              // production-scan limit + active-list version, so a single
-              // miss (or a stale-version eviction) collapses the hint
-              // back to nothing — no extra request, no spinner. Sums the
-              // same corpus + production `validDetectionsLost` figures the
-              // single-phrase preview rounds up for its red-banner text,
-              // so the inline hint matches what the bulk preview will
-              // show once the reviewer opens it.
-              getCachedRemoveValidLost={(phrase) => {
-                const entry = removeDryRunCacheRef.current.getEntry(
-                  phrase,
-                  effectiveProductionScanLimit,
-                  handwavyActiveListVersion,
-                );
-                if (!entry) return undefined;
-                const corpusLost =
-                  entry.response.dryRunImpact.corpus.validDetectionsLost;
-                const productionLost =
-                  entry.response.dryRunImpact.production?.validDetectionsLost ??
-                  0;
-                return corpusLost + productionLost;
-              }}
-            />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <PreviewMatchBlock
-                kind="curated"
-                title="Curated benchmark"
-                subtitle={`${preview.matches.corpusSize} fixtures`}
-                matches={preview.matches}
-                emptyHint="No GREEN/YELLOW curated fixtures would be flagged"
-              />
-              {preview.productionMatches ? (
-                <PreviewMatchBlock
-                  kind="production"
-                  title="Production archive"
-                  subtitle={
-                    preview.productionLimit != null
-                      ? `last ${preview.productionMatches.corpusSize} of up to ${preview.productionLimit} reports`
-                      : `last ${preview.productionMatches.corpusSize} reports`
-                  }
-                  matches={preview.productionMatches}
-                  emptyHint="No GREEN/YELLOW production reports would be flagged"
-                />
-              ) : (
-                <div
-                  className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
-                  data-testid="handwavy-preview-production-error"
-                >
-                  <div className="font-semibold flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    Production archive scan unavailable
-                  </div>
-                  <div className="mt-1 text-amber-100/80">
-                    {preview.productionError ??
-                      "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="flex justify-end gap-2 pt-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleCancelPreview}
-                disabled={busy === "confirm"}
-                data-testid="handwavy-preview-cancel"
-              >
-                Back out
-              </Button>
-              {(() => {
-                const previewConfirmReason = describeHandwavyDisabledReason({
-                  mutationsAllowed,
-                  cooldownActive: cooldown.active,
-                  cooldownSecondsRemaining: cooldown.secondsRemaining,
-                  inFlight: busy === "confirm",
-                  inFlightLabel:
-                    "Adding the previewed phrase — wait for it to finish.",
-                });
-                const previewConfirmHintId = previewConfirmReason
-                  ? "handwavy-preview-confirm-disabled-hint-id"
-                  : undefined;
-                return (
-                  <>
-                    <Button
-                      size="sm"
-                      variant={hasWarning ? "destructive" : "default"}
-                      onClick={handleConfirmPreview}
-                      disabled={busy === "confirm" || cooldown.active || !mutationsAllowed}
-                      title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                      data-testid="handwavy-preview-confirm"
-                      data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                      aria-describedby={previewConfirmHintId}
-                    >
-                      {cooldown.active
-                        ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
-                        : busy === "confirm"
-                        ? "Adding…"
-                        : hasWarning
-                        ? "Add anyway"
-                        : "Confirm add"}
-                    </Button>
-                    {previewConfirmHintId && (
-                      <div className="basis-full">
-                        <HandwavyDisabledHint
-                          id={previewConfirmHintId}
-                          reason={previewConfirmReason}
-                          testId="handwavy-preview-confirm-disabled-hint"
-                        />
+                  <PreviewOverlapsBlock
+                    overlaps={preview.overlaps}
+                    candidate={preview.phrase}
+                    onJumpToActivePhrase={jumpToActivePhrase}
+                    // Task #226 — route the "Remove existing" quick-action through
+                    // the same entry point the per-row trash button uses so the
+                    // thrash gate (Task #139) AND the impact-preview dialog
+                    // (Task #173) both fire exactly the way they would for a
+                    // hand-clicked row. Cycles are looked up from the same
+                    // `thrashByPhrase` map the active list uses; if the colliding
+                    // phrase isn't found in the active list (shouldn't happen,
+                    // but the overlap snapshot could outlive a concurrent remove)
+                    // we pass an empty array so the request still flows through
+                    // the normal preview rather than failing closed.
+                    onRequestRemoveExisting={(phrase) =>
+                      requestRemove(phrase, thrashByPhrase.get(phrase) ?? [])
+                    }
+                    // Task #315 — route the header "Remove all overlapping" action
+                    // through a dedicated handler that pre-fills the existing
+                    // bulk-remove dry-run panel with the eligible overlap phrases.
+                    // The reviewer then sees the same combined corpus + production
+                    // impact summary the regular bulk-remove flow uses and confirms
+                    // once instead of firing one single-phrase dialog per overlap.
+                    onRequestRemoveAllOverlapping={(phrases) =>
+                      void previewBulkRemoveOverlapping(phrases)
+                    }
+                    mutationsAllowed={mutationsAllowed}
+                    removeBusyPhrase={
+                      busy && busy.startsWith("rm-preview:")
+                        ? busy.slice("rm-preview:".length)
+                        : busy && busy.startsWith("rm:")
+                          ? busy.slice("rm:".length)
+                          : null
+                    }
+                    // Disable the header bulk action while a bulk-remove dry-run
+                    // is in flight or its preview panel is already open, so a
+                    // second click can't stack a duplicate request on top of an
+                    // existing one.
+                    bulkOverlappingBusy={
+                      busy === "bulk-preview" || bulkPreview !== null
+                    }
+                    // Task #453 — surface the combined "would un-flag N reports"
+                    // hint next to the bulk button when every eligible overlap
+                    // phrase already has a fresh entry in the per-row remove-
+                    // impact cache (Task #246). The cache is keyed by phrase +
+                    // production-scan limit + active-list version, so a single
+                    // miss (or a stale-version eviction) collapses the hint
+                    // back to nothing — no extra request, no spinner. Sums the
+                    // same corpus + production `validDetectionsLost` figures the
+                    // single-phrase preview rounds up for its red-banner text,
+                    // so the inline hint matches what the bulk preview will
+                    // show once the reviewer opens it.
+                    getCachedRemoveValidLost={(phrase) => {
+                      const entry = removeDryRunCacheRef.current.getEntry(
+                        phrase,
+                        effectiveProductionScanLimit,
+                        handwavyActiveListVersion,
+                      );
+                      if (!entry) return undefined;
+                      const corpusLost =
+                        entry.response.dryRunImpact.corpus.validDetectionsLost;
+                      const productionLost =
+                        entry.response.dryRunImpact.production
+                          ?.validDetectionsLost ?? 0;
+                      return corpusLost + productionLost;
+                    }}
+                  />
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <PreviewMatchBlock
+                      kind="curated"
+                      title="Curated benchmark"
+                      subtitle={`${preview.matches.corpusSize} fixtures`}
+                      matches={preview.matches}
+                      emptyHint="No GREEN/YELLOW curated fixtures would be flagged"
+                    />
+                    {preview.productionMatches ? (
+                      <PreviewMatchBlock
+                        kind="production"
+                        title="Production archive"
+                        subtitle={
+                          preview.productionLimit != null
+                            ? `last ${preview.productionMatches.corpusSize} of up to ${preview.productionLimit} reports`
+                            : `last ${preview.productionMatches.corpusSize} reports`
+                        }
+                        matches={preview.productionMatches}
+                        emptyHint="No GREEN/YELLOW production reports would be flagged"
+                      />
+                    ) : (
+                      <div
+                        className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
+                        data-testid="handwavy-preview-production-error"
+                      >
+                        <div className="font-semibold flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Production archive scan unavailable
+                        </div>
+                        <div className="mt-1 text-amber-100/80">
+                          {preview.productionError ??
+                            "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
+                        </div>
                       </div>
                     )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-          );
-        })()}
-        {/* Task #154 — bulk-removal preview panel. Wires the calibration UI
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleCancelPreview}
+                      disabled={busy === "confirm"}
+                      data-testid="handwavy-preview-cancel"
+                    >
+                      Back out
+                    </Button>
+                    {(() => {
+                      const previewConfirmReason =
+                        describeHandwavyDisabledReason({
+                          mutationsAllowed,
+                          cooldownActive: cooldown.active,
+                          cooldownSecondsRemaining: cooldown.secondsRemaining,
+                          inFlight: busy === "confirm",
+                          inFlightLabel:
+                            "Adding the previewed phrase — wait for it to finish.",
+                        });
+                      const previewConfirmHintId = previewConfirmReason
+                        ? "handwavy-preview-confirm-disabled-hint-id"
+                        : undefined;
+                      return (
+                        <>
+                          <Button
+                            size="sm"
+                            variant={hasWarning ? "destructive" : "default"}
+                            onClick={handleConfirmPreview}
+                            disabled={
+                              busy === "confirm" ||
+                              cooldown.active ||
+                              !mutationsAllowed
+                            }
+                            title={
+                              !mutationsAllowed
+                                ? MUTATIONS_BLOCKED_TITLE
+                                : undefined
+                            }
+                            data-testid="handwavy-preview-confirm"
+                            data-mutations-blocked={
+                              !mutationsAllowed ? "true" : "false"
+                            }
+                            aria-describedby={previewConfirmHintId}
+                          >
+                            {cooldown.active
+                              ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
+                              : busy === "confirm"
+                                ? "Adding…"
+                                : hasWarning
+                                  ? "Add anyway"
+                                  : "Confirm add"}
+                          </Button>
+                          {previewConfirmHintId && (
+                            <div className="basis-full">
+                              <HandwavyDisabledHint
+                                id={previewConfirmHintId}
+                                reason={previewConfirmReason}
+                                testId="handwavy-preview-confirm-disabled-hint"
+                              />
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              );
+            })()}
+          {/* Task #154 — bulk-removal preview panel. Wires the calibration UI
             to the same DELETE `{phrases, dryRun: true}` endpoint the CLI's
             `--dry-run` flag consumes, so reviewers see the per-phrase
             outcomes (`wouldRemove` / `notFound` / `duplicateInBatch`) plus
@@ -7720,220 +8446,246 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             per-phrase outcomes list and a summary line at the top of the
             preview panel, mirroring the per-row warning so a bulk sweep
             can't quietly take out contentious phrases. */}
-        {bulkPreview && (() => {
-          const data = bulkPreview.data;
-          const corpus = data.dryRunImpact.corpus;
-          const production = data.dryRunImpact.production ?? null;
-          const productionError = data.dryRunImpact.productionError ?? null;
-          const productionLimit = data.dryRunImpact.productionLimit ?? null;
-          const corpusLost = corpus.validDetectionsLost;
-          const productionLost = production?.validDetectionsLost ?? 0;
-          const totalValidLost = corpusLost + productionLost;
-          const requiresAck = totalValidLost > 0;
-          // Task #178 — the reviewer can drop individual phrases inline
-          // from the per-phrase outcomes list, so the rendered counts
-          // ("Removal preview for N", "X would be removed", the Remove
-          // button label, etc.) MUST be recomputed against the current
-          // `requestedPhrases` instead of the original dry-run totals.
-          // Task #258 — the corpus + production impact figures (and the
-          // `requiresAck` red-banner gate) are kept honest by a
-          // debounced re-fetch in `dropPhraseFromBulkPreview` that
-          // replaces `bulkPreview.data` with a fresh dry-run scored
-          // against the surviving list, so once a refetch lands the
-          // values below already reflect the current selection. While
-          // the refetch is in flight the counts are recomputed
-          // optimistically from `requestedPhrases` (counts only) and
-          // the dry-run impact stays as the previous response — over-
-          // warning is the safe direction.
-          const requestedSet = new Set(bulkPreview.requestedPhrases);
-          const visibleResults: HandwavyPhraseBatchRemoveResultEntry[] =
-            data.results.filter((r: HandwavyPhraseBatchRemoveResultEntry) =>
-              requestedSet.has(r.raw),
-            );
-          const wouldRemove = visibleResults.filter((r) => r.removed).length;
-          const visibleNotFound = visibleResults.filter(
-            (r) => !r.removed && r.reason === "not-found",
-          ).length;
-          const visibleDuplicate = visibleResults.filter(
-            (r) => !r.removed && r.reason === "duplicate-in-batch",
-          ).length;
-          const visibleProjectedTotal = data.total - wouldRemove;
-          const selectionDrifted =
-            selectedInList.length !== bulkPreview.requestedPhrases.length ||
-            !bulkPreview.requestedPhrases.every((p) =>
-              selectedInList.includes(p),
-            );
-          const removalDisabled =
-            wouldRemove === 0 ||
-            busy === "bulk-remove" ||
-            (requiresAck && !bulkPreview.acknowledged) ||
-            cooldown.active;
-          // Task #151 — count selected phrases that have already been
-          // removed and reinstated >= HIGH_THRASH_MIN times. We surface
-          // this both as a summary banner and as per-row badges below so
-          // a reviewer batching 20 phrases can't miss the thrash signal.
-          const HIGH_THRASH_MIN = 2;
-          const highThrashCount = bulkPreview.requestedPhrases.reduce(
-            (acc, p) => {
-              const cycles = thrashByPhrase.get(p)?.length ?? 0;
-              return acc + (cycles >= HIGH_THRASH_MIN ? 1 : 0);
-            },
-            0,
-          );
-          return (
-          <div
-            className={cn(
-              "rounded-md border p-3 space-y-3 text-xs",
-              requiresAck
-                ? "border-red-500/40 bg-red-500/5"
-                : "border-amber-500/40 bg-amber-500/5",
-            )}
-            data-testid="handwavy-bulk-preview"
-          >
-            <div className="flex items-start gap-2">
-              {requiresAck ? (
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
-              ) : (
-                <Info className="w-4 h-4 mt-0.5 shrink-0 text-amber-300" />
-              )}
-              <div className="flex-1">
-                <div className="font-semibold text-foreground">
-                  Removal preview for {bulkPreview.requestedPhrases.length} phrase
-                  {bulkPreview.requestedPhrases.length === 1 ? "" : "s"}
-                </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Of these {bulkPreview.requestedPhrases.length}, <span className="text-foreground/90">{wouldRemove}</span> would be removed
-                  {visibleNotFound > 0 && (
-                    <>
-                      , <span className="text-foreground/90">{visibleNotFound}</span> {visibleNotFound === 1 ? "is" : "are"} not on the active list
-                    </>
+          {bulkPreview &&
+            (() => {
+              const data = bulkPreview.data;
+              const corpus = data.dryRunImpact.corpus;
+              const production = data.dryRunImpact.production ?? null;
+              const productionError = data.dryRunImpact.productionError ?? null;
+              const productionLimit = data.dryRunImpact.productionLimit ?? null;
+              const corpusLost = corpus.validDetectionsLost;
+              const productionLost = production?.validDetectionsLost ?? 0;
+              const totalValidLost = corpusLost + productionLost;
+              const requiresAck = totalValidLost > 0;
+              // Task #178 — the reviewer can drop individual phrases inline
+              // from the per-phrase outcomes list, so the rendered counts
+              // ("Removal preview for N", "X would be removed", the Remove
+              // button label, etc.) MUST be recomputed against the current
+              // `requestedPhrases` instead of the original dry-run totals.
+              // Task #258 — the corpus + production impact figures (and the
+              // `requiresAck` red-banner gate) are kept honest by a
+              // debounced re-fetch in `dropPhraseFromBulkPreview` that
+              // replaces `bulkPreview.data` with a fresh dry-run scored
+              // against the surviving list, so once a refetch lands the
+              // values below already reflect the current selection. While
+              // the refetch is in flight the counts are recomputed
+              // optimistically from `requestedPhrases` (counts only) and
+              // the dry-run impact stays as the previous response — over-
+              // warning is the safe direction.
+              const requestedSet = new Set(bulkPreview.requestedPhrases);
+              const visibleResults: HandwavyPhraseBatchRemoveResultEntry[] =
+                data.results.filter((r: HandwavyPhraseBatchRemoveResultEntry) =>
+                  requestedSet.has(r.raw),
+                );
+              const wouldRemove = visibleResults.filter(
+                (r) => r.removed,
+              ).length;
+              const visibleNotFound = visibleResults.filter(
+                (r) => !r.removed && r.reason === "not-found",
+              ).length;
+              const visibleDuplicate = visibleResults.filter(
+                (r) => !r.removed && r.reason === "duplicate-in-batch",
+              ).length;
+              const visibleProjectedTotal = data.total - wouldRemove;
+              const selectionDrifted =
+                selectedInList.length !== bulkPreview.requestedPhrases.length ||
+                !bulkPreview.requestedPhrases.every((p) =>
+                  selectedInList.includes(p),
+                );
+              const removalDisabled =
+                wouldRemove === 0 ||
+                busy === "bulk-remove" ||
+                (requiresAck && !bulkPreview.acknowledged) ||
+                cooldown.active;
+              // Task #151 — count selected phrases that have already been
+              // removed and reinstated >= HIGH_THRASH_MIN times. We surface
+              // this both as a summary banner and as per-row badges below so
+              // a reviewer batching 20 phrases can't miss the thrash signal.
+              const HIGH_THRASH_MIN = 2;
+              const highThrashCount = bulkPreview.requestedPhrases.reduce(
+                (acc, p) => {
+                  const cycles = thrashByPhrase.get(p)?.length ?? 0;
+                  return acc + (cycles >= HIGH_THRASH_MIN ? 1 : 0);
+                },
+                0,
+              );
+              return (
+                <div
+                  className={cn(
+                    "rounded-md border p-3 space-y-3 text-xs",
+                    requiresAck
+                      ? "border-red-500/40 bg-red-500/5"
+                      : "border-amber-500/40 bg-amber-500/5",
                   )}
-                  {visibleDuplicate > 0 && (
-                    <>
-                      , <span className="text-foreground/90">{visibleDuplicate}</span> {visibleDuplicate === 1 ? "is a duplicate" : "are duplicates"} in this batch
-                    </>
+                  data-testid="handwavy-bulk-preview"
+                >
+                  <div className="flex items-start gap-2">
+                    {requiresAck ? (
+                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+                    ) : (
+                      <Info className="w-4 h-4 mt-0.5 shrink-0 text-amber-300" />
+                    )}
+                    <div className="flex-1">
+                      <div className="font-semibold text-foreground">
+                        Removal preview for{" "}
+                        {bulkPreview.requestedPhrases.length} phrase
+                        {bulkPreview.requestedPhrases.length === 1 ? "" : "s"}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        Of these {bulkPreview.requestedPhrases.length},{" "}
+                        <span className="text-foreground/90">
+                          {wouldRemove}
+                        </span>{" "}
+                        would be removed
+                        {visibleNotFound > 0 && (
+                          <>
+                            ,{" "}
+                            <span className="text-foreground/90">
+                              {visibleNotFound}
+                            </span>{" "}
+                            {visibleNotFound === 1 ? "is" : "are"} not on the
+                            active list
+                          </>
+                        )}
+                        {visibleDuplicate > 0 && (
+                          <>
+                            ,{" "}
+                            <span className="text-foreground/90">
+                              {visibleDuplicate}
+                            </span>{" "}
+                            {visibleDuplicate === 1
+                              ? "is a duplicate"
+                              : "are duplicates"}{" "}
+                            in this batch
+                          </>
+                        )}
+                        . The active list would shrink from{" "}
+                        <span className="text-foreground/90">{data.total}</span>{" "}
+                        to{" "}
+                        <span className="text-foreground/90">
+                          {visibleProjectedTotal}
+                        </span>{" "}
+                        phrases. Nothing has been removed yet.
+                      </div>
+                    </div>
+                  </div>
+                  {highThrashCount > 0 && (
+                    <div
+                      className="flex items-start gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200"
+                      data-testid="handwavy-bulk-preview-thrash-summary"
+                    >
+                      <RotateCcw className="w-3 h-3 mt-0.5 shrink-0 text-amber-300" />
+                      <span>
+                        {highThrashCount} of{" "}
+                        {bulkPreview.requestedPhrases.length} selected phrase
+                        {bulkPreview.requestedPhrases.length === 1
+                          ? ""
+                          : "s"}{" "}
+                        {highThrashCount === 1 ? "has" : "have"} been removed
+                        and reinstated {HIGH_THRASH_MIN}+ times — flagged below.
+                      </span>
+                    </div>
                   )}
-                  . The active list would shrink from{" "}
-                  <span className="text-foreground/90">{data.total}</span> to{" "}
-                  <span className="text-foreground/90">{visibleProjectedTotal}</span>{" "}
-                  phrases. Nothing has been removed yet.
-                </div>
-              </div>
-            </div>
-            {highThrashCount > 0 && (
-              <div
-                className="flex items-start gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200"
-                data-testid="handwavy-bulk-preview-thrash-summary"
-              >
-                <RotateCcw className="w-3 h-3 mt-0.5 shrink-0 text-amber-300" />
-                <span>
-                  {highThrashCount} of {bulkPreview.requestedPhrases.length} selected phrase
-                  {bulkPreview.requestedPhrases.length === 1 ? "" : "s"}{" "}
-                  {highThrashCount === 1 ? "has" : "have"} been removed and reinstated{" "}
-                  {HIGH_THRASH_MIN}+ times — flagged below.
-                </span>
-              </div>
-            )}
-            {/* Task #375 — between the per-row drop click and the
+                  {/* Task #375 — between the per-row drop click and the
                 debounced re-fetch landing, the impact figures below are
                 stale-by-one-drop. Surface a small inline hint so the
                 live re-scoring is visible and a reviewer who confirms
                 in that window knows newer numbers are inbound (the
                 confirm itself still commits the surviving list — only
                 the visual feedback is new). */}
-            {bulkPreviewRefreshing && (
-              <div
-                className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
-                data-testid="handwavy-bulk-preview-refreshing"
-                role="status"
-                aria-live="polite"
-              >
-                <RefreshCw className="w-3 h-3 animate-spin" />
-                <span>refreshing impact…</span>
-              </div>
-            )}
-            <div
-              className="grid grid-cols-1 lg:grid-cols-2 gap-3"
-              data-testid="handwavy-bulk-preview-impact"
-            >
-              <BulkRemovalImpactBlock
-                kind="curated"
-                title="Curated benchmark"
-                subtitle={`${corpus.corpusSize} fixtures`}
-                impact={corpus}
-                emptyHint="No curated detections would be lost"
-              />
-              {production ? (
-                <BulkRemovalImpactBlock
-                  kind="production"
-                  title="Production archive"
-                  subtitle={
-                    productionLimit != null
-                      ? `last ${production.corpusSize} of up to ${productionLimit} reports`
-                      : `last ${production.corpusSize} reports`
-                  }
-                  impact={production}
-                  emptyHint="No production detections would be lost"
-                  productionLimit={productionLimit}
-                  // Task #464 — wire up the in-banner rescan affordance
-                  // for the coverage-gap notice so reviewers can widen
-                  // the production-scan window to its cap and re-run
-                  // the bulk-remove dry-run without leaving the panel.
-                  // Only the bulk-preview caller wires these in; the
-                  // per-row Trash and edit-rename callers omit them so
-                  // their banners stay informational-only.
-                  onRescanFullArchive={rescanBulkPreviewFullArchive}
-                  rescanning={bulkPreviewRescanningFullArchive}
-                  rescanCap={CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}
-                />
-              ) : (
-                <div
-                  className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
-                  data-testid="handwavy-bulk-preview-production-error"
-                >
-                  <div className="font-semibold flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    Production archive scan unavailable
+                  {bulkPreviewRefreshing && (
+                    <div
+                      className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+                      data-testid="handwavy-bulk-preview-refreshing"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>refreshing impact…</span>
+                    </div>
+                  )}
+                  <div
+                    className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                    data-testid="handwavy-bulk-preview-impact"
+                  >
+                    <BulkRemovalImpactBlock
+                      kind="curated"
+                      title="Curated benchmark"
+                      subtitle={`${corpus.corpusSize} fixtures`}
+                      impact={corpus}
+                      emptyHint="No curated detections would be lost"
+                    />
+                    {production ? (
+                      <BulkRemovalImpactBlock
+                        kind="production"
+                        title="Production archive"
+                        subtitle={
+                          productionLimit != null
+                            ? `last ${production.corpusSize} of up to ${productionLimit} reports`
+                            : `last ${production.corpusSize} reports`
+                        }
+                        impact={production}
+                        emptyHint="No production detections would be lost"
+                        productionLimit={productionLimit}
+                        // Task #464 — wire up the in-banner rescan affordance
+                        // for the coverage-gap notice so reviewers can widen
+                        // the production-scan window to its cap and re-run
+                        // the bulk-remove dry-run without leaving the panel.
+                        // Only the bulk-preview caller wires these in; the
+                        // per-row Trash and edit-rename callers omit them so
+                        // their banners stay informational-only.
+                        onRescanFullArchive={rescanBulkPreviewFullArchive}
+                        rescanning={bulkPreviewRescanningFullArchive}
+                        rescanCap={CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}
+                      />
+                    ) : (
+                      <div
+                        className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
+                        data-testid="handwavy-bulk-preview-production-error"
+                      >
+                        <div className="font-semibold flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Production archive scan unavailable
+                        </div>
+                        <div className="mt-1 text-amber-100/80">
+                          {productionError ??
+                            "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-1 text-amber-100/80">
-                    {productionError ??
-                      "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
-                  </div>
-                </div>
-              )}
-            </div>
-            {/* Task #376 — surface non-abort failures of the post-drop
+                  {/* Task #376 — surface non-abort failures of the post-drop
                 debounced dry-run re-fetch. The previous response's
                 impact figures stay rendered above (over-warning is the
                 safe direction) but a small inline hint tells the
                 reviewer the numbers didn't refresh against the current
                 `requestedPhrases` list, with a Retry button that
                 re-fires the dry-run on demand. */}
-            {bulkPreviewRefetchFailed && (
-              <div
-                className="flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100"
-                data-testid="handwavy-bulk-preview-refetch-failed"
-              >
-                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
-                <div className="flex-1">
-                  Couldn't refresh impact — showing the last estimate.
-                  The figures above may be stale relative to your current
-                  selection.
-                </div>
-                <button
-                  type="button"
-                  onClick={retryBulkPreviewRefetch}
-                  className="shrink-0 inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-100 hover:bg-amber-500/20 hover:text-amber-50 focus:outline-none focus:ring-1 focus:ring-amber-300/60"
-                  data-testid="handwavy-bulk-preview-refetch-retry"
-                  aria-label="Retry refreshing the removal impact estimate"
-                  title="Retry the impact dry-run"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  Retry
-                </button>
-              </div>
-            )}
-            {/* Task #344 — render the per-tier `sampleMatches` inline so a
+                  {bulkPreviewRefetchFailed && (
+                    <div
+                      className="flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100"
+                      data-testid="handwavy-bulk-preview-refetch-failed"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
+                      <div className="flex-1">
+                        Couldn't refresh impact — showing the last estimate. The
+                        figures above may be stale relative to your current
+                        selection.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={retryBulkPreviewRefetch}
+                        className="shrink-0 inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-100 hover:bg-amber-500/20 hover:text-amber-50 focus:outline-none focus:ring-1 focus:ring-amber-300/60"
+                        data-testid="handwavy-bulk-preview-refetch-retry"
+                        aria-label="Retry refreshing the removal impact estimate"
+                        title="Retry the impact dry-run"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                  {/* Task #344 — render the per-tier `sampleMatches` inline so a
                 reviewer running a bulk retire sees the same affordance the
                 per-row Trash preview added in Task #245: curated fixture +
                 production report IDs grouped by tier with the production
@@ -7943,369 +8695,409 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 DOM entirely when the dry-run returned no samples on
                 either side, so zero-impact previews keep their lean
                 visual footprint. */}
-            {(corpus.sampleMatches.length > 0 ||
-              (production?.sampleMatches.length ?? 0) > 0) && (
-              <div
-                className="grid grid-cols-1 lg:grid-cols-2 gap-3"
-                data-testid="handwavy-bulk-preview-matches"
-              >
-                {corpus.sampleMatches.length > 0 && (
-                  <HandwavyRemovePreviewMatches
-                    kind="curated"
-                    title={`Curated fixtures that would lose their flag (${corpus.sampleMatches.length})`}
-                    matches={corpus.sampleMatches}
-                  />
-                )}
-                {production && production.sampleMatches.length > 0 && (
-                  <HandwavyRemovePreviewMatches
-                    kind="production"
-                    title={`Production reports that would lose their flag (${production.sampleMatches.length})`}
-                    matches={production.sampleMatches}
-                  />
-                )}
-              </div>
-            )}
-            <details
-              className="text-[11px]"
-              data-testid="handwavy-bulk-preview-results-details"
-              open={bulkPreviewOutcomesOpen}
-              onToggle={(e) =>
-                setBulkPreviewOutcomesOpen(e.currentTarget.open)
-              }
-            >
-              <summary className="cursor-pointer text-muted-foreground/80 hover:text-foreground/80 select-none">
-                Per-phrase outcomes ({visibleResults.length})
-              </summary>
-              <ul
-                ref={bulkPreviewResultsRef}
-                className="mt-1 max-h-48 overflow-y-auto space-y-0.5 border-l border-border/30 pl-2"
-                data-testid="handwavy-bulk-preview-results"
-              >
-                {visibleResults.map((r, idx) => {
-                  const cfg = r.removed
-                    ? {
-                        label: "would remove",
-                        color: "text-emerald-400",
-                        icon: <CheckCircle2 className="w-3 h-3" />,
-                      }
-                    : r.reason === "duplicate-in-batch"
-                      ? {
-                          label: "duplicate",
-                          color: "text-amber-400",
-                          icon: <AlertTriangle className="w-3 h-3" />,
-                        }
-                      : {
-                          label: "not-found",
-                          color: "text-yellow-400",
-                          icon: <AlertTriangle className="w-3 h-3" />,
-                        };
-                  // Task #151 — flag rows whose phrase has >=2 completed
-                  // remove+reinstate cycles so a reviewer can spot
-                  // contentious phrases inside this preview list too.
-                  const cycleCount = thrashByPhrase.get(r.raw)?.length ?? 0;
-                  const isHighThrash = cycleCount >= HIGH_THRASH_MIN;
-                  return (
-                    <li
-                      key={`${r.raw}-${idx}`}
-                      className="flex items-start gap-2 text-[11px]"
-                      data-testid={
-                        isHighThrash
-                          ? "handwavy-bulk-preview-result-row-thrash"
-                          : "handwavy-bulk-preview-result-row"
-                      }
-                      data-outcome={r.removed ? "would-remove" : r.reason ?? "unknown"}
+                  {(corpus.sampleMatches.length > 0 ||
+                    (production?.sampleMatches.length ?? 0) > 0) && (
+                    <div
+                      className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                      data-testid="handwavy-bulk-preview-matches"
                     >
-                      <span className={cn("flex items-center gap-1 w-28 shrink-0", cfg.color)}>
-                        {cfg.icon}
-                        <span className="uppercase tracking-wide font-bold text-[9px]">
-                          {cfg.label}
-                        </span>
-                      </span>
-                      <span className="font-mono text-foreground/80 break-all flex-1">
-                        {r.raw}
-                      </span>
-                      {isHighThrash && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] border-amber-500/40 text-amber-300 font-sans shrink-0"
-                          data-testid="handwavy-bulk-preview-thrash-badge"
-                          aria-label={`Removed and reinstated ${cycleCount} time${cycleCount === 1 ? "" : "s"}`}
-                        >
-                          <RotateCcw className="w-3 h-3 mr-1" />
-                          {cycleCount}× cycles
-                        </Badge>
+                      {corpus.sampleMatches.length > 0 && (
+                        <HandwavyRemovePreviewMatches
+                          kind="curated"
+                          title={`Curated fixtures that would lose their flag (${corpus.sampleMatches.length})`}
+                          matches={corpus.sampleMatches}
+                        />
                       )}
-                      {/* Task #178 — per-row dismiss button. Lets the
+                      {production && production.sampleMatches.length > 0 && (
+                        <HandwavyRemovePreviewMatches
+                          kind="production"
+                          title={`Production reports that would lose their flag (${production.sampleMatches.length})`}
+                          matches={production.sampleMatches}
+                        />
+                      )}
+                    </div>
+                  )}
+                  <details
+                    className="text-[11px]"
+                    data-testid="handwavy-bulk-preview-results-details"
+                    open={bulkPreviewOutcomesOpen}
+                    onToggle={(e) =>
+                      setBulkPreviewOutcomesOpen(e.currentTarget.open)
+                    }
+                  >
+                    <summary className="cursor-pointer text-muted-foreground/80 hover:text-foreground/80 select-none">
+                      Per-phrase outcomes ({visibleResults.length})
+                    </summary>
+                    <ul
+                      ref={bulkPreviewResultsRef}
+                      className="mt-1 max-h-48 overflow-y-auto space-y-0.5 border-l border-border/30 pl-2"
+                      data-testid="handwavy-bulk-preview-results"
+                    >
+                      {visibleResults.map((r, idx) => {
+                        const cfg = r.removed
+                          ? {
+                              label: "would remove",
+                              color: "text-emerald-400",
+                              icon: <CheckCircle2 className="w-3 h-3" />,
+                            }
+                          : r.reason === "duplicate-in-batch"
+                            ? {
+                                label: "duplicate",
+                                color: "text-amber-400",
+                                icon: <AlertTriangle className="w-3 h-3" />,
+                              }
+                            : {
+                                label: "not-found",
+                                color: "text-yellow-400",
+                                icon: <AlertTriangle className="w-3 h-3" />,
+                              };
+                        // Task #151 — flag rows whose phrase has >=2 completed
+                        // remove+reinstate cycles so a reviewer can spot
+                        // contentious phrases inside this preview list too.
+                        const cycleCount =
+                          thrashByPhrase.get(r.raw)?.length ?? 0;
+                        const isHighThrash = cycleCount >= HIGH_THRASH_MIN;
+                        return (
+                          <li
+                            key={`${r.raw}-${idx}`}
+                            className="flex items-start gap-2 text-[11px]"
+                            data-testid={
+                              isHighThrash
+                                ? "handwavy-bulk-preview-result-row-thrash"
+                                : "handwavy-bulk-preview-result-row"
+                            }
+                            data-outcome={
+                              r.removed
+                                ? "would-remove"
+                                : (r.reason ?? "unknown")
+                            }
+                          >
+                            <span
+                              className={cn(
+                                "flex items-center gap-1 w-28 shrink-0",
+                                cfg.color,
+                              )}
+                            >
+                              {cfg.icon}
+                              <span className="uppercase tracking-wide font-bold text-[9px]">
+                                {cfg.label}
+                              </span>
+                            </span>
+                            <span className="font-mono text-foreground/80 break-all flex-1">
+                              {r.raw}
+                            </span>
+                            {isHighThrash && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] border-amber-500/40 text-amber-300 font-sans shrink-0"
+                                data-testid="handwavy-bulk-preview-thrash-badge"
+                                aria-label={`Removed and reinstated ${cycleCount} time${cycleCount === 1 ? "" : "s"}`}
+                              >
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                {cycleCount}× cycles
+                              </Badge>
+                            )}
+                            {/* Task #178 — per-row dismiss button. Lets the
                           reviewer drop just this phrase from the pending
                           batch (e.g., the one high-thrash entry in 20)
                           without backing out and re-ticking everything
                           else. Dropping the last phrase closes the
                           panel — see `dropPhraseFromBulkPreview`. */}
-                      <button
-                        type="button"
-                        onClick={() => dropPhraseFromBulkPreview(r.raw)}
-                        disabled={busy === "bulk-remove"}
-                        className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-foreground hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-foreground/30 disabled:opacity-40 disabled:cursor-not-allowed"
-                        data-testid="handwavy-bulk-preview-result-drop"
-                        data-phrase={r.raw}
-                        aria-label={`Drop "${r.raw}" from this batch`}
-                        title="Drop this phrase from the batch"
-                      >
-                        <XIcon className="w-3 h-3" />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </details>
-            {selectionDrifted && (
-              <div
-                className="text-[11px] text-amber-200 italic flex items-start gap-1"
-                data-testid="handwavy-bulk-preview-stale"
-              >
-                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-                <span className="flex-1">
-                  Selection has changed since this preview was generated. Re-preview to refresh — confirming will still apply to the {bulkPreview.requestedPhrases.length} phrase
-                  {bulkPreview.requestedPhrases.length === 1 ? "" : "s"} shown above.
-                </span>
-                {/* Task #502 — one-click in-place refresh of the bulk-remove
+                            <button
+                              type="button"
+                              onClick={() => dropPhraseFromBulkPreview(r.raw)}
+                              disabled={busy === "bulk-remove"}
+                              className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-foreground hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-foreground/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                              data-testid="handwavy-bulk-preview-result-drop"
+                              data-phrase={r.raw}
+                              aria-label={`Drop "${r.raw}" from this batch`}
+                              title="Drop this phrase from the batch"
+                            >
+                              <XIcon className="w-3 h-3" />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </details>
+                  {selectionDrifted && (
+                    <div
+                      className="text-[11px] text-amber-200 italic flex items-start gap-1"
+                      data-testid="handwavy-bulk-preview-stale"
+                    >
+                      <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                      <span className="flex-1">
+                        Selection has changed since this preview was generated.
+                        Re-preview to refresh — confirming will still apply to
+                        the {bulkPreview.requestedPhrases.length} phrase
+                        {bulkPreview.requestedPhrases.length === 1
+                          ? ""
+                          : "s"}{" "}
+                        shown above.
+                      </span>
+                      {/* Task #502 — one-click in-place refresh of the bulk-remove
                     dry-run snapshot, mirroring the Task #354 affordance on
                     the per-batch reinstate preview. Re-runs the same handler
                     the outer "Remove selected" button uses so the captured
                     outcomes + counts catch up to the currently-selected
                     phrase set without forcing the reviewer to back out and
                     re-tick the active list. */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200 shrink-0"
-                  disabled={
-                    selectedInList.length === 0 ||
-                    busy === "bulk-remove" ||
-                    busy === "bulk-preview" ||
-                    !mutationsAllowed
-                  }
-                  title={
-                    !mutationsAllowed
-                      ? MUTATIONS_BLOCKED_TITLE
-                      : undefined
-                  }
-                  onClick={handlePreviewBulkRemove}
-                  data-testid="handwavy-bulk-preview-stale-repreview"
-                  data-mutations-blocked={
-                    !mutationsAllowed ? "true" : "false"
-                  }
-                  aria-label="Re-preview removal to refresh the snapshot"
-                >
-                  <RefreshCw className="w-3 h-3 mr-1" />
-                  {busy === "bulk-preview" ? "Refreshing…" : "Re-preview"}
-                </Button>
-              </div>
-            )}
-            {requiresAck ? (
-              <label
-                className="flex items-start gap-2 text-[11px] text-red-100 cursor-pointer select-none"
-                data-testid="handwavy-bulk-preview-ack-label"
-              >
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-red-500"
-                  checked={bulkPreview.acknowledged}
-                  onChange={(e) => setBulkPreviewAcknowledged(e.target.checked)}
-                  data-testid="handwavy-bulk-preview-ack"
-                  aria-label="I understand legitimate detections would be lost"
-                />
-                <span>
-                  I understand this would un-flag{" "}
-                  <span className="font-semibold">{totalValidLost}</span>{" "}
-                  legitimately-flagged hand-wavy {totalValidLost === 1 ? "report" : "reports"}
-                  {corpusLost > 0 && productionLost > 0
-                    ? ` (${corpusLost} curated + ${productionLost} production)`
-                    : corpusLost > 0
-                      ? ` in the curated benchmark corpus`
-                      : ` in the recent production sample`}{" "}
-                  and proceed anyway.
-                </span>
-              </label>
-            ) : wouldRemove > 0 ? (
-              <div className="text-[11px] text-emerald-200 flex items-start gap-1">
-                <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0" />
-                No legitimate hand-wavy detections would be lost. Safe to proceed.
-              </div>
-            ) : (
-              <div className="text-[11px] text-amber-200 flex items-start gap-1">
-                <Info className="w-3 h-3 mt-0.5 shrink-0" />
-                Nothing in this batch would be removed (every phrase is already off the active list or duplicated). Cancel and adjust your selection.
-              </div>
-            )}
-            <div className="flex justify-end gap-2 pt-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={cancelBulkPreview}
-                disabled={busy === "bulk-remove"}
-                data-testid="handwavy-bulk-preview-cancel"
-              >
-                Back out
-              </Button>
-              {(() => {
-                const bulkPreviewConfirmReason = describeHandwavyDisabledReason({
-                  mutationsAllowed,
-                  cooldownActive: cooldown.active,
-                  cooldownSecondsRemaining: cooldown.secondsRemaining,
-                  inFlight: busy === "bulk-remove",
-                  inFlightLabel:
-                    "Bulk removal is in progress — wait for it to finish.",
-                  extraReason:
-                    wouldRemove === 0
-                      ? "Nothing left to remove in this preview."
-                      : requiresAck && !bulkPreview.acknowledged
-                        ? "Tick the acknowledgment checkbox above to confirm losing the listed detections."
-                        : null,
-                });
-                const bulkPreviewConfirmHintId = bulkPreviewConfirmReason
-                  ? "handwavy-bulk-preview-confirm-disabled-hint-id"
-                  : undefined;
-                return (
-                  <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200 shrink-0"
+                        disabled={
+                          selectedInList.length === 0 ||
+                          busy === "bulk-remove" ||
+                          busy === "bulk-preview" ||
+                          !mutationsAllowed
+                        }
+                        title={
+                          !mutationsAllowed
+                            ? MUTATIONS_BLOCKED_TITLE
+                            : undefined
+                        }
+                        onClick={handlePreviewBulkRemove}
+                        data-testid="handwavy-bulk-preview-stale-repreview"
+                        data-mutations-blocked={
+                          !mutationsAllowed ? "true" : "false"
+                        }
+                        aria-label="Re-preview removal to refresh the snapshot"
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        {busy === "bulk-preview" ? "Refreshing…" : "Re-preview"}
+                      </Button>
+                    </div>
+                  )}
+                  {requiresAck ? (
+                    <label
+                      className="flex items-start gap-2 text-[11px] text-red-100 cursor-pointer select-none"
+                      data-testid="handwavy-bulk-preview-ack-label"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-red-500"
+                        checked={bulkPreview.acknowledged}
+                        onChange={(e) =>
+                          setBulkPreviewAcknowledged(e.target.checked)
+                        }
+                        data-testid="handwavy-bulk-preview-ack"
+                        aria-label="I understand legitimate detections would be lost"
+                      />
+                      <span>
+                        I understand this would un-flag{" "}
+                        <span className="font-semibold">{totalValidLost}</span>{" "}
+                        legitimately-flagged hand-wavy{" "}
+                        {totalValidLost === 1 ? "report" : "reports"}
+                        {corpusLost > 0 && productionLost > 0
+                          ? ` (${corpusLost} curated + ${productionLost} production)`
+                          : corpusLost > 0
+                            ? ` in the curated benchmark corpus`
+                            : ` in the recent production sample`}{" "}
+                        and proceed anyway.
+                      </span>
+                    </label>
+                  ) : wouldRemove > 0 ? (
+                    <div className="text-[11px] text-emerald-200 flex items-start gap-1">
+                      <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0" />
+                      No legitimate hand-wavy detections would be lost. Safe to
+                      proceed.
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-amber-200 flex items-start gap-1">
+                      <Info className="w-3 h-3 mt-0.5 shrink-0" />
+                      Nothing in this batch would be removed (every phrase is
+                      already off the active list or duplicated). Cancel and
+                      adjust your selection.
+                    </div>
+                  )}
+                  <div className="flex justify-end gap-2 pt-1">
                     <Button
                       size="sm"
-                      variant={requiresAck ? "destructive" : "default"}
-                      onClick={confirmBulkRemoveFromPreview}
-                      disabled={removalDisabled || !mutationsAllowed}
-                      title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                      data-testid="handwavy-bulk-preview-confirm"
-                      data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                      aria-describedby={bulkPreviewConfirmHintId}
+                      variant="ghost"
+                      onClick={cancelBulkPreview}
+                      disabled={busy === "bulk-remove"}
+                      data-testid="handwavy-bulk-preview-cancel"
                     >
-                      {cooldown.active
-                        ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
-                        : busy === "bulk-remove"
-                        ? "Removing…"
-                        : wouldRemove === 0
-                          ? "Nothing to remove"
-                          : requiresAck
-                            ? `Remove ${wouldRemove} anyway`
-                            : `Remove ${wouldRemove} phrase${wouldRemove === 1 ? "" : "s"}`}
+                      Back out
                     </Button>
-                    {bulkPreviewConfirmHintId && (
-                      <div className="basis-full">
-                        <HandwavyDisabledHint
-                          id={bulkPreviewConfirmHintId}
-                          reason={bulkPreviewConfirmReason}
-                          testId="handwavy-bulk-preview-confirm-disabled-hint"
-                        />
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-          );
-        })()}
-        {/* Task #139 — confirm panel for high-thrash single removals. Only
+                    {(() => {
+                      const bulkPreviewConfirmReason =
+                        describeHandwavyDisabledReason({
+                          mutationsAllowed,
+                          cooldownActive: cooldown.active,
+                          cooldownSecondsRemaining: cooldown.secondsRemaining,
+                          inFlight: busy === "bulk-remove",
+                          inFlightLabel:
+                            "Bulk removal is in progress — wait for it to finish.",
+                          extraReason:
+                            wouldRemove === 0
+                              ? "Nothing left to remove in this preview."
+                              : requiresAck && !bulkPreview.acknowledged
+                                ? "Tick the acknowledgment checkbox above to confirm losing the listed detections."
+                                : null,
+                        });
+                      const bulkPreviewConfirmHintId = bulkPreviewConfirmReason
+                        ? "handwavy-bulk-preview-confirm-disabled-hint-id"
+                        : undefined;
+                      return (
+                        <>
+                          <Button
+                            size="sm"
+                            variant={requiresAck ? "destructive" : "default"}
+                            onClick={confirmBulkRemoveFromPreview}
+                            disabled={removalDisabled || !mutationsAllowed}
+                            title={
+                              !mutationsAllowed
+                                ? MUTATIONS_BLOCKED_TITLE
+                                : undefined
+                            }
+                            data-testid="handwavy-bulk-preview-confirm"
+                            data-mutations-blocked={
+                              !mutationsAllowed ? "true" : "false"
+                            }
+                            aria-describedby={bulkPreviewConfirmHintId}
+                          >
+                            {cooldown.active
+                              ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
+                              : busy === "bulk-remove"
+                                ? "Removing…"
+                                : wouldRemove === 0
+                                  ? "Nothing to remove"
+                                  : requiresAck
+                                    ? `Remove ${wouldRemove} anyway`
+                                    : `Remove ${wouldRemove} phrase${wouldRemove === 1 ? "" : "s"}`}
+                          </Button>
+                          {bulkPreviewConfirmHintId && (
+                            <div className="basis-full">
+                              <HandwavyDisabledHint
+                                id={bulkPreviewConfirmHintId}
+                                reason={bulkPreviewConfirmReason}
+                                testId="handwavy-bulk-preview-confirm-disabled-hint"
+                              />
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              );
+            })()}
+          {/* Task #139 — confirm panel for high-thrash single removals. Only
             shown when the trash button is pressed on a phrase with >=2
             completed remove+reinstate cycles, so reviewers see the prior
             disagreement before triggering what's likely cycle #N+1. */}
-        {removeConfirm && (
-          <div
-            className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-2 text-xs"
-            data-testid="handwavy-remove-confirm"
-          >
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
-              <div className="flex-1">
-                <div className="font-semibold text-foreground">
-                  Remove "{removeConfirm.phrase}" anyway?
-                </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  This phrase has already been removed and reinstated{" "}
-                  {removeConfirm.cycles.length}× — the next removal is more likely
-                  to get reverted again. Consider starting a discussion before
-                  flipping it once more.
+          {removeConfirm && (
+            <div
+              className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-2 text-xs"
+              data-testid="handwavy-remove-confirm"
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
+                <div className="flex-1">
+                  <div className="font-semibold text-foreground">
+                    Remove "{removeConfirm.phrase}" anyway?
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    This phrase has already been removed and reinstated{" "}
+                    {removeConfirm.cycles.length}× — the next removal is more
+                    likely to get reverted again. Consider starting a discussion
+                    before flipping it once more.
+                  </div>
                 </div>
               </div>
-            </div>
-            <ol
-              className="max-h-48 overflow-y-auto pl-2 border-l border-amber-500/30 space-y-1.5 text-[10px] leading-snug"
-              data-testid="handwavy-remove-confirm-cycles"
-            >
-              {removeConfirm.cycles.map((c, i) => (
-                <li key={`${c.removedAt}-${i}`} className="space-y-0.5">
-                  <div>
-                    <span className="text-muted-foreground">#{i + 1} removed:</span>{" "}
-                    {formatAuditTimestamp(c.removedAt) ?? "unknown date"}
-                    {" by "}
-                    <span className="text-foreground/90">{c.removedBy || "anonymous"}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">reinstated:</span>{" "}
-                    {formatAuditTimestamp(c.reinstatedAt) ?? "unknown date"}
-                    {" by "}
-                    <span className="text-foreground/90">{c.reinstatedBy || "anonymous"}</span>
-                  </div>
-                </li>
-              ))}
-            </ol>
-            <div className="flex justify-end gap-2 pt-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={cancelRemoveConfirm}
-                disabled={busy === `rm:${removeConfirm.phrase}`}
-                data-testid="handwavy-remove-confirm-cancel"
+              <ol
+                className="max-h-48 overflow-y-auto pl-2 border-l border-amber-500/30 space-y-1.5 text-[10px] leading-snug"
+                data-testid="handwavy-remove-confirm-cycles"
               >
-                Back out
-              </Button>
-              {(() => {
-                const removeConfirmReason = describeHandwavyDisabledReason({
-                  mutationsAllowed,
-                  inFlight:
-                    busy === `rm:${removeConfirm.phrase}` ||
-                    busy === `rm-preview:${removeConfirm.phrase}`,
-                  inFlightLabel:
-                    busy === `rm:${removeConfirm.phrase}`
-                      ? "Removing this phrase — wait for it to finish."
-                      : "Loading the removal preview — wait for it to finish.",
-                });
-                const removeConfirmHintId = removeConfirmReason
-                  ? "handwavy-remove-confirm-go-disabled-hint-id"
-                  : undefined;
-                return (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={confirmRemoveAnyway}
-                      disabled={
-                        busy === `rm:${removeConfirm.phrase}` ||
-                        busy === `rm-preview:${removeConfirm.phrase}` ||
-                        !mutationsAllowed
-                      }
-                      title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                      data-testid="handwavy-remove-confirm-go"
-                      data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                      aria-describedby={removeConfirmHintId}
-                    >
-                      Remove anyway
-                    </Button>
-                    {removeConfirmHintId && (
-                      <div className="basis-full">
-                        <HandwavyDisabledHint
-                          id={removeConfirmHintId}
-                          reason={removeConfirmReason}
-                          testId="handwavy-remove-confirm-go-disabled-hint"
-                        />
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
+                {removeConfirm.cycles.map((c, i) => (
+                  <li key={`${c.removedAt}-${i}`} className="space-y-0.5">
+                    <div>
+                      <span className="text-muted-foreground">
+                        #{i + 1} removed:
+                      </span>{" "}
+                      {formatAuditTimestamp(c.removedAt) ?? "unknown date"}
+                      {" by "}
+                      <span className="text-foreground/90">
+                        {c.removedBy || "anonymous"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">reinstated:</span>{" "}
+                      {formatAuditTimestamp(c.reinstatedAt) ?? "unknown date"}
+                      {" by "}
+                      <span className="text-foreground/90">
+                        {c.reinstatedBy || "anonymous"}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={cancelRemoveConfirm}
+                  disabled={busy === `rm:${removeConfirm.phrase}`}
+                  data-testid="handwavy-remove-confirm-cancel"
+                >
+                  Back out
+                </Button>
+                {(() => {
+                  const removeConfirmReason = describeHandwavyDisabledReason({
+                    mutationsAllowed,
+                    inFlight:
+                      busy === `rm:${removeConfirm.phrase}` ||
+                      busy === `rm-preview:${removeConfirm.phrase}`,
+                    inFlightLabel:
+                      busy === `rm:${removeConfirm.phrase}`
+                        ? "Removing this phrase — wait for it to finish."
+                        : "Loading the removal preview — wait for it to finish.",
+                  });
+                  const removeConfirmHintId = removeConfirmReason
+                    ? "handwavy-remove-confirm-go-disabled-hint-id"
+                    : undefined;
+                  return (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={confirmRemoveAnyway}
+                        disabled={
+                          busy === `rm:${removeConfirm.phrase}` ||
+                          busy === `rm-preview:${removeConfirm.phrase}` ||
+                          !mutationsAllowed
+                        }
+                        title={
+                          !mutationsAllowed
+                            ? MUTATIONS_BLOCKED_TITLE
+                            : undefined
+                        }
+                        data-testid="handwavy-remove-confirm-go"
+                        data-mutations-blocked={
+                          !mutationsAllowed ? "true" : "false"
+                        }
+                        aria-describedby={removeConfirmHintId}
+                      >
+                        Remove anyway
+                      </Button>
+                      {removeConfirmHintId && (
+                        <div className="basis-full">
+                          <HandwavyDisabledHint
+                            id={removeConfirmHintId}
+                            reason={removeConfirmReason}
+                            testId="handwavy-remove-confirm-go-disabled-hint"
+                          />
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
             </div>
-          </div>
-        )}
-        {/* Task #173 — single-phrase removal-impact preview panel. Shown
+          )}
+          {/* Task #173 — single-phrase removal-impact preview panel. Shown
             after the per-row Trash button issues a `DELETE {phrase,
             dryRun: true}` and the response indicates that valid
             hand-wavy detections WOULD be lost in the curated and/or
@@ -8315,65 +9107,67 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             behind an explicit acknowledgment checkbox. Zero-impact
             removals never reach this panel — they are fired in one
             click from `requestRemoveWithImpactPreview`. */}
-        {removePreview && (() => {
-          const { phrase, data, acknowledged, source, scannedAt } = removePreview;
-          const corpus = data.dryRunImpact.corpus;
-          const production = data.dryRunImpact.production ?? null;
-          const productionError = data.dryRunImpact.productionError;
-          const productionLimit = data.dryRunImpact.productionLimit;
-          const corpusLost = corpus.validDetectionsLost;
-          const productionLost = production?.validDetectionsLost ?? 0;
-          const totalValidLost = corpusLost + productionLost;
-          const requireAck = totalValidLost > 0;
-          const rescanInFlight = busy === `rm-rescan:${phrase}`;
-          const inFlight =
-            busy === `rm:${phrase}` ||
-            busy === `rm-preview:${phrase}` ||
-            // Task #494 — fold the dedicated re-scan key into the
-            // panel-wide `inFlight` so a mid-rescan reviewer can't
-            // confirm against half-replaced data. The button itself
-            // also reads `rescanInFlight` directly to render its own
-            // inline spinner / disabled state.
-            rescanInFlight;
-          // Task #349 — fresh-vs-cached badge for the preview header.
-          const sourceBadge = describeRemovePreviewSource(
-            source,
-            scannedAt,
-            removePreviewNow,
-          );
-          return (
-            <div
-              className="rounded-md border border-red-500/40 bg-red-500/5 p-3 space-y-3 text-xs"
-              data-testid="handwavy-remove-preview"
-            >
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
-                <div className="flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-semibold text-foreground">
-                      Remove "{phrase}"?
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-[9px] uppercase tracking-wide whitespace-nowrap",
-                          sourceBadge.tone === "fresh"
-                            ? "border-emerald-500/40 text-emerald-200"
-                            : "border-amber-500/40 text-amber-200",
-                        )}
-                        data-testid="handwavy-remove-preview-source"
-                        data-source={source}
-                        data-scanned-at={scannedAt}
-                        title={
-                          source === "fresh"
-                            ? "These impact numbers came from a fresh corpus + production-archive scan."
-                            : `Served from cache, scanned ${formatRemovePreviewScannedAgo(scannedAt, removePreviewNow)}. Adding, removing, reinstating, or editing any phrase invalidates the cache so the next Trash click re-scans.`
-                        }
-                      >
-                        {sourceBadge.label}
-                      </Badge>
-                      {/* Task #494 — explicit "Re-scan" affordance next to
+          {removePreview &&
+            (() => {
+              const { phrase, data, acknowledged, source, scannedAt } =
+                removePreview;
+              const corpus = data.dryRunImpact.corpus;
+              const production = data.dryRunImpact.production ?? null;
+              const productionError = data.dryRunImpact.productionError;
+              const productionLimit = data.dryRunImpact.productionLimit;
+              const corpusLost = corpus.validDetectionsLost;
+              const productionLost = production?.validDetectionsLost ?? 0;
+              const totalValidLost = corpusLost + productionLost;
+              const requireAck = totalValidLost > 0;
+              const rescanInFlight = busy === `rm-rescan:${phrase}`;
+              const inFlight =
+                busy === `rm:${phrase}` ||
+                busy === `rm-preview:${phrase}` ||
+                // Task #494 — fold the dedicated re-scan key into the
+                // panel-wide `inFlight` so a mid-rescan reviewer can't
+                // confirm against half-replaced data. The button itself
+                // also reads `rescanInFlight` directly to render its own
+                // inline spinner / disabled state.
+                rescanInFlight;
+              // Task #349 — fresh-vs-cached badge for the preview header.
+              const sourceBadge = describeRemovePreviewSource(
+                source,
+                scannedAt,
+                removePreviewNow,
+              );
+              return (
+                <div
+                  className="rounded-md border border-red-500/40 bg-red-500/5 p-3 space-y-3 text-xs"
+                  data-testid="handwavy-remove-preview"
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-semibold text-foreground">
+                          Remove "{phrase}"?
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[9px] uppercase tracking-wide whitespace-nowrap",
+                              sourceBadge.tone === "fresh"
+                                ? "border-emerald-500/40 text-emerald-200"
+                                : "border-amber-500/40 text-amber-200",
+                            )}
+                            data-testid="handwavy-remove-preview-source"
+                            data-source={source}
+                            data-scanned-at={scannedAt}
+                            title={
+                              source === "fresh"
+                                ? "These impact numbers came from a fresh corpus + production-archive scan."
+                                : `Served from cache, scanned ${formatRemovePreviewScannedAgo(scannedAt, removePreviewNow)}. Adding, removing, reinstating, or editing any phrase invalidates the cache so the next Trash click re-scans.`
+                            }
+                          >
+                            {sourceBadge.label}
+                          </Badge>
+                          {/* Task #494 — explicit "Re-scan" affordance next to
                           the cached badge. Only rendered while the panel
                           is showing a cached preview; once the re-scan
                           lands the badge flips to "Fresh scan" and this
@@ -8382,93 +9176,98 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                           button drives `rescanRemovePreview`, which uses
                           a dedicated busy key so its inline spinner /
                           disabled state stays scoped to this control. */}
-                      {source === "cached" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 px-2 text-[10px] gap-1 border-amber-500/40 text-amber-200 hover:text-amber-100"
-                          onClick={rescanRemovePreview}
-                          disabled={rescanInFlight || !mutationsAllowed}
-                          title={
-                            !mutationsAllowed
-                              ? MUTATIONS_BLOCKED_TITLE
-                              : "Force a fresh corpus + production-archive dry-run for this phrase."
-                          }
-                          data-testid="handwavy-remove-preview-rescan"
-                          data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                        >
-                          <RefreshCw
-                            className={cn(
-                              "w-3 h-3",
-                              rescanInFlight && "animate-spin",
-                            )}
-                            data-testid="handwavy-remove-preview-rescan-icon"
-                            data-spinning={rescanInFlight ? "true" : "false"}
-                          />
-                          {rescanInFlight ? "Re-scanning…" : "Re-scan"}
-                        </Button>
-                      )}
+                          {source === "cached" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-[10px] gap-1 border-amber-500/40 text-amber-200 hover:text-amber-100"
+                              onClick={rescanRemovePreview}
+                              disabled={rescanInFlight || !mutationsAllowed}
+                              title={
+                                !mutationsAllowed
+                                  ? MUTATIONS_BLOCKED_TITLE
+                                  : "Force a fresh corpus + production-archive dry-run for this phrase."
+                              }
+                              data-testid="handwavy-remove-preview-rescan"
+                              data-mutations-blocked={
+                                !mutationsAllowed ? "true" : "false"
+                              }
+                            >
+                              <RefreshCw
+                                className={cn(
+                                  "w-3 h-3",
+                                  rescanInFlight && "animate-spin",
+                                )}
+                                data-testid="handwavy-remove-preview-rescan-icon"
+                                data-spinning={
+                                  rescanInFlight ? "true" : "false"
+                                }
+                              />
+                              {rescanInFlight ? "Re-scanning…" : "Re-scan"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div
+                        className="text-[10px] text-muted-foreground mt-0.5"
+                        data-testid="handwavy-remove-preview-summary"
+                      >
+                        Removing this phrase would un-flag{" "}
+                        <span className="text-red-300 font-semibold">
+                          {totalValidLost}
+                        </span>{" "}
+                        valid hand-wavy detection
+                        {totalValidLost === 1 ? "" : "s"}
+                        {corpusLost > 0 && productionLost > 0
+                          ? ` (${corpusLost} curated + ${productionLost} production)`
+                          : corpusLost > 0
+                            ? " in the curated benchmark"
+                            : " in the production archive"}
+                        . Review the impact below before confirming.
+                      </div>
                     </div>
                   </div>
                   <div
-                    className="text-[10px] text-muted-foreground mt-0.5"
-                    data-testid="handwavy-remove-preview-summary"
+                    className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                    data-testid="handwavy-remove-preview-impact"
                   >
-                    Removing this phrase would un-flag{" "}
-                    <span className="text-red-300 font-semibold">
-                      {totalValidLost}
-                    </span>{" "}
-                    valid hand-wavy detection{totalValidLost === 1 ? "" : "s"}
-                    {corpusLost > 0 && productionLost > 0
-                      ? ` (${corpusLost} curated + ${productionLost} production)`
-                      : corpusLost > 0
-                        ? " in the curated benchmark"
-                        : " in the production archive"}
-                    . Review the impact below before confirming.
+                    <BulkRemovalImpactBlock
+                      kind="curated"
+                      title="Curated benchmark"
+                      subtitle={`${corpus.corpusSize} fixtures`}
+                      impact={corpus}
+                      emptyHint="No curated detections would be lost"
+                    />
+                    {production ? (
+                      <BulkRemovalImpactBlock
+                        kind="production"
+                        title="Production archive"
+                        subtitle={
+                          productionLimit != null
+                            ? `last ${production.corpusSize} of up to ${productionLimit} reports`
+                            : `last ${production.corpusSize} reports`
+                        }
+                        impact={production}
+                        emptyHint="No production detections would be lost"
+                        productionLimit={productionLimit}
+                      />
+                    ) : (
+                      <div
+                        className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
+                        data-testid="handwavy-remove-preview-production-error"
+                      >
+                        <div className="font-semibold flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Production archive scan unavailable
+                        </div>
+                        <div className="mt-1 text-amber-100/80">
+                          {productionError ??
+                            "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </div>
-              <div
-                className="grid grid-cols-1 lg:grid-cols-2 gap-3"
-                data-testid="handwavy-remove-preview-impact"
-              >
-                <BulkRemovalImpactBlock
-                  kind="curated"
-                  title="Curated benchmark"
-                  subtitle={`${corpus.corpusSize} fixtures`}
-                  impact={corpus}
-                  emptyHint="No curated detections would be lost"
-                />
-                {production ? (
-                  <BulkRemovalImpactBlock
-                    kind="production"
-                    title="Production archive"
-                    subtitle={
-                      productionLimit != null
-                        ? `last ${production.corpusSize} of up to ${productionLimit} reports`
-                        : `last ${production.corpusSize} reports`
-                    }
-                    impact={production}
-                    emptyHint="No production detections would be lost"
-                    productionLimit={productionLimit}
-                  />
-                ) : (
-                  <div
-                    className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
-                    data-testid="handwavy-remove-preview-production-error"
-                  >
-                    <div className="font-semibold flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Production archive scan unavailable
-                    </div>
-                    <div className="mt-1 text-amber-100/80">
-                      {productionError ??
-                        "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
-                    </div>
-                  </div>
-                )}
-              </div>
-              {/* Task #245 — render the per-tier `sampleMatches` inline so a
+                  {/* Task #245 — render the per-tier `sampleMatches` inline so a
                   reviewer can see the actual fixture / report identifiers
                   the dry-run would un-flag without leaving the page.
                   Production IDs link to the `/verify/:id` viewer in a new
@@ -8477,103 +9276,116 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   DOM entirely when the dry-run returned no samples on
                   either side, so zero-impact previews keep their lean
                   visual footprint. */}
-              {(corpus.sampleMatches.length > 0 ||
-                (production?.sampleMatches.length ?? 0) > 0) && (
-                <div
-                  className="grid grid-cols-1 lg:grid-cols-2 gap-3"
-                  data-testid="handwavy-remove-preview-matches"
-                >
-                  {corpus.sampleMatches.length > 0 && (
-                    <HandwavyRemovePreviewMatches
-                      kind="curated"
-                      title={`Curated fixtures that would lose their flag (${corpus.sampleMatches.length})`}
-                      matches={corpus.sampleMatches}
-                    />
-                  )}
-                  {production && production.sampleMatches.length > 0 && (
-                    <HandwavyRemovePreviewMatches
-                      kind="production"
-                      title={`Production reports that would lose their flag (${production.sampleMatches.length})`}
-                      matches={production.sampleMatches}
-                    />
-                  )}
-                </div>
-              )}
-              {requireAck && (
-                <label
-                  className="flex items-start gap-2 text-[11px] text-foreground/90 cursor-pointer select-none"
-                  data-testid="handwavy-remove-preview-ack-label"
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={acknowledged}
-                    onChange={(e) => setRemovePreviewAcknowledged(e.target.checked)}
-                    disabled={inFlight}
-                    data-testid="handwavy-remove-preview-ack"
-                  />
-                  <span>
-                    I understand this will un-flag {totalValidLost} valid
-                    hand-wavy detection{totalValidLost === 1 ? "" : "s"} and
-                    want to remove "{phrase}" anyway.
-                  </span>
-                </label>
-              )}
-              <div className="flex justify-end gap-2 pt-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={cancelRemovePreview}
-                  disabled={inFlight}
-                  data-testid="handwavy-remove-preview-cancel"
-                >
-                  Back out
-                </Button>
-                {(() => {
-                  const removePreviewReason = describeHandwavyDisabledReason({
-                    mutationsAllowed,
-                    inFlight,
-                    inFlightLabel:
-                      "Removing this phrase — wait for it to finish.",
-                    extraReason:
-                      requireAck && !acknowledged
-                        ? "Tick the acknowledgment checkbox above to confirm losing the listed detections."
-                        : null,
-                  });
-                  const removePreviewHintId = removePreviewReason
-                    ? "handwavy-remove-preview-confirm-disabled-hint-id"
-                    : undefined;
-                  return (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={confirmRemoveFromPreview}
-                        disabled={inFlight || (requireAck && !acknowledged) || !mutationsAllowed}
-                        title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                        data-testid="handwavy-remove-preview-confirm"
-                        data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                        aria-describedby={removePreviewHintId}
-                      >
-                        Remove anyway
-                      </Button>
-                      {removePreviewHintId && (
-                        <div className="basis-full">
-                          <HandwavyDisabledHint
-                            id={removePreviewHintId}
-                            reason={removePreviewReason}
-                            testId="handwavy-remove-preview-confirm-disabled-hint"
-                          />
-                        </div>
+                  {(corpus.sampleMatches.length > 0 ||
+                    (production?.sampleMatches.length ?? 0) > 0) && (
+                    <div
+                      className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                      data-testid="handwavy-remove-preview-matches"
+                    >
+                      {corpus.sampleMatches.length > 0 && (
+                        <HandwavyRemovePreviewMatches
+                          kind="curated"
+                          title={`Curated fixtures that would lose their flag (${corpus.sampleMatches.length})`}
+                          matches={corpus.sampleMatches}
+                        />
                       )}
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
-          );
-        })()}
-        {/* Task #237 / #332 — post-Trash Undo stack. Renders the most-
+                      {production && production.sampleMatches.length > 0 && (
+                        <HandwavyRemovePreviewMatches
+                          kind="production"
+                          title={`Production reports that would lose their flag (${production.sampleMatches.length})`}
+                          matches={production.sampleMatches}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {requireAck && (
+                    <label
+                      className="flex items-start gap-2 text-[11px] text-foreground/90 cursor-pointer select-none"
+                      data-testid="handwavy-remove-preview-ack-label"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={acknowledged}
+                        onChange={(e) =>
+                          setRemovePreviewAcknowledged(e.target.checked)
+                        }
+                        disabled={inFlight}
+                        data-testid="handwavy-remove-preview-ack"
+                      />
+                      <span>
+                        I understand this will un-flag {totalValidLost} valid
+                        hand-wavy detection{totalValidLost === 1 ? "" : "s"} and
+                        want to remove "{phrase}" anyway.
+                      </span>
+                    </label>
+                  )}
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={cancelRemovePreview}
+                      disabled={inFlight}
+                      data-testid="handwavy-remove-preview-cancel"
+                    >
+                      Back out
+                    </Button>
+                    {(() => {
+                      const removePreviewReason =
+                        describeHandwavyDisabledReason({
+                          mutationsAllowed,
+                          inFlight,
+                          inFlightLabel:
+                            "Removing this phrase — wait for it to finish.",
+                          extraReason:
+                            requireAck && !acknowledged
+                              ? "Tick the acknowledgment checkbox above to confirm losing the listed detections."
+                              : null,
+                        });
+                      const removePreviewHintId = removePreviewReason
+                        ? "handwavy-remove-preview-confirm-disabled-hint-id"
+                        : undefined;
+                      return (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={confirmRemoveFromPreview}
+                            disabled={
+                              inFlight ||
+                              (requireAck && !acknowledged) ||
+                              !mutationsAllowed
+                            }
+                            title={
+                              !mutationsAllowed
+                                ? MUTATIONS_BLOCKED_TITLE
+                                : undefined
+                            }
+                            data-testid="handwavy-remove-preview-confirm"
+                            data-mutations-blocked={
+                              !mutationsAllowed ? "true" : "false"
+                            }
+                            aria-describedby={removePreviewHintId}
+                          >
+                            Remove anyway
+                          </Button>
+                          {removePreviewHintId && (
+                            <div className="basis-full">
+                              <HandwavyDisabledHint
+                                id={removePreviewHintId}
+                                reason={removePreviewReason}
+                                testId="handwavy-remove-preview-confirm-disabled-hint"
+                              />
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              );
+            })()}
+          {/* Task #237 / #332 — post-Trash Undo stack. Renders the most-
             recent N single-phrase removals as mini-banners (newest on
             top) so the reviewer can roll back ANY of their recent per-
             row Trash clicks in one click without scrolling into the
@@ -8583,14 +9395,14 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             unambiguous about which past removal they target. The
             container exposes count + max attributes so tests can read
             off the bound. */}
-        {singleUndo.length > 0 && (
-          <div
-            className="space-y-1.5"
-            data-testid="handwavy-single-undo-stack"
-            data-count={singleUndo.length}
-            data-max={SINGLE_UNDO_MAX}
-          >
-            {/* Task #472 — stack header with "Undo all" affordance.
+          {singleUndo.length > 0 && (
+            <div
+              className="space-y-1.5"
+              data-testid="handwavy-single-undo-stack"
+              data-count={singleUndo.length}
+              data-max={SINGLE_UNDO_MAX}
+            >
+              {/* Task #472 — stack header with "Undo all" affordance.
                 Surfaces only when there are 2+ entries so the single-
                 entry case keeps the cleanest possible Undo flow (the
                 per-row button does the same thing as a one-entry "Undo
@@ -8598,184 +9410,203 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 which walks each entry through the same single-phrase
                 reinstate path the per-row Undo button uses and reports
                 succeeded vs. skipped in one toast. */}
-            {singleUndo.length >= 2 && (() => {
-              const allBusy = busy === SINGLE_UNDO_ALL_BUSY_KEY;
-              const allReason = describeHandwavyDisabledReason({
-                mutationsAllowed,
-                cooldownActive: cooldown.active,
-                cooldownSecondsRemaining: cooldown.secondsRemaining,
-                inFlight: allBusy,
-                inFlightLabel:
-                  "Undoing every recent removal — wait for it to finish.",
-              });
-              const allHintId = allReason
-                ? "handwavy-single-undo-all-disabled-hint-id"
-                : undefined;
-              return (
-                <div
-                  className="flex items-center gap-2 flex-wrap text-[11px]"
-                  data-testid="handwavy-single-undo-stack-header"
-                >
-                  <span className="text-muted-foreground">
-                    {singleUndo.length} recent removals
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-[11px] ml-auto"
-                    onClick={() => void handleUndoAllSingleRemoves()}
-                    disabled={allBusy || !mutationsAllowed || cooldown.active}
-                    title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                    data-testid="handwavy-single-undo-all"
-                    aria-label="Undo all recent removals"
-                    data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                    aria-describedby={allHintId}
-                  >
-                    <Undo2 className="w-3 h-3 mr-1" />
-                    {allBusy ? "Undoing all…" : `Undo all (${singleUndo.length})`}
-                  </Button>
-                  {allHintId && (
-                    <div className="basis-full">
-                      <HandwavyDisabledHint
-                        id={allHintId}
-                        reason={allReason}
-                        testId="handwavy-single-undo-all-disabled-hint"
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-            {[...singleUndo].reverse().map((entry, reversedIndex) => {
-              const undoBusy = busy === singleUndoBusyKey(entry);
-              // Task #472 — while the bulk "Undo all" is walking the
-              // stack, every per-row Undo / Dismiss should also be
-              // disabled so a stray click doesn't race the loop and
-              // either fire a duplicate reinstate or yank an entry
-              // out from under the loop's iterator. The loop itself
-              // snapshots the stack at start, so dismissed entries
-              // would still be processed — disabling is the simpler
-              // contract.
-              const allBusy = busy === SINGLE_UNDO_ALL_BUSY_KEY;
-              // Task #473 — count-based eviction signal. The stack drops the
-              // OLDEST entry (singleUndo[0]) once a new push tips it past
-              // SINGLE_UNDO_MAX (see handleRemove). The list renders newest
-              // first via .reverse(), so the oldest entry is the LAST one
-              // rendered — `slotPosition` (1 = oldest, N = newest) lets each
-              // banner show "Slot N of MAX" so reviewers can predict the
-              // eviction order before it happens. When the stack is at cap
-              // the slot-1 entry additionally gets red border + pulse styling
-              // and a "Next to evict" caption, mirroring the urgency cue
-              // Task #140 surfaced for the time-windowed Undo affordance.
-              const slotPosition = singleUndo.length - reversedIndex;
-              const atCap = singleUndo.length >= SINGLE_UNDO_MAX;
-              const isNextToEvict = atCap && slotPosition === 1;
-              return (
-                <div
-                  key={entry.removedAt}
-                  className={cn(
-                    "rounded-md border p-3 flex items-center gap-2 flex-wrap text-xs",
-                    isNextToEvict
-                      ? "border-red-400/60 bg-red-500/5 animate-pulse"
-                      : "border-border/40 bg-background/40",
-                  )}
-                  data-testid="handwavy-single-undo"
-                  data-phrase={entry.phrase}
-                  data-removed-at={entry.removedAt}
-                  data-slot-position={slotPosition}
-                  data-next-to-evict={isNextToEvict ? "true" : "false"}
-                >
-                  <span className="font-semibold text-foreground">Phrase removed</span>
-                  <span className="font-mono text-foreground/80 break-all flex-1 min-w-[8rem]">
-                    {entry.phrase}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[10px] tabular-nums shrink-0",
-                      isNextToEvict && "border-red-400/60 text-red-300",
-                    )}
-                    data-testid="handwavy-single-undo-slot"
-                    title={
-                      isNextToEvict
-                        ? `Slot ${slotPosition} of ${SINGLE_UNDO_MAX} — the next per-row Trash will evict this entry from the one-click Undo stack.`
-                        : `Slot ${slotPosition} of ${SINGLE_UNDO_MAX} in the post-Trash one-click Undo stack (newest pushes drop the oldest entry once the cap is reached).`
-                    }
-                  >
-                    Slot {slotPosition} of {SINGLE_UNDO_MAX}
-                  </Badge>
-                  {isNextToEvict && (
-                    <span
-                      className="text-[10px] font-semibold text-red-300 shrink-0 flex items-center gap-1"
-                      data-testid="handwavy-single-undo-evict-warning"
+              {singleUndo.length >= 2 &&
+                (() => {
+                  const allBusy = busy === SINGLE_UNDO_ALL_BUSY_KEY;
+                  const allReason = describeHandwavyDisabledReason({
+                    mutationsAllowed,
+                    cooldownActive: cooldown.active,
+                    cooldownSecondsRemaining: cooldown.secondsRemaining,
+                    inFlight: allBusy,
+                    inFlightLabel:
+                      "Undoing every recent removal — wait for it to finish.",
+                  });
+                  const allHintId = allReason
+                    ? "handwavy-single-undo-all-disabled-hint-id"
+                    : undefined;
+                  return (
+                    <div
+                      className="flex items-center gap-2 flex-wrap text-[11px]"
+                      data-testid="handwavy-single-undo-stack-header"
                     >
-                      <AlertTriangle className="w-3 h-3" aria-hidden="true" />
-                      Next Trash evicts this entry
-                    </span>
-                  )}
-                  {(() => {
-                    // Task #337 — visible reason caption + aria-describedby
-                    // for this specific banner's Undo button. Hint id is
-                    // suffixed with the entry's removedAt so each banner in
-                    // the Task #332 stack carries an unambiguous, stable
-                    // identifier even when several banners render at once.
-                    const singleUndoReason = describeHandwavyDisabledReason({
-                      mutationsAllowed,
-                      inFlight: undoBusy || allBusy,
-                      inFlightLabel: allBusy
-                        ? "Undoing every recent removal — wait for it to finish."
-                        : "Undoing this single removal — wait for it to finish.",
-                    });
-                    const singleUndoHintId = singleUndoReason
-                      ? `handwavy-single-undo-disabled-hint-id-${entry.removedAt}`
-                      : undefined;
-                    return (
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-[11px]"
-                          onClick={() => handleUndoSingleRemove(entry)}
-                          disabled={undoBusy || allBusy || !mutationsAllowed}
-                          title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                          data-testid="handwavy-single-undo-button"
-                          aria-label={`Undo removal of phrase ${entry.phrase}`}
-                          data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                          aria-describedby={singleUndoHintId}
-                        >
-                          <Undo2 className="w-3 h-3 mr-1" />
-                          {undoBusy ? "Undoing…" : "Undo"}
-                        </Button>
-                        {singleUndoHintId && (
-                          <div className="basis-full">
-                            <HandwavyDisabledHint
-                              id={singleUndoHintId}
-                              reason={singleUndoReason}
-                              testId="handwavy-single-undo-disabled-hint"
-                            />
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                  <button
-                    type="button"
-                    className="text-[10px] text-muted-foreground hover:text-foreground underline"
-                    onClick={() => dismissSingleUndo(entry)}
-                    disabled={undoBusy || allBusy}
-                    aria-label={`Dismiss undo banner for phrase ${entry.phrase}`}
-                    data-testid="handwavy-single-undo-dismiss"
+                      <span className="text-muted-foreground">
+                        {singleUndo.length} recent removals
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[11px] ml-auto"
+                        onClick={() => void handleUndoAllSingleRemoves()}
+                        disabled={
+                          allBusy || !mutationsAllowed || cooldown.active
+                        }
+                        title={
+                          !mutationsAllowed
+                            ? MUTATIONS_BLOCKED_TITLE
+                            : undefined
+                        }
+                        data-testid="handwavy-single-undo-all"
+                        aria-label="Undo all recent removals"
+                        data-mutations-blocked={
+                          !mutationsAllowed ? "true" : "false"
+                        }
+                        aria-describedby={allHintId}
+                      >
+                        <Undo2 className="w-3 h-3 mr-1" />
+                        {allBusy
+                          ? "Undoing all…"
+                          : `Undo all (${singleUndo.length})`}
+                      </Button>
+                      {allHintId && (
+                        <div className="basis-full">
+                          <HandwavyDisabledHint
+                            id={allHintId}
+                            reason={allReason}
+                            testId="handwavy-single-undo-all-disabled-hint"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              {[...singleUndo].reverse().map((entry, reversedIndex) => {
+                const undoBusy = busy === singleUndoBusyKey(entry);
+                // Task #472 — while the bulk "Undo all" is walking the
+                // stack, every per-row Undo / Dismiss should also be
+                // disabled so a stray click doesn't race the loop and
+                // either fire a duplicate reinstate or yank an entry
+                // out from under the loop's iterator. The loop itself
+                // snapshots the stack at start, so dismissed entries
+                // would still be processed — disabling is the simpler
+                // contract.
+                const allBusy = busy === SINGLE_UNDO_ALL_BUSY_KEY;
+                // Task #473 — count-based eviction signal. The stack drops the
+                // OLDEST entry (singleUndo[0]) once a new push tips it past
+                // SINGLE_UNDO_MAX (see handleRemove). The list renders newest
+                // first via .reverse(), so the oldest entry is the LAST one
+                // rendered — `slotPosition` (1 = oldest, N = newest) lets each
+                // banner show "Slot N of MAX" so reviewers can predict the
+                // eviction order before it happens. When the stack is at cap
+                // the slot-1 entry additionally gets red border + pulse styling
+                // and a "Next to evict" caption, mirroring the urgency cue
+                // Task #140 surfaced for the time-windowed Undo affordance.
+                const slotPosition = singleUndo.length - reversedIndex;
+                const atCap = singleUndo.length >= SINGLE_UNDO_MAX;
+                const isNextToEvict = atCap && slotPosition === 1;
+                return (
+                  <div
+                    key={entry.removedAt}
+                    className={cn(
+                      "rounded-md border p-3 flex items-center gap-2 flex-wrap text-xs",
+                      isNextToEvict
+                        ? "border-red-400/60 bg-red-500/5 animate-pulse"
+                        : "border-border/40 bg-background/40",
+                    )}
+                    data-testid="handwavy-single-undo"
+                    data-phrase={entry.phrase}
+                    data-removed-at={entry.removedAt}
+                    data-slot-position={slotPosition}
+                    data-next-to-evict={isNextToEvict ? "true" : "false"}
                   >
-                    Dismiss
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {/* Task #247 — edit-then-rename impact preview. Reuses the
+                    <span className="font-semibold text-foreground">
+                      Phrase removed
+                    </span>
+                    <span className="font-mono text-foreground/80 break-all flex-1 min-w-[8rem]">
+                      {entry.phrase}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] tabular-nums shrink-0",
+                        isNextToEvict && "border-red-400/60 text-red-300",
+                      )}
+                      data-testid="handwavy-single-undo-slot"
+                      title={
+                        isNextToEvict
+                          ? `Slot ${slotPosition} of ${SINGLE_UNDO_MAX} — the next per-row Trash will evict this entry from the one-click Undo stack.`
+                          : `Slot ${slotPosition} of ${SINGLE_UNDO_MAX} in the post-Trash one-click Undo stack (newest pushes drop the oldest entry once the cap is reached).`
+                      }
+                    >
+                      Slot {slotPosition} of {SINGLE_UNDO_MAX}
+                    </Badge>
+                    {isNextToEvict && (
+                      <span
+                        className="text-[10px] font-semibold text-red-300 shrink-0 flex items-center gap-1"
+                        data-testid="handwavy-single-undo-evict-warning"
+                      >
+                        <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                        Next Trash evicts this entry
+                      </span>
+                    )}
+                    {(() => {
+                      // Task #337 — visible reason caption + aria-describedby
+                      // for this specific banner's Undo button. Hint id is
+                      // suffixed with the entry's removedAt so each banner in
+                      // the Task #332 stack carries an unambiguous, stable
+                      // identifier even when several banners render at once.
+                      const singleUndoReason = describeHandwavyDisabledReason({
+                        mutationsAllowed,
+                        inFlight: undoBusy || allBusy,
+                        inFlightLabel: allBusy
+                          ? "Undoing every recent removal — wait for it to finish."
+                          : "Undoing this single removal — wait for it to finish.",
+                      });
+                      const singleUndoHintId = singleUndoReason
+                        ? `handwavy-single-undo-disabled-hint-id-${entry.removedAt}`
+                        : undefined;
+                      return (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() => handleUndoSingleRemove(entry)}
+                            disabled={undoBusy || allBusy || !mutationsAllowed}
+                            title={
+                              !mutationsAllowed
+                                ? MUTATIONS_BLOCKED_TITLE
+                                : undefined
+                            }
+                            data-testid="handwavy-single-undo-button"
+                            aria-label={`Undo removal of phrase ${entry.phrase}`}
+                            data-mutations-blocked={
+                              !mutationsAllowed ? "true" : "false"
+                            }
+                            aria-describedby={singleUndoHintId}
+                          >
+                            <Undo2 className="w-3 h-3 mr-1" />
+                            {undoBusy ? "Undoing…" : "Undo"}
+                          </Button>
+                          {singleUndoHintId && (
+                            <div className="basis-full">
+                              <HandwavyDisabledHint
+                                id={singleUndoHintId}
+                                reason={singleUndoReason}
+                                testId="handwavy-single-undo-disabled-hint"
+                              />
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                    <button
+                      type="button"
+                      className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                      onClick={() => dismissSingleUndo(entry)}
+                      disabled={undoBusy || allBusy}
+                      aria-label={`Dismiss undo banner for phrase ${entry.phrase}`}
+                      data-testid="handwavy-single-undo-dismiss"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {/* Task #247 — edit-then-rename impact preview. Reuses the
             single-phrase Task #155 dry-run + the same
             `BulkRemovalImpactBlock` renderer the Trash flow uses so a
             reviewer who renamed a phrase from inside the per-row Edit
@@ -8783,127 +9614,135 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             the live PATCH lands. Only mounts when the rename's
             removal-impact dry-run reported a non-zero
             validDetectionsLost — zero-impact renames apply directly. */}
-        {editPreview && (() => {
-          const { originalPhrase, pending, data, acknowledged, source, scannedAt } = editPreview;
-          const corpus = data.dryRunImpact.corpus;
-          const production = data.dryRunImpact.production ?? null;
-          const productionError = data.dryRunImpact.productionError;
-          const productionLimit = data.dryRunImpact.productionLimit;
-          const corpusLost = corpus.validDetectionsLost;
-          const productionLost = production?.validDetectionsLost ?? 0;
-          const totalValidLost = corpusLost + productionLost;
-          const requireAck = totalValidLost > 0;
-          const inFlight =
-            busy === `edit:${originalPhrase}` ||
-            busy === `edit-preview:${originalPhrase}`;
-          const renamedTo = pending.newPhrase
-            .toLowerCase()
-            .replace(/\s+/g, " ")
-            .trim();
-          // Task #492 — fresh-vs-cached badge for the rename preview
-          // header. Mirrors the per-row Trash preview's badge (Task
-          // #349) so a reviewer who renames the same phrase twice in
-          // a row can tell whether the second click reused the prior
-          // scan or paid for a fresh corpus + production-archive
-          // round-trip.
-          const sourceBadge = describeRemovePreviewSource(
-            source,
-            scannedAt,
-            editPreviewNow,
-          );
-          return (
-            <div
-              className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-3 text-xs"
-              data-testid="handwavy-edit-preview"
-            >
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
-                <div className="flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-semibold text-foreground">
-                      Rename "{originalPhrase}" → "{renamedTo}"?
+          {editPreview &&
+            (() => {
+              const {
+                originalPhrase,
+                pending,
+                data,
+                acknowledged,
+                source,
+                scannedAt,
+              } = editPreview;
+              const corpus = data.dryRunImpact.corpus;
+              const production = data.dryRunImpact.production ?? null;
+              const productionError = data.dryRunImpact.productionError;
+              const productionLimit = data.dryRunImpact.productionLimit;
+              const corpusLost = corpus.validDetectionsLost;
+              const productionLost = production?.validDetectionsLost ?? 0;
+              const totalValidLost = corpusLost + productionLost;
+              const requireAck = totalValidLost > 0;
+              const inFlight =
+                busy === `edit:${originalPhrase}` ||
+                busy === `edit-preview:${originalPhrase}`;
+              const renamedTo = pending.newPhrase
+                .toLowerCase()
+                .replace(/\s+/g, " ")
+                .trim();
+              // Task #492 — fresh-vs-cached badge for the rename preview
+              // header. Mirrors the per-row Trash preview's badge (Task
+              // #349) so a reviewer who renames the same phrase twice in
+              // a row can tell whether the second click reused the prior
+              // scan or paid for a fresh corpus + production-archive
+              // round-trip.
+              const sourceBadge = describeRemovePreviewSource(
+                source,
+                scannedAt,
+                editPreviewNow,
+              );
+              return (
+                <div
+                  className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-3 text-xs"
+                  data-testid="handwavy-edit-preview"
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-semibold text-foreground">
+                          Rename "{originalPhrase}" → "{renamedTo}"?
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[9px] uppercase tracking-wide whitespace-nowrap shrink-0",
+                            sourceBadge.tone === "fresh"
+                              ? "border-emerald-500/40 text-emerald-200"
+                              : "border-amber-500/40 text-amber-200",
+                          )}
+                          data-testid="handwavy-edit-preview-source"
+                          data-source={source}
+                          data-scanned-at={scannedAt}
+                          title={
+                            source === "fresh"
+                              ? "These impact numbers came from a fresh corpus + production-archive scan."
+                              : `Served from cache, scanned ${formatRemovePreviewScannedAgo(scannedAt, editPreviewNow)}. Adding, removing, reinstating, or editing any phrase invalidates the cache so the next Save re-scans.`
+                          }
+                        >
+                          {sourceBadge.label}
+                        </Badge>
+                      </div>
+                      <div
+                        className="text-[10px] text-muted-foreground mt-0.5"
+                        data-testid="handwavy-edit-preview-summary"
+                      >
+                        Renaming this phrase first removes the original from the
+                        active list, which would un-flag{" "}
+                        <span className="text-amber-300 font-semibold">
+                          {totalValidLost}
+                        </span>{" "}
+                        valid hand-wavy detection
+                        {totalValidLost === 1 ? "" : "s"}
+                        {corpusLost > 0 && productionLost > 0
+                          ? ` (${corpusLost} curated + ${productionLost} production)`
+                          : corpusLost > 0
+                            ? " in the curated benchmark"
+                            : " in the production archive"}
+                        . Review the impact below before confirming the rename.
+                      </div>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[9px] uppercase tracking-wide whitespace-nowrap shrink-0",
-                        sourceBadge.tone === "fresh"
-                          ? "border-emerald-500/40 text-emerald-200"
-                          : "border-amber-500/40 text-amber-200",
-                      )}
-                      data-testid="handwavy-edit-preview-source"
-                      data-source={source}
-                      data-scanned-at={scannedAt}
-                      title={
-                        source === "fresh"
-                          ? "These impact numbers came from a fresh corpus + production-archive scan."
-                          : `Served from cache, scanned ${formatRemovePreviewScannedAgo(scannedAt, editPreviewNow)}. Adding, removing, reinstating, or editing any phrase invalidates the cache so the next Save re-scans.`
-                      }
-                    >
-                      {sourceBadge.label}
-                    </Badge>
                   </div>
                   <div
-                    className="text-[10px] text-muted-foreground mt-0.5"
-                    data-testid="handwavy-edit-preview-summary"
+                    className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                    data-testid="handwavy-edit-preview-impact"
                   >
-                    Renaming this phrase first removes the original from
-                    the active list, which would un-flag{" "}
-                    <span className="text-amber-300 font-semibold">
-                      {totalValidLost}
-                    </span>{" "}
-                    valid hand-wavy detection{totalValidLost === 1 ? "" : "s"}
-                    {corpusLost > 0 && productionLost > 0
-                      ? ` (${corpusLost} curated + ${productionLost} production)`
-                      : corpusLost > 0
-                        ? " in the curated benchmark"
-                        : " in the production archive"}
-                    . Review the impact below before confirming the
-                    rename.
+                    <BulkRemovalImpactBlock
+                      kind="curated"
+                      title="Curated benchmark"
+                      subtitle={`${corpus.corpusSize} fixtures`}
+                      impact={corpus}
+                      emptyHint="No curated detections would be lost"
+                    />
+                    {production ? (
+                      <BulkRemovalImpactBlock
+                        kind="production"
+                        title="Production archive"
+                        subtitle={
+                          productionLimit != null
+                            ? `last ${production.corpusSize} of up to ${productionLimit} reports`
+                            : `last ${production.corpusSize} reports`
+                        }
+                        impact={production}
+                        emptyHint="No production detections would be lost"
+                        productionLimit={productionLimit}
+                      />
+                    ) : (
+                      <div
+                        className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
+                        data-testid="handwavy-edit-preview-production-error"
+                      >
+                        <div className="font-semibold flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Production archive scan unavailable
+                        </div>
+                        <div className="mt-1 text-amber-100/80">
+                          {productionError ??
+                            "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </div>
-              <div
-                className="grid grid-cols-1 lg:grid-cols-2 gap-3"
-                data-testid="handwavy-edit-preview-impact"
-              >
-                <BulkRemovalImpactBlock
-                  kind="curated"
-                  title="Curated benchmark"
-                  subtitle={`${corpus.corpusSize} fixtures`}
-                  impact={corpus}
-                  emptyHint="No curated detections would be lost"
-                />
-                {production ? (
-                  <BulkRemovalImpactBlock
-                    kind="production"
-                    title="Production archive"
-                    subtitle={
-                      productionLimit != null
-                        ? `last ${production.corpusSize} of up to ${productionLimit} reports`
-                        : `last ${production.corpusSize} reports`
-                    }
-                    impact={production}
-                    emptyHint="No production detections would be lost"
-                    productionLimit={productionLimit}
-                  />
-                ) : (
-                  <div
-                    className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200"
-                    data-testid="handwavy-edit-preview-production-error"
-                  >
-                    <div className="font-semibold flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Production archive scan unavailable
-                    </div>
-                    <div className="mt-1 text-amber-100/80">
-                      {productionError ??
-                        "The production archive scan did not return a result. Only the curated-corpus signal is shown."}
-                    </div>
-                  </div>
-                )}
-              </div>
-              {/* Task #491 — render the per-tier `sampleMatches` inline so a
+                  {/* Task #491 — render the per-tier `sampleMatches` inline so a
                   reviewer renaming a phrase from inside the per-row Edit
                   panel sees the same affordance the per-row Trash (Task
                   #245) and batch-confirm (Task #344) previews already
@@ -8915,229 +9754,260 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   DOM entirely when the dry-run returned no samples on
                   either side, so zero-impact previews keep their lean
                   visual footprint. */}
-              {(corpus.sampleMatches.length > 0 ||
-                (production?.sampleMatches.length ?? 0) > 0) && (
-                <div
-                  className="grid grid-cols-1 lg:grid-cols-2 gap-3"
-                  data-testid="handwavy-edit-preview-matches"
-                >
-                  {corpus.sampleMatches.length > 0 && (
-                    <HandwavyRemovePreviewMatches
-                      kind="curated"
-                      title={`Curated fixtures that would lose their flag (${corpus.sampleMatches.length})`}
-                      matches={corpus.sampleMatches}
-                    />
-                  )}
-                  {production && production.sampleMatches.length > 0 && (
-                    <HandwavyRemovePreviewMatches
-                      kind="production"
-                      title={`Production reports that would lose their flag (${production.sampleMatches.length})`}
-                      matches={production.sampleMatches}
-                    />
-                  )}
-                </div>
-              )}
-              {requireAck && (
-                <label
-                  className="flex items-start gap-2 text-[11px] text-foreground/90 cursor-pointer select-none"
-                  data-testid="handwavy-edit-preview-ack-label"
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={acknowledged}
-                    onChange={(e) => setEditPreviewAcknowledged(e.target.checked)}
-                    disabled={inFlight}
-                    data-testid="handwavy-edit-preview-ack"
-                  />
-                  <span>
-                    I understand renaming "{originalPhrase}" will un-flag{" "}
-                    {totalValidLost} valid hand-wavy detection
-                    {totalValidLost === 1 ? "" : "s"} and want to apply
-                    the rename anyway.
-                  </span>
-                </label>
-              )}
-              <div className="flex justify-end gap-2 pt-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={cancelEditPreview}
-                  disabled={inFlight}
-                  data-testid="handwavy-edit-preview-cancel"
-                >
-                  Back out
-                </Button>
-                {(() => {
-                  const editPreviewReason = describeHandwavyDisabledReason({
-                    mutationsAllowed,
-                    inFlight,
-                    inFlightLabel:
-                      "Saving the rename — wait for it to finish.",
-                    extraReason:
-                      requireAck && !acknowledged
-                        ? "Tick the acknowledgment checkbox above to confirm losing the listed detections."
-                        : null,
-                  });
-                  const editPreviewHintId = editPreviewReason
-                    ? "handwavy-edit-preview-confirm-disabled-hint-id"
-                    : undefined;
-                  return (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={confirmEditFromPreview}
-                        disabled={inFlight || (requireAck && !acknowledged) || !mutationsAllowed}
-                        title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                        data-testid="handwavy-edit-preview-confirm"
-                        data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                        aria-describedby={editPreviewHintId}
-                      >
-                        Rename anyway
-                      </Button>
-                      {editPreviewHintId && (
-                        <div className="basis-full">
-                          <HandwavyDisabledHint
-                            id={editPreviewHintId}
-                            reason={editPreviewReason}
-                            testId="handwavy-edit-preview-confirm-disabled-hint"
-                          />
-                        </div>
+                  {(corpus.sampleMatches.length > 0 ||
+                    (production?.sampleMatches.length ?? 0) > 0) && (
+                    <div
+                      className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                      data-testid="handwavy-edit-preview-matches"
+                    >
+                      {corpus.sampleMatches.length > 0 && (
+                        <HandwavyRemovePreviewMatches
+                          kind="curated"
+                          title={`Curated fixtures that would lose their flag (${corpus.sampleMatches.length})`}
+                          matches={corpus.sampleMatches}
+                        />
                       )}
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
-          );
-        })()}
-        {/* Task #134 — per-phrase results banner shown after a bulk batch
+                      {production && production.sampleMatches.length > 0 && (
+                        <HandwavyRemovePreviewMatches
+                          kind="production"
+                          title={`Production reports that would lose their flag (${production.sampleMatches.length})`}
+                          matches={production.sampleMatches}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {requireAck && (
+                    <label
+                      className="flex items-start gap-2 text-[11px] text-foreground/90 cursor-pointer select-none"
+                      data-testid="handwavy-edit-preview-ack-label"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={acknowledged}
+                        onChange={(e) =>
+                          setEditPreviewAcknowledged(e.target.checked)
+                        }
+                        disabled={inFlight}
+                        data-testid="handwavy-edit-preview-ack"
+                      />
+                      <span>
+                        I understand renaming "{originalPhrase}" will un-flag{" "}
+                        {totalValidLost} valid hand-wavy detection
+                        {totalValidLost === 1 ? "" : "s"} and want to apply the
+                        rename anyway.
+                      </span>
+                    </label>
+                  )}
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={cancelEditPreview}
+                      disabled={inFlight}
+                      data-testid="handwavy-edit-preview-cancel"
+                    >
+                      Back out
+                    </Button>
+                    {(() => {
+                      const editPreviewReason = describeHandwavyDisabledReason({
+                        mutationsAllowed,
+                        inFlight,
+                        inFlightLabel:
+                          "Saving the rename — wait for it to finish.",
+                        extraReason:
+                          requireAck && !acknowledged
+                            ? "Tick the acknowledgment checkbox above to confirm losing the listed detections."
+                            : null,
+                      });
+                      const editPreviewHintId = editPreviewReason
+                        ? "handwavy-edit-preview-confirm-disabled-hint-id"
+                        : undefined;
+                      return (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={confirmEditFromPreview}
+                            disabled={
+                              inFlight ||
+                              (requireAck && !acknowledged) ||
+                              !mutationsAllowed
+                            }
+                            title={
+                              !mutationsAllowed
+                                ? MUTATIONS_BLOCKED_TITLE
+                                : undefined
+                            }
+                            data-testid="handwavy-edit-preview-confirm"
+                            data-mutations-blocked={
+                              !mutationsAllowed ? "true" : "false"
+                            }
+                            aria-describedby={editPreviewHintId}
+                          >
+                            Rename anyway
+                          </Button>
+                          {editPreviewHintId && (
+                            <div className="basis-full">
+                              <HandwavyDisabledHint
+                                id={editPreviewHintId}
+                                reason={editPreviewReason}
+                                testId="handwavy-edit-preview-confirm-disabled-hint"
+                              />
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              );
+            })()}
+          {/* Task #134 — per-phrase results banner shown after a bulk batch
             finishes, mirroring the CLI's per-phrase outcome summary.
             Task #142 — the same banner is reused for the "Undo this batch"
             action that appears when the just-completed batch retired at
             least one phrase: clicking it reinstates each removed phrase
             via the existing single-phrase reinstate endpoint and then
             replaces these rows with the per-phrase reinstate outcomes. */}
-        {bulkResults && (() => {
-          // Task #142 — the Undo affordance is gated purely on REMOVED
-          // rows existing (the literal Done-looks-like wording). Rows
-          // that somehow lack the `removedAt` history identifier still
-          // show up in the count so the banner doesn't lie about what
-          // the click will attempt; `handleUndoBulkBatch` flags those
-          // identifier-less rows as per-phrase errors with a "reinstate
-          // manually from the history log" message rather than silently
-          // skipping them.
-          const removedRows = bulkResults.kind === "remove"
-            ? bulkResults.rows.filter((r) => r.status === "removed")
-            : [];
-          const removedCount = removedRows.length;
-          const reinstatedCount = bulkResults.kind === "undo"
-            ? bulkResults.rows.filter((r) => r.status === "reinstated").length
-            : 0;
-          const undoBusy = busy === "bulk-undo";
-          // Task #238 — retryable failures (error / auth-failed) drive the
-          // "Retry failed" affordance. Not-found rows are intentionally
-          // excluded: on a remove batch the phrase is genuinely gone; on
-          // an undo batch the phrase is already reinstated. Undo rows
-          // missing a captured `removedAt` are similarly unretryable
-          // through the per-history-row endpoint and don't count toward
-          // the retry pool.
-          const failedRetryRows = retryableFailedRows(bulkResults);
-          const retryFailedCount = failedRetryRows.length;
-          const retryBusy =
-            bulkResults.kind === "remove"
-              ? busy === "bulk-remove"
-              : busy === "bulk-undo";
-          const showUndoBtn = bulkResults.kind === "remove" && removedCount > 0;
-          const showRetryBtn = retryFailedCount > 0;
-          const headingLabel = bulkResults.kind === "undo"
-            ? "Bulk undo results"
-            : "Bulk removal results";
-          const summaryLabel = bulkResults.kind === "undo"
-            ? `${reinstatedCount} / ${bulkResults.rows.length} reinstated`
-            : `${removedCount} / ${bulkResults.rows.length} removed`;
-          const retried = bulkResults.retried;
-          const retryHint = retried
-            ? `Retried ${retried.count} ${retried.count === 1 ? "row" : "rows"} from the previous ${retried.parentKind === "remove" ? "remove" : "undo"} batch.`
-            : null;
-          // Task #337 — visible reason captions for the bulk-results
-          // banner action buttons. We compute per-button so a reviewer
-          // sees only the hint that matches the button they tried to
-          // press, and we render them on a sibling row beneath the
-          // action row (rather than wedging a `basis-full` between the
-          // buttons themselves) so the existing flex layout doesn't get
-          // visually fractured.
-          const retryFailedReason = showRetryBtn
-            ? describeHandwavyDisabledReason({
-                mutationsAllowed,
-                cooldownActive: cooldown.active,
-                cooldownSecondsRemaining: cooldown.secondsRemaining,
-                inFlight: retryBusy,
-                inFlightLabel:
-                  bulkResults.kind === "remove"
-                    ? "Bulk removal is in progress — wait for it to finish."
-                    : "Bulk undo is in progress — wait for it to finish.",
-              })
-            : null;
-          const retryFailedHintId = retryFailedReason
-            ? "handwavy-bulk-retry-failed-disabled-hint-id"
-            : undefined;
-          const bulkUndoReason = showUndoBtn
-            ? describeHandwavyDisabledReason({
-                mutationsAllowed,
-                cooldownActive: cooldown.active,
-                cooldownSecondsRemaining: cooldown.secondsRemaining,
-                inFlight: undoBusy,
-                inFlightLabel:
-                  "Bulk undo is in progress — wait for it to finish.",
-              })
-            : null;
-          const bulkUndoHintId = bulkUndoReason
-            ? "handwavy-bulk-undo-disabled-hint-id"
-            : undefined;
-          return (
-          <div
-            className="rounded-md border border-border/40 bg-background/40 p-3 space-y-2 text-xs"
-            data-testid="handwavy-bulk-results"
-            data-kind={bulkResults.kind}
-            data-retried={retried ? "true" : "false"}
-          >
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-foreground">{headingLabel}</span>
-              <Badge variant="outline" className="text-[10px]">
-                {summaryLabel}
-              </Badge>
-              {/* Task #238 — "Retry failed" sits alongside the existing
+          {bulkResults &&
+            (() => {
+              // Task #142 — the Undo affordance is gated purely on REMOVED
+              // rows existing (the literal Done-looks-like wording). Rows
+              // that somehow lack the `removedAt` history identifier still
+              // show up in the count so the banner doesn't lie about what
+              // the click will attempt; `handleUndoBulkBatch` flags those
+              // identifier-less rows as per-phrase errors with a "reinstate
+              // manually from the history log" message rather than silently
+              // skipping them.
+              const removedRows =
+                bulkResults.kind === "remove"
+                  ? bulkResults.rows.filter((r) => r.status === "removed")
+                  : [];
+              const removedCount = removedRows.length;
+              const reinstatedCount =
+                bulkResults.kind === "undo"
+                  ? bulkResults.rows.filter((r) => r.status === "reinstated")
+                      .length
+                  : 0;
+              const undoBusy = busy === "bulk-undo";
+              // Task #238 — retryable failures (error / auth-failed) drive the
+              // "Retry failed" affordance. Not-found rows are intentionally
+              // excluded: on a remove batch the phrase is genuinely gone; on
+              // an undo batch the phrase is already reinstated. Undo rows
+              // missing a captured `removedAt` are similarly unretryable
+              // through the per-history-row endpoint and don't count toward
+              // the retry pool.
+              const failedRetryRows = retryableFailedRows(bulkResults);
+              const retryFailedCount = failedRetryRows.length;
+              const retryBusy =
+                bulkResults.kind === "remove"
+                  ? busy === "bulk-remove"
+                  : busy === "bulk-undo";
+              const showUndoBtn =
+                bulkResults.kind === "remove" && removedCount > 0;
+              const showRetryBtn = retryFailedCount > 0;
+              const headingLabel =
+                bulkResults.kind === "undo"
+                  ? "Bulk undo results"
+                  : "Bulk removal results";
+              const summaryLabel =
+                bulkResults.kind === "undo"
+                  ? `${reinstatedCount} / ${bulkResults.rows.length} reinstated`
+                  : `${removedCount} / ${bulkResults.rows.length} removed`;
+              const retried = bulkResults.retried;
+              const retryHint = retried
+                ? `Retried ${retried.count} ${retried.count === 1 ? "row" : "rows"} from the previous ${retried.parentKind === "remove" ? "remove" : "undo"} batch.`
+                : null;
+              // Task #337 — visible reason captions for the bulk-results
+              // banner action buttons. We compute per-button so a reviewer
+              // sees only the hint that matches the button they tried to
+              // press, and we render them on a sibling row beneath the
+              // action row (rather than wedging a `basis-full` between the
+              // buttons themselves) so the existing flex layout doesn't get
+              // visually fractured.
+              const retryFailedReason = showRetryBtn
+                ? describeHandwavyDisabledReason({
+                    mutationsAllowed,
+                    cooldownActive: cooldown.active,
+                    cooldownSecondsRemaining: cooldown.secondsRemaining,
+                    inFlight: retryBusy,
+                    inFlightLabel:
+                      bulkResults.kind === "remove"
+                        ? "Bulk removal is in progress — wait for it to finish."
+                        : "Bulk undo is in progress — wait for it to finish.",
+                  })
+                : null;
+              const retryFailedHintId = retryFailedReason
+                ? "handwavy-bulk-retry-failed-disabled-hint-id"
+                : undefined;
+              const bulkUndoReason = showUndoBtn
+                ? describeHandwavyDisabledReason({
+                    mutationsAllowed,
+                    cooldownActive: cooldown.active,
+                    cooldownSecondsRemaining: cooldown.secondsRemaining,
+                    inFlight: undoBusy,
+                    inFlightLabel:
+                      "Bulk undo is in progress — wait for it to finish.",
+                  })
+                : null;
+              const bulkUndoHintId = bulkUndoReason
+                ? "handwavy-bulk-undo-disabled-hint-id"
+                : undefined;
+              return (
+                <div
+                  className="rounded-md border border-border/40 bg-background/40 p-3 space-y-2 text-xs"
+                  data-testid="handwavy-bulk-results"
+                  data-kind={bulkResults.kind}
+                  data-retried={retried ? "true" : "false"}
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-foreground">
+                      {headingLabel}
+                    </span>
+                    <Badge variant="outline" className="text-[10px]">
+                      {summaryLabel}
+                    </Badge>
+                    {/* Task #238 — "Retry failed" sits alongside the existing
                   Undo / Dismiss controls so reviewers can re-run only
                   the rows that previously errored or auth-failed without
                   re-ticking the active list (for removes) or chasing
                   the history panel one by one (for undos). The button
                   is hidden when no retryable failure is present so the
                   banner stays uncluttered for the all-success path. */}
-              {showRetryBtn && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="ml-auto h-7 px-2 text-[11px]"
-                  onClick={handleRetryFailedBulkResults}
-                  disabled={retryBusy || cooldown.active || !mutationsAllowed}
-                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                  data-testid="handwavy-bulk-retry-failed"
-                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                  data-cooldown-active={cooldown.active ? "true" : "false"}
-                  aria-describedby={retryFailedHintId}
-                >
-                  <RotateCcw className="w-3 h-3 mr-1" />
-                  {cooldown.active
-                    ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
-                    : retryBusy
-                    ? `Retrying ${retryFailedCount}…`
-                    : `Retry failed (${retryFailedCount})`}
-                </Button>
-              )}
-              {/* Task #142 — "Undo this batch" lives next to the dismiss
+                    {showRetryBtn && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="ml-auto h-7 px-2 text-[11px]"
+                        onClick={handleRetryFailedBulkResults}
+                        disabled={
+                          retryBusy || cooldown.active || !mutationsAllowed
+                        }
+                        title={
+                          !mutationsAllowed
+                            ? MUTATIONS_BLOCKED_TITLE
+                            : undefined
+                        }
+                        data-testid="handwavy-bulk-retry-failed"
+                        data-mutations-blocked={
+                          !mutationsAllowed ? "true" : "false"
+                        }
+                        data-cooldown-active={
+                          cooldown.active ? "true" : "false"
+                        }
+                        aria-describedby={retryFailedHintId}
+                      >
+                        <RotateCcw className="w-3 h-3 mr-1" />
+                        {cooldown.active
+                          ? `Cooldown — ${Math.max(1, cooldown.secondsRemaining)}s`
+                          : retryBusy
+                            ? `Retrying ${retryFailedCount}…`
+                            : `Retry failed (${retryFailedCount})`}
+                      </Button>
+                    )}
+                    {/* Task #142 — "Undo this batch" lives next to the dismiss
                   control so it sits in reviewers' eyeline the moment the
                   removal results render. We show it on the removal banner
                   (not after the undo itself completes) whenever at least
@@ -9146,116 +10016,153 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   handler surfaces them as per-phrase errors with a
                   manual-reinstate hint rather than silently dropping
                   them. */}
-              {showUndoBtn && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    "h-7 px-2 text-[11px]",
-                    showRetryBtn ? "" : "ml-auto",
+                    {showUndoBtn && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "h-7 px-2 text-[11px]",
+                          showRetryBtn ? "" : "ml-auto",
+                        )}
+                        onClick={() => handleUndoBulkBatch()}
+                        disabled={undoBusy || !mutationsAllowed}
+                        title={
+                          !mutationsAllowed
+                            ? MUTATIONS_BLOCKED_TITLE
+                            : undefined
+                        }
+                        data-testid="handwavy-bulk-undo"
+                        data-mutations-blocked={
+                          !mutationsAllowed ? "true" : "false"
+                        }
+                        aria-describedby={bulkUndoHintId}
+                      >
+                        <Undo2 className="w-3 h-3 mr-1" />
+                        {undoBusy
+                          ? `Undoing ${removedCount}…`
+                          : `Undo this batch (${removedCount})`}
+                      </Button>
+                    )}
+                    <button
+                      type="button"
+                      className={cn(
+                        "text-[10px] text-muted-foreground hover:text-foreground underline",
+                        showUndoBtn || showRetryBtn ? "" : "ml-auto",
+                      )}
+                      onClick={dismissBulkResults}
+                      data-testid="handwavy-bulk-dismiss"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                  {retryHint && (
+                    <div
+                      className="text-[10px] text-muted-foreground italic"
+                      data-testid="handwavy-bulk-retry-hint"
+                      data-parent-kind={retried?.parentKind}
+                      data-retried-count={retried?.count}
+                    >
+                      {retryHint}
+                    </div>
                   )}
-                  onClick={() => handleUndoBulkBatch()}
-                  disabled={undoBusy || !mutationsAllowed}
-                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                  data-testid="handwavy-bulk-undo"
-                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                  aria-describedby={bulkUndoHintId}
-                >
-                  <Undo2 className="w-3 h-3 mr-1" />
-                  {undoBusy
-                    ? `Undoing ${removedCount}…`
-                    : `Undo this batch (${removedCount})`}
-                </Button>
-              )}
-              <button
-                type="button"
-                className={cn(
-                  "text-[10px] text-muted-foreground hover:text-foreground underline",
-                  showUndoBtn || showRetryBtn ? "" : "ml-auto",
-                )}
-                onClick={dismissBulkResults}
-                data-testid="handwavy-bulk-dismiss"
-              >
-                Dismiss
-              </button>
-            </div>
-            {retryHint && (
-              <div
-                className="text-[10px] text-muted-foreground italic"
-                data-testid="handwavy-bulk-retry-hint"
-                data-parent-kind={retried?.parentKind}
-                data-retried-count={retried?.count}
-              >
-                {retryHint}
-              </div>
-            )}
-            {/* Task #337 — visible reason captions for the disabled
+                  {/* Task #337 — visible reason captions for the disabled
                 "Retry failed" / "Undo this batch" controls above. Sit
                 on a sibling row beneath the action row so the existing
                 flex layout isn't fractured by basis-full wrappers
                 between the buttons themselves. */}
-            {(retryFailedHintId || bulkUndoHintId) && (
-              <div className="flex flex-col gap-1">
-                {retryFailedHintId && (
-                  <HandwavyDisabledHint
-                    id={retryFailedHintId}
-                    reason={retryFailedReason}
-                    testId="handwavy-bulk-retry-failed-disabled-hint"
-                  />
-                )}
-                {bulkUndoHintId && (
-                  <HandwavyDisabledHint
-                    id={bulkUndoHintId}
-                    reason={bulkUndoReason}
-                    testId="handwavy-bulk-undo-disabled-hint"
-                  />
-                )}
-              </div>
-            )}
-            <ul className="space-y-0.5">
-              {bulkResults.rows.map((r) => {
-                const cfg =
-                  r.status === "removed"
-                    ? { label: "removed", color: "text-emerald-400", icon: <CheckCircle2 className="w-3 h-3" /> }
-                    : r.status === "reinstated"
-                      ? { label: "reinstated", color: "text-emerald-400", icon: <RotateCcw className="w-3 h-3" /> }
-                      : r.status === "not-found"
-                        ? { label: "not-found", color: "text-yellow-400", icon: <AlertTriangle className="w-3 h-3" /> }
-                        : r.status === "auth-failed"
-                          ? { label: "auth-failed", color: "text-red-400", icon: <XCircle className="w-3 h-3" /> }
-                          : { label: "error", color: "text-red-400", icon: <XCircle className="w-3 h-3" /> };
-                return (
-                  <li
-                    key={`${r.phrase}-${r.status}`}
-                    className="flex items-start gap-2 text-[11px]"
-                    data-testid="handwavy-bulk-result-row"
-                    data-status={r.status}
-                  >
-                    <span className={cn("flex items-center gap-1 w-24 shrink-0", cfg.color)}>
-                      {cfg.icon}
-                      <span className="uppercase tracking-wide font-bold text-[9px]">{cfg.label}</span>
-                    </span>
-                    <span className="font-mono text-foreground/80 break-all flex-1">{r.phrase}</span>
-                    {r.message && (
-                      <span className="text-muted-foreground text-[10px] italic shrink-0 max-w-[40%] truncate">
-                        {r.message}
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-          );
-        })()}
-        {isLoading ? (
-          <Skeleton className="h-32 rounded-md" />
-        ) : phrases.length === 0 ? (
-          <div className="text-xs text-muted-foreground italic">No phrases configured.</div>
-        ) : (
-          <div className="border border-border/30 rounded-md max-h-96 overflow-y-auto">
-            {/* Task #134 — bulk-action toolbar. Sticky so the "Remove
+                  {(retryFailedHintId || bulkUndoHintId) && (
+                    <div className="flex flex-col gap-1">
+                      {retryFailedHintId && (
+                        <HandwavyDisabledHint
+                          id={retryFailedHintId}
+                          reason={retryFailedReason}
+                          testId="handwavy-bulk-retry-failed-disabled-hint"
+                        />
+                      )}
+                      {bulkUndoHintId && (
+                        <HandwavyDisabledHint
+                          id={bulkUndoHintId}
+                          reason={bulkUndoReason}
+                          testId="handwavy-bulk-undo-disabled-hint"
+                        />
+                      )}
+                    </div>
+                  )}
+                  <ul className="space-y-0.5">
+                    {bulkResults.rows.map((r) => {
+                      const cfg =
+                        r.status === "removed"
+                          ? {
+                              label: "removed",
+                              color: "text-emerald-400",
+                              icon: <CheckCircle2 className="w-3 h-3" />,
+                            }
+                          : r.status === "reinstated"
+                            ? {
+                                label: "reinstated",
+                                color: "text-emerald-400",
+                                icon: <RotateCcw className="w-3 h-3" />,
+                              }
+                            : r.status === "not-found"
+                              ? {
+                                  label: "not-found",
+                                  color: "text-yellow-400",
+                                  icon: <AlertTriangle className="w-3 h-3" />,
+                                }
+                              : r.status === "auth-failed"
+                                ? {
+                                    label: "auth-failed",
+                                    color: "text-red-400",
+                                    icon: <XCircle className="w-3 h-3" />,
+                                  }
+                                : {
+                                    label: "error",
+                                    color: "text-red-400",
+                                    icon: <XCircle className="w-3 h-3" />,
+                                  };
+                      return (
+                        <li
+                          key={`${r.phrase}-${r.status}`}
+                          className="flex items-start gap-2 text-[11px]"
+                          data-testid="handwavy-bulk-result-row"
+                          data-status={r.status}
+                        >
+                          <span
+                            className={cn(
+                              "flex items-center gap-1 w-24 shrink-0",
+                              cfg.color,
+                            )}
+                          >
+                            {cfg.icon}
+                            <span className="uppercase tracking-wide font-bold text-[9px]">
+                              {cfg.label}
+                            </span>
+                          </span>
+                          <span className="font-mono text-foreground/80 break-all flex-1">
+                            {r.phrase}
+                          </span>
+                          {r.message && (
+                            <span className="text-muted-foreground text-[10px] italic shrink-0 max-w-[40%] truncate">
+                              {r.message}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })()}
+          {isLoading ? (
+            <Skeleton className="h-32 rounded-md" />
+          ) : phrases.length === 0 ? (
+            <div className="text-xs text-muted-foreground italic">
+              No phrases configured.
+            </div>
+          ) : (
+            <div className="border border-border/30 rounded-md max-h-96 overflow-y-auto">
+              {/* Task #134 — bulk-action toolbar. Sticky so the "Remove
                 selected" button stays in view while the reviewer scrolls a
                 long list. Indeterminate select-all checkbox toggles the
                 whole visible list at once.
@@ -9264,100 +10171,103 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                 window before opening the preview. The state is shared
                 with the add-time input above so changes here propagate
                 to both flows. */}
-            {(() => {
-              // Task #337 — derive the visible reason captions for the
-              // toolbar's "Undo last N adds" and "Remove selected"
-              // buttons. Wrapped in an IIFE so the hint id/reason
-              // locals are in scope for both the buttons (which carry
-              // `aria-describedby`) and the sibling hint row rendered
-              // beneath the buttons. The "Select at least one phrase
-              // first" extraReason is the only branch unique to the
-              // bulk-remove control — every other branch is the same
-              // shape as the rest of the panel uses.
-              const undoAllReason =
-                undoCandidates.size >= 2
-                  ? describeHandwavyDisabledReason({
-                      mutationsAllowed,
-                      inFlight: busy === "undo-batch",
-                      inFlightLabel:
-                        "Undoing the last batch — wait for it to finish.",
-                    })
-                  : null;
-              const undoAllHintId = undoAllReason
-                ? "handwavy-undo-all-disabled-hint-id"
-                : undefined;
-              const bulkRemoveExtra =
-                selectedInList.length === 0
-                  ? "Select at least one phrase first."
-                  : null;
-              const bulkRemoveReason = describeHandwavyDisabledReason({
-                mutationsAllowed,
-                bulkBusy: bulkPreview !== null,
-                inFlight:
-                  busy === "bulk-remove" || busy === "bulk-preview",
-                inFlightLabel:
-                  busy === "bulk-remove"
-                    ? "Bulk removal is in progress — wait for it to finish."
-                    : "Loading the bulk removal preview — wait for it to finish.",
-                extraReason: bulkRemoveExtra,
-              });
-              const bulkRemoveHintId = bulkRemoveReason
-                ? "handwavy-bulk-remove-disabled-hint-id"
-                : undefined;
-              return (
-            <div
-              className="sticky top-0 z-10 bg-background/95 backdrop-blur px-3 py-2 border-b border-border/30 text-xs"
-              data-testid="handwavy-bulk-toolbar"
-            >
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 cursor-pointer accent-primary"
-                  checked={allSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = someSelected;
-                  }}
-                  onChange={toggleSelectAll}
-                  aria-label={allSelected ? "Deselect all phrases" : "Select all phrases"}
-                  data-testid="handwavy-select-all"
-                />
-                <span className="text-muted-foreground">
-                  {selectedInList.length > 0
-                    ? `${selectedInList.length} selected`
-                    : "Select phrases to remove in bulk"}
-                </span>
-                {/* Task #138 — "Most contentious first" toggle. Sits inside
+              {(() => {
+                // Task #337 — derive the visible reason captions for the
+                // toolbar's "Undo last N adds" and "Remove selected"
+                // buttons. Wrapped in an IIFE so the hint id/reason
+                // locals are in scope for both the buttons (which carry
+                // `aria-describedby`) and the sibling hint row rendered
+                // beneath the buttons. The "Select at least one phrase
+                // first" extraReason is the only branch unique to the
+                // bulk-remove control — every other branch is the same
+                // shape as the rest of the panel uses.
+                const undoAllReason =
+                  undoCandidates.size >= 2
+                    ? describeHandwavyDisabledReason({
+                        mutationsAllowed,
+                        inFlight: busy === "undo-batch",
+                        inFlightLabel:
+                          "Undoing the last batch — wait for it to finish.",
+                      })
+                    : null;
+                const undoAllHintId = undoAllReason
+                  ? "handwavy-undo-all-disabled-hint-id"
+                  : undefined;
+                const bulkRemoveExtra =
+                  selectedInList.length === 0
+                    ? "Select at least one phrase first."
+                    : null;
+                const bulkRemoveReason = describeHandwavyDisabledReason({
+                  mutationsAllowed,
+                  bulkBusy: bulkPreview !== null,
+                  inFlight: busy === "bulk-remove" || busy === "bulk-preview",
+                  inFlightLabel:
+                    busy === "bulk-remove"
+                      ? "Bulk removal is in progress — wait for it to finish."
+                      : "Loading the bulk removal preview — wait for it to finish.",
+                  extraReason: bulkRemoveExtra,
+                });
+                const bulkRemoveHintId = bulkRemoveReason
+                  ? "handwavy-bulk-remove-disabled-hint-id"
+                  : undefined;
+                return (
+                  <div
+                    className="sticky top-0 z-10 bg-background/95 backdrop-blur px-3 py-2 border-b border-border/30 text-xs"
+                    data-testid="handwavy-bulk-toolbar"
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                        checked={allSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = someSelected;
+                        }}
+                        onChange={toggleSelectAll}
+                        aria-label={
+                          allSelected
+                            ? "Deselect all phrases"
+                            : "Select all phrases"
+                        }
+                        data-testid="handwavy-select-all"
+                      />
+                      <span className="text-muted-foreground">
+                        {selectedInList.length > 0
+                          ? `${selectedInList.length} selected`
+                          : "Select phrases to remove in bulk"}
+                      </span>
+                      {/* Task #138 — "Most contentious first" toggle. Sits inside
                     the sticky toolbar so reviewers can flip the ordering at
                     any scroll depth. Disabled when there are no thrashed
                     phrases at all so the affordance doesn't promise an order
                     change that wouldn't visibly happen. */}
-                <label
-                  className={cn(
-                    "ml-auto inline-flex items-center gap-1.5 text-[11px] select-none",
-                    contentiousCount === 0
-                      ? "text-muted-foreground/60 cursor-not-allowed"
-                      : "text-muted-foreground cursor-pointer",
-                  )}
-                  title={
-                    contentiousCount === 0
-                      ? "No phrases have been removed and reinstated yet"
-                      : `Sort the ${contentiousCount} thrashed phrase${contentiousCount === 1 ? "" : "s"} to the top`
-                  }
-                  data-testid="handwavy-sort-thrash-label"
-                >
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
-                    checked={sortByThrash && contentiousCount > 0}
-                    disabled={contentiousCount === 0}
-                    onChange={(e) => setSortByThrash(e.target.checked)}
-                    aria-label="Show most contentious phrases first"
-                    data-testid="handwavy-sort-thrash"
-                  />
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Most contentious first</span>
-                </label>
-                {/* Task #233 — panel-level "Undo last N adds" button.
+                      <label
+                        className={cn(
+                          "ml-auto inline-flex items-center gap-1.5 text-[11px] select-none",
+                          contentiousCount === 0
+                            ? "text-muted-foreground/60 cursor-not-allowed"
+                            : "text-muted-foreground cursor-pointer",
+                        )}
+                        title={
+                          contentiousCount === 0
+                            ? "No phrases have been removed and reinstated yet"
+                            : `Sort the ${contentiousCount} thrashed phrase${contentiousCount === 1 ? "" : "s"} to the top`
+                        }
+                        data-testid="handwavy-sort-thrash-label"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                          checked={sortByThrash && contentiousCount > 0}
+                          disabled={contentiousCount === 0}
+                          onChange={(e) => setSortByThrash(e.target.checked)}
+                          aria-label="Show most contentious phrases first"
+                          data-testid="handwavy-sort-thrash"
+                        />
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Most contentious first</span>
+                      </label>
+                      {/* Task #233 — panel-level "Undo last N adds" button.
                     Only renders when at least two reviewer-added phrases
                     are still inside their per-marker undo window
                     (`undoCandidates.size >= 2`). For a single eligible
@@ -9370,100 +10280,101 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                     window expiry between the click and the confirm
                     doesn't silently shrink the batch the dialog is
                     summarizing. */}
-                {undoCandidates.size >= 2 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs gap-1 border-amber-500/60 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:border-amber-400/40 dark:text-amber-300 dark:hover:bg-amber-950/30"
-                    disabled={
-                      busy === "undo-batch" ||
-                      !mutationsAllowed
-                    }
-                    onClick={() => {
-                      const snapshot = Array.from(undoCandidates.entries()).map(
-                        ([phrase, entry]) => ({
-                          phrase,
-                          addedAtIso: entry.addedAtIso,
-                        }),
-                      );
-                      if (snapshot.length === 0) return;
-                      setUndoAllConfirm({
-                        entries: snapshot,
-                        count: snapshot.length,
-                      });
-                    }}
-                    data-testid="handwavy-undo-all"
-                    data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                    aria-describedby={undoAllHintId}
-                    title={
-                      !mutationsAllowed
-                        ? MUTATIONS_BLOCKED_TITLE
-                        : `Roll back every reviewer-added phrase still inside its 5-minute undo window. Each phrase keeps its own audit trail row marked "undone".`
-                    }
-                  >
-                    <Undo2 className="w-3.5 h-3.5" />
-                    {busy === "undo-batch"
-                      ? "Undoing…"
-                      : `Undo last ${undoCandidates.size} adds`}
-                  </Button>
-                )}
-                {/* Task #154 — sole bulk-remove entry point. The reviewer
+                      {undoCandidates.size >= 2 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs gap-1 border-amber-500/60 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:border-amber-400/40 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                          disabled={busy === "undo-batch" || !mutationsAllowed}
+                          onClick={() => {
+                            const snapshot = Array.from(
+                              undoCandidates.entries(),
+                            ).map(([phrase, entry]) => ({
+                              phrase,
+                              addedAtIso: entry.addedAtIso,
+                            }));
+                            if (snapshot.length === 0) return;
+                            setUndoAllConfirm({
+                              entries: snapshot,
+                              count: snapshot.length,
+                            });
+                          }}
+                          data-testid="handwavy-undo-all"
+                          data-mutations-blocked={
+                            !mutationsAllowed ? "true" : "false"
+                          }
+                          aria-describedby={undoAllHintId}
+                          title={
+                            !mutationsAllowed
+                              ? MUTATIONS_BLOCKED_TITLE
+                              : `Roll back every reviewer-added phrase still inside its 5-minute undo window. Each phrase keeps its own audit trail row marked "undone".`
+                          }
+                        >
+                          <Undo2 className="w-3.5 h-3.5" />
+                          {busy === "undo-batch"
+                            ? "Undoing…"
+                            : `Undo last ${undoCandidates.size} adds`}
+                        </Button>
+                      )}
+                      {/* Task #154 — sole bulk-remove entry point. The reviewer
                     is always routed through the side-by-side preview panel
                     (`handwavy-bulk-preview`) before any DELETE fires. The
                     preview panel itself owns the destructive confirm + the
                     acknowledgment checkbox when valid detections would be
                     lost. */}
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="h-7 px-2 text-xs gap-1"
-                  disabled={
-                    selectedInList.length === 0 ||
-                    busy === "bulk-remove" ||
-                    busy === "bulk-preview" ||
-                    bulkPreview !== null ||
-                    !mutationsAllowed
-                  }
-                  onClick={handlePreviewBulkRemove}
-                  data-testid="handwavy-bulk-remove"
-                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                  aria-describedby={bulkRemoveHintId}
-                  title={
-                    !mutationsAllowed
-                      ? MUTATIONS_BLOCKED_TITLE
-                      : "Open the side-by-side removal preview. You'll see how many active phrases would be removed, plus how many flagged reports would lose their flag, before anything is committed."
-                  }
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  {busy === "bulk-preview"
-                    ? "Previewing…"
-                    : `Remove selected${selectedInList.length > 0 ? ` (${selectedInList.length})` : ""}`}
-                </Button>
-              </div>
-              {/* Task #337 — visible reason captions for the disabled
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 px-2 text-xs gap-1"
+                        disabled={
+                          selectedInList.length === 0 ||
+                          busy === "bulk-remove" ||
+                          busy === "bulk-preview" ||
+                          bulkPreview !== null ||
+                          !mutationsAllowed
+                        }
+                        onClick={handlePreviewBulkRemove}
+                        data-testid="handwavy-bulk-remove"
+                        data-mutations-blocked={
+                          !mutationsAllowed ? "true" : "false"
+                        }
+                        aria-describedby={bulkRemoveHintId}
+                        title={
+                          !mutationsAllowed
+                            ? MUTATIONS_BLOCKED_TITLE
+                            : "Open the side-by-side removal preview. You'll see how many active phrases would be removed, plus how many flagged reports would lose their flag, before anything is committed."
+                        }
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {busy === "bulk-preview"
+                          ? "Previewing…"
+                          : `Remove selected${selectedInList.length > 0 ? ` (${selectedInList.length})` : ""}`}
+                      </Button>
+                    </div>
+                    {/* Task #337 — visible reason captions for the disabled
                   "Undo last N adds" / "Remove selected" controls
                   above. Sit on a sibling row beneath the action row so
                   the existing flex layout isn't fractured by basis-full
                   wrappers between the buttons themselves. */}
-              {(undoAllHintId || bulkRemoveHintId) && (
-                <div className="flex flex-col gap-1 mt-1">
-                  {undoAllHintId && (
-                    <HandwavyDisabledHint
-                      id={undoAllHintId}
-                      reason={undoAllReason}
-                      testId="handwavy-undo-all-disabled-hint"
-                    />
-                  )}
-                  {bulkRemoveHintId && (
-                    <HandwavyDisabledHint
-                      id={bulkRemoveHintId}
-                      reason={bulkRemoveReason}
-                      testId="handwavy-bulk-remove-disabled-hint"
-                    />
-                  )}
-                </div>
-              )}
-              {/* Task #229 — production scan-window control for the bulk
+                    {(undoAllHintId || bulkRemoveHintId) && (
+                      <div className="flex flex-col gap-1 mt-1">
+                        {undoAllHintId && (
+                          <HandwavyDisabledHint
+                            id={undoAllHintId}
+                            reason={undoAllReason}
+                            testId="handwavy-undo-all-disabled-hint"
+                          />
+                        )}
+                        {bulkRemoveHintId && (
+                          <HandwavyDisabledHint
+                            id={bulkRemoveHintId}
+                            reason={bulkRemoveReason}
+                            testId="handwavy-bulk-remove-disabled-hint"
+                          />
+                        )}
+                      </div>
+                    )}
+                    {/* Task #229 — production scan-window control for the bulk
                   removal preview. Mirrors the add-time control above and
                   shares the same `productionScanLimitInput` state so
                   reviewers only ever have to tune the value once per
@@ -9471,551 +10382,647 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                   to both flows). Disabled while a preview is in flight or
                   open so changes don't desynchronize from the in-flight
                   request. */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2 text-[11px] text-muted-foreground">
-                <label
-                  htmlFor="handwavy-bulk-production-scan-limit"
-                  className="shrink-0"
-                >
-                  Production scan window:
-                </label>
-                <input
-                  id="handwavy-bulk-production-scan-limit"
-                  type="number"
-                  inputMode="numeric"
-                  min={CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}
-                  max={CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}
-                  step={100}
-                  value={productionScanLimitInput}
-                  onChange={(e) => setProductionScanLimitInput(e.target.value)}
-                  className={cn(
-                    "h-7 w-24 px-2 rounded-md border bg-background/40 text-xs focus:outline-none focus:ring-1",
-                    productionScanLimitValid || productionScanLimitInput.trim() === ""
-                      ? "border-border/40 focus:ring-primary/40"
-                      : "border-red-500/60 focus:ring-red-500/60",
-                  )}
-                  data-testid="handwavy-bulk-production-scan-limit"
-                  aria-label="Production scan window for bulk removal preview (most recent N reports) — shared with the add-phrase and single-remove previews."
-                  disabled={busy === "bulk-preview" || busy === "bulk-remove" || bulkPreview !== null}
-                />
-                <span className="text-muted-foreground/70">
-                  most recent reports ({CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}–
-                  {CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}; default{" "}
-                  {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT})
-                </span>
-                {!productionScanLimitValid && productionScanLimitInput.trim() !== "" && (
-                  <span
-                    className="text-red-400"
-                    data-testid="handwavy-bulk-production-scan-limit-warning"
-                  >
-                    Out of range — the next preview will use{" "}
-                    {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT} until you fix this.
-                  </span>
-                )}
-              </div>
-            </div>
-              );
-            })()}
-            <div className="divide-y divide-border/20">
-            {displayPhrases.map((m) => {
-              const addedAt = formatAuditTimestamp(m.addedAt);
-              const isCurated = !m.addedBy && !m.addedAt;
-              const isEditing = editing?.phrase === m.phrase;
-              const editsList: HandwavyEditEntry[] = m.edits ?? [];
-              const lastEdit: HandwavyEditEntry | undefined =
-                editsList.length > 0 ? editsList[editsList.length - 1] : undefined;
-              const lastEditAt = formatAuditTimestamp(lastEdit?.editedAt);
-              const isSelected = selected.has(m.phrase);
-              // Task #134 + Task #120 — bulk selection and inline edit are
-              // mutually exclusive on a per-row basis: while a row is being
-              // edited the reviewer shouldn't be able to retire it via the
-              // bulk path, and while a bulk batch is mid-flight or pending
-              // confirmation the row's edit affordance is disabled. The
-              // disable rules below keep both flows visible side-by-side
-              // without letting them step on each other.
-              const bulkBusy = busy === "bulk-remove" || bulkPreview !== null;
-              // Task #141 — every active marker that's still inside its own
-              // undo window gets its own Undo button (not just the single
-              // most-recent one), so a reviewer who fired two adds back-to-
-              // back can roll back either of them through the audit-friendly
-              // undo path. Look the row up by phrase in `undoCandidates`.
-              // Task #140 — the entry also carries its own live `remainingMs`
-              // so this row's countdown text + urgent styling tick down
-              // independently of every other row.
-              const undoEntry = undoCandidates.get(m.phrase) ?? null;
-              const isUndoTarget = undoEntry !== null;
-              const undoBusyKey = undoEntry
-                ? `undo:${m.phrase}:${undoEntry.addedAtIso}`
-                : null;
-              const undoRemainingMs = undoEntry?.remainingMs ?? 0;
-              const undoIsUrgent =
-                undoEntry !== null && undoRemainingMs <= UNDO_URGENT_MS;
-              // Task #131 — count of completed remove+reinstate cycles for
-              // this phrase, derived from the existing history log. Surfaced
-              // as a hover-able badge so reviewers can spot contentious
-              // markers at a glance.
-              const cycles = thrashByPhrase.get(m.phrase) ?? [];
-              // Task #149 — count category transitions from the in-row edit
-              // history so reviewers can spot phrases that have bounced
-              // between absence/hedging/buzzword multiple times without
-              // expanding the full history panel. The filter + render lives
-              // in `HandwavyCategoryFlipBadge` (Task #338) so this list and
-              // the removed-history list always agree on what counts as a
-              // "flip" and how the badge looks.
-              const categoryFlips = getCategoryFlips(editsList);
-              // Task #357 — list of rename entries on the in-row edit history
-              // so a sibling badge can sit next to the category-flip / thrash
-              // badges. The filter + render lives in `HandwavyRenameBadge` so
-              // this list and the removed-history list always agree on what
-              // counts as a rename and how the badge looks.
-              const renameEdits = getRenameEdits(editsList);
-              // Task #220 — when a reviewer clicks an entry name in the
-              // pre-preview overlap hint we set `highlightedPhrase` to that
-              // phrase for ~2.5s so the matching row pulses amber. The
-              // `data-handwavy-phrase` hook gives the jump helper a stable
-              // selector to scroll into view (the row's React key already
-              // uses the phrase string but isn't queryable from the DOM).
-              const isHighlighted = highlightedPhrase === m.phrase;
-              // Task #337 — visible reason caption beneath the per-row
-              // Edit / Trash buttons. The buttons share identical disable
-              // conditions, so they share one caption + hintId pair (each
-              // button's aria-describedby points at it). We only compute
-              // the reason when the row is in its non-edit branch — when
-              // this row is being edited the rendered Save/Cancel pair
-              // has its own context and the per-row Edit/Trash buttons
-              // aren't on screen. The phrase slug keeps the id collision-
-              // free across rows in the same panel render.
-              const editTrashDisabledReason = !isEditing
-                ? describeHandwavyDisabledReason({
-                    mutationsAllowed,
-                    rowEditingActive: editing !== null,
-                    bulkBusy,
-                    inFlight:
-                      busy === `rm:${m.phrase}` ||
-                      busy === `rm-preview:${m.phrase}`,
-                    inFlightLabel:
-                      busy === `rm:${m.phrase}`
-                        ? "Removing this phrase — wait for it to finish."
-                        : "Loading the removal preview for this phrase — wait for it to finish.",
-                  })
-                : null;
-              const editTrashHintId = editTrashDisabledReason
-                ? `handwavy-row-disabled-${slugifyForHintId(m.phrase, "phrase")}`
-                : undefined;
-              return (
-                <div
-                  key={m.phrase}
-                  className={cn(
-                    "flex flex-col gap-1 px-3 py-2 text-xs transition-colors duration-700",
-                    isHighlighted &&
-                      "bg-amber-500/15 ring-1 ring-amber-400/60 ring-inset",
-                  )}
-                  data-testid="handwavy-row"
-                  data-handwavy-phrase={m.phrase}
-                  data-highlighted={isHighlighted ? "true" : undefined}
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5 cursor-pointer accent-primary shrink-0"
-                      checked={isSelected}
-                      onChange={() => toggleSelected(m.phrase)}
-                      disabled={bulkBusy || isEditing}
-                      aria-label={`Select phrase ${m.phrase} for bulk removal`}
-                      data-testid="handwavy-select"
-                    />
-                    {isEditing ? (
-                      // Task #247 — when this row is in edit mode, the
-                      // phrase becomes editable. Saving with a value
-                      // that normalizes to a different string than the
-                      // current phrase triggers the rename + impact
-                      // preview gate; otherwise the input is a no-op
-                      // and the legacy category/rationale edit path
-                      // runs unchanged.
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2 text-[11px] text-muted-foreground">
+                      <label
+                        htmlFor="handwavy-bulk-production-scan-limit"
+                        className="shrink-0"
+                      >
+                        Production scan window:
+                      </label>
                       <input
-                        type="text"
-                        value={editing!.newPhrase}
+                        id="handwavy-bulk-production-scan-limit"
+                        type="number"
+                        inputMode="numeric"
+                        min={CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}
+                        max={CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}
+                        step={100}
+                        value={productionScanLimitInput}
                         onChange={(e) =>
-                          setEditing((prev) =>
-                            prev ? { ...prev, newPhrase: e.target.value } : prev,
-                          )
+                          setProductionScanLimitInput(e.target.value)
                         }
-                        className="flex-1 h-7 px-2 rounded border border-border/40 bg-background/40 font-mono text-[11px] text-foreground/90"
-                        data-testid="handwavy-edit-phrase"
-                        aria-label={`Edit phrase text for ${m.phrase}`}
+                        className={cn(
+                          "h-7 w-24 px-2 rounded-md border bg-background/40 text-xs focus:outline-none focus:ring-1",
+                          productionScanLimitValid ||
+                            productionScanLimitInput.trim() === ""
+                            ? "border-border/40 focus:ring-primary/40"
+                            : "border-red-500/60 focus:ring-red-500/60",
+                        )}
+                        data-testid="handwavy-bulk-production-scan-limit"
+                        aria-label="Production scan window for bulk removal preview (most recent N reports) — shared with the add-phrase and single-remove previews."
+                        disabled={
+                          busy === "bulk-preview" ||
+                          busy === "bulk-remove" ||
+                          bulkPreview !== null
+                        }
                       />
-                    ) : (
-                      <span className="flex-1 font-mono text-foreground/80 break-all">{m.phrase}</span>
-                    )}
-                    {/* Task #131 — thrash counter badge appears before the
+                      <span className="text-muted-foreground/70">
+                        most recent reports (
+                        {CALIBRATION_PRODUCTION_SCAN_LIMIT_MIN}–
+                        {CALIBRATION_PRODUCTION_SCAN_LIMIT_MAX}; default{" "}
+                        {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT})
+                      </span>
+                      {!productionScanLimitValid &&
+                        productionScanLimitInput.trim() !== "" && (
+                          <span
+                            className="text-red-400"
+                            data-testid="handwavy-bulk-production-scan-limit-warning"
+                          >
+                            Out of range — the next preview will use{" "}
+                            {CALIBRATION_PRODUCTION_SCAN_LIMIT_DEFAULT} until
+                            you fix this.
+                          </span>
+                        )}
+                    </div>
+                  </div>
+                );
+              })()}
+              <div className="divide-y divide-border/20">
+                {displayPhrases.map((m) => {
+                  const addedAt = formatAuditTimestamp(m.addedAt);
+                  const isCurated = !m.addedBy && !m.addedAt;
+                  const isEditing = editing?.phrase === m.phrase;
+                  const editsList: HandwavyEditEntry[] = m.edits ?? [];
+                  const lastEdit: HandwavyEditEntry | undefined =
+                    editsList.length > 0
+                      ? editsList[editsList.length - 1]
+                      : undefined;
+                  const lastEditAt = formatAuditTimestamp(lastEdit?.editedAt);
+                  const isSelected = selected.has(m.phrase);
+                  // Task #134 + Task #120 — bulk selection and inline edit are
+                  // mutually exclusive on a per-row basis: while a row is being
+                  // edited the reviewer shouldn't be able to retire it via the
+                  // bulk path, and while a bulk batch is mid-flight or pending
+                  // confirmation the row's edit affordance is disabled. The
+                  // disable rules below keep both flows visible side-by-side
+                  // without letting them step on each other.
+                  const bulkBusy =
+                    busy === "bulk-remove" || bulkPreview !== null;
+                  // Task #141 — every active marker that's still inside its own
+                  // undo window gets its own Undo button (not just the single
+                  // most-recent one), so a reviewer who fired two adds back-to-
+                  // back can roll back either of them through the audit-friendly
+                  // undo path. Look the row up by phrase in `undoCandidates`.
+                  // Task #140 — the entry also carries its own live `remainingMs`
+                  // so this row's countdown text + urgent styling tick down
+                  // independently of every other row.
+                  const undoEntry = undoCandidates.get(m.phrase) ?? null;
+                  const isUndoTarget = undoEntry !== null;
+                  const undoBusyKey = undoEntry
+                    ? `undo:${m.phrase}:${undoEntry.addedAtIso}`
+                    : null;
+                  const undoRemainingMs = undoEntry?.remainingMs ?? 0;
+                  const undoIsUrgent =
+                    undoEntry !== null && undoRemainingMs <= UNDO_URGENT_MS;
+                  // Task #131 — count of completed remove+reinstate cycles for
+                  // this phrase, derived from the existing history log. Surfaced
+                  // as a hover-able badge so reviewers can spot contentious
+                  // markers at a glance.
+                  const cycles = thrashByPhrase.get(m.phrase) ?? [];
+                  // Task #149 — count category transitions from the in-row edit
+                  // history so reviewers can spot phrases that have bounced
+                  // between absence/hedging/buzzword multiple times without
+                  // expanding the full history panel. The filter + render lives
+                  // in `HandwavyCategoryFlipBadge` (Task #338) so this list and
+                  // the removed-history list always agree on what counts as a
+                  // "flip" and how the badge looks.
+                  const categoryFlips = getCategoryFlips(editsList);
+                  // Task #357 — list of rename entries on the in-row edit history
+                  // so a sibling badge can sit next to the category-flip / thrash
+                  // badges. The filter + render lives in `HandwavyRenameBadge` so
+                  // this list and the removed-history list always agree on what
+                  // counts as a rename and how the badge looks.
+                  const renameEdits = getRenameEdits(editsList);
+                  // Task #220 — when a reviewer clicks an entry name in the
+                  // pre-preview overlap hint we set `highlightedPhrase` to that
+                  // phrase for ~2.5s so the matching row pulses amber. The
+                  // `data-handwavy-phrase` hook gives the jump helper a stable
+                  // selector to scroll into view (the row's React key already
+                  // uses the phrase string but isn't queryable from the DOM).
+                  const isHighlighted = highlightedPhrase === m.phrase;
+                  // Task #337 — visible reason caption beneath the per-row
+                  // Edit / Trash buttons. The buttons share identical disable
+                  // conditions, so they share one caption + hintId pair (each
+                  // button's aria-describedby points at it). We only compute
+                  // the reason when the row is in its non-edit branch — when
+                  // this row is being edited the rendered Save/Cancel pair
+                  // has its own context and the per-row Edit/Trash buttons
+                  // aren't on screen. The phrase slug keeps the id collision-
+                  // free across rows in the same panel render.
+                  const editTrashDisabledReason = !isEditing
+                    ? describeHandwavyDisabledReason({
+                        mutationsAllowed,
+                        rowEditingActive: editing !== null,
+                        bulkBusy,
+                        inFlight:
+                          busy === `rm:${m.phrase}` ||
+                          busy === `rm-preview:${m.phrase}`,
+                        inFlightLabel:
+                          busy === `rm:${m.phrase}`
+                            ? "Removing this phrase — wait for it to finish."
+                            : "Loading the removal preview for this phrase — wait for it to finish.",
+                      })
+                    : null;
+                  const editTrashHintId = editTrashDisabledReason
+                    ? `handwavy-row-disabled-${slugifyForHintId(m.phrase, "phrase")}`
+                    : undefined;
+                  return (
+                    <div
+                      key={m.phrase}
+                      className={cn(
+                        "flex flex-col gap-1 px-3 py-2 text-xs transition-colors duration-700",
+                        isHighlighted &&
+                          "bg-amber-500/15 ring-1 ring-amber-400/60 ring-inset",
+                      )}
+                      data-testid="handwavy-row"
+                      data-handwavy-phrase={m.phrase}
+                      data-highlighted={isHighlighted ? "true" : undefined}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 cursor-pointer accent-primary shrink-0"
+                          checked={isSelected}
+                          onChange={() => toggleSelected(m.phrase)}
+                          disabled={bulkBusy || isEditing}
+                          aria-label={`Select phrase ${m.phrase} for bulk removal`}
+                          data-testid="handwavy-select"
+                        />
+                        {isEditing ? (
+                          // Task #247 — when this row is in edit mode, the
+                          // phrase becomes editable. Saving with a value
+                          // that normalizes to a different string than the
+                          // current phrase triggers the rename + impact
+                          // preview gate; otherwise the input is a no-op
+                          // and the legacy category/rationale edit path
+                          // runs unchanged.
+                          <input
+                            type="text"
+                            value={editing!.newPhrase}
+                            onChange={(e) =>
+                              setEditing((prev) =>
+                                prev
+                                  ? { ...prev, newPhrase: e.target.value }
+                                  : prev,
+                              )
+                            }
+                            className="flex-1 h-7 px-2 rounded border border-border/40 bg-background/40 font-mono text-[11px] text-foreground/90"
+                            data-testid="handwavy-edit-phrase"
+                            aria-label={`Edit phrase text for ${m.phrase}`}
+                          />
+                        ) : (
+                          <span className="flex-1 font-mono text-foreground/80 break-all">
+                            {m.phrase}
+                          </span>
+                        )}
+                        {/* Task #131 — thrash counter badge appears before the
                        category/edit affordances so reviewers see the
                        contentious-marker signal alongside the existing
                        bulk-select + inline-edit controls. */}
-                    {cycles.length > 0 && (
-                      <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                          <TooltipTrigger
-                            type="button"
-                            className="cursor-help inline-flex"
-                            data-testid="handwavy-thrash-badge"
-                            aria-label={`Removed and reinstated ${cycles.length} time${cycles.length === 1 ? "" : "s"}`}
-                          >
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] border-amber-500/40 text-amber-300"
-                            >
-                              <RotateCcw className="w-3 h-3 mr-1" />
-                              Removed and reinstated {cycles.length}×
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            align="end"
-                            collisionPadding={12}
-                            className="max-w-xs glass-card glow-border text-popover-foreground text-left font-normal normal-case px-3 py-2 whitespace-normal"
-                            data-testid="handwavy-thrash-tooltip"
-                          >
-                            <div className="text-[11px] font-semibold mb-1">
-                              {cycles.length} remove + reinstate {cycles.length === 1 ? "cycle" : "cycles"}
-                            </div>
-                            <ol className="space-y-1.5 text-[10px] leading-snug">
-                              {cycles.map((c, i) => (
-                                <li key={`${c.removedAt}-${i}`} className="space-y-0.5">
-                                  <div>
-                                    <span className="text-muted-foreground">#{i + 1} removed:</span>{" "}
-                                    {formatAuditTimestamp(c.removedAt) ?? "unknown date"}
-                                    {" by "}
-                                    <span className="text-foreground/90">{c.removedBy || "anonymous"}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-muted-foreground">reinstated:</span>{" "}
-                                    {formatAuditTimestamp(c.reinstatedAt) ?? "unknown date"}
-                                    {" by "}
-                                    <span className="text-foreground/90">{c.reinstatedBy || "anonymous"}</span>
-                                  </div>
-                                </li>
-                              ))}
-                            </ol>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                    {/* Task #149 — category-flip badge sits next to the
+                        {cycles.length > 0 && (
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger
+                                type="button"
+                                className="cursor-help inline-flex"
+                                data-testid="handwavy-thrash-badge"
+                                aria-label={`Removed and reinstated ${cycles.length} time${cycles.length === 1 ? "" : "s"}`}
+                              >
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] border-amber-500/40 text-amber-300"
+                                >
+                                  <RotateCcw className="w-3 h-3 mr-1" />
+                                  Removed and reinstated {cycles.length}×
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                align="end"
+                                collisionPadding={12}
+                                className="max-w-xs glass-card glow-border text-popover-foreground text-left font-normal normal-case px-3 py-2 whitespace-normal"
+                                data-testid="handwavy-thrash-tooltip"
+                              >
+                                <div className="text-[11px] font-semibold mb-1">
+                                  {cycles.length} remove + reinstate{" "}
+                                  {cycles.length === 1 ? "cycle" : "cycles"}
+                                </div>
+                                <ol className="space-y-1.5 text-[10px] leading-snug">
+                                  {cycles.map((c, i) => (
+                                    <li
+                                      key={`${c.removedAt}-${i}`}
+                                      className="space-y-0.5"
+                                    >
+                                      <div>
+                                        <span className="text-muted-foreground">
+                                          #{i + 1} removed:
+                                        </span>{" "}
+                                        {formatAuditTimestamp(c.removedAt) ??
+                                          "unknown date"}
+                                        {" by "}
+                                        <span className="text-foreground/90">
+                                          {c.removedBy || "anonymous"}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-muted-foreground">
+                                          reinstated:
+                                        </span>{" "}
+                                        {formatAuditTimestamp(c.reinstatedAt) ??
+                                          "unknown date"}
+                                        {" by "}
+                                        <span className="text-foreground/90">
+                                          {c.reinstatedBy || "anonymous"}
+                                        </span>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ol>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {/* Task #149 — category-flip badge sits next to the
                        thrash badge so the two "this phrase is unstable"
                        signals (remove+reinstate cycles vs. category
                        reassignments) live side by side. Render lives in the
                        shared `HandwavyCategoryFlipBadge` (Task #338) which
                        also enforces the >= HANDWAVY_CATEGORY_FLIP_MIN
                        threshold so a one-off correction stays clean. */}
-                    <HandwavyCategoryFlipBadge
-                      flips={categoryFlips}
-                      testIdPrefix="handwavy"
-                    />
-                    {/* Task #357 — rename badge sits next to the
+                        <HandwavyCategoryFlipBadge
+                          flips={categoryFlips}
+                          testIdPrefix="handwavy"
+                        />
+                        {/* Task #357 — rename badge sits next to the
                        category-flip badge so the audit-trail signal "this
                        phrase used to be called X" is visible at row level
                        too, not only inside the per-edit history rows. The
                        shared `HandwavyRenameBadge` handles the empty-list
                        guard and tooltip rendering. */}
-                    <HandwavyRenameBadge
-                      renames={renameEdits}
-                      testIdPrefix="handwavy"
-                      formatTimestamp={formatAuditTimestamp}
-                    />
-                    {isEditing ? (
-                      <select
-                        value={editing!.category}
-                        onChange={(e) =>
-                          setEditing((prev) =>
-                            prev ? { ...prev, category: e.target.value as "absence" | "hedging" | "buzzword" } : prev,
-                          )
-                        }
-                        className="h-7 px-1.5 rounded border border-border/40 bg-background/40 text-[10px]"
-                        data-testid="handwavy-edit-category"
-                        aria-label={`Edit category for ${m.phrase}`}
-                      >
-                        <option value="absence">absence</option>
-                        <option value="hedging">hedging</option>
-                        <option value="buzzword">buzzword</option>
-                      </select>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px] capitalize">{m.category}</Badge>
-                    )}
-                    {isEditing ? (
-                      <>
-                        {(() => {
-                          const editSaveReason = describeHandwavyDisabledReason({
-                            mutationsAllowed,
-                            inFlight: busy === `edit:${m.phrase}`,
-                            inFlightLabel:
-                              "Saving the rename — wait for it to finish.",
-                          });
-                          const editSaveHintId = editSaveReason
-                            ? `handwavy-edit-save-disabled-hint-id-${slugifyForHintId(m.phrase, "phrase")}`
-                            : undefined;
-                          return (
-                            <>
+                        <HandwavyRenameBadge
+                          renames={renameEdits}
+                          testIdPrefix="handwavy"
+                          formatTimestamp={formatAuditTimestamp}
+                        />
+                        {isEditing ? (
+                          <select
+                            value={editing!.category}
+                            onChange={(e) =>
+                              setEditing((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      category: e.target.value as
+                                        | "absence"
+                                        | "hedging"
+                                        | "buzzword",
+                                    }
+                                  : prev,
+                              )
+                            }
+                            className="h-7 px-1.5 rounded border border-border/40 bg-background/40 text-[10px]"
+                            data-testid="handwavy-edit-category"
+                            aria-label={`Edit category for ${m.phrase}`}
+                          >
+                            <option value="absence">absence</option>
+                            <option value="hedging">hedging</option>
+                            <option value="buzzword">buzzword</option>
+                          </select>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] capitalize"
+                          >
+                            {m.category}
+                          </Badge>
+                        )}
+                        {isEditing ? (
+                          <>
+                            {(() => {
+                              const editSaveReason =
+                                describeHandwavyDisabledReason({
+                                  mutationsAllowed,
+                                  inFlight: busy === `edit:${m.phrase}`,
+                                  inFlightLabel:
+                                    "Saving the rename — wait for it to finish.",
+                                });
+                              const editSaveHintId = editSaveReason
+                                ? `handwavy-edit-save-disabled-hint-id-${slugifyForHintId(m.phrase, "phrase")}`
+                                : undefined;
+                              return (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-emerald-300 hover:text-emerald-200"
+                                    disabled={
+                                      busy === `edit:${m.phrase}` ||
+                                      !mutationsAllowed
+                                    }
+                                    title={
+                                      !mutationsAllowed
+                                        ? MUTATIONS_BLOCKED_TITLE
+                                        : undefined
+                                    }
+                                    onClick={handleSaveEdit}
+                                    data-testid="handwavy-edit-save"
+                                    data-mutations-blocked={
+                                      !mutationsAllowed ? "true" : "false"
+                                    }
+                                    aria-label={`Save edit for ${m.phrase}`}
+                                    aria-describedby={editSaveHintId}
+                                  >
+                                    <Save className="w-3.5 h-3.5" />
+                                  </Button>
+                                  {editSaveHintId && (
+                                    <div className="basis-full">
+                                      <HandwavyDisabledHint
+                                        id={editSaveHintId}
+                                        reason={editSaveReason}
+                                        testId="handwavy-edit-save-disabled-hint"
+                                      />
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-muted-foreground"
+                              disabled={busy === `edit:${m.phrase}`}
+                              onClick={handleCancelEdit}
+                              data-testid="handwavy-edit-cancel"
+                              aria-label={`Cancel edit for ${m.phrase}`}
+                            >
+                              <XIcon className="w-3.5 h-3.5" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            {isUndoTarget && undoEntry && (
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 px-2 text-emerald-300 hover:text-emerald-200"
-                                disabled={busy === `edit:${m.phrase}` || !mutationsAllowed}
-                                title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                                onClick={handleSaveEdit}
-                                data-testid="handwavy-edit-save"
-                                data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                                aria-label={`Save edit for ${m.phrase}`}
-                                aria-describedby={editSaveHintId}
+                                className={cn(
+                                  "h-7 px-2 text-[10px]",
+                                  undoIsUrgent
+                                    ? "text-red-400 hover:text-red-300 animate-pulse"
+                                    : "text-amber-300 hover:text-amber-200",
+                                )}
+                                disabled={
+                                  editing !== null ||
+                                  busy === undoBusyKey ||
+                                  !mutationsAllowed
+                                }
+                                onClick={() =>
+                                  handleUndo(m.phrase, undoEntry.addedAtIso)
+                                }
+                                data-testid="handwavy-undo"
+                                data-undo-remaining-ms={undoRemainingMs}
+                                data-undo-urgent={
+                                  undoIsUrgent ? "true" : "false"
+                                }
+                                data-mutations-blocked={
+                                  !mutationsAllowed ? "true" : "false"
+                                }
+                                aria-label={`Undo adding phrase ${m.phrase} (${formatUndoRemaining(undoRemainingMs)} left)`}
+                                title={
+                                  !mutationsAllowed
+                                    ? MUTATIONS_BLOCKED_TITLE
+                                    : `Undo this brand-new add — ${formatUndoRemaining(undoRemainingMs)} left in the 5-minute window`
+                                }
                               >
-                                <Save className="w-3.5 h-3.5" />
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                {busy === undoBusyKey
+                                  ? "Undoing…"
+                                  : `Undo (${formatUndoRemaining(undoRemainingMs)})`}
                               </Button>
-                              {editSaveHintId && (
-                                <div className="basis-full">
-                                  <HandwavyDisabledHint
-                                    id={editSaveHintId}
-                                    reason={editSaveReason}
-                                    testId="handwavy-edit-save-disabled-hint"
-                                  />
-                                </div>
-                              )}
-                            </>
-                          );
-                        })()}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-muted-foreground"
-                          disabled={busy === `edit:${m.phrase}`}
-                          onClick={handleCancelEdit}
-                          data-testid="handwavy-edit-cancel"
-                          aria-label={`Cancel edit for ${m.phrase}`}
-                        >
-                          <XIcon className="w-3.5 h-3.5" />
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        {isUndoTarget && undoEntry && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className={cn(
-                              "h-7 px-2 text-[10px]",
-                              undoIsUrgent
-                                ? "text-red-400 hover:text-red-300 animate-pulse"
-                                : "text-amber-300 hover:text-amber-200",
                             )}
-                            disabled={
-                              editing !== null ||
-                              busy === undoBusyKey ||
-                              !mutationsAllowed
-                            }
-                            onClick={() => handleUndo(m.phrase, undoEntry.addedAtIso)}
-                            data-testid="handwavy-undo"
-                            data-undo-remaining-ms={undoRemainingMs}
-                            data-undo-urgent={undoIsUrgent ? "true" : "false"}
-                            data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                            aria-label={`Undo adding phrase ${m.phrase} (${formatUndoRemaining(undoRemainingMs)} left)`}
-                            title={
-                              !mutationsAllowed
-                                ? MUTATIONS_BLOCKED_TITLE
-                                : `Undo this brand-new add — ${formatUndoRemaining(undoRemainingMs)} left in the 5-minute window`
-                            }
-                          >
-                            <RotateCcw className="w-3 h-3 mr-1" />
-                            {busy === undoBusyKey
-                              ? "Undoing…"
-                              : `Undo (${formatUndoRemaining(undoRemainingMs)})`}
-                          </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-muted-foreground hover:text-primary"
+                              disabled={
+                                editing !== null ||
+                                busy === `rm:${m.phrase}` ||
+                                busy === `rm-preview:${m.phrase}` ||
+                                bulkBusy ||
+                                !mutationsAllowed
+                              }
+                              title={
+                                !mutationsAllowed
+                                  ? MUTATIONS_BLOCKED_TITLE
+                                  : undefined
+                              }
+                              onClick={() =>
+                                handleStartEdit(
+                                  m.phrase,
+                                  m.category,
+                                  m.rationale,
+                                )
+                              }
+                              data-testid="handwavy-edit"
+                              data-mutations-blocked={
+                                !mutationsAllowed ? "true" : "false"
+                              }
+                              aria-label={`Edit phrase ${m.phrase}`}
+                              aria-describedby={editTrashHintId}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-muted-foreground hover:text-red-400"
+                              disabled={
+                                editing !== null ||
+                                busy === `rm:${m.phrase}` ||
+                                busy === `rm-preview:${m.phrase}` ||
+                                bulkBusy ||
+                                !mutationsAllowed
+                              }
+                              title={
+                                !mutationsAllowed
+                                  ? MUTATIONS_BLOCKED_TITLE
+                                  : undefined
+                              }
+                              onClick={() => requestRemove(m.phrase, cycles)}
+                              data-testid="handwavy-remove"
+                              data-mutations-blocked={
+                                !mutationsAllowed ? "true" : "false"
+                              }
+                              aria-label={`Remove phrase ${m.phrase}`}
+                              aria-describedby={editTrashHintId}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-muted-foreground hover:text-primary"
-                          disabled={
-                            editing !== null ||
-                            busy === `rm:${m.phrase}` ||
-                            busy === `rm-preview:${m.phrase}` ||
-                            bulkBusy ||
-                            !mutationsAllowed
-                          }
-                          title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                          onClick={() => handleStartEdit(m.phrase, m.category, m.rationale)}
-                          data-testid="handwavy-edit"
-                          data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                          aria-label={`Edit phrase ${m.phrase}`}
-                          aria-describedby={editTrashHintId}
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-muted-foreground hover:text-red-400"
-                          disabled={
-                            editing !== null ||
-                            busy === `rm:${m.phrase}` ||
-                            busy === `rm-preview:${m.phrase}` ||
-                            bulkBusy ||
-                            !mutationsAllowed
-                          }
-                          title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                          onClick={() => requestRemove(m.phrase, cycles)}
-                          data-testid="handwavy-remove"
-                          data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                          aria-label={`Remove phrase ${m.phrase}`}
-                          aria-describedby={editTrashHintId}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                  {/* Task #337 — visible explanation when the per-row
+                      </div>
+                      {/* Task #337 — visible explanation when the per-row
                       Edit/Trash buttons are disabled. Sibling of the
                       buttons row (above the audit-info row) so it
                       renders directly beneath the affordances it
                       describes. Stays out of the DOM entirely when both
                       buttons are enabled. */}
-                  {editTrashHintId && (
-                    <HandwavyDisabledHint
-                      id={editTrashHintId}
-                      reason={editTrashDisabledReason}
-                      testId="handwavy-row-disabled-hint"
-                    />
-                  )}
-                  <div
-                    className="text-[10px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5"
-                    data-testid="handwavy-audit"
-                  >
-                    {isCurated ? (
-                      <span className="italic">Curated default</span>
-                    ) : (
-                      <>
-                        <span>
-                          Added by{" "}
-                          <span className="text-foreground/80">{m.addedBy || "anonymous"}</span>
-                        </span>
-                        {addedAt && (
-                          <span data-testid="handwavy-added-at">{addedAt}</span>
-                        )}
-                      </>
-                    )}
-                    {lastEdit && (
-                      <span data-testid="handwavy-last-edit">
-                        Last edit by{" "}
-                        <span className="text-foreground/80">{lastEdit.editedBy || "anonymous"}</span>
-                        {lastEditAt && <> • {lastEditAt}</>}
-                      </span>
-                    )}
-                    {editsList.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setOpenEditHistory((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(m.phrase)) next.delete(m.phrase);
-                            else next.add(m.phrase);
-                            return next;
-                          })
-                        }
-                        className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground/80 underline-offset-2 hover:underline"
-                        data-testid="handwavy-edit-history-toggle"
-                        aria-expanded={openEditHistory.has(m.phrase)}
-                        aria-controls={`handwavy-edit-history-${m.phrase}`}
-                        aria-label={`${openEditHistory.has(m.phrase) ? "Hide" : "Show"} full edit history for ${m.phrase} (${editsList.length} edits)`}
-                      >
-                        <Clock className="w-3 h-3" />
-                        {openEditHistory.has(m.phrase) ? "Hide" : "Show"} history ({editsList.length} edits)
-                      </button>
-                    )}
-                  </div>
-                  {!isEditing && editsList.length === 1 && (
-                    // Task #132 — single-edit case keeps the lightweight
-                    // <details> affordance so reviewers can still revert
-                    // the one recorded edit. The Task #133 toggle only
-                    // renders for >1 edits, so this stays the entry
-                    // point for one-edit rows.
-                    <details className="text-[10px]" data-testid="handwavy-edits-details">
-                      <summary className="cursor-pointer text-muted-foreground/80 hover:text-foreground/80 select-none">
-                        Show edit
-                      </summary>
-                      <ul
-                        className="mt-1 space-y-1 border-l border-primary/20 pl-2"
-                        data-testid="handwavy-edits-list"
-                      >
-                        {renderHandwavyEditEntries({
-                          editsList,
-                          phrase: m.phrase,
-                          currentCategory: m.category,
-                          currentRationale: m.rationale,
-                          editing,
-                          busy,
-                          onRevertClick: (entry) =>
-                            setRevertConfirm({ phrase: m.phrase, entry }),
-                          mutationsAllowed,
-                        })}
-                      </ul>
-                    </details>
-                  )}
-                  {!isEditing && editsList.length > 1 && openEditHistory.has(m.phrase) && (
-                    // Task #133 — full chronological history panel,
-                    // toggled per row via openEditHistory. Each entry
-                    // also carries Task #132's Revert button so the
-                    // expanded view doubles as the restore surface.
-                    <div
-                      id={`handwavy-edit-history-${m.phrase}`}
-                      className="mt-1 ml-1 border-l-2 border-primary/20 pl-2 flex flex-col gap-1.5"
-                      data-testid="handwavy-edit-history-list"
-                    >
-                      <ul
-                        className="space-y-1.5"
-                        data-testid="handwavy-edits-list"
-                      >
-                        {renderHandwavyEditEntries({
-                          editsList,
-                          phrase: m.phrase,
-                          currentCategory: m.category,
-                          currentRationale: m.rationale,
-                          editing,
-                          busy,
-                          onRevertClick: (entry) =>
-                            setRevertConfirm({ phrase: m.phrase, entry }),
-                          mutationsAllowed,
-                          showHistoryTestIds: true,
-                        })}
-                      </ul>
-                    </div>
-                  )}
-                  {isEditing ? (
-                    <textarea
-                      value={editing!.rationale}
-                      onChange={(e) =>
-                        setEditing((prev) => (prev ? { ...prev, rationale: e.target.value } : prev))
-                      }
-                      placeholder="Rationale (leave empty to clear)"
-                      maxLength={500}
-                      rows={2}
-                      className="w-full mt-1 px-2 py-1.5 rounded border border-border/40 bg-background/40 text-[11px] resize-y"
-                      data-testid="handwavy-edit-rationale"
-                      aria-label={`Edit rationale for ${m.phrase}`}
-                    />
-                  ) : (
-                    m.rationale && (
+                      {editTrashHintId && (
+                        <HandwavyDisabledHint
+                          id={editTrashHintId}
+                          reason={editTrashDisabledReason}
+                          testId="handwavy-row-disabled-hint"
+                        />
+                      )}
                       <div
-                        className="text-[11px] text-foreground/70 italic pl-1 border-l border-primary/30"
-                        data-testid="handwavy-rationale-display"
+                        className="text-[10px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5"
+                        data-testid="handwavy-audit"
                       >
-                        “{m.rationale}”
+                        {isCurated ? (
+                          <span className="italic">Curated default</span>
+                        ) : (
+                          <>
+                            <span>
+                              Added by{" "}
+                              <span className="text-foreground/80">
+                                {m.addedBy || "anonymous"}
+                              </span>
+                            </span>
+                            {addedAt && (
+                              <span data-testid="handwavy-added-at">
+                                {addedAt}
+                              </span>
+                            )}
+                          </>
+                        )}
+                        {lastEdit && (
+                          <span data-testid="handwavy-last-edit">
+                            Last edit by{" "}
+                            <span className="text-foreground/80">
+                              {lastEdit.editedBy || "anonymous"}
+                            </span>
+                            {lastEditAt && <> • {lastEditAt}</>}
+                          </span>
+                        )}
+                        {editsList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenEditHistory((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(m.phrase)) next.delete(m.phrase);
+                                else next.add(m.phrase);
+                                return next;
+                              })
+                            }
+                            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground/80 underline-offset-2 hover:underline"
+                            data-testid="handwavy-edit-history-toggle"
+                            aria-expanded={openEditHistory.has(m.phrase)}
+                            aria-controls={`handwavy-edit-history-${m.phrase}`}
+                            aria-label={`${openEditHistory.has(m.phrase) ? "Hide" : "Show"} full edit history for ${m.phrase} (${editsList.length} edits)`}
+                          >
+                            <Clock className="w-3 h-3" />
+                            {openEditHistory.has(m.phrase)
+                              ? "Hide"
+                              : "Show"}{" "}
+                            history ({editsList.length} edits)
+                          </button>
+                        )}
                       </div>
-                    )
-                  )}
-                </div>
-              );
-            })}
+                      {!isEditing && editsList.length === 1 && (
+                        // Task #132 — single-edit case keeps the lightweight
+                        // <details> affordance so reviewers can still revert
+                        // the one recorded edit. The Task #133 toggle only
+                        // renders for >1 edits, so this stays the entry
+                        // point for one-edit rows.
+                        <details
+                          className="text-[10px]"
+                          data-testid="handwavy-edits-details"
+                        >
+                          <summary className="cursor-pointer text-muted-foreground/80 hover:text-foreground/80 select-none">
+                            Show edit
+                          </summary>
+                          <ul
+                            className="mt-1 space-y-1 border-l border-primary/20 pl-2"
+                            data-testid="handwavy-edits-list"
+                          >
+                            {renderHandwavyEditEntries({
+                              editsList,
+                              phrase: m.phrase,
+                              currentCategory: m.category,
+                              currentRationale: m.rationale,
+                              editing,
+                              busy,
+                              onRevertClick: (entry) =>
+                                setRevertConfirm({ phrase: m.phrase, entry }),
+                              mutationsAllowed,
+                            })}
+                          </ul>
+                        </details>
+                      )}
+                      {!isEditing &&
+                        editsList.length > 1 &&
+                        openEditHistory.has(m.phrase) && (
+                          // Task #133 — full chronological history panel,
+                          // toggled per row via openEditHistory. Each entry
+                          // also carries Task #132's Revert button so the
+                          // expanded view doubles as the restore surface.
+                          <div
+                            id={`handwavy-edit-history-${m.phrase}`}
+                            className="mt-1 ml-1 border-l-2 border-primary/20 pl-2 flex flex-col gap-1.5"
+                            data-testid="handwavy-edit-history-list"
+                          >
+                            <ul
+                              className="space-y-1.5"
+                              data-testid="handwavy-edits-list"
+                            >
+                              {renderHandwavyEditEntries({
+                                editsList,
+                                phrase: m.phrase,
+                                currentCategory: m.category,
+                                currentRationale: m.rationale,
+                                editing,
+                                busy,
+                                onRevertClick: (entry) =>
+                                  setRevertConfirm({ phrase: m.phrase, entry }),
+                                mutationsAllowed,
+                                showHistoryTestIds: true,
+                              })}
+                            </ul>
+                          </div>
+                        )}
+                      {isEditing ? (
+                        <textarea
+                          value={editing!.rationale}
+                          onChange={(e) =>
+                            setEditing((prev) =>
+                              prev
+                                ? { ...prev, rationale: e.target.value }
+                                : prev,
+                            )
+                          }
+                          placeholder="Rationale (leave empty to clear)"
+                          maxLength={500}
+                          rows={2}
+                          className="w-full mt-1 px-2 py-1.5 rounded border border-border/40 bg-background/40 text-[11px] resize-y"
+                          data-testid="handwavy-edit-rationale"
+                          aria-label={`Edit rationale for ${m.phrase}`}
+                        />
+                      ) : (
+                        m.rationale && (
+                          <div
+                            className="text-[11px] text-foreground/70 italic pl-1 border-l border-primary/30"
+                            data-testid="handwavy-rationale-display"
+                          >
+                            “{m.rationale}”
+                          </div>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
-        {/* Task #175 — dedicated "Recent batch removals" picker, sourced
+          )}
+          {/* Task #175 — dedicated "Recent batch removals" picker, sourced
             from GET /feedback/calibration/handwavy-phrases/removal-batches.
             Shows the same data the Task #160 reinstate-batch CLI picker
             uses (timestamp, reviewer, phrase count, sample phrases,
@@ -10024,534 +11031,583 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
             below. The button reuses handleReinstateBatch (Task #144), so
             after a successful round-trip both this panel and the active
             phrase list refresh through the same `refresh()` call. */}
-        {(removalBatchesQuery.isLoading ||
-          removalBatchesQuery.isError ||
-          removalBatchesQuery.isSuccess) && (
-          <div
-            className="pt-2 border-t border-border/20"
-            data-testid="handwavy-removal-batches-panel"
-          >
-            <div className="text-[11px] font-semibold text-foreground/80 uppercase tracking-wider flex items-center gap-1 mb-2">
-              <Layers className="w-3 h-3 text-primary/80" />
-              Recent batch removals
-              {removalBatchesQuery.data &&
-                typeof removalBatchesQuery.data.totalBatches === "number" &&
-                removalBatchesQuery.data.totalBatches > removalBatches.length && (
-                  <span className="ml-1 text-muted-foreground/70 normal-case font-normal">
-                    (showing {removalBatches.length} of {removalBatchesQuery.data.totalBatches})
-                  </span>
-                )}
-            </div>
-            {removalBatchesQuery.isLoading ? (
-              <div className="text-[11px] text-muted-foreground italic">Loading recent batches…</div>
-            ) : removalBatchesQuery.isError ? (
-              <div className="text-[11px] text-destructive">
-                Failed to load recent batch removals.
+          {(removalBatchesQuery.isLoading ||
+            removalBatchesQuery.isError ||
+            removalBatchesQuery.isSuccess) && (
+            <div
+              className="pt-2 border-t border-border/20"
+              data-testid="handwavy-removal-batches-panel"
+            >
+              <div className="text-[11px] font-semibold text-foreground/80 uppercase tracking-wider flex items-center gap-1 mb-2">
+                <Layers className="w-3 h-3 text-primary/80" />
+                Recent batch removals
+                {removalBatchesQuery.data &&
+                  typeof removalBatchesQuery.data.totalBatches === "number" &&
+                  removalBatchesQuery.data.totalBatches >
+                    removalBatches.length && (
+                    <span className="ml-1 text-muted-foreground/70 normal-case font-normal">
+                      (showing {removalBatches.length} of{" "}
+                      {removalBatchesQuery.data.totalBatches})
+                    </span>
+                  )}
               </div>
-            ) : removalBatches.length === 0 ? (
-              <div
-                className="text-[11px] text-muted-foreground italic"
-                data-testid="handwavy-removal-batches-empty"
-              >
-                No recent batch removals.
-              </div>
-            ) : (
-              <div
-                className="border border-border/20 rounded-md divide-y divide-border/10 max-h-64 overflow-y-auto"
-                data-testid="handwavy-removal-batches-list"
-              >
-                {removalBatches.map((b) => {
-                  const removedAtIso = String(b.removedAt);
-                  const batchKey = `reinstate-batch:${removedAtIso}`;
-                  // Separate busy key for the preview-detail fetch so the
-                  // row spinner is independent of the reinstate mutation.
-                  const previewKey = `picker-preview:${removedAtIso}`;
-                  const phraseCount = b.phraseCount ?? 0;
-                  const samples = Array.isArray(b.samplePhrases) ? b.samplePhrases : [];
-                  const hiddenSampleCount = Math.max(0, phraseCount - samples.length);
-                  // Task #242 — conflict count computed above from the
-                  // current active list + history. Only present when at
-                  // least one inner phrase has been re-added or has a
-                  // newer history entry than this batch's removedAt; the
-                  // memo also skips already-reinstated whole batches.
-                  const conflict = removalBatchConflicts.get(removedAtIso);
-                  // Task #243 — full per-batch phrase list comes from the
-                  // existing handwavy-phrases history payload (no new
-                  // endpoint). The product rule is "show the toggle when
-                  // the batch has more than the 5-sample preview", and we
-                  // additionally require the full list to actually be
-                  // cached locally and to add new rows over the samples
-                  // (otherwise expanding would just re-show the same
-                  // phrases — happens briefly if the history payload
-                  // hasn't loaded yet, or if the summary ever returns
-                  // <=5 samples for a small batch).
-                  const fullPhrases = phrasesByBatchRemovedAt.get(removedAtIso);
-                  const expandable =
-                    phraseCount > 5 &&
-                    Array.isArray(fullPhrases) &&
-                    fullPhrases.length > samples.length;
-                  const isExpanded = expandable && expandedBatches.has(removedAtIso);
-                  // Task #480 — partial-reinstate awareness on the row
-                  // button. The whole-batch picker summary only carries
-                  // an "all reinstated" boolean, but the local history
-                  // payload knows the per-phrase reinstated flags, so
-                  // we can derive the remaining count without an extra
-                  // API call. Only surface the "(N left)" suffix when a
-                  // strict subset has been individually reinstated —
-                  // 0 reinstated keeps the original copy clean, and
-                  // N === phraseCount falls through to the "Already
-                  // reinstated" badge branch above.
-                  const pickerReinstatedCount =
-                    reinstatedCountByBatchRemovedAt.get(removedAtIso) ?? 0;
-                  const pickerRemainingCount = Math.max(
-                    0,
-                    phraseCount - pickerReinstatedCount,
-                  );
-                  const showRemainingSuffix =
-                    phraseCount > 0 &&
-                    pickerReinstatedCount > 0 &&
-                    pickerReinstatedCount < phraseCount;
-                  // Task #486 — Per-row category breakdown chip ("4
-                  // hedging · 3 absence · 1 buzzword"). Reuses the
-                  // shared groupHandwavyPhrasesByCategory helper via
-                  // the categoryBreakdownByBatchRemovedAt memo so the
-                  // row matches the dialog's category sectioning by
-                  // construction. We only render when the breakdown
-                  // is available (i.e. the parent
-                  // useGetHandwavyPhrases query has the inner
-                  // phrases for this batch); otherwise the chip is
-                  // omitted rather than guessing — same lifecycle as
-                  // the existing "Show all" toggle above.
-                  const categoryBreakdown =
-                    categoryBreakdownByBatchRemovedAt.get(removedAtIso);
-                  // Task #340 — track whether THIS row's conflict popover
-                  // is currently open. The chip becomes a button that
-                  // toggles the inline list of conflicting phrases below
-                  // the row's first line.
-                  const isConflictExpanded =
-                    !!conflict && openConflictBatch === removedAtIso;
-                  const conflictDetailId = `handwavy-removal-batches-conflict-detail-${removedAtIso}`;
-                  return (
-                    <div
-                      key={removedAtIso}
-                      className="px-3 py-2 text-[11px] space-y-1"
-                      data-testid="handwavy-removal-batches-row"
-                      data-batch-removed-at={removedAtIso}
-                      data-batch-conflict-count={conflict ? conflict.conflictCount : 0}
-                      data-batch-expanded={isExpanded ? "true" : "false"}
-                      data-batch-conflict-expanded={isConflictExpanded ? "true" : "false"}
-                      data-batch-categories={
-                        categoryBreakdown
-                          ? categoryBreakdown
-                              .map((g) => `${g.key}:${g.count}`)
-                              .join(",")
-                          : ""
-                      }
-                    >
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-foreground/80 flex-1 min-w-0">
-                          <strong className="text-foreground">{phraseCount}</strong>{" "}
-                          phrase{phraseCount === 1 ? "" : "s"} removed by{" "}
-                          <span className="text-foreground/90">{b.removedBy || "anonymous"}</span>
-                          {" • "}
-                          {formatAuditTimestamp(b.removedAt) ?? "unknown date"}
-                        </span>
-                        {conflict && (
-                          // Task #340 — clickable chip. Toggles the inline
-                          // conflict-detail list below so reviewers can see
-                          // exactly WHICH phrases would overwrite newer
-                          // state without scrolling into the full
-                          // removal-history panel. Task #471 — chip JSX,
-                          // styling, icon, and base copy live in the shared
-                          // `HandwavyRemovalBatchConflictChip`; this site
-                          // just supplies the toggle wiring + the
-                          // picker-specific trailing sentence ("Click to
-                          // see which.").
-                          <HandwavyRemovalBatchConflictChip
-                            testId="handwavy-removal-batches-conflict-chip"
-                            conflictCount={conflict.conflictCount}
-                            total={conflict.total}
-                            onToggle={() => toggleConflictExpanded(removedAtIso)}
-                            isExpanded={isConflictExpanded}
-                            controlsId={conflictDetailId}
-                            titleSuffix="Click to see which."
-                            ariaLabelSuffix="click to expand"
-                          />
-                        )}
-                        {b.reinstated ? (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] border-emerald-500/40 text-emerald-300"
-                            data-testid="handwavy-removal-batches-reinstated"
-                          >
-                            Already reinstated
-                          </Badge>
-                        ) : (
-                          (() => {
-                            // Task #337 — visible reason caption beneath
-                            // the picker's "Reinstate this batch" button
-                            // (the entry-point counterpart to the in-
-                            // history Preview reinstate / Reinstate all
-                            // pair handled above). Same disable surface,
-                            // so the same describeHandwavyDisabledReason
-                            // shape applies.
-                            const pickerReinstateReason = describeHandwavyDisabledReason({
-                              mutationsAllowed,
-                              inFlight:
-                                busy === batchKey || busy === previewKey,
-                              inFlightLabel:
-                                busy === batchKey
-                                  ? "Reinstating this batch — wait for it to finish."
-                                  : "Loading the batch reinstate preview — wait for it to finish.",
-                            });
-                            const pickerReinstateHintId = pickerReinstateReason
-                              ? `handwavy-picker-reinstate-disabled-${slugifyForHintId(
-                                  removedAtIso,
-                                  "batch",
-                                )}`
-                              : undefined;
-                            return (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                                  disabled={
-                                    busy === batchKey ||
-                                    busy === previewKey ||
-                                    !mutationsAllowed
-                                  }
-                                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                                  onClick={() =>
-                                    handleOpenPickerBatchPreview(
-                                      removedAtIso,
-                                      b.removedBy,
-                                      phraseCount,
-                                    )
-                                  }
-                                  data-testid="handwavy-removal-batches-reinstate"
-                                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                                  data-remaining-count={
-                                    showRemainingSuffix
-                                      ? pickerRemainingCount
-                                      : undefined
-                                  }
-                                  aria-label={
-                                    showRemainingSuffix
-                                      ? `Preview and reinstate the ${pickerRemainingCount} remaining phrase${pickerRemainingCount === 1 ? "" : "s"} from this batch of ${phraseCount} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
-                                      : `Preview and reinstate this batch of ${phraseCount} phrase${phraseCount === 1 ? "" : "s"} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
-                                  }
-                                  aria-describedby={pickerReinstateHintId}
-                                >
-                                  <RotateCcw className="w-3 h-3 mr-1" />
-                                  {busy === batchKey
-                                    ? "Reinstating…"
-                                    : busy === previewKey
-                                      ? "Loading preview…"
-                                      : showRemainingSuffix
-                                        ? `Reinstate this batch (${pickerRemainingCount} left)`
-                                        : "Reinstate this batch"}
-                                </Button>
-                                {pickerReinstateHintId && (
-                                  <div className="basis-full">
-                                    <HandwavyDisabledHint
-                                      id={pickerReinstateHintId}
-                                      reason={pickerReinstateReason}
-                                      testId="handwavy-picker-reinstate-disabled-hint"
-                                    />
-                                  </div>
-                                )}
-                              </>
-                            );
-                          })()
-                        )}
-                      </div>
-                      {categoryBreakdown && categoryBreakdown.length > 0 && (
-                        // Task #486 — Compact per-category breakdown
-                        // chip ("4 hedging · 3 absence · 1 buzzword").
-                        // Lets reviewers triaging a mixed batch see
-                        // the category mix at a glance without
-                        // opening the dialog. Derived from the same
-                        // history payload + grouping helper that the
-                        // dialog uses, so the row and the dialog can
-                        // never disagree on counts or section order.
-                        // Rendered as a single flex-wrap line so a
-                        // batch with many categories still wraps
-                        // cleanly inside the picker's narrow column.
-                        <div
-                          className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-muted-foreground"
-                          data-testid="handwavy-removal-batches-row-categories"
-                          aria-label={`Category breakdown: ${categoryBreakdown
-                            .map(
-                              (g) =>
-                                `${g.count} ${shortHandwavyCategoryChipLabel(g.key)}`,
-                            )
-                            .join(", ")}`}
-                        >
-                          {categoryBreakdown.map((g, idx) => (
-                            <span
-                              key={g.key}
-                              className="inline-flex items-baseline gap-1"
-                              data-testid="handwavy-removal-batches-row-category"
-                              data-category={g.key}
-                              data-category-count={g.count}
-                              title={`${g.count} ${g.label}`}
-                            >
-                              <strong className="text-foreground/80 tabular-nums">
-                                {g.count}
-                              </strong>
-                              <span>
-                                {shortHandwavyCategoryChipLabel(g.key)}
-                              </span>
-                              {idx < categoryBreakdown.length - 1 && (
-                                <span
-                                  aria-hidden="true"
-                                  className="text-muted-foreground/40 ml-1"
-                                >
-                                  ·
-                                </span>
-                              )}
+              {removalBatchesQuery.isLoading ? (
+                <div className="text-[11px] text-muted-foreground italic">
+                  Loading recent batches…
+                </div>
+              ) : removalBatchesQuery.isError ? (
+                <div className="text-[11px] text-destructive">
+                  Failed to load recent batch removals.
+                </div>
+              ) : removalBatches.length === 0 ? (
+                <div
+                  className="text-[11px] text-muted-foreground italic"
+                  data-testid="handwavy-removal-batches-empty"
+                >
+                  No recent batch removals.
+                </div>
+              ) : (
+                <div
+                  className="border border-border/20 rounded-md divide-y divide-border/10 max-h-64 overflow-y-auto"
+                  data-testid="handwavy-removal-batches-list"
+                >
+                  {removalBatches.map((b) => {
+                    const removedAtIso = String(b.removedAt);
+                    const batchKey = `reinstate-batch:${removedAtIso}`;
+                    // Separate busy key for the preview-detail fetch so the
+                    // row spinner is independent of the reinstate mutation.
+                    const previewKey = `picker-preview:${removedAtIso}`;
+                    const phraseCount = b.phraseCount ?? 0;
+                    const samples = Array.isArray(b.samplePhrases)
+                      ? b.samplePhrases
+                      : [];
+                    const hiddenSampleCount = Math.max(
+                      0,
+                      phraseCount - samples.length,
+                    );
+                    // Task #242 — conflict count computed above from the
+                    // current active list + history. Only present when at
+                    // least one inner phrase has been re-added or has a
+                    // newer history entry than this batch's removedAt; the
+                    // memo also skips already-reinstated whole batches.
+                    const conflict = removalBatchConflicts.get(removedAtIso);
+                    // Task #243 — full per-batch phrase list comes from the
+                    // existing handwavy-phrases history payload (no new
+                    // endpoint). The product rule is "show the toggle when
+                    // the batch has more than the 5-sample preview", and we
+                    // additionally require the full list to actually be
+                    // cached locally and to add new rows over the samples
+                    // (otherwise expanding would just re-show the same
+                    // phrases — happens briefly if the history payload
+                    // hasn't loaded yet, or if the summary ever returns
+                    // <=5 samples for a small batch).
+                    const fullPhrases =
+                      phrasesByBatchRemovedAt.get(removedAtIso);
+                    const expandable =
+                      phraseCount > 5 &&
+                      Array.isArray(fullPhrases) &&
+                      fullPhrases.length > samples.length;
+                    const isExpanded =
+                      expandable && expandedBatches.has(removedAtIso);
+                    // Task #480 — partial-reinstate awareness on the row
+                    // button. The whole-batch picker summary only carries
+                    // an "all reinstated" boolean, but the local history
+                    // payload knows the per-phrase reinstated flags, so
+                    // we can derive the remaining count without an extra
+                    // API call. Only surface the "(N left)" suffix when a
+                    // strict subset has been individually reinstated —
+                    // 0 reinstated keeps the original copy clean, and
+                    // N === phraseCount falls through to the "Already
+                    // reinstated" badge branch above.
+                    const pickerReinstatedCount =
+                      reinstatedCountByBatchRemovedAt.get(removedAtIso) ?? 0;
+                    const pickerRemainingCount = Math.max(
+                      0,
+                      phraseCount - pickerReinstatedCount,
+                    );
+                    const showRemainingSuffix =
+                      phraseCount > 0 &&
+                      pickerReinstatedCount > 0 &&
+                      pickerReinstatedCount < phraseCount;
+                    // Task #486 — Per-row category breakdown chip ("4
+                    // hedging · 3 absence · 1 buzzword"). Reuses the
+                    // shared groupHandwavyPhrasesByCategory helper via
+                    // the categoryBreakdownByBatchRemovedAt memo so the
+                    // row matches the dialog's category sectioning by
+                    // construction. We only render when the breakdown
+                    // is available (i.e. the parent
+                    // useGetHandwavyPhrases query has the inner
+                    // phrases for this batch); otherwise the chip is
+                    // omitted rather than guessing — same lifecycle as
+                    // the existing "Show all" toggle above.
+                    const categoryBreakdown =
+                      categoryBreakdownByBatchRemovedAt.get(removedAtIso);
+                    // Task #340 — track whether THIS row's conflict popover
+                    // is currently open. The chip becomes a button that
+                    // toggles the inline list of conflicting phrases below
+                    // the row's first line.
+                    const isConflictExpanded =
+                      !!conflict && openConflictBatch === removedAtIso;
+                    const conflictDetailId = `handwavy-removal-batches-conflict-detail-${removedAtIso}`;
+                    return (
+                      <div
+                        key={removedAtIso}
+                        className="px-3 py-2 text-[11px] space-y-1"
+                        data-testid="handwavy-removal-batches-row"
+                        data-batch-removed-at={removedAtIso}
+                        data-batch-conflict-count={
+                          conflict ? conflict.conflictCount : 0
+                        }
+                        data-batch-expanded={isExpanded ? "true" : "false"}
+                        data-batch-conflict-expanded={
+                          isConflictExpanded ? "true" : "false"
+                        }
+                        data-batch-categories={
+                          categoryBreakdown
+                            ? categoryBreakdown
+                                .map((g) => `${g.key}:${g.count}`)
+                                .join(",")
+                            : ""
+                        }
+                      >
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-foreground/80 flex-1 min-w-0">
+                            <strong className="text-foreground">
+                              {phraseCount}
+                            </strong>{" "}
+                            phrase{phraseCount === 1 ? "" : "s"} removed by{" "}
+                            <span className="text-foreground/90">
+                              {b.removedBy || "anonymous"}
                             </span>
-                          ))}
-                        </div>
-                      )}
-                      {isConflictExpanded && conflict && (
-                        // Task #340 — inline detail panel attached to the
-                        // conflict chip. Lists each conflicting phrase
-                        // with a short status note. "Currently active"
-                        // entries become click targets that scroll +
-                        // pulse-highlight the matching active-list row
-                        // (mirrors `jumpToActivePhrase`, the same helper
-                        // the draft-overlap hint uses). Task #481 — the
-                        // sibling "removed again on <date>" entries are
-                        // ALSO clickable now: they scroll + pulse-
-                        // highlight the matching row in the full
-                        // removal-history panel below (via
-                        // `jumpToHistoryRow`, the same helper Task #412
-                        // wired up for the "Previously removed" hint),
-                        // so reviewers can inspect the newer retirement
-                        // entry without hand-scrolling the history list.
-                        // The trailing date stays in the label so the
-                        // popover still tells the reviewer when the
-                        // phrase was last retired without a click.
-                        <div
-                          id={conflictDetailId}
-                          className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-amber-100"
-                          data-testid="handwavy-removal-batches-conflict-detail"
-                        >
-                          <div className="text-[10px] uppercase tracking-wider text-amber-300/80 mb-1">
-                            Conflicting phrase{conflict.conflicts.length === 1 ? "" : "s"}
-                          </div>
-                          <ul className="space-y-1">
-                            {conflict.conflicts.map((c, i) => (
-                              <li
-                                key={`${removedAtIso}-conflict-${i}`}
-                                className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
-                                data-testid="handwavy-removal-batches-conflict-row"
-                                data-conflict-phrase={c.phrase}
-                                data-conflict-status={c.status}
-                              >
-                                {c.status === "active" ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => jumpToActivePhrase(c.phrase)}
-                                    className="font-mono break-all underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm text-left"
-                                    data-testid="handwavy-removal-batches-conflict-jump"
-                                    aria-label={`Jump to "${c.phrase}" in the active phrase list`}
-                                  >
-                                    &ldquo;{c.phrase}&rdquo;
-                                  </button>
-                                ) : c.laterRemovedAt ? (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      jumpToHistoryRow(c.phrase, c.laterRemovedAt as string)
+                            {" • "}
+                            {formatAuditTimestamp(b.removedAt) ??
+                              "unknown date"}
+                          </span>
+                          {conflict && (
+                            // Task #340 — clickable chip. Toggles the inline
+                            // conflict-detail list below so reviewers can see
+                            // exactly WHICH phrases would overwrite newer
+                            // state without scrolling into the full
+                            // removal-history panel. Task #471 — chip JSX,
+                            // styling, icon, and base copy live in the shared
+                            // `HandwavyRemovalBatchConflictChip`; this site
+                            // just supplies the toggle wiring + the
+                            // picker-specific trailing sentence ("Click to
+                            // see which.").
+                            <HandwavyRemovalBatchConflictChip
+                              testId="handwavy-removal-batches-conflict-chip"
+                              conflictCount={conflict.conflictCount}
+                              total={conflict.total}
+                              onToggle={() =>
+                                toggleConflictExpanded(removedAtIso)
+                              }
+                              isExpanded={isConflictExpanded}
+                              controlsId={conflictDetailId}
+                              titleSuffix="Click to see which."
+                              ariaLabelSuffix="click to expand"
+                            />
+                          )}
+                          {b.reinstated ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] border-emerald-500/40 text-emerald-300"
+                              data-testid="handwavy-removal-batches-reinstated"
+                            >
+                              Already reinstated
+                            </Badge>
+                          ) : (
+                            (() => {
+                              // Task #337 — visible reason caption beneath
+                              // the picker's "Reinstate this batch" button
+                              // (the entry-point counterpart to the in-
+                              // history Preview reinstate / Reinstate all
+                              // pair handled above). Same disable surface,
+                              // so the same describeHandwavyDisabledReason
+                              // shape applies.
+                              const pickerReinstateReason =
+                                describeHandwavyDisabledReason({
+                                  mutationsAllowed,
+                                  inFlight:
+                                    busy === batchKey || busy === previewKey,
+                                  inFlightLabel:
+                                    busy === batchKey
+                                      ? "Reinstating this batch — wait for it to finish."
+                                      : "Loading the batch reinstate preview — wait for it to finish.",
+                                });
+                              const pickerReinstateHintId =
+                                pickerReinstateReason
+                                  ? `handwavy-picker-reinstate-disabled-${slugifyForHintId(
+                                      removedAtIso,
+                                      "batch",
+                                    )}`
+                                  : undefined;
+                              return (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
+                                    disabled={
+                                      busy === batchKey ||
+                                      busy === previewKey ||
+                                      !mutationsAllowed
                                     }
-                                    className="font-mono break-all underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm text-left"
-                                    data-testid="handwavy-removal-batches-conflict-jump-history"
-                                    aria-label={`Jump to the newer removal-history entry for "${c.phrase}" (removed again on ${formatAuditTimestamp(c.laterRemovedAt) ?? "unknown date"})`}
+                                    title={
+                                      !mutationsAllowed
+                                        ? MUTATIONS_BLOCKED_TITLE
+                                        : undefined
+                                    }
+                                    onClick={() =>
+                                      handleOpenPickerBatchPreview(
+                                        removedAtIso,
+                                        b.removedBy,
+                                        phraseCount,
+                                      )
+                                    }
+                                    data-testid="handwavy-removal-batches-reinstate"
+                                    data-mutations-blocked={
+                                      !mutationsAllowed ? "true" : "false"
+                                    }
+                                    data-remaining-count={
+                                      showRemainingSuffix
+                                        ? pickerRemainingCount
+                                        : undefined
+                                    }
+                                    aria-label={
+                                      showRemainingSuffix
+                                        ? `Preview and reinstate the ${pickerRemainingCount} remaining phrase${pickerRemainingCount === 1 ? "" : "s"} from this batch of ${phraseCount} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
+                                        : `Preview and reinstate this batch of ${phraseCount} phrase${phraseCount === 1 ? "" : "s"} removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
+                                    }
+                                    aria-describedby={pickerReinstateHintId}
                                   >
-                                    &ldquo;{c.phrase}&rdquo;
-                                  </button>
-                                ) : (
-                                  <span className="font-mono break-all">
-                                    &ldquo;{c.phrase}&rdquo;
+                                    <RotateCcw className="w-3 h-3 mr-1" />
+                                    {busy === batchKey
+                                      ? "Reinstating…"
+                                      : busy === previewKey
+                                        ? "Loading preview…"
+                                        : showRemainingSuffix
+                                          ? `Reinstate this batch (${pickerRemainingCount} left)`
+                                          : "Reinstate this batch"}
+                                  </Button>
+                                  {pickerReinstateHintId && (
+                                    <div className="basis-full">
+                                      <HandwavyDisabledHint
+                                        id={pickerReinstateHintId}
+                                        reason={pickerReinstateReason}
+                                        testId="handwavy-picker-reinstate-disabled-hint"
+                                      />
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()
+                          )}
+                        </div>
+                        {categoryBreakdown && categoryBreakdown.length > 0 && (
+                          // Task #486 — Compact per-category breakdown
+                          // chip ("4 hedging · 3 absence · 1 buzzword").
+                          // Lets reviewers triaging a mixed batch see
+                          // the category mix at a glance without
+                          // opening the dialog. Derived from the same
+                          // history payload + grouping helper that the
+                          // dialog uses, so the row and the dialog can
+                          // never disagree on counts or section order.
+                          // Rendered as a single flex-wrap line so a
+                          // batch with many categories still wraps
+                          // cleanly inside the picker's narrow column.
+                          <div
+                            className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-muted-foreground"
+                            data-testid="handwavy-removal-batches-row-categories"
+                            aria-label={`Category breakdown: ${categoryBreakdown
+                              .map(
+                                (g) =>
+                                  `${g.count} ${shortHandwavyCategoryChipLabel(g.key)}`,
+                              )
+                              .join(", ")}`}
+                          >
+                            {categoryBreakdown.map((g, idx) => (
+                              <span
+                                key={g.key}
+                                className="inline-flex items-baseline gap-1"
+                                data-testid="handwavy-removal-batches-row-category"
+                                data-category={g.key}
+                                data-category-count={g.count}
+                                title={`${g.count} ${g.label}`}
+                              >
+                                <strong className="text-foreground/80 tabular-nums">
+                                  {g.count}
+                                </strong>
+                                <span>
+                                  {shortHandwavyCategoryChipLabel(g.key)}
+                                </span>
+                                {idx < categoryBreakdown.length - 1 && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="text-muted-foreground/40 ml-1"
+                                  >
+                                    ·
                                   </span>
                                 )}
-                                <span className="text-amber-200/70">
-                                  {c.status === "active"
-                                    ? "currently active"
-                                    : `removed again on ${formatAuditTimestamp(c.laterRemovedAt) ?? "unknown date"}`}
-                                </span>
-                              </li>
+                              </span>
                             ))}
-                          </ul>
-                        </div>
-                      )}
-                      {isExpanded && fullPhrases ? (
-                        <ul
-                          className="pl-4 list-disc text-foreground/70 space-y-0.5 marker:text-muted-foreground/40"
-                          data-testid="handwavy-removal-batches-full"
-                        >
-                          {fullPhrases.map((p, i) => (
-                            <li key={`${removedAtIso}-full-${i}`} className="font-mono break-all">
-                              {p}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        samples.length > 0 && (
+                          </div>
+                        )}
+                        {isConflictExpanded && conflict && (
+                          // Task #340 — inline detail panel attached to the
+                          // conflict chip. Lists each conflicting phrase
+                          // with a short status note. "Currently active"
+                          // entries become click targets that scroll +
+                          // pulse-highlight the matching active-list row
+                          // (mirrors `jumpToActivePhrase`, the same helper
+                          // the draft-overlap hint uses). Task #481 — the
+                          // sibling "removed again on <date>" entries are
+                          // ALSO clickable now: they scroll + pulse-
+                          // highlight the matching row in the full
+                          // removal-history panel below (via
+                          // `jumpToHistoryRow`, the same helper Task #412
+                          // wired up for the "Previously removed" hint),
+                          // so reviewers can inspect the newer retirement
+                          // entry without hand-scrolling the history list.
+                          // The trailing date stays in the label so the
+                          // popover still tells the reviewer when the
+                          // phrase was last retired without a click.
+                          <div
+                            id={conflictDetailId}
+                            className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-amber-100"
+                            data-testid="handwavy-removal-batches-conflict-detail"
+                          >
+                            <div className="text-[10px] uppercase tracking-wider text-amber-300/80 mb-1">
+                              Conflicting phrase
+                              {conflict.conflicts.length === 1 ? "" : "s"}
+                            </div>
+                            <ul className="space-y-1">
+                              {conflict.conflicts.map((c, i) => (
+                                <li
+                                  key={`${removedAtIso}-conflict-${i}`}
+                                  className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
+                                  data-testid="handwavy-removal-batches-conflict-row"
+                                  data-conflict-phrase={c.phrase}
+                                  data-conflict-status={c.status}
+                                >
+                                  {c.status === "active" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        jumpToActivePhrase(c.phrase)
+                                      }
+                                      className="font-mono break-all underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm text-left"
+                                      data-testid="handwavy-removal-batches-conflict-jump"
+                                      aria-label={`Jump to "${c.phrase}" in the active phrase list`}
+                                    >
+                                      &ldquo;{c.phrase}&rdquo;
+                                    </button>
+                                  ) : c.laterRemovedAt ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        jumpToHistoryRow(
+                                          c.phrase,
+                                          c.laterRemovedAt as string,
+                                        )
+                                      }
+                                      className="font-mono break-all underline decoration-amber-400/60 decoration-dotted underline-offset-2 hover:decoration-solid hover:text-amber-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 rounded-sm text-left"
+                                      data-testid="handwavy-removal-batches-conflict-jump-history"
+                                      aria-label={`Jump to the newer removal-history entry for "${c.phrase}" (removed again on ${formatAuditTimestamp(c.laterRemovedAt) ?? "unknown date"})`}
+                                    >
+                                      &ldquo;{c.phrase}&rdquo;
+                                    </button>
+                                  ) : (
+                                    <span className="font-mono break-all">
+                                      &ldquo;{c.phrase}&rdquo;
+                                    </span>
+                                  )}
+                                  <span className="text-amber-200/70">
+                                    {c.status === "active"
+                                      ? "currently active"
+                                      : `removed again on ${formatAuditTimestamp(c.laterRemovedAt) ?? "unknown date"}`}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {isExpanded && fullPhrases ? (
                           <ul
                             className="pl-4 list-disc text-foreground/70 space-y-0.5 marker:text-muted-foreground/40"
-                            data-testid="handwavy-removal-batches-samples"
+                            data-testid="handwavy-removal-batches-full"
                           >
-                            {samples.map((p, i) => (
-                              <li key={`${removedAtIso}-sample-${i}`} className="font-mono break-all">
+                            {fullPhrases.map((p, i) => (
+                              <li
+                                key={`${removedAtIso}-full-${i}`}
+                                className="font-mono break-all"
+                              >
                                 {p}
                               </li>
                             ))}
-                            {hiddenSampleCount > 0 && (
-                              <li className="list-none italic text-muted-foreground/70 not-italic-break">
-                                + {hiddenSampleCount} more
-                              </li>
-                            )}
                           </ul>
-                        )
-                      )}
-                      {expandable && (
-                        <button
-                          type="button"
-                          onClick={() => toggleBatchExpanded(removedAtIso)}
-                          className="text-[11px] text-muted-foreground hover:text-foreground/80 underline-offset-2 hover:underline"
-                          data-testid="handwavy-removal-batches-toggle"
-                          aria-expanded={isExpanded}
-                          aria-label={
-                            isExpanded
-                              ? `Hide full phrase list for batch removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
-                              : `Show all ${phraseCount} phrases in batch removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
+                        ) : (
+                          samples.length > 0 && (
+                            <ul
+                              className="pl-4 list-disc text-foreground/70 space-y-0.5 marker:text-muted-foreground/40"
+                              data-testid="handwavy-removal-batches-samples"
+                            >
+                              {samples.map((p, i) => (
+                                <li
+                                  key={`${removedAtIso}-sample-${i}`}
+                                  className="font-mono break-all"
+                                >
+                                  {p}
+                                </li>
+                              ))}
+                              {hiddenSampleCount > 0 && (
+                                <li className="list-none italic text-muted-foreground/70 not-italic-break">
+                                  + {hiddenSampleCount} more
+                                </li>
+                              )}
+                            </ul>
+                          )
+                        )}
+                        {expandable && (
+                          <button
+                            type="button"
+                            onClick={() => toggleBatchExpanded(removedAtIso)}
+                            className="text-[11px] text-muted-foreground hover:text-foreground/80 underline-offset-2 hover:underline"
+                            data-testid="handwavy-removal-batches-toggle"
+                            aria-expanded={isExpanded}
+                            aria-label={
+                              isExpanded
+                                ? `Hide full phrase list for batch removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
+                                : `Show all ${phraseCount} phrases in batch removed on ${formatAuditTimestamp(b.removedAt) ?? "unknown date"}`
+                            }
+                          >
+                            {isExpanded ? "Hide" : `Show all (${phraseCount})`}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {sortedHistoryGroups.length > 0 && (
+            <div className="pt-2 border-t border-border/20">
+              <button
+                type="button"
+                onClick={() => setShowHistory((v) => !v)}
+                className="text-[11px] text-muted-foreground hover:text-foreground/80 flex items-center gap-1"
+                data-testid="handwavy-history-toggle"
+                aria-expanded={showHistory}
+              >
+                <Clock className="w-3 h-3" />
+                {showHistory ? "Hide" : "Show"} removal &amp; undo history (
+                {totalHistoryRowCount})
+              </button>
+              {showHistory && (
+                <div
+                  className="mt-2 border border-border/20 rounded-md divide-y divide-border/10 max-h-64 overflow-y-auto"
+                  data-testid="handwavy-history-list"
+                >
+                  {visibleHistoryGroups.map((group, gIdx) => {
+                    const renderRow = (
+                      h: DisplayHistoryRow,
+                      rowIdx: number,
+                      opts: { insideBatch?: boolean } = {},
+                    ) => {
+                      const removedAtKey = String(h.removedAt);
+                      const reinstateKey = `reinstate:${h.phrase}:${removedAtKey}`;
+                      const isActive = phrases.some(
+                        (m: { phrase: string }) => m.phrase === h.phrase,
+                      );
+                      const isUndone = h.undone === true;
+                      // Task #179 — flag inner phrases of a batch group whose
+                      // completed remove+reinstate cycle count is >= 2 so a
+                      // bulk-reinstate (which would push them onto the active
+                      // list and start cycle #N+1) doesn't quietly hide the
+                      // thrash signal. Mirrors the per-row badge in the bulk-
+                      // REMOVE preview from Task #151. Only shown for rows the
+                      // batch button would actually flip — already-reinstated
+                      // or already-active rows are no-ops, so adding a badge
+                      // there would be noise.
+                      const HANDWAVY_HIGH_THRASH_MIN = 2;
+                      const cycleCount =
+                        thrashByPhrase.get(h.phrase)?.length ?? 0;
+                      const showBatchThrashBadge =
+                        opts.insideBatch === true &&
+                        !h.reinstated &&
+                        !isActive &&
+                        cycleCount >= HANDWAVY_HIGH_THRASH_MIN;
+                      // Task #234 — surface the same category-flip badge that
+                      // the active-row list shows (Task #149) on removed-history
+                      // rows, so a reviewer about to click Reinstate sees that
+                      // the phrase has bounced between categories. We pull
+                      // straight off the row's preserved `edits` array (which
+                      // mirrors the active-list source); the filter, threshold
+                      // and rendering live in the shared
+                      // `HandwavyCategoryFlipBadge` (Task #338) so this row and
+                      // the active-list row never disagree on what counts as a
+                      // flip. For batch entries this is per-inner-phrase, not
+                      // aggregated, so a partial reinstate still sees
+                      // per-phrase churn.
+                      const historyCategoryFlips = getCategoryFlips(h.edits);
+                      // Task #357 — same idea for renames: the removed-history
+                      // row mirrors the active-row rename badge so a reviewer
+                      // about to Reinstate sees that the phrase previously had
+                      // a different name. For batch entries this is per-inner-
+                      // phrase (not aggregated across the batch), matching how
+                      // category flips are surfaced.
+                      const historyRenameEdits = getRenameEdits(h.edits);
+                      // Task #412 — pulse-highlight the row the
+                      // "Previously removed" hint just jumped to. Keyed on
+                      // phrase + removedAt so a remove → reinstate → remove
+                      // cycle only lights the exact retirement entry.
+                      const isHistoryHighlighted =
+                        (highlightedHistoryRow !== null &&
+                          highlightedHistoryRow.phrase === h.phrase &&
+                          highlightedHistoryRow.removedAt === removedAtKey) ||
+                        // Task #487 — bulk-undo "skipped" toast action
+                        // pulses every row matching a drift-skipped phrase
+                        // in one shot.
+                        highlightedHistoryPhrases.has(h.phrase);
+                      return (
+                        <div
+                          key={`${h.phrase}-${removedAtKey}-${rowIdx}`}
+                          className={cn(
+                            "px-3 py-2 text-[11px] text-muted-foreground space-y-0.5 transition-colors duration-700",
+                            isUndone &&
+                              "bg-amber-500/5 border-l-2 border-amber-500/40",
+                            opts.insideBatch && "pl-6 bg-background/20",
+                            // Task #412 — amber pulse matches the
+                            // active-list jump so reviewers learn one cue.
+                            isHistoryHighlighted &&
+                              "bg-amber-500/15 ring-1 ring-amber-400/60 ring-inset",
+                          )}
+                          data-testid="handwavy-history-row"
+                          data-history-kind={isUndone ? "undone" : "removed"}
+                          // Task #412 — DOM-queryable selectors for
+                          // `jumpToHistoryRow` (React key isn't queryable).
+                          data-handwavy-history-phrase={h.phrase}
+                          data-handwavy-history-removed-at={removedAtKey}
+                          data-highlighted={
+                            isHistoryHighlighted ? "true" : undefined
                           }
                         >
-                          {isExpanded ? "Hide" : `Show all (${phraseCount})`}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-        {sortedHistoryGroups.length > 0 && (
-          <div className="pt-2 border-t border-border/20">
-            <button
-              type="button"
-              onClick={() => setShowHistory((v) => !v)}
-              className="text-[11px] text-muted-foreground hover:text-foreground/80 flex items-center gap-1"
-              data-testid="handwavy-history-toggle"
-              aria-expanded={showHistory}
-            >
-              <Clock className="w-3 h-3" />
-              {showHistory ? "Hide" : "Show"} removal &amp; undo history ({totalHistoryRowCount})
-            </button>
-            {showHistory && (
-              <div
-                className="mt-2 border border-border/20 rounded-md divide-y divide-border/10 max-h-64 overflow-y-auto"
-                data-testid="handwavy-history-list"
-              >
-                {visibleHistoryGroups.map((group, gIdx) => {
-                  const renderRow = (
-                    h: DisplayHistoryRow,
-                    rowIdx: number,
-                    opts: { insideBatch?: boolean } = {},
-                  ) => {
-                    const removedAtKey = String(h.removedAt);
-                    const reinstateKey = `reinstate:${h.phrase}:${removedAtKey}`;
-                    const isActive = phrases.some(
-                      (m: { phrase: string }) => m.phrase === h.phrase,
-                    );
-                    const isUndone = h.undone === true;
-                    // Task #179 — flag inner phrases of a batch group whose
-                    // completed remove+reinstate cycle count is >= 2 so a
-                    // bulk-reinstate (which would push them onto the active
-                    // list and start cycle #N+1) doesn't quietly hide the
-                    // thrash signal. Mirrors the per-row badge in the bulk-
-                    // REMOVE preview from Task #151. Only shown for rows the
-                    // batch button would actually flip — already-reinstated
-                    // or already-active rows are no-ops, so adding a badge
-                    // there would be noise.
-                    const HANDWAVY_HIGH_THRASH_MIN = 2;
-                    const cycleCount = thrashByPhrase.get(h.phrase)?.length ?? 0;
-                    const showBatchThrashBadge =
-                      opts.insideBatch === true &&
-                      !h.reinstated &&
-                      !isActive &&
-                      cycleCount >= HANDWAVY_HIGH_THRASH_MIN;
-                    // Task #234 — surface the same category-flip badge that
-                    // the active-row list shows (Task #149) on removed-history
-                    // rows, so a reviewer about to click Reinstate sees that
-                    // the phrase has bounced between categories. We pull
-                    // straight off the row's preserved `edits` array (which
-                    // mirrors the active-list source); the filter, threshold
-                    // and rendering live in the shared
-                    // `HandwavyCategoryFlipBadge` (Task #338) so this row and
-                    // the active-list row never disagree on what counts as a
-                    // flip. For batch entries this is per-inner-phrase, not
-                    // aggregated, so a partial reinstate still sees
-                    // per-phrase churn.
-                    const historyCategoryFlips = getCategoryFlips(h.edits);
-                    // Task #357 — same idea for renames: the removed-history
-                    // row mirrors the active-row rename badge so a reviewer
-                    // about to Reinstate sees that the phrase previously had
-                    // a different name. For batch entries this is per-inner-
-                    // phrase (not aggregated across the batch), matching how
-                    // category flips are surfaced.
-                    const historyRenameEdits = getRenameEdits(h.edits);
-                    // Task #412 — pulse-highlight the row the
-                    // "Previously removed" hint just jumped to. Keyed on
-                    // phrase + removedAt so a remove → reinstate → remove
-                    // cycle only lights the exact retirement entry.
-                    const isHistoryHighlighted =
-                      (highlightedHistoryRow !== null &&
-                        highlightedHistoryRow.phrase === h.phrase &&
-                        highlightedHistoryRow.removedAt === removedAtKey) ||
-                      // Task #487 — bulk-undo "skipped" toast action
-                      // pulses every row matching a drift-skipped phrase
-                      // in one shot.
-                      highlightedHistoryPhrases.has(h.phrase);
-                    return (
-                      <div
-                        key={`${h.phrase}-${removedAtKey}-${rowIdx}`}
-                        className={cn(
-                          "px-3 py-2 text-[11px] text-muted-foreground space-y-0.5 transition-colors duration-700",
-                          isUndone && "bg-amber-500/5 border-l-2 border-amber-500/40",
-                          opts.insideBatch && "pl-6 bg-background/20",
-                          // Task #412 — amber pulse matches the
-                          // active-list jump so reviewers learn one cue.
-                          isHistoryHighlighted &&
-                            "bg-amber-500/15 ring-1 ring-amber-400/60 ring-inset",
-                        )}
-                        data-testid="handwavy-history-row"
-                        data-history-kind={isUndone ? "undone" : "removed"}
-                        // Task #412 — DOM-queryable selectors for
-                        // `jumpToHistoryRow` (React key isn't queryable).
-                        data-handwavy-history-phrase={h.phrase}
-                        data-handwavy-history-removed-at={removedAtKey}
-                        data-highlighted={isHistoryHighlighted ? "true" : undefined}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-foreground/70 break-all flex-1 line-through">{h.phrase}</span>
-                          {showBatchThrashBadge && (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] border-amber-500/40 text-amber-300"
-                              data-testid="handwavy-history-batch-thrash-badge"
-                              aria-label={`Removed and reinstated ${cycleCount} time${cycleCount === 1 ? "" : "s"}`}
-                            >
-                              <RotateCcw className="w-3 h-3 mr-1" />
-                              {cycleCount}× cycles
-                            </Badge>
-                          )}
-                          {/* Task #234 — category-flip badge mirrors the
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-foreground/70 break-all flex-1 line-through">
+                              {h.phrase}
+                            </span>
+                            {showBatchThrashBadge && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] border-amber-500/40 text-amber-300"
+                                data-testid="handwavy-history-batch-thrash-badge"
+                                aria-label={`Removed and reinstated ${cycleCount} time${cycleCount === 1 ? "" : "s"}`}
+                              >
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                {cycleCount}× cycles
+                              </Badge>
+                            )}
+                            {/* Task #234 — category-flip badge mirrors the
                               active-row badge from Task #149 so a reviewer
                               about to Reinstate sees the same churn signal.
                               Render lives in the shared
@@ -10559,725 +11615,73 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                               component handles the threshold guard and
                               tooltip. For batch rows this is per-inner-phrase
                               (not aggregated). */}
-                          <HandwavyCategoryFlipBadge
-                            flips={historyCategoryFlips}
-                            testIdPrefix="handwavy-history"
-                          />
-                          {/* Task #357 — rename badge mirrors the active-row
+                            <HandwavyCategoryFlipBadge
+                              flips={historyCategoryFlips}
+                              testIdPrefix="handwavy-history"
+                            />
+                            {/* Task #357 — rename badge mirrors the active-row
                               badge so a reviewer about to Reinstate sees the
                               "this phrase used to be called X" signal here
                               too. Render lives in the shared
                               `HandwavyRenameBadge`; the component handles the
                               empty-list guard. For batch rows this is per-
                               inner-phrase (not aggregated). */}
-                          <HandwavyRenameBadge
-                            renames={historyRenameEdits}
-                            testIdPrefix="handwavy-history"
-                            formatTimestamp={formatAuditTimestamp}
-                          />
-                          <Badge variant="outline" className="text-[10px] capitalize">{h.category}</Badge>
-                          {isUndone && (
+                            <HandwavyRenameBadge
+                              renames={historyRenameEdits}
+                              testIdPrefix="handwavy-history"
+                              formatTimestamp={formatAuditTimestamp}
+                            />
                             <Badge
                               variant="outline"
-                              className="text-[10px] border-amber-500/40 text-amber-300"
-                              data-testid="handwavy-history-undone"
+                              className="text-[10px] capitalize"
                             >
-                              Undone
+                              {h.category}
                             </Badge>
-                          )}
-                          {h.reinstated ? (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] border-emerald-500/40 text-emerald-300"
-                              data-testid="handwavy-history-reinstated"
-                            >
-                              Reinstated
-                            </Badge>
-                          ) : isActive ? (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] text-muted-foreground"
-                              data-testid="handwavy-history-active"
-                            >
-                              Already active
-                            </Badge>
-                          ) : (
-                            (() => {
-                              // Task #337 — visible reason caption beneath
-                              // a disabled per-history-row Reinstate button.
-                              // Inline IIFE keeps the local hint id/reason
-                              // in scope without disturbing the surrounding
-                              // ternary structure.
-                              const reinstateReason = describeHandwavyDisabledReason({
-                                mutationsAllowed,
-                                inFlight: busy === reinstateKey,
-                                inFlightLabel:
-                                  "Reinstating this phrase — wait for it to finish.",
-                              });
-                              const reinstateHintId = reinstateReason
-                                ? `handwavy-reinstate-disabled-${slugifyForHintId(
-                                    `${h.phrase}-${removedAtKey}`,
-                                    "reinstate",
-                                  )}`
-                                : undefined;
-                              return (
-                                <>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                                    disabled={busy === reinstateKey || !mutationsAllowed}
-                                    title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                                    onClick={() => setReinstateConfirm(h)}
-                                    data-testid="handwavy-reinstate"
-                                    data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                                    aria-label={`Reinstate phrase ${h.phrase}`}
-                                    aria-describedby={reinstateHintId}
-                                  >
-                                    <RotateCcw className="w-3 h-3 mr-1" />
-                                    {busy === reinstateKey ? "Reinstating…" : "Reinstate"}
-                                  </Button>
-                                  {reinstateHintId && (
-                                    <HandwavyDisabledHint
-                                      id={reinstateHintId}
-                                      reason={reinstateReason}
-                                      testId="handwavy-reinstate-disabled-hint"
-                                    />
-                                  )}
-                                </>
-                              );
-                            })()
-                          )}
-                        </div>
-                        <div>
-                          {isUndone ? "Undone by " : "Removed by "}
-                          <span className="text-foreground/80">
-                            {(isUndone ? h.undoneBy : h.removedBy) || "anonymous"}
-                          </span>
-                          {" • "}
-                          {formatAuditTimestamp(h.removedAt) ?? "unknown date"}
-                          {!opts.insideBatch && h.batchSize && h.batchSize > 1 && (
-                            <span
-                              className="ml-2 text-foreground/60"
-                              data-testid="handwavy-history-batch-label"
-                            >
-                              (part of a batch removal of {h.batchSize})
-                            </span>
-                          )}
-                        </div>
-                        {(h.addedBy || h.rationale) && (
-                          <div className="text-foreground/60">
-                            Originally added by{" "}
-                            <span className="text-foreground/80">{h.addedBy || "anonymous"}</span>
-                            {h.rationale && <> — “{h.rationale}”</>}
-                          </div>
-                        )}
-                        {h.reinstated && (
-                          <div
-                            className="text-emerald-300/80"
-                            data-testid="handwavy-history-reinstated-meta"
-                          >
-                            Reinstated by{" "}
-                            <span className="text-foreground/80">{h.reinstatedBy || "anonymous"}</span>
-                            {" • "}
-                            {formatAuditTimestamp(h.reinstatedAt) ?? "unknown date"}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  };
-
-                  if (group.kind === "single") {
-                    return renderRow(group.row, gIdx);
-                  }
-
-                  // Task #144 — batch group: a single header row with one
-                  // "Reinstate all" button, then the inner per-phrase rows
-                  // beneath it (still independently reinstateable).
-                  const batchKey = `reinstate-batch:${group.removedAtIso}`;
-                  // Task #177 — busy key for the dry-run preview fetch. Kept
-                  // distinct from the mutating key so the spinner only blocks
-                  // the button the reviewer actually pressed.
-                  const previewKey = `reinstate-batch-preview:${group.removedAtIso}`;
-                  // Number of inner phrases that aren't already reinstated
-                  // AND aren't already in the active list — i.e. what the
-                  // batch button would actually re-add.
-                  const remainingRows = group.rows.filter(
-                    (r) => !r.reinstated && !phrases.some((m: { phrase: string }) => m.phrase === r.phrase),
-                  );
-                  const remainingCount = remainingRows.length;
-                  // Task #177 — when this batch's dry-run preview is open,
-                  // surface the per-phrase outcomes inline below the header
-                  // so the reviewer can confirm or cancel without losing the
-                  // surrounding history context.
-                  const previewForGroup =
-                    reinstatePreview &&
-                    reinstatePreview.removedAtIso === group.removedAtIso
-                      ? reinstatePreview
-                      : null;
-                  // Task #514 — partial-success outcome panel for this batch.
-                  // Populated by `handleReinstateBatchSubset` when the
-                  // server's mutating /reinstate-batch round-trip came back
-                  // with a mix of `reinstated: true` and `reinstated: false`
-                  // results (e.g. a teammate re-added one of the remaining
-                  // phrases between preview and confirm). Renders a per-row
-                  // outcome list inline below the header so reviewers can
-                  // see exactly which rows landed vs. which stayed on the
-                  // removal-history list.
-                  const outcomeForGroup =
-                    reinstateBatchOutcome &&
-                    reinstateBatchOutcome.removedAtIso === group.removedAtIso
-                      ? reinstateBatchOutcome
-                      : null;
-                  // Task #179 — count how many of the rows the batch button
-                  // would actually flip have already cycled (remove +
-                  // reinstate) >= 2 times. Surfaced as a summary line below
-                  // the batch header so a reviewer can't miss the thrash
-                  // signal before the batch fires. Mirrors the bulk-REMOVE
-                  // preview's `handwavy-bulk-preview-thrash-summary` from
-                  // Task #151. We deliberately scope the count to
-                  // `remainingRows` (not `group.rows`) so the summary
-                  // matches the batch button's "Reinstate all N" label.
-                  const HISTORY_HIGH_THRASH_MIN = 2;
-                  const remainingHighThrashCount = remainingRows.reduce(
-                    (acc, r) =>
-                      acc +
-                      ((thrashByPhrase.get(r.phrase)?.length ?? 0) >=
-                      HISTORY_HIGH_THRASH_MIN
-                        ? 1
-                        : 0),
-                    0,
-                  );
-                  // Task #339 — re-use the same `removalBatchConflicts`
-                  // memo the "Recent batch removals" picker uses (keyed by
-                  // batch ISO `removedAt`) so the older history-panel batch
-                  // header surfaces the same "N of M may overwrite recent
-                  // edits" chip. The memo already skips fully-reinstated
-                  // batches and is computed from the same handwavy-phrases
-                  // payload, so no extra request is needed.
-                  const historyBatchConflict = group.allReinstated
-                    ? undefined
-                    : removalBatchConflicts.get(group.removedAtIso);
-                  return (
-                    <div
-                      key={`batch-${group.removedAtIso}-${gIdx}`}
-                      data-testid="handwavy-history-batch-group"
-                      data-batch-removed-at={group.removedAtIso}
-                      data-batch-conflict-count={historyBatchConflict ? historyBatchConflict.conflictCount : 0}
-                    >
-                      <div
-                        className="px-3 py-2 text-[11px] bg-primary/5 border-l-2 border-primary/40 flex items-center gap-2 flex-wrap"
-                        data-testid="handwavy-history-batch-header"
-                      >
-                        <Layers className="w-3 h-3 text-primary/80 shrink-0" />
-                        <span className="text-foreground/80 flex-1 min-w-0">
-                          Batch removal of <strong>{group.batchSize}</strong> phrase{group.batchSize === 1 ? "" : "s"} by{" "}
-                          <span className="text-foreground/90">{group.removedBy || "anonymous"}</span>
-                          {" on "}
-                          {formatAuditTimestamp(group.removedAtIso) ?? "unknown date"}
-                          {group.reinstatedCount > 0 && !group.allReinstated && (
-                            <span className="ml-2 text-muted-foreground">
-                              ({group.reinstatedCount} of {group.batchSize} reinstated)
-                            </span>
-                          )}
-                        </span>
-                        {historyBatchConflict && (
-                          // Task #471 — same shared chip the picker row
-                          // uses (Task #242 / #340), rendered in static
-                          // (non-toggle) mode here because the
-                          // history-panel header sits directly above the
-                          // per-phrase rows so reviewers already see the
-                          // detail without an inline expander.
-                          <HandwavyRemovalBatchConflictChip
-                            testId="handwavy-history-batch-conflict-chip"
-                            conflictCount={historyBatchConflict.conflictCount}
-                            total={historyBatchConflict.total}
-                            titleSuffix="Use the per-phrase rows below for a finer-grained decision."
-                          />
-                        )}
-                        {group.allReinstated ? (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] border-emerald-500/40 text-emerald-300"
-                            data-testid="handwavy-history-batch-reinstated"
-                          >
-                            All reinstated
-                          </Badge>
-                        ) : remainingCount === 0 ? (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] text-muted-foreground"
-                            data-testid="handwavy-history-batch-nothing-to-do"
-                          >
-                            Nothing to reinstate
-                          </Badge>
-                        ) : (
-                          (() => {
-                            // Task #337 — both batch reinstate buttons
-                            // (Preview reinstate / Reinstate all N) share
-                            // the same disable conditions (either request
-                            // in flight, or mutations blocked), so they
-                            // share one hintId and one visible caption
-                            // rendered on its own row at the end of this
-                            // flex-wrap cluster (basis-full forces a new
-                            // line). IIFE keeps the hint id/reason locals
-                            // scoped to this ternary branch without
-                            // hoisting them up into the outer renderRow.
-                            const batchReinstateReason = describeHandwavyDisabledReason({
-                              mutationsAllowed,
-                              inFlight:
-                                busy === batchKey || busy === previewKey,
-                              inFlightLabel:
-                                busy === batchKey
-                                  ? "Reinstating this batch — wait for it to finish."
-                                  : "Loading the batch reinstate preview — wait for it to finish.",
-                            });
-                            const batchReinstateHintId = batchReinstateReason
-                              ? `handwavy-batch-reinstate-disabled-${slugifyForHintId(
-                                  group.removedAtIso,
-                                  "batch",
-                                )}`
-                              : undefined;
-                            return (
-                              <>
-                            {/* Task #177 — dry-run preview affordance next
-                                to "Reinstate all". Calls /reinstate-batch
-                                with `dryRun: true` so the reviewer can see
-                                per-phrase outcomes (would-reinstate /
-                                already-reinstated / already-active) before
-                                committing. The mutating call still lives
-                                on the existing button next to it. */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200"
-                              disabled={busy === previewKey || busy === batchKey || !mutationsAllowed}
-                              title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                              onClick={() =>
-                                handlePreviewReinstateBatch(group.removedAtIso)
-                              }
-                              data-testid="handwavy-reinstate-batch-preview"
-                              data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                              aria-label={`Preview reinstate of ${remainingCount} remaining phrase${remainingCount === 1 ? "" : "s"} from this batch`}
-                              aria-describedby={batchReinstateHintId}
-                            >
-                              <Info className="w-3 h-3 mr-1" />
-                              {busy === previewKey
-                                ? "Previewing…"
-                                : "Preview reinstate"}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
-                              disabled={busy === batchKey || busy === previewKey || !mutationsAllowed}
-                              title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                              data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                              aria-describedby={batchReinstateHintId}
-                              onClick={() => {
-                                // Task #180 — gate the direct "Reinstate all"
-                                // click behind a confirmation dialog
-                                // (mirroring Task #153's per-row reinstate
-                                // confirm) so a misclick doesn't re-enable
-                                // every phrase from the batch at once. We
-                                // capture exactly the rows the button would
-                                // actually re-add (skipping ones already
-                                // reinstated or already on the active list)
-                                // so the dialog can list them. The Task
-                                // #177 Preview button next to this is its
-                                // own richer confirm flow and is left as
-                                // an immediate action.
-                                const phrasesToReinstate = group.rows
-                                  .filter(
-                                    (r) =>
-                                      !r.reinstated &&
-                                      !phrases.some(
-                                        (m: { phrase: string }) => m.phrase === r.phrase,
-                                      ),
-                                  )
-                                  .map((r) => r.phrase);
-                                setReinstateBatchConfirm({
-                                  removedAtIso: group.removedAtIso,
-                                  removedBy: group.removedBy,
-                                  batchSize: group.batchSize,
-                                  phrasesToReinstate,
-                                  originalPhraseCount: phrasesToReinstate.length,
-                                });
-                              }}
-                              data-testid="handwavy-reinstate-batch"
-                              aria-label={`Reinstate all ${remainingCount} remaining phrase${remainingCount === 1 ? "" : "s"} from this batch`}
-                            >
-                              <RotateCcw className="w-3 h-3 mr-1" />
-                              {busy === batchKey
-                                ? "Reinstating…"
-                                : `Reinstate all ${remainingCount}`}
-                            </Button>
-                            {batchReinstateHintId && (
-                              <div className="basis-full">
-                                <HandwavyDisabledHint
-                                  id={batchReinstateHintId}
-                                  reason={batchReinstateReason}
-                                  testId="handwavy-batch-reinstate-disabled-hint"
-                                />
-                              </div>
-                            )}
-                              </>
-                            );
-                          })()
-                        )}
-                      </div>
-                      {previewForGroup && (() => {
-                        const data = previewForGroup.data;
-                        const droppedPhrases = previewForGroup.droppedPhrases;
-                        const wouldReinstateCountRaw =
-                          typeof data.reinstatedCount === "number"
-                            ? data.reinstatedCount
-                            : 0;
-                        const skippedCountRaw =
-                          typeof data.skipped === "number" ? data.skipped : 0;
-                        const projectedTotalRaw =
-                          typeof data.total === "number" ? data.total : null;
-                        const results: HandwavyPhraseReinstateBatchEntryResult[] =
-                          Array.isArray(data.results) ? data.results : [];
-                        // Task #361 — only count drops against rows the
-                        // dry-run actually would have reinstated; this keeps
-                        // the adjusted counts non-negative if the snapshot
-                        // is stale.
-                        const droppedWouldReinstate = results.filter(
-                          (r) => r.reinstated && droppedPhrases.has(r.phrase),
-                        );
-                        const droppedCount = droppedWouldReinstate.length;
-                        const wouldReinstateCount = Math.max(
-                          0,
-                          wouldReinstateCountRaw - droppedCount,
-                        );
-                        const skippedCount = skippedCountRaw + droppedCount;
-                        const projectedTotal =
-                          projectedTotalRaw != null
-                            ? Math.max(0, projectedTotalRaw - droppedCount)
-                            : null;
-                        const noun =
-                          wouldReinstateCount === 1 ? "phrase" : "phrases";
-                        const confirming = busy === batchKey;
-                        // Task #248 — drift detection mirrors the bulk-remove
-                        // preview's "Selection has changed since this preview
-                        // was generated" warning. The dry-run snapshot was
-                        // captured at click time; if a teammate per-phrase
-                        // reinstates one of the inner phrases, re-removes a
-                        // previously reinstated row, or independently re-adds
-                        // one of these phrases to the active list between
-                        // the preview and the reviewer's confirm click, the
-                        // panel's per-phrase outcomes silently go stale. We
-                        // recompute the expected outcome for each preview
-                        // row off the current `group.rows` (reinstated flags
-                        // from history) + the current active list and flag
-                        // any mismatch so the reviewer knows to re-preview
-                        // before pressing confirm. The mutating server call
-                        // already ignores already-active / already-reinstated
-                        // rows safely (Task #159), so this is a heads-up,
-                        // not a hard block — confirm stays enabled.
-                        const expectedOutcomeFor = (
-                          phrase: string,
-                        ): "would-reinstate" | "already-reinstated" | "already-active" => {
-                          const innerRow = group.rows.find(
-                            (r) => r.phrase === phrase,
-                          );
-                          if (innerRow?.reinstated) return "already-reinstated";
-                          if (
-                            phrases.some(
-                              (m: { phrase: string }) => m.phrase === phrase,
-                            )
-                          ) {
-                            return "already-active";
-                          }
-                          return "would-reinstate";
-                        };
-                        const previewOutcomeFor = (
-                          r: HandwavyPhraseReinstateBatchEntryResult,
-                        ): "would-reinstate" | "already-reinstated" | "already-active" | "unknown" => {
-                          if (r.reinstated) return "would-reinstate";
-                          if (r.reason === "already-reinstated") return "already-reinstated";
-                          if (r.reason === "already-active") return "already-active";
-                          return "unknown";
-                        };
-                        const previewDrifted = results.some((r) => {
-                          const previewOutcome = previewOutcomeFor(r);
-                          if (previewOutcome === "unknown") return false;
-                          return expectedOutcomeFor(r.phrase) !== previewOutcome;
-                        });
-                        return (
-                          <div
-                            className="px-3 py-2 border-l-2 border-sky-500/40 bg-sky-500/5 space-y-2"
-                            data-testid="handwavy-reinstate-batch-preview-panel"
-                            data-batch-removed-at={group.removedAtIso}
-                          >
-                            <div className="flex items-start gap-2">
-                              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-sky-300" />
-                              <div className="flex-1 text-[11px]">
-                                <div className="font-semibold text-foreground">
-                                  Reinstate preview for {group.batchSize}{" "}
-                                  {group.batchSize === 1 ? "phrase" : "phrases"}
-                                </div>
-                                <div className="text-[10px] text-muted-foreground mt-0.5">
-                                  <span className="text-foreground/90">
-                                    {wouldReinstateCount}
-                                  </span>{" "}
-                                  of {group.batchSize} {noun} would be
-                                  reinstated
-                                  {skippedCount > 0 && (
-                                    <>
-                                      ,{" "}
-                                      <span className="text-foreground/90">
-                                        {skippedCount}
-                                      </span>{" "}
-                                      skipped (
-                                      {skippedCountRaw > 0 &&
-                                        "already reinstated or already active"}
-                                      {skippedCountRaw > 0 &&
-                                        droppedCount > 0 &&
-                                        "; "}
-                                      {droppedCount > 0 && (
-                                        <>
-                                          {droppedCount} dropped by reviewer
-                                        </>
-                                      )}
-                                      )
-                                    </>
-                                  )}
-                                  .{" "}
-                                  {projectedTotal != null && (
-                                    <>
-                                      The active list would grow to{" "}
-                                      <span className="text-foreground/90">
-                                        {projectedTotal}
-                                      </span>{" "}
-                                      phrases.{" "}
-                                    </>
-                                  )}
-                                  Nothing has changed yet.
-                                </div>
-                              </div>
-                            </div>
-                            <ul
-                              className="max-h-48 overflow-y-auto space-y-0.5 border-l border-border/30 pl-2"
-                              data-testid="handwavy-reinstate-batch-preview-results"
-                            >
-                              {results.map((r, idx) => {
-                                const isDropped =
-                                  r.reinstated && droppedPhrases.has(r.phrase);
-                                const cfg = isDropped
-                                  ? {
-                                      label: "dropped",
-                                      color: "text-muted-foreground",
-                                      icon: <XIcon className="w-3 h-3" />,
-                                    }
-                                  : r.reinstated
-                                  ? {
-                                      label: "would reinstate",
-                                      color: "text-emerald-400",
-                                      icon: <CheckCircle2 className="w-3 h-3" />,
-                                    }
-                                  : r.reason === "already-reinstated"
-                                    ? {
-                                        label: "already reinstated",
-                                        color: "text-muted-foreground",
-                                        icon: <CheckCircle2 className="w-3 h-3" />,
-                                      }
-                                    : r.reason === "already-active"
-                                      ? {
-                                          label: "already active",
-                                          color: "text-amber-300",
-                                          icon: <Info className="w-3 h-3" />,
-                                        }
-                                      : {
-                                          label: "skipped",
-                                          color: "text-yellow-400",
-                                          icon: <AlertTriangle className="w-3 h-3" />,
-                                        };
-                                return (
-                                  <li
-                                    key={`${r.phrase}-${idx}`}
-                                    className="flex items-start gap-2 text-[11px]"
-                                    data-testid="handwavy-reinstate-batch-preview-row"
-                                    data-outcome={
-                                      isDropped
-                                        ? "dropped"
-                                        : r.reinstated
-                                          ? "would-reinstate"
-                                          : r.reason ?? "unknown"
-                                    }
-                                    data-phrase={r.phrase}
-                                  >
-                                    <span
-                                      className={cn(
-                                        "flex items-center gap-1 w-32 shrink-0",
-                                        cfg.color,
-                                      )}
-                                    >
-                                      {cfg.icon}
-                                      <span className="uppercase tracking-wide font-bold text-[9px]">
-                                        {cfg.label}
-                                      </span>
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        "font-mono break-all flex-1",
-                                        isDropped
-                                          ? "text-muted-foreground line-through"
-                                          : "text-foreground/80",
-                                      )}
-                                    >
-                                      {r.phrase}
-                                    </span>
-                                    {r.reinstated && !isDropped && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          dropPhraseFromReinstatePreview(
-                                            r.phrase,
-                                          )
-                                        }
-                                        disabled={confirming}
-                                        className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-foreground hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-foreground/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        data-testid="handwavy-reinstate-preview-result-drop"
-                                        data-phrase={r.phrase}
-                                        aria-label={`Skip "${r.phrase}" — leave it on the removal-history list`}
-                                        title="Skip this phrase — leave it removed"
-                                      >
-                                        <XIcon className="w-3 h-3" />
-                                      </button>
-                                    )}
-                                    {/* Task #513 — undo affordance for a row
-                                        the reviewer just dropped. Restoring
-                                        here reverses the drop without losing
-                                        the rest of the drop selections, so
-                                        reviewers don't have to re-preview the
-                                        whole batch to recover from a misclick. */}
-                                    {isDropped && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          restorePhraseToReinstatePreview(
-                                            r.phrase,
-                                          )
-                                        }
-                                        disabled={confirming}
-                                        className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-emerald-300 hover:bg-emerald-300/10 focus:outline-none focus:ring-1 focus:ring-emerald-300/40 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        data-testid="handwavy-reinstate-preview-result-restore"
-                                        data-phrase={r.phrase}
-                                        aria-label={`Undo drop of "${r.phrase}" — put it back into the pending reinstate set`}
-                                        title="Undo drop — put this phrase back into the pending reinstate set"
-                                      >
-                                        <Undo2 className="w-3 h-3" />
-                                      </button>
-                                    )}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                            {droppedCount > 0 && (
-                              <div
-                                className="text-[11px] text-amber-200 italic"
-                                data-testid="handwavy-reinstate-batch-preview-dropped-note"
+                            {isUndone && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] border-amber-500/40 text-amber-300"
+                                data-testid="handwavy-history-undone"
                               >
-                                {droppedCount} phrase
-                                {droppedCount === 1 ? "" : "s"} will stay on
-                                the removal-history list. Confirm reinstates
-                                only the rows still marked “would reinstate.”
-                              </div>
+                                Undone
+                              </Badge>
                             )}
-                            {previewDrifted && (
-                              <div
-                                className="text-[11px] text-amber-200 italic flex items-start gap-1"
-                                data-testid="handwavy-reinstate-batch-preview-stale"
+                            {h.reinstated ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] border-emerald-500/40 text-emerald-300"
+                                data-testid="handwavy-history-reinstated"
                               >
-                                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-                                <span className="flex-1">
-                                  Phrase state has changed since this preview was generated. Re-preview to refresh — confirming will still skip any phrase the server now sees as already active or already reinstated.
-                                </span>
-                                {/* Task #354 — one-click in-place refresh of
-                                    the dry-run snapshot, so the reviewer
-                                    doesn't have to close the panel and lose
-                                    their place in the history list. */}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200 shrink-0"
-                                  disabled={
-                                    busy === previewKey ||
-                                    confirming ||
-                                    !mutationsAllowed
-                                  }
-                                  title={
-                                    !mutationsAllowed
-                                      ? MUTATIONS_BLOCKED_TITLE
-                                      : undefined
-                                  }
-                                  onClick={() =>
-                                    handlePreviewReinstateBatch(
-                                      group.removedAtIso,
-                                    )
-                                  }
-                                  data-testid="handwavy-reinstate-batch-preview-stale-repreview"
-                                  data-mutations-blocked={
-                                    !mutationsAllowed ? "true" : "false"
-                                  }
-                                  aria-label="Re-preview reinstate to refresh the snapshot"
-                                >
-                                  <RefreshCw className="w-3 h-3 mr-1" />
-                                  {busy === previewKey
-                                    ? "Refreshing…"
-                                    : "Re-preview"}
-                                </Button>
-                              </div>
-                            )}
-                            {droppedCount > 0 && wouldReinstateCount === 0 && (
-                              // Task #512 — when the reviewer drops every
-                              // would-reinstate row, the confirm button
-                              // disables silently. Surface a short empty-state
-                              // hint so the dead-end state is self-explanatory
-                              // and the reviewer knows to re-preview or cancel.
-                              <div
-                                className="text-[11px] text-muted-foreground italic flex items-start gap-1"
-                                data-testid="handwavy-reinstate-batch-preview-all-dropped"
+                                Reinstated
+                              </Badge>
+                            ) : isActive ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] text-muted-foreground"
+                                data-testid="handwavy-history-active"
                               >
-                                <Info className="w-3 h-3 mt-0.5 shrink-0" />
-                                <span>
-                                  All rows dropped — nothing left to reinstate.
-                                  Re-preview or cancel.
-                                </span>
-                              </div>
-                            )}
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
-                                disabled={confirming}
-                                onClick={() => setReinstatePreview(null)}
-                                data-testid="handwavy-reinstate-batch-preview-cancel"
-                              >
-                                Cancel
-                              </Button>
-                              {(() => {
-                                const reinstateBatchPrevReason =
+                                Already active
+                              </Badge>
+                            ) : (
+                              (() => {
+                                // Task #337 — visible reason caption beneath
+                                // a disabled per-history-row Reinstate button.
+                                // Inline IIFE keeps the local hint id/reason
+                                // in scope without disturbing the surrounding
+                                // ternary structure.
+                                const reinstateReason =
                                   describeHandwavyDisabledReason({
                                     mutationsAllowed,
-                                    inFlight: confirming,
+                                    inFlight: busy === reinstateKey,
                                     inFlightLabel:
-                                      "Reinstating this batch — wait for it to finish.",
-                                    extraReason:
-                                      wouldReinstateCount === 0
-                                        ? "No phrases in this batch are still removed."
-                                        : null,
+                                      "Reinstating this phrase — wait for it to finish.",
                                   });
-                                const reinstateBatchPrevHintId =
-                                  reinstateBatchPrevReason
-                                    ? `handwavy-reinstate-batch-preview-confirm-disabled-hint-id-${slugifyForHintId(
-                                        group.removedAtIso,
-                                        "batch",
-                                      )}`
-                                    : undefined;
+                                const reinstateHintId = reinstateReason
+                                  ? `handwavy-reinstate-disabled-${slugifyForHintId(
+                                      `${h.phrase}-${removedAtKey}`,
+                                      "reinstate",
+                                    )}`
+                                  : undefined;
                                 return (
                                   <>
                                     <Button
@@ -11285,523 +11689,1331 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
                                       size="sm"
                                       className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
                                       disabled={
-                                        confirming || wouldReinstateCount === 0 || !mutationsAllowed
+                                        busy === reinstateKey ||
+                                        !mutationsAllowed
                                       }
-                                      title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                                      onClick={() => {
-                                        // Task #361 — fall back to per-phrase
-                                        // /reinstate (subset path) once the
-                                        // reviewer has dropped any row, since
-                                        // /reinstate-batch has no allow-list.
-                                        if (droppedCount === 0) {
-                                          void handleReinstateBatch(
-                                            group.removedAtIso,
-                                            group.batchSize,
-                                          );
-                                        } else {
-                                          const allowList = results
-                                            .filter(
-                                              (r) =>
-                                                r.reinstated &&
-                                                !droppedPhrases.has(r.phrase),
-                                            )
-                                            .map((r) => r.phrase);
-                                          void handleReinstateBatchSubset(
-                                            group.removedAtIso,
-                                            allowList,
-                                          );
-                                        }
-                                      }}
-                                      data-testid="handwavy-reinstate-batch-preview-confirm"
-                                      data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                                      aria-label={`Confirm reinstate of ${wouldReinstateCount} ${noun} from this batch`}
-                                      aria-describedby={reinstateBatchPrevHintId}
+                                      title={
+                                        !mutationsAllowed
+                                          ? MUTATIONS_BLOCKED_TITLE
+                                          : undefined
+                                      }
+                                      onClick={() => setReinstateConfirm(h)}
+                                      data-testid="handwavy-reinstate"
+                                      data-mutations-blocked={
+                                        !mutationsAllowed ? "true" : "false"
+                                      }
+                                      aria-label={`Reinstate phrase ${h.phrase}`}
+                                      aria-describedby={reinstateHintId}
                                     >
                                       <RotateCcw className="w-3 h-3 mr-1" />
-                                      {confirming
+                                      {busy === reinstateKey
                                         ? "Reinstating…"
-                                        : wouldReinstateCount > 0
-                                          ? `Confirm reinstate (${wouldReinstateCount})`
-                                          : "Nothing to reinstate"}
+                                        : "Reinstate"}
                                     </Button>
-                                    {reinstateBatchPrevHintId && (
-                                      <div className="basis-full">
-                                        <HandwavyDisabledHint
-                                          id={reinstateBatchPrevHintId}
-                                          reason={reinstateBatchPrevReason}
-                                          testId="handwavy-reinstate-batch-preview-confirm-disabled-hint"
-                                        />
-                                      </div>
+                                    {reinstateHintId && (
+                                      <HandwavyDisabledHint
+                                        id={reinstateHintId}
+                                        reason={reinstateReason}
+                                        testId="handwavy-reinstate-disabled-hint"
+                                      />
                                     )}
                                   </>
                                 );
-                              })()}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      {outcomeForGroup && (() => {
-                        // Task #514 — partial-success outcome panel.
-                        // Renders when `handleReinstateBatchSubset`
-                        // captured a mixed `results[]` from the server (at
-                        // least one `reinstated: true` AND at least one
-                        // `reinstated: false`). The all-success path
-                        // already cleared this state, so a fully
-                        // successful confirm collapses the panel exactly
-                        // as before.
-                        const {
-                          results,
-                          reinstatedCount,
-                          attemptedCount,
-                        } = outcomeForGroup;
-                        const failed = results.filter((r) => !r.reinstated);
-                        return (
-                          <div
-                            className="px-3 py-2 border-l-2 border-amber-500/50 bg-amber-500/5 space-y-2"
-                            data-testid="handwavy-reinstate-batch-outcome-panel"
-                            data-batch-removed-at={group.removedAtIso}
-                            data-reinstated-count={reinstatedCount}
-                            data-failed-count={failed.length}
-                          >
-                            <div className="flex items-start gap-2">
-                              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
-                              <div className="flex-1 text-[11px]">
-                                <div
-                                  className="font-semibold text-foreground"
-                                  data-testid="handwavy-reinstate-batch-outcome-title"
-                                >
-                                  Partial reinstate: {reinstatedCount} of{" "}
-                                  {attemptedCount} landed
-                                </div>
-                                <div className="text-[10px] text-muted-foreground mt-0.5">
-                                  <span className="text-foreground/90">
-                                    {failed.length}
-                                  </span>{" "}
-                                  phrase{failed.length === 1 ? "" : "s"}{" "}
-                                  stayed on the removal-history list — likely
-                                  re-added or
-                                  reinstated elsewhere between preview and
-                                  confirm. Re-preview to see the current state.
-                                </div>
-                              </div>
-                            </div>
-                            <ul
-                              className="max-h-48 overflow-y-auto space-y-0.5 border-l border-border/30 pl-2"
-                              data-testid="handwavy-reinstate-batch-outcome-results"
-                            >
-                              {results.map((r, idx) => {
-                                const cfg = r.reinstated
-                                  ? {
-                                      label: "reinstated",
-                                      color: "text-emerald-400",
-                                      icon: <CheckCircle2 className="w-3 h-3" />,
-                                    }
-                                  : r.reason === "already-active"
-                                    ? {
-                                        label: "failed: already active",
-                                        color: "text-amber-300",
-                                        icon: <Info className="w-3 h-3" />,
-                                      }
-                                    : r.reason === "already-reinstated"
-                                      ? {
-                                          label: "failed: already reinstated",
-                                          color: "text-muted-foreground",
-                                          icon: <CheckCircle2 className="w-3 h-3" />,
-                                        }
-                                      : r.reason === "not-in-batch"
-                                        ? {
-                                            label: "failed: not in batch",
-                                            color: "text-yellow-400",
-                                            icon: <AlertTriangle className="w-3 h-3" />,
-                                          }
-                                        : {
-                                            label: "failed: skipped",
-                                            color: "text-yellow-400",
-                                            icon: <AlertTriangle className="w-3 h-3" />,
-                                          };
-                                return (
-                                  <li
-                                    key={`outcome-${r.phrase}-${idx}`}
-                                    className="flex items-start gap-2 text-[11px]"
-                                    data-testid="handwavy-reinstate-batch-outcome-row"
-                                    data-outcome={
-                                      r.reinstated
-                                        ? "reinstated"
-                                        : r.reason ?? "skipped"
-                                    }
-                                    data-phrase={r.phrase}
-                                  >
-                                    <span
-                                      className={cn(
-                                        "flex items-center gap-1 w-44 shrink-0",
-                                        cfg.color,
-                                      )}
-                                    >
-                                      {cfg.icon}
-                                      {cfg.label}
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        "flex-1 min-w-0 break-words font-mono",
-                                        r.reinstated
-                                          ? "text-foreground/90"
-                                          : "text-muted-foreground line-through",
-                                      )}
-                                    >
-                                      {r.phrase}
-                                    </span>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                            {failed.length > 0 && (
-                              <div
-                                className="text-[11px] text-amber-200"
-                                data-testid="handwavy-reinstate-batch-outcome-failed-summary"
-                              >
-                                Failed: {failed.map((r) => `“${r.phrase}”`).join(", ")}
-                              </div>
+                              })()
                             )}
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200"
-                                disabled={
-                                  busy === previewKey ||
-                                  busy === batchKey ||
-                                  !mutationsAllowed
-                                }
-                                title={
-                                  !mutationsAllowed
-                                    ? MUTATIONS_BLOCKED_TITLE
-                                    : undefined
-                                }
-                                onClick={() =>
-                                  handlePreviewReinstateBatch(
-                                    group.removedAtIso,
-                                  )
-                                }
-                                data-testid="handwavy-reinstate-batch-outcome-repreview"
-                              >
-                                <RefreshCw className="w-3 h-3 mr-1" />
-                                {busy === previewKey
-                                  ? "Refreshing…"
-                                  : "Re-preview"}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
-                                onClick={() =>
-                                  setReinstateBatchOutcome((prev) =>
-                                    prev &&
-                                    prev.removedAtIso === group.removedAtIso
-                                      ? null
-                                      : prev,
-                                  )
-                                }
-                                data-testid="handwavy-reinstate-batch-outcome-dismiss"
-                              >
-                                Dismiss
-                              </Button>
-                            </div>
                           </div>
-                        );
-                      })()}
-                      {/* Task #179 — high-thrash summary: only rendered when
+                          <div>
+                            {isUndone ? "Undone by " : "Removed by "}
+                            <span className="text-foreground/80">
+                              {(isUndone ? h.undoneBy : h.removedBy) ||
+                                "anonymous"}
+                            </span>
+                            {" • "}
+                            {formatAuditTimestamp(h.removedAt) ??
+                              "unknown date"}
+                            {!opts.insideBatch &&
+                              h.batchSize &&
+                              h.batchSize > 1 && (
+                                <span
+                                  className="ml-2 text-foreground/60"
+                                  data-testid="handwavy-history-batch-label"
+                                >
+                                  (part of a batch removal of {h.batchSize})
+                                </span>
+                              )}
+                          </div>
+                          {(h.addedBy || h.rationale) && (
+                            <div className="text-foreground/60">
+                              Originally added by{" "}
+                              <span className="text-foreground/80">
+                                {h.addedBy || "anonymous"}
+                              </span>
+                              {h.rationale && <> — “{h.rationale}”</>}
+                            </div>
+                          )}
+                          {h.reinstated && (
+                            <div
+                              className="text-emerald-300/80"
+                              data-testid="handwavy-history-reinstated-meta"
+                            >
+                              Reinstated by{" "}
+                              <span className="text-foreground/80">
+                                {h.reinstatedBy || "anonymous"}
+                              </span>
+                              {" • "}
+                              {formatAuditTimestamp(h.reinstatedAt) ??
+                                "unknown date"}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    };
+
+                    if (group.kind === "single") {
+                      return renderRow(group.row, gIdx);
+                    }
+
+                    // Task #144 — batch group: a single header row with one
+                    // "Reinstate all" button, then the inner per-phrase rows
+                    // beneath it (still independently reinstateable).
+                    const batchKey = `reinstate-batch:${group.removedAtIso}`;
+                    // Task #177 — busy key for the dry-run preview fetch. Kept
+                    // distinct from the mutating key so the spinner only blocks
+                    // the button the reviewer actually pressed.
+                    const previewKey = `reinstate-batch-preview:${group.removedAtIso}`;
+                    // Number of inner phrases that aren't already reinstated
+                    // AND aren't already in the active list — i.e. what the
+                    // batch button would actually re-add.
+                    const remainingRows = group.rows.filter(
+                      (r) =>
+                        !r.reinstated &&
+                        !phrases.some(
+                          (m: { phrase: string }) => m.phrase === r.phrase,
+                        ),
+                    );
+                    const remainingCount = remainingRows.length;
+                    // Task #177 — when this batch's dry-run preview is open,
+                    // surface the per-phrase outcomes inline below the header
+                    // so the reviewer can confirm or cancel without losing the
+                    // surrounding history context.
+                    const previewForGroup =
+                      reinstatePreview &&
+                      reinstatePreview.removedAtIso === group.removedAtIso
+                        ? reinstatePreview
+                        : null;
+                    // Task #514 — partial-success outcome panel for this batch.
+                    // Populated by `handleReinstateBatchSubset` when the
+                    // server's mutating /reinstate-batch round-trip came back
+                    // with a mix of `reinstated: true` and `reinstated: false`
+                    // results (e.g. a teammate re-added one of the remaining
+                    // phrases between preview and confirm). Renders a per-row
+                    // outcome list inline below the header so reviewers can
+                    // see exactly which rows landed vs. which stayed on the
+                    // removal-history list.
+                    const outcomeForGroup =
+                      reinstateBatchOutcome &&
+                      reinstateBatchOutcome.removedAtIso === group.removedAtIso
+                        ? reinstateBatchOutcome
+                        : null;
+                    // Task #179 — count how many of the rows the batch button
+                    // would actually flip have already cycled (remove +
+                    // reinstate) >= 2 times. Surfaced as a summary line below
+                    // the batch header so a reviewer can't miss the thrash
+                    // signal before the batch fires. Mirrors the bulk-REMOVE
+                    // preview's `handwavy-bulk-preview-thrash-summary` from
+                    // Task #151. We deliberately scope the count to
+                    // `remainingRows` (not `group.rows`) so the summary
+                    // matches the batch button's "Reinstate all N" label.
+                    const HISTORY_HIGH_THRASH_MIN = 2;
+                    const remainingHighThrashCount = remainingRows.reduce(
+                      (acc, r) =>
+                        acc +
+                        ((thrashByPhrase.get(r.phrase)?.length ?? 0) >=
+                        HISTORY_HIGH_THRASH_MIN
+                          ? 1
+                          : 0),
+                      0,
+                    );
+                    // Task #339 — re-use the same `removalBatchConflicts`
+                    // memo the "Recent batch removals" picker uses (keyed by
+                    // batch ISO `removedAt`) so the older history-panel batch
+                    // header surfaces the same "N of M may overwrite recent
+                    // edits" chip. The memo already skips fully-reinstated
+                    // batches and is computed from the same handwavy-phrases
+                    // payload, so no extra request is needed.
+                    const historyBatchConflict = group.allReinstated
+                      ? undefined
+                      : removalBatchConflicts.get(group.removedAtIso);
+                    return (
+                      <div
+                        key={`batch-${group.removedAtIso}-${gIdx}`}
+                        data-testid="handwavy-history-batch-group"
+                        data-batch-removed-at={group.removedAtIso}
+                        data-batch-conflict-count={
+                          historyBatchConflict
+                            ? historyBatchConflict.conflictCount
+                            : 0
+                        }
+                      >
+                        <div
+                          className="px-3 py-2 text-[11px] bg-primary/5 border-l-2 border-primary/40 flex items-center gap-2 flex-wrap"
+                          data-testid="handwavy-history-batch-header"
+                        >
+                          <Layers className="w-3 h-3 text-primary/80 shrink-0" />
+                          <span className="text-foreground/80 flex-1 min-w-0">
+                            Batch removal of <strong>{group.batchSize}</strong>{" "}
+                            phrase{group.batchSize === 1 ? "" : "s"} by{" "}
+                            <span className="text-foreground/90">
+                              {group.removedBy || "anonymous"}
+                            </span>
+                            {" on "}
+                            {formatAuditTimestamp(group.removedAtIso) ??
+                              "unknown date"}
+                            {group.reinstatedCount > 0 &&
+                              !group.allReinstated && (
+                                <span className="ml-2 text-muted-foreground">
+                                  ({group.reinstatedCount} of {group.batchSize}{" "}
+                                  reinstated)
+                                </span>
+                              )}
+                          </span>
+                          {historyBatchConflict && (
+                            // Task #471 — same shared chip the picker row
+                            // uses (Task #242 / #340), rendered in static
+                            // (non-toggle) mode here because the
+                            // history-panel header sits directly above the
+                            // per-phrase rows so reviewers already see the
+                            // detail without an inline expander.
+                            <HandwavyRemovalBatchConflictChip
+                              testId="handwavy-history-batch-conflict-chip"
+                              conflictCount={historyBatchConflict.conflictCount}
+                              total={historyBatchConflict.total}
+                              titleSuffix="Use the per-phrase rows below for a finer-grained decision."
+                            />
+                          )}
+                          {group.allReinstated ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] border-emerald-500/40 text-emerald-300"
+                              data-testid="handwavy-history-batch-reinstated"
+                            >
+                              All reinstated
+                            </Badge>
+                          ) : remainingCount === 0 ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] text-muted-foreground"
+                              data-testid="handwavy-history-batch-nothing-to-do"
+                            >
+                              Nothing to reinstate
+                            </Badge>
+                          ) : (
+                            (() => {
+                              // Task #337 — both batch reinstate buttons
+                              // (Preview reinstate / Reinstate all N) share
+                              // the same disable conditions (either request
+                              // in flight, or mutations blocked), so they
+                              // share one hintId and one visible caption
+                              // rendered on its own row at the end of this
+                              // flex-wrap cluster (basis-full forces a new
+                              // line). IIFE keeps the hint id/reason locals
+                              // scoped to this ternary branch without
+                              // hoisting them up into the outer renderRow.
+                              const batchReinstateReason =
+                                describeHandwavyDisabledReason({
+                                  mutationsAllowed,
+                                  inFlight:
+                                    busy === batchKey || busy === previewKey,
+                                  inFlightLabel:
+                                    busy === batchKey
+                                      ? "Reinstating this batch — wait for it to finish."
+                                      : "Loading the batch reinstate preview — wait for it to finish.",
+                                });
+                              const batchReinstateHintId = batchReinstateReason
+                                ? `handwavy-batch-reinstate-disabled-${slugifyForHintId(
+                                    group.removedAtIso,
+                                    "batch",
+                                  )}`
+                                : undefined;
+                              return (
+                                <>
+                                  {/* Task #177 — dry-run preview affordance next
+                                to "Reinstate all". Calls /reinstate-batch
+                                with `dryRun: true` so the reviewer can see
+                                per-phrase outcomes (would-reinstate /
+                                already-reinstated / already-active) before
+                                committing. The mutating call still lives
+                                on the existing button next to it. */}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200"
+                                    disabled={
+                                      busy === previewKey ||
+                                      busy === batchKey ||
+                                      !mutationsAllowed
+                                    }
+                                    title={
+                                      !mutationsAllowed
+                                        ? MUTATIONS_BLOCKED_TITLE
+                                        : undefined
+                                    }
+                                    onClick={() =>
+                                      handlePreviewReinstateBatch(
+                                        group.removedAtIso,
+                                      )
+                                    }
+                                    data-testid="handwavy-reinstate-batch-preview"
+                                    data-mutations-blocked={
+                                      !mutationsAllowed ? "true" : "false"
+                                    }
+                                    aria-label={`Preview reinstate of ${remainingCount} remaining phrase${remainingCount === 1 ? "" : "s"} from this batch`}
+                                    aria-describedby={batchReinstateHintId}
+                                  >
+                                    <Info className="w-3 h-3 mr-1" />
+                                    {busy === previewKey
+                                      ? "Previewing…"
+                                      : "Preview reinstate"}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
+                                    disabled={
+                                      busy === batchKey ||
+                                      busy === previewKey ||
+                                      !mutationsAllowed
+                                    }
+                                    title={
+                                      !mutationsAllowed
+                                        ? MUTATIONS_BLOCKED_TITLE
+                                        : undefined
+                                    }
+                                    data-mutations-blocked={
+                                      !mutationsAllowed ? "true" : "false"
+                                    }
+                                    aria-describedby={batchReinstateHintId}
+                                    onClick={() => {
+                                      // Task #180 — gate the direct "Reinstate all"
+                                      // click behind a confirmation dialog
+                                      // (mirroring Task #153's per-row reinstate
+                                      // confirm) so a misclick doesn't re-enable
+                                      // every phrase from the batch at once. We
+                                      // capture exactly the rows the button would
+                                      // actually re-add (skipping ones already
+                                      // reinstated or already on the active list)
+                                      // so the dialog can list them. The Task
+                                      // #177 Preview button next to this is its
+                                      // own richer confirm flow and is left as
+                                      // an immediate action.
+                                      const phrasesToReinstate = group.rows
+                                        .filter(
+                                          (r) =>
+                                            !r.reinstated &&
+                                            !phrases.some(
+                                              (m: { phrase: string }) =>
+                                                m.phrase === r.phrase,
+                                            ),
+                                        )
+                                        .map((r) => r.phrase);
+                                      setReinstateBatchConfirm({
+                                        removedAtIso: group.removedAtIso,
+                                        removedBy: group.removedBy,
+                                        batchSize: group.batchSize,
+                                        phrasesToReinstate,
+                                        originalPhraseCount:
+                                          phrasesToReinstate.length,
+                                      });
+                                    }}
+                                    data-testid="handwavy-reinstate-batch"
+                                    aria-label={`Reinstate all ${remainingCount} remaining phrase${remainingCount === 1 ? "" : "s"} from this batch`}
+                                  >
+                                    <RotateCcw className="w-3 h-3 mr-1" />
+                                    {busy === batchKey
+                                      ? "Reinstating…"
+                                      : `Reinstate all ${remainingCount}`}
+                                  </Button>
+                                  {batchReinstateHintId && (
+                                    <div className="basis-full">
+                                      <HandwavyDisabledHint
+                                        id={batchReinstateHintId}
+                                        reason={batchReinstateReason}
+                                        testId="handwavy-batch-reinstate-disabled-hint"
+                                      />
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()
+                          )}
+                        </div>
+                        {previewForGroup &&
+                          (() => {
+                            const data = previewForGroup.data;
+                            const droppedPhrases =
+                              previewForGroup.droppedPhrases;
+                            const wouldReinstateCountRaw =
+                              typeof data.reinstatedCount === "number"
+                                ? data.reinstatedCount
+                                : 0;
+                            const skippedCountRaw =
+                              typeof data.skipped === "number"
+                                ? data.skipped
+                                : 0;
+                            const projectedTotalRaw =
+                              typeof data.total === "number"
+                                ? data.total
+                                : null;
+                            const results: HandwavyPhraseReinstateBatchEntryResult[] =
+                              Array.isArray(data.results) ? data.results : [];
+                            // Task #361 — only count drops against rows the
+                            // dry-run actually would have reinstated; this keeps
+                            // the adjusted counts non-negative if the snapshot
+                            // is stale.
+                            const droppedWouldReinstate = results.filter(
+                              (r) =>
+                                r.reinstated && droppedPhrases.has(r.phrase),
+                            );
+                            const droppedCount = droppedWouldReinstate.length;
+                            const wouldReinstateCount = Math.max(
+                              0,
+                              wouldReinstateCountRaw - droppedCount,
+                            );
+                            const skippedCount = skippedCountRaw + droppedCount;
+                            const projectedTotal =
+                              projectedTotalRaw != null
+                                ? Math.max(0, projectedTotalRaw - droppedCount)
+                                : null;
+                            const noun =
+                              wouldReinstateCount === 1 ? "phrase" : "phrases";
+                            const confirming = busy === batchKey;
+                            // Task #248 — drift detection mirrors the bulk-remove
+                            // preview's "Selection has changed since this preview
+                            // was generated" warning. The dry-run snapshot was
+                            // captured at click time; if a teammate per-phrase
+                            // reinstates one of the inner phrases, re-removes a
+                            // previously reinstated row, or independently re-adds
+                            // one of these phrases to the active list between
+                            // the preview and the reviewer's confirm click, the
+                            // panel's per-phrase outcomes silently go stale. We
+                            // recompute the expected outcome for each preview
+                            // row off the current `group.rows` (reinstated flags
+                            // from history) + the current active list and flag
+                            // any mismatch so the reviewer knows to re-preview
+                            // before pressing confirm. The mutating server call
+                            // already ignores already-active / already-reinstated
+                            // rows safely (Task #159), so this is a heads-up,
+                            // not a hard block — confirm stays enabled.
+                            const expectedOutcomeFor = (
+                              phrase: string,
+                            ):
+                              | "would-reinstate"
+                              | "already-reinstated"
+                              | "already-active" => {
+                              const innerRow = group.rows.find(
+                                (r) => r.phrase === phrase,
+                              );
+                              if (innerRow?.reinstated)
+                                return "already-reinstated";
+                              if (
+                                phrases.some(
+                                  (m: { phrase: string }) =>
+                                    m.phrase === phrase,
+                                )
+                              ) {
+                                return "already-active";
+                              }
+                              return "would-reinstate";
+                            };
+                            const previewOutcomeFor = (
+                              r: HandwavyPhraseReinstateBatchEntryResult,
+                            ):
+                              | "would-reinstate"
+                              | "already-reinstated"
+                              | "already-active"
+                              | "unknown" => {
+                              if (r.reinstated) return "would-reinstate";
+                              if (r.reason === "already-reinstated")
+                                return "already-reinstated";
+                              if (r.reason === "already-active")
+                                return "already-active";
+                              return "unknown";
+                            };
+                            const previewDrifted = results.some((r) => {
+                              const previewOutcome = previewOutcomeFor(r);
+                              if (previewOutcome === "unknown") return false;
+                              return (
+                                expectedOutcomeFor(r.phrase) !== previewOutcome
+                              );
+                            });
+                            return (
+                              <div
+                                className="px-3 py-2 border-l-2 border-sky-500/40 bg-sky-500/5 space-y-2"
+                                data-testid="handwavy-reinstate-batch-preview-panel"
+                                data-batch-removed-at={group.removedAtIso}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-sky-300" />
+                                  <div className="flex-1 text-[11px]">
+                                    <div className="font-semibold text-foreground">
+                                      Reinstate preview for {group.batchSize}{" "}
+                                      {group.batchSize === 1
+                                        ? "phrase"
+                                        : "phrases"}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                                      <span className="text-foreground/90">
+                                        {wouldReinstateCount}
+                                      </span>{" "}
+                                      of {group.batchSize} {noun} would be
+                                      reinstated
+                                      {skippedCount > 0 && (
+                                        <>
+                                          ,{" "}
+                                          <span className="text-foreground/90">
+                                            {skippedCount}
+                                          </span>{" "}
+                                          skipped (
+                                          {skippedCountRaw > 0 &&
+                                            "already reinstated or already active"}
+                                          {skippedCountRaw > 0 &&
+                                            droppedCount > 0 &&
+                                            "; "}
+                                          {droppedCount > 0 && (
+                                            <>
+                                              {droppedCount} dropped by reviewer
+                                            </>
+                                          )}
+                                          )
+                                        </>
+                                      )}
+                                      .{" "}
+                                      {projectedTotal != null && (
+                                        <>
+                                          The active list would grow to{" "}
+                                          <span className="text-foreground/90">
+                                            {projectedTotal}
+                                          </span>{" "}
+                                          phrases.{" "}
+                                        </>
+                                      )}
+                                      Nothing has changed yet.
+                                    </div>
+                                  </div>
+                                </div>
+                                <ul
+                                  className="max-h-48 overflow-y-auto space-y-0.5 border-l border-border/30 pl-2"
+                                  data-testid="handwavy-reinstate-batch-preview-results"
+                                >
+                                  {results.map((r, idx) => {
+                                    const isDropped =
+                                      r.reinstated &&
+                                      droppedPhrases.has(r.phrase);
+                                    const cfg = isDropped
+                                      ? {
+                                          label: "dropped",
+                                          color: "text-muted-foreground",
+                                          icon: <XIcon className="w-3 h-3" />,
+                                        }
+                                      : r.reinstated
+                                        ? {
+                                            label: "would reinstate",
+                                            color: "text-emerald-400",
+                                            icon: (
+                                              <CheckCircle2 className="w-3 h-3" />
+                                            ),
+                                          }
+                                        : r.reason === "already-reinstated"
+                                          ? {
+                                              label: "already reinstated",
+                                              color: "text-muted-foreground",
+                                              icon: (
+                                                <CheckCircle2 className="w-3 h-3" />
+                                              ),
+                                            }
+                                          : r.reason === "already-active"
+                                            ? {
+                                                label: "already active",
+                                                color: "text-amber-300",
+                                                icon: (
+                                                  <Info className="w-3 h-3" />
+                                                ),
+                                              }
+                                            : {
+                                                label: "skipped",
+                                                color: "text-yellow-400",
+                                                icon: (
+                                                  <AlertTriangle className="w-3 h-3" />
+                                                ),
+                                              };
+                                    return (
+                                      <li
+                                        key={`${r.phrase}-${idx}`}
+                                        className="flex items-start gap-2 text-[11px]"
+                                        data-testid="handwavy-reinstate-batch-preview-row"
+                                        data-outcome={
+                                          isDropped
+                                            ? "dropped"
+                                            : r.reinstated
+                                              ? "would-reinstate"
+                                              : (r.reason ?? "unknown")
+                                        }
+                                        data-phrase={r.phrase}
+                                      >
+                                        <span
+                                          className={cn(
+                                            "flex items-center gap-1 w-32 shrink-0",
+                                            cfg.color,
+                                          )}
+                                        >
+                                          {cfg.icon}
+                                          <span className="uppercase tracking-wide font-bold text-[9px]">
+                                            {cfg.label}
+                                          </span>
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "font-mono break-all flex-1",
+                                            isDropped
+                                              ? "text-muted-foreground line-through"
+                                              : "text-foreground/80",
+                                          )}
+                                        >
+                                          {r.phrase}
+                                        </span>
+                                        {r.reinstated && !isDropped && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              dropPhraseFromReinstatePreview(
+                                                r.phrase,
+                                              )
+                                            }
+                                            disabled={confirming}
+                                            className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-foreground hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-foreground/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            data-testid="handwavy-reinstate-preview-result-drop"
+                                            data-phrase={r.phrase}
+                                            aria-label={`Skip "${r.phrase}" — leave it on the removal-history list`}
+                                            title="Skip this phrase — leave it removed"
+                                          >
+                                            <XIcon className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                        {/* Task #513 — undo affordance for a row
+                                        the reviewer just dropped. Restoring
+                                        here reverses the drop without losing
+                                        the rest of the drop selections, so
+                                        reviewers don't have to re-preview the
+                                        whole batch to recover from a misclick. */}
+                                        {isDropped && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              restorePhraseToReinstatePreview(
+                                                r.phrase,
+                                              )
+                                            }
+                                            disabled={confirming}
+                                            className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-emerald-300 hover:bg-emerald-300/10 focus:outline-none focus:ring-1 focus:ring-emerald-300/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            data-testid="handwavy-reinstate-preview-result-restore"
+                                            data-phrase={r.phrase}
+                                            aria-label={`Undo drop of "${r.phrase}" — put it back into the pending reinstate set`}
+                                            title="Undo drop — put this phrase back into the pending reinstate set"
+                                          >
+                                            <Undo2 className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                                {droppedCount > 0 && (
+                                  <div
+                                    className="text-[11px] text-amber-200 italic"
+                                    data-testid="handwavy-reinstate-batch-preview-dropped-note"
+                                  >
+                                    {droppedCount} phrase
+                                    {droppedCount === 1 ? "" : "s"} will stay on
+                                    the removal-history list. Confirm reinstates
+                                    only the rows still marked “would
+                                    reinstate.”
+                                  </div>
+                                )}
+                                {previewDrifted && (
+                                  <div
+                                    className="text-[11px] text-amber-200 italic flex items-start gap-1"
+                                    data-testid="handwavy-reinstate-batch-preview-stale"
+                                  >
+                                    <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                                    <span className="flex-1">
+                                      Phrase state has changed since this
+                                      preview was generated. Re-preview to
+                                      refresh — confirming will still skip any
+                                      phrase the server now sees as already
+                                      active or already reinstated.
+                                    </span>
+                                    {/* Task #354 — one-click in-place refresh of
+                                    the dry-run snapshot, so the reviewer
+                                    doesn't have to close the panel and lose
+                                    their place in the history list. */}
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200 shrink-0"
+                                      disabled={
+                                        busy === previewKey ||
+                                        confirming ||
+                                        !mutationsAllowed
+                                      }
+                                      title={
+                                        !mutationsAllowed
+                                          ? MUTATIONS_BLOCKED_TITLE
+                                          : undefined
+                                      }
+                                      onClick={() =>
+                                        handlePreviewReinstateBatch(
+                                          group.removedAtIso,
+                                        )
+                                      }
+                                      data-testid="handwavy-reinstate-batch-preview-stale-repreview"
+                                      data-mutations-blocked={
+                                        !mutationsAllowed ? "true" : "false"
+                                      }
+                                      aria-label="Re-preview reinstate to refresh the snapshot"
+                                    >
+                                      <RefreshCw className="w-3 h-3 mr-1" />
+                                      {busy === previewKey
+                                        ? "Refreshing…"
+                                        : "Re-preview"}
+                                    </Button>
+                                  </div>
+                                )}
+                                {droppedCount > 0 &&
+                                  wouldReinstateCount === 0 && (
+                                    // Task #512 — when the reviewer drops every
+                                    // would-reinstate row, the confirm button
+                                    // disables silently. Surface a short empty-state
+                                    // hint so the dead-end state is self-explanatory
+                                    // and the reviewer knows to re-preview or cancel.
+                                    <div
+                                      className="text-[11px] text-muted-foreground italic flex items-start gap-1"
+                                      data-testid="handwavy-reinstate-batch-preview-all-dropped"
+                                    >
+                                      <Info className="w-3 h-3 mt-0.5 shrink-0" />
+                                      <span>
+                                        All rows dropped — nothing left to
+                                        reinstate. Re-preview or cancel.
+                                      </span>
+                                    </div>
+                                  )}
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                                    disabled={confirming}
+                                    onClick={() => setReinstatePreview(null)}
+                                    data-testid="handwavy-reinstate-batch-preview-cancel"
+                                  >
+                                    Cancel
+                                  </Button>
+                                  {(() => {
+                                    const reinstateBatchPrevReason =
+                                      describeHandwavyDisabledReason({
+                                        mutationsAllowed,
+                                        inFlight: confirming,
+                                        inFlightLabel:
+                                          "Reinstating this batch — wait for it to finish.",
+                                        extraReason:
+                                          wouldReinstateCount === 0
+                                            ? "No phrases in this batch are still removed."
+                                            : null,
+                                      });
+                                    const reinstateBatchPrevHintId =
+                                      reinstateBatchPrevReason
+                                        ? `handwavy-reinstate-batch-preview-confirm-disabled-hint-id-${slugifyForHintId(
+                                            group.removedAtIso,
+                                            "batch",
+                                          )}`
+                                        : undefined;
+                                    return (
+                                      <>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 px-2 text-[10px] text-emerald-300 hover:text-emerald-200"
+                                          disabled={
+                                            confirming ||
+                                            wouldReinstateCount === 0 ||
+                                            !mutationsAllowed
+                                          }
+                                          title={
+                                            !mutationsAllowed
+                                              ? MUTATIONS_BLOCKED_TITLE
+                                              : undefined
+                                          }
+                                          onClick={() => {
+                                            // Task #361 — fall back to per-phrase
+                                            // /reinstate (subset path) once the
+                                            // reviewer has dropped any row, since
+                                            // /reinstate-batch has no allow-list.
+                                            if (droppedCount === 0) {
+                                              void handleReinstateBatch(
+                                                group.removedAtIso,
+                                                group.batchSize,
+                                              );
+                                            } else {
+                                              const allowList = results
+                                                .filter(
+                                                  (r) =>
+                                                    r.reinstated &&
+                                                    !droppedPhrases.has(
+                                                      r.phrase,
+                                                    ),
+                                                )
+                                                .map((r) => r.phrase);
+                                              void handleReinstateBatchSubset(
+                                                group.removedAtIso,
+                                                allowList,
+                                              );
+                                            }
+                                          }}
+                                          data-testid="handwavy-reinstate-batch-preview-confirm"
+                                          data-mutations-blocked={
+                                            !mutationsAllowed ? "true" : "false"
+                                          }
+                                          aria-label={`Confirm reinstate of ${wouldReinstateCount} ${noun} from this batch`}
+                                          aria-describedby={
+                                            reinstateBatchPrevHintId
+                                          }
+                                        >
+                                          <RotateCcw className="w-3 h-3 mr-1" />
+                                          {confirming
+                                            ? "Reinstating…"
+                                            : wouldReinstateCount > 0
+                                              ? `Confirm reinstate (${wouldReinstateCount})`
+                                              : "Nothing to reinstate"}
+                                        </Button>
+                                        {reinstateBatchPrevHintId && (
+                                          <div className="basis-full">
+                                            <HandwavyDisabledHint
+                                              id={reinstateBatchPrevHintId}
+                                              reason={reinstateBatchPrevReason}
+                                              testId="handwavy-reinstate-batch-preview-confirm-disabled-hint"
+                                            />
+                                          </div>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        {outcomeForGroup &&
+                          (() => {
+                            // Task #514 — partial-success outcome panel.
+                            // Renders when `handleReinstateBatchSubset`
+                            // captured a mixed `results[]` from the server (at
+                            // least one `reinstated: true` AND at least one
+                            // `reinstated: false`). The all-success path
+                            // already cleared this state, so a fully
+                            // successful confirm collapses the panel exactly
+                            // as before.
+                            const { results, reinstatedCount, attemptedCount } =
+                              outcomeForGroup;
+                            const failed = results.filter((r) => !r.reinstated);
+                            return (
+                              <div
+                                className="px-3 py-2 border-l-2 border-amber-500/50 bg-amber-500/5 space-y-2"
+                                data-testid="handwavy-reinstate-batch-outcome-panel"
+                                data-batch-removed-at={group.removedAtIso}
+                                data-reinstated-count={reinstatedCount}
+                                data-failed-count={failed.length}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
+                                  <div className="flex-1 text-[11px]">
+                                    <div
+                                      className="font-semibold text-foreground"
+                                      data-testid="handwavy-reinstate-batch-outcome-title"
+                                    >
+                                      Partial reinstate: {reinstatedCount} of{" "}
+                                      {attemptedCount} landed
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                                      <span className="text-foreground/90">
+                                        {failed.length}
+                                      </span>{" "}
+                                      phrase{failed.length === 1 ? "" : "s"}{" "}
+                                      stayed on the removal-history list —
+                                      likely re-added or reinstated elsewhere
+                                      between preview and confirm. Re-preview to
+                                      see the current state.
+                                    </div>
+                                  </div>
+                                </div>
+                                <ul
+                                  className="max-h-48 overflow-y-auto space-y-0.5 border-l border-border/30 pl-2"
+                                  data-testid="handwavy-reinstate-batch-outcome-results"
+                                >
+                                  {results.map((r, idx) => {
+                                    const cfg = r.reinstated
+                                      ? {
+                                          label: "reinstated",
+                                          color: "text-emerald-400",
+                                          icon: (
+                                            <CheckCircle2 className="w-3 h-3" />
+                                          ),
+                                        }
+                                      : r.reason === "already-active"
+                                        ? {
+                                            label: "failed: already active",
+                                            color: "text-amber-300",
+                                            icon: <Info className="w-3 h-3" />,
+                                          }
+                                        : r.reason === "already-reinstated"
+                                          ? {
+                                              label:
+                                                "failed: already reinstated",
+                                              color: "text-muted-foreground",
+                                              icon: (
+                                                <CheckCircle2 className="w-3 h-3" />
+                                              ),
+                                            }
+                                          : r.reason === "not-in-batch"
+                                            ? {
+                                                label: "failed: not in batch",
+                                                color: "text-yellow-400",
+                                                icon: (
+                                                  <AlertTriangle className="w-3 h-3" />
+                                                ),
+                                              }
+                                            : {
+                                                label: "failed: skipped",
+                                                color: "text-yellow-400",
+                                                icon: (
+                                                  <AlertTriangle className="w-3 h-3" />
+                                                ),
+                                              };
+                                    return (
+                                      <li
+                                        key={`outcome-${r.phrase}-${idx}`}
+                                        className="flex items-start gap-2 text-[11px]"
+                                        data-testid="handwavy-reinstate-batch-outcome-row"
+                                        data-outcome={
+                                          r.reinstated
+                                            ? "reinstated"
+                                            : (r.reason ?? "skipped")
+                                        }
+                                        data-phrase={r.phrase}
+                                      >
+                                        <span
+                                          className={cn(
+                                            "flex items-center gap-1 w-44 shrink-0",
+                                            cfg.color,
+                                          )}
+                                        >
+                                          {cfg.icon}
+                                          {cfg.label}
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "flex-1 min-w-0 break-words font-mono",
+                                            r.reinstated
+                                              ? "text-foreground/90"
+                                              : "text-muted-foreground line-through",
+                                          )}
+                                        >
+                                          {r.phrase}
+                                        </span>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                                {failed.length > 0 && (
+                                  <div
+                                    className="text-[11px] text-amber-200"
+                                    data-testid="handwavy-reinstate-batch-outcome-failed-summary"
+                                  >
+                                    Failed:{" "}
+                                    {failed
+                                      .map((r) => `“${r.phrase}”`)
+                                      .join(", ")}
+                                  </div>
+                                )}
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-sky-300 hover:text-sky-200"
+                                    disabled={
+                                      busy === previewKey ||
+                                      busy === batchKey ||
+                                      !mutationsAllowed
+                                    }
+                                    title={
+                                      !mutationsAllowed
+                                        ? MUTATIONS_BLOCKED_TITLE
+                                        : undefined
+                                    }
+                                    onClick={() =>
+                                      handlePreviewReinstateBatch(
+                                        group.removedAtIso,
+                                      )
+                                    }
+                                    data-testid="handwavy-reinstate-batch-outcome-repreview"
+                                  >
+                                    <RefreshCw className="w-3 h-3 mr-1" />
+                                    {busy === previewKey
+                                      ? "Refreshing…"
+                                      : "Re-preview"}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                                    onClick={() =>
+                                      setReinstateBatchOutcome((prev) =>
+                                        prev &&
+                                        prev.removedAtIso === group.removedAtIso
+                                          ? null
+                                          : prev,
+                                      )
+                                    }
+                                    data-testid="handwavy-reinstate-batch-outcome-dismiss"
+                                  >
+                                    Dismiss
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        {/* Task #179 — high-thrash summary: only rendered when
                           the batch button has work to do AND at least one of
                           those rows is high-thrash, so a batch with zero
                           high-thrash phrases is visually identical to the
                           pre-#179 layout. */}
-                      {remainingCount > 0 && remainingHighThrashCount > 0 && (
-                        <div
-                          className="px-3 py-1.5 text-[10px] bg-amber-500/5 border-l-2 border-amber-500/40 flex items-start gap-1.5 text-amber-200"
-                          data-testid="handwavy-history-batch-thrash-summary"
-                        >
-                          <RotateCcw className="w-3 h-3 mt-0.5 shrink-0 text-amber-300" />
-                          <span>
-                            {remainingHighThrashCount} of {remainingCount} selected phrase
-                            {remainingCount === 1 ? "" : "s"}{" "}
-                            {remainingHighThrashCount === 1 ? "has" : "have"} already cycled{" "}
-                            {HISTORY_HIGH_THRASH_MIN}+ times — flagged below.
-                          </span>
-                        </div>
-                      )}
-                      {/* Task #366 — collapsed-by-default <details>; auto-
+                        {remainingCount > 0 && remainingHighThrashCount > 0 && (
+                          <div
+                            className="px-3 py-1.5 text-[10px] bg-amber-500/5 border-l-2 border-amber-500/40 flex items-start gap-1.5 text-amber-200"
+                            data-testid="handwavy-history-batch-thrash-summary"
+                          >
+                            <RotateCcw className="w-3 h-3 mt-0.5 shrink-0 text-amber-300" />
+                            <span>
+                              {remainingHighThrashCount} of {remainingCount}{" "}
+                              selected phrase
+                              {remainingCount === 1 ? "" : "s"}{" "}
+                              {remainingHighThrashCount === 1 ? "has" : "have"}{" "}
+                              already cycled {HISTORY_HIGH_THRASH_MIN}+ times —
+                              flagged below.
+                            </span>
+                          </div>
+                        )}
+                        {/* Task #366 — collapsed-by-default <details>; auto-
                           expands when the batch has ≥1 high-thrash phrase.
                           Mirrors Task #257's bulk-REMOVE preview pattern. */}
-                      {(() => {
-                        const explicitOpen =
-                          historyBatchRowsExplicit.get(group.removedAtIso);
-                        const defaultOpen = remainingHighThrashCount > 0;
-                        const rowsOpen =
-                          explicitOpen !== undefined ? explicitOpen : defaultOpen;
-                        return (
-                          <details
-                            data-testid="handwavy-history-batch-rows-details"
-                            data-default-open={defaultOpen ? "true" : "false"}
-                            data-auto-expanded={
-                              defaultOpen && explicitOpen === undefined
-                                ? "true"
-                                : "false"
-                            }
-                            open={rowsOpen}
-                            onToggle={(e) => {
-                              const nextOpen = e.currentTarget.open;
-                              setHistoryBatchRowsExplicit((prev) => {
-                                const next = new Map(prev);
-                                next.set(group.removedAtIso, nextOpen);
-                                return next;
-                              });
-                            }}
-                          >
-                            <summary
-                              className="px-3 py-1.5 text-[11px] cursor-pointer select-none text-muted-foreground hover:text-foreground/80 list-none [&::-webkit-details-marker]:hidden flex items-center gap-1"
-                              data-testid="handwavy-history-batch-rows-summary"
+                        {(() => {
+                          const explicitOpen = historyBatchRowsExplicit.get(
+                            group.removedAtIso,
+                          );
+                          const defaultOpen = remainingHighThrashCount > 0;
+                          const rowsOpen =
+                            explicitOpen !== undefined
+                              ? explicitOpen
+                              : defaultOpen;
+                          return (
+                            <details
+                              data-testid="handwavy-history-batch-rows-details"
+                              data-default-open={defaultOpen ? "true" : "false"}
+                              data-auto-expanded={
+                                defaultOpen && explicitOpen === undefined
+                                  ? "true"
+                                  : "false"
+                              }
+                              open={rowsOpen}
+                              onToggle={(e) => {
+                                const nextOpen = e.currentTarget.open;
+                                setHistoryBatchRowsExplicit((prev) => {
+                                  const next = new Map(prev);
+                                  next.set(group.removedAtIso, nextOpen);
+                                  return next;
+                                });
+                              }}
                             >
-                              {rowsOpen ? (
-                                <ChevronDown className="w-3 h-3" />
-                              ) : (
-                                <ChevronRight className="w-3 h-3" />
-                              )}
-                              Per-phrase rows ({group.rows.length})
-                            </summary>
-                            <div className="divide-y divide-border/10">
-                              {group.rows.map((row, rIdx) =>
-                                renderRow(row, rIdx, { insideBatch: true }),
-                              )}
-                            </div>
-                          </details>
-                        );
-                      })()}
-                    </div>
-                  );
-                })}
-                {totalHistoryRowCount > visibleHistoryRowCount && (
-                  <div className="px-3 py-2 text-[10px] italic text-muted-foreground/70">
-                    Showing the {visibleHistoryRowCount} most recent of {totalHistoryRowCount} removals.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-
-    {/* Task #146 — confirmation prompt before reverting an edit. The dialog
-        summarizes which fields will change and to what values so reviewers
-        can spot a misclick before any audit-log mutation happens. */}
-    <AlertDialog
-      open={revertConfirm !== null}
-      onOpenChange={(open) => {
-        if (!open) setRevertConfirm(null);
-      }}
-    >
-      <AlertDialogContent data-testid="handwavy-revert-confirm">
-        <AlertDialogHeader>
-          <AlertDialogTitle>Revert this edit?</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-2">
-              {revertConfirm && (
-                <>
-                  <div>
-                    Restore <span className="font-mono text-foreground/80">“{revertConfirm.phrase}”</span>{" "}
-                    to the values from before the edit by{" "}
-                    <span className="text-foreground/80">
-                      {revertConfirm.entry.editedBy || "anonymous"}
-                    </span>
-                    {(() => {
-                      const lbl = formatAuditTimestamp(revertConfirm.entry.editedAt);
-                      return lbl ? <> on {lbl}</> : null;
-                    })()}
-                    .
-                  </div>
-                  {(revertConfirm.entry.category || revertConfirm.entry.rationale) ? (
-                    <ul
-                      className="list-disc pl-5 space-y-1 text-foreground/80"
-                      data-testid="handwavy-revert-confirm-changes"
-                    >
-                      {revertConfirm.entry.category && (
-                        <li>
-                          category{" "}
-                          <span className="text-foreground">{revertConfirm.entry.category.to}</span>
-                          {" → "}
-                          <span className="text-foreground">{revertConfirm.entry.category.from}</span>
-                        </li>
-                      )}
-                      {revertConfirm.entry.rationale && (
-                        <li>
-                          rationale{" "}
-                          <span className="text-foreground">
-                            {revertConfirm.entry.rationale.to && revertConfirm.entry.rationale.to.length > 0
-                              ? `“${revertConfirm.entry.rationale.to}”`
-                              : "(empty)"}
-                          </span>
-                          {" → "}
-                          <span className="text-foreground">
-                            {revertConfirm.entry.rationale.from && revertConfirm.entry.rationale.from.length > 0
-                              ? `“${revertConfirm.entry.rationale.from}”`
-                              : "(empty)"}
-                          </span>
-                        </li>
-                      )}
-                    </ul>
-                  ) : (
-                    <div className="italic">
-                      This edit didn't record any field changes — reverting will be a no-op.
+                              <summary
+                                className="px-3 py-1.5 text-[11px] cursor-pointer select-none text-muted-foreground hover:text-foreground/80 list-none [&::-webkit-details-marker]:hidden flex items-center gap-1"
+                                data-testid="handwavy-history-batch-rows-summary"
+                              >
+                                {rowsOpen ? (
+                                  <ChevronDown className="w-3 h-3" />
+                                ) : (
+                                  <ChevronRight className="w-3 h-3" />
+                                )}
+                                Per-phrase rows ({group.rows.length})
+                              </summary>
+                              <div className="divide-y divide-border/10">
+                                {group.rows.map((row, rIdx) =>
+                                  renderRow(row, rIdx, { insideBatch: true }),
+                                )}
+                              </div>
+                            </details>
+                          );
+                        })()}
+                      </div>
+                    );
+                  })}
+                  {totalHistoryRowCount > visibleHistoryRowCount && (
+                    <div className="px-3 py-2 text-[10px] italic text-muted-foreground/70">
+                      Showing the {visibleHistoryRowCount} most recent of{" "}
+                      {totalHistoryRowCount} removals.
                     </div>
                   )}
-                  <div className="text-xs italic">
-                    The original entry stays in place; the revert is recorded as a new audit entry.
-                  </div>
-                </>
-              )}
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {(() => {
-          const reason = describeHandwavyDisabledReason({ mutationsAllowed });
-          const hintId = reason
-            ? "handwavy-revert-confirm-confirm-disabled-hint-id"
-            : undefined;
-          return (
-            <>
-              {reason && (
-                <div className="px-6 pb-2">
-                  <HandwavyDisabledHint
-                    id={hintId}
-                    reason={reason}
-                    testId="handwavy-revert-confirm-confirm-disabled-hint"
-                  />
                 </div>
               )}
-              <AlertDialogFooter>
-                <AlertDialogCancel data-testid="handwavy-revert-confirm-cancel">
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  data-testid="handwavy-revert-confirm-confirm"
-                  disabled={!mutationsAllowed}
-                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                  aria-describedby={hintId}
-                  onClick={() => {
-                    if (revertConfirm) {
-                      const { phrase, entry } = revertConfirm;
-                      setRevertConfirm(null);
-                      void handleRevertEdit(phrase, entry);
-                    }
-                  }}
-                >
-                  Revert edit
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </>
-          );
-        })()}
-      </AlertDialogContent>
-    </AlertDialog>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-    {/* Task #153 — confirmation prompt before reinstating a removed phrase.
+      {/* Task #146 — confirmation prompt before reverting an edit. The dialog
+        summarizes which fields will change and to what values so reviewers
+        can spot a misclick before any audit-log mutation happens. */}
+      <AlertDialog
+        open={revertConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setRevertConfirm(null);
+        }}
+      >
+        <AlertDialogContent data-testid="handwavy-revert-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revert this edit?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {revertConfirm && (
+                  <>
+                    <div>
+                      Restore{" "}
+                      <span className="font-mono text-foreground/80">
+                        “{revertConfirm.phrase}”
+                      </span>{" "}
+                      to the values from before the edit by{" "}
+                      <span className="text-foreground/80">
+                        {revertConfirm.entry.editedBy || "anonymous"}
+                      </span>
+                      {(() => {
+                        const lbl = formatAuditTimestamp(
+                          revertConfirm.entry.editedAt,
+                        );
+                        return lbl ? <> on {lbl}</> : null;
+                      })()}
+                      .
+                    </div>
+                    {revertConfirm.entry.category ||
+                    revertConfirm.entry.rationale ? (
+                      <ul
+                        className="list-disc pl-5 space-y-1 text-foreground/80"
+                        data-testid="handwavy-revert-confirm-changes"
+                      >
+                        {revertConfirm.entry.category && (
+                          <li>
+                            category{" "}
+                            <span className="text-foreground">
+                              {revertConfirm.entry.category.to}
+                            </span>
+                            {" → "}
+                            <span className="text-foreground">
+                              {revertConfirm.entry.category.from}
+                            </span>
+                          </li>
+                        )}
+                        {revertConfirm.entry.rationale && (
+                          <li>
+                            rationale{" "}
+                            <span className="text-foreground">
+                              {revertConfirm.entry.rationale.to &&
+                              revertConfirm.entry.rationale.to.length > 0
+                                ? `“${revertConfirm.entry.rationale.to}”`
+                                : "(empty)"}
+                            </span>
+                            {" → "}
+                            <span className="text-foreground">
+                              {revertConfirm.entry.rationale.from &&
+                              revertConfirm.entry.rationale.from.length > 0
+                                ? `“${revertConfirm.entry.rationale.from}”`
+                                : "(empty)"}
+                            </span>
+                          </li>
+                        )}
+                      </ul>
+                    ) : (
+                      <div className="italic">
+                        This edit didn't record any field changes — reverting
+                        will be a no-op.
+                      </div>
+                    )}
+                    <div className="text-xs italic">
+                      The original entry stays in place; the revert is recorded
+                      as a new audit entry.
+                    </div>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {(() => {
+            const reason = describeHandwavyDisabledReason({ mutationsAllowed });
+            const hintId = reason
+              ? "handwavy-revert-confirm-confirm-disabled-hint-id"
+              : undefined;
+            return (
+              <>
+                {reason && (
+                  <div className="px-6 pb-2">
+                    <HandwavyDisabledHint
+                      id={hintId}
+                      reason={reason}
+                      testId="handwavy-revert-confirm-confirm-disabled-hint"
+                    />
+                  </div>
+                )}
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="handwavy-revert-confirm-cancel">
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    data-testid="handwavy-revert-confirm-confirm"
+                    disabled={!mutationsAllowed}
+                    title={
+                      !mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined
+                    }
+                    data-mutations-blocked={
+                      !mutationsAllowed ? "true" : "false"
+                    }
+                    aria-describedby={hintId}
+                    onClick={() => {
+                      if (revertConfirm) {
+                        const { phrase, entry } = revertConfirm;
+                        setRevertConfirm(null);
+                        void handleRevertEdit(phrase, entry);
+                      }
+                    }}
+                  >
+                    Revert edit
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Task #153 — confirmation prompt before reinstating a removed phrase.
         The dialog summarizes the phrase, its category, and the original
         rationale so reviewers can spot a misclick before the phrase is
         re-enabled on the active list. */}
-    <AlertDialog
-      open={reinstateConfirm !== null}
-      onOpenChange={(open) => {
-        if (!open) setReinstateConfirm(null);
-      }}
-    >
-      <AlertDialogContent data-testid="handwavy-reinstate-confirm">
-        <AlertDialogHeader>
-          <AlertDialogTitle>Reinstate this phrase?</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-2">
-              {reinstateConfirm && (
-                <>
-                  <div>
-                    Restore{" "}
-                    <span className="font-mono text-foreground/80">
-                      “{reinstateConfirm.phrase}”
-                    </span>{" "}
-                    to the active list. New triages will start flagging it
-                    again immediately.
+      <AlertDialog
+        open={reinstateConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setReinstateConfirm(null);
+        }}
+      >
+        <AlertDialogContent data-testid="handwavy-reinstate-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reinstate this phrase?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {reinstateConfirm && (
+                  <>
+                    <div>
+                      Restore{" "}
+                      <span className="font-mono text-foreground/80">
+                        “{reinstateConfirm.phrase}”
+                      </span>{" "}
+                      to the active list. New triages will start flagging it
+                      again immediately.
+                    </div>
+                    <ul
+                      className="list-disc pl-5 space-y-1 text-foreground/80"
+                      data-testid="handwavy-reinstate-confirm-summary"
+                    >
+                      <li>
+                        category{" "}
+                        <span className="text-foreground capitalize">
+                          {HANDWAVY_CATEGORY_LABELS[
+                            reinstateConfirm.category as keyof typeof HANDWAVY_CATEGORY_LABELS
+                          ] ??
+                            reinstateConfirm.category ??
+                            "absence"}
+                        </span>
+                      </li>
+                      <li>
+                        rationale{" "}
+                        <span className="text-foreground">
+                          {reinstateConfirm.rationale &&
+                          reinstateConfirm.rationale.length > 0
+                            ? `“${reinstateConfirm.rationale}”`
+                            : "(none recorded)"}
+                        </span>
+                      </li>
+                    </ul>
+                    <div className="text-xs italic">
+                      The original removal entry stays in the history; the
+                      reinstate is recorded as a new audit entry.
+                    </div>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {(() => {
+            const reason = describeHandwavyDisabledReason({ mutationsAllowed });
+            const hintId = reason
+              ? "handwavy-reinstate-confirm-confirm-disabled-hint-id"
+              : undefined;
+            return (
+              <>
+                {reason && (
+                  <div className="px-6 pb-2">
+                    <HandwavyDisabledHint
+                      id={hintId}
+                      reason={reason}
+                      testId="handwavy-reinstate-confirm-confirm-disabled-hint"
+                    />
                   </div>
-                  <ul
-                    className="list-disc pl-5 space-y-1 text-foreground/80"
-                    data-testid="handwavy-reinstate-confirm-summary"
-                  >
-                    <li>
-                      category{" "}
-                      <span className="text-foreground capitalize">
-                        {HANDWAVY_CATEGORY_LABELS[
-                          reinstateConfirm.category as keyof typeof HANDWAVY_CATEGORY_LABELS
-                        ] ?? reinstateConfirm.category ?? "absence"}
-                      </span>
-                    </li>
-                    <li>
-                      rationale{" "}
-                      <span className="text-foreground">
-                        {reinstateConfirm.rationale && reinstateConfirm.rationale.length > 0
-                          ? `“${reinstateConfirm.rationale}”`
-                          : "(none recorded)"}
-                      </span>
-                    </li>
-                  </ul>
-                  <div className="text-xs italic">
-                    The original removal entry stays in the history; the reinstate is recorded as a new audit entry.
-                  </div>
-                </>
-              )}
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {(() => {
-          const reason = describeHandwavyDisabledReason({ mutationsAllowed });
-          const hintId = reason
-            ? "handwavy-reinstate-confirm-confirm-disabled-hint-id"
-            : undefined;
-          return (
-            <>
-              {reason && (
-                <div className="px-6 pb-2">
-                  <HandwavyDisabledHint
-                    id={hintId}
-                    reason={reason}
-                    testId="handwavy-reinstate-confirm-confirm-disabled-hint"
-                  />
-                </div>
-              )}
-              <AlertDialogFooter>
-                <AlertDialogCancel data-testid="handwavy-reinstate-confirm-cancel">
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  data-testid="handwavy-reinstate-confirm-confirm"
-                  disabled={!mutationsAllowed}
-                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                  aria-describedby={hintId}
-                  onClick={() => {
-                    if (reinstateConfirm) {
-                      const entry = reinstateConfirm;
-                      setReinstateConfirm(null);
-                      void handleReinstate(entry);
+                )}
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="handwavy-reinstate-confirm-cancel">
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    data-testid="handwavy-reinstate-confirm-confirm"
+                    disabled={!mutationsAllowed}
+                    title={
+                      !mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined
                     }
-                  }}
-                >
-                  Reinstate phrase
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </>
-          );
-        })()}
-      </AlertDialogContent>
-    </AlertDialog>
+                    data-mutations-blocked={
+                      !mutationsAllowed ? "true" : "false"
+                    }
+                    aria-describedby={hintId}
+                    onClick={() => {
+                      if (reinstateConfirm) {
+                        const entry = reinstateConfirm;
+                        setReinstateConfirm(null);
+                        void handleReinstate(entry);
+                      }
+                    }}
+                  >
+                    Reinstate phrase
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
+        </AlertDialogContent>
+      </AlertDialog>
 
-    {/* Task #233 — confirmation prompt for the panel-level "Undo last N
+      {/* Task #233 — confirmation prompt for the panel-level "Undo last N
         adds" button. Mirrors Task #180's reinstate-batch confirm so the
         reviewer gets the same blast-radius gate (count + per-phrase list
         + cancel-leaves-it-untouched footer) for the bulk undo as for
@@ -11809,101 +13021,104 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         captured at click time and stored on `undoAllConfirm.entries`,
         so a window expiry between the click and the confirm doesn't
         silently shrink the batch the dialog is summarizing. */}
-    <AlertDialog
-      open={undoAllConfirm !== null}
-      onOpenChange={(open) => {
-        if (!open) setUndoAllConfirm(null);
-      }}
-    >
-      <AlertDialogContent data-testid="handwavy-undo-all-confirm">
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            {undoAllConfirm
-              ? `Undo the last ${undoAllConfirm.count} add${undoAllConfirm.count === 1 ? "" : "s"}?`
-              : "Undo recent adds?"}
-          </AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-2">
-              {undoAllConfirm && (
-                <>
-                  <div>
-                    Roll back the{" "}
-                    <strong>{undoAllConfirm.count}</strong> reviewer-added
-                    phrase
-                    {undoAllConfirm.count === 1 ? "" : "s"} that {" "}
-                    {undoAllConfirm.count === 1 ? "is" : "are"} still inside
-                    the per-marker undo window. Each phrase keeps its own
-                    audit trail row marked{" "}
-                    <span className="font-mono">undone</span> — provenance
-                    isn't collapsed into a single batch row.
+      <AlertDialog
+        open={undoAllConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setUndoAllConfirm(null);
+        }}
+      >
+        <AlertDialogContent data-testid="handwavy-undo-all-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {undoAllConfirm
+                ? `Undo the last ${undoAllConfirm.count} add${undoAllConfirm.count === 1 ? "" : "s"}?`
+                : "Undo recent adds?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {undoAllConfirm && (
+                  <>
+                    <div>
+                      Roll back the <strong>{undoAllConfirm.count}</strong>{" "}
+                      reviewer-added phrase
+                      {undoAllConfirm.count === 1 ? "" : "s"} that{" "}
+                      {undoAllConfirm.count === 1 ? "is" : "are"} still inside
+                      the per-marker undo window. Each phrase keeps its own
+                      audit trail row marked{" "}
+                      <span className="font-mono">undone</span> — provenance
+                      isn't collapsed into a single batch row.
+                    </div>
+                    <ul
+                      className="list-disc pl-5 space-y-1 text-foreground/80 max-h-48 overflow-y-auto"
+                      data-testid="handwavy-undo-all-confirm-summary"
+                    >
+                      {undoAllConfirm.entries.map((e) => (
+                        <li key={`${e.phrase}:${e.addedAtIso}`}>
+                          <span className="font-mono text-foreground/80">
+                            “{e.phrase}”
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="text-xs italic">
+                      Any entry whose 5-minute window elapses before the request
+                      lands will be skipped (and called out in the success
+                      toast); the rest will still be rolled back. Cancel leaves
+                      every phrase active.
+                    </div>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {(() => {
+            const reason = describeHandwavyDisabledReason({ mutationsAllowed });
+            const hintId = reason
+              ? "handwavy-undo-all-confirm-confirm-disabled-hint-id"
+              : undefined;
+            return (
+              <>
+                {reason && (
+                  <div className="px-6 pb-2">
+                    <HandwavyDisabledHint
+                      id={hintId}
+                      reason={reason}
+                      testId="handwavy-undo-all-confirm-confirm-disabled-hint"
+                    />
                   </div>
-                  <ul
-                    className="list-disc pl-5 space-y-1 text-foreground/80 max-h-48 overflow-y-auto"
-                    data-testid="handwavy-undo-all-confirm-summary"
-                  >
-                    {undoAllConfirm.entries.map((e) => (
-                      <li key={`${e.phrase}:${e.addedAtIso}`}>
-                        <span className="font-mono text-foreground/80">
-                          “{e.phrase}”
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="text-xs italic">
-                    Any entry whose 5-minute window elapses before the
-                    request lands will be skipped (and called out in the
-                    success toast); the rest will still be rolled back.
-                    Cancel leaves every phrase active.
-                  </div>
-                </>
-              )}
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {(() => {
-          const reason = describeHandwavyDisabledReason({ mutationsAllowed });
-          const hintId = reason
-            ? "handwavy-undo-all-confirm-confirm-disabled-hint-id"
-            : undefined;
-          return (
-            <>
-              {reason && (
-                <div className="px-6 pb-2">
-                  <HandwavyDisabledHint
-                    id={hintId}
-                    reason={reason}
-                    testId="handwavy-undo-all-confirm-confirm-disabled-hint"
-                  />
-                </div>
-              )}
-              <AlertDialogFooter>
-                <AlertDialogCancel data-testid="handwavy-undo-all-confirm-cancel">
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  data-testid="handwavy-undo-all-confirm-confirm"
-                  disabled={!mutationsAllowed}
-                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                  aria-describedby={hintId}
-                  onClick={() => {
-                    if (undoAllConfirm) {
-                      const { entries } = undoAllConfirm;
-                      setUndoAllConfirm(null);
-                      void handleUndoAllAdds(entries);
+                )}
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="handwavy-undo-all-confirm-cancel">
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    data-testid="handwavy-undo-all-confirm-confirm"
+                    disabled={!mutationsAllowed}
+                    title={
+                      !mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined
                     }
-                  }}
-                >
-                  Undo adds
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </>
-          );
-        })()}
-      </AlertDialogContent>
-    </AlertDialog>
+                    data-mutations-blocked={
+                      !mutationsAllowed ? "true" : "false"
+                    }
+                    aria-describedby={hintId}
+                    onClick={() => {
+                      if (undoAllConfirm) {
+                        const { entries } = undoAllConfirm;
+                        setUndoAllConfirm(null);
+                        void handleUndoAllAdds(entries);
+                      }
+                    }}
+                  >
+                    Undo adds
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
+        </AlertDialogContent>
+      </AlertDialog>
 
-    {/* Task #180 — confirmation prompt before reinstating an entire batch
+      {/* Task #180 — confirmation prompt before reinstating an entire batch
         removal entry. Mirrors Task #153's per-row reinstate confirm and
         Task #146's revert confirm so reviewers get the same blast-radius
         guard whether they click "Reinstate" on a single row or
@@ -11911,583 +13126,593 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         many phrases are about to come back to the active list and lists
         them so a misclick is obvious before any audit-log mutation
         happens. */}
-    <AlertDialog
-      open={reinstateBatchConfirm !== null}
-      onOpenChange={(open) => {
-        if (!open) setReinstateBatchConfirm(null);
-      }}
-    >
-      <AlertDialogContent
-        data-testid="handwavy-reinstate-batch-confirm"
-        data-batch-conflict-count={
-          reinstateBatchConfirm
-            ? removalBatchConflicts.get(reinstateBatchConfirm.removedAtIso)
-                ?.conflictCount ?? 0
-            : 0
-        }
+      <AlertDialog
+        open={reinstateBatchConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setReinstateBatchConfirm(null);
+        }}
       >
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            {reinstateBatchConfirm
-              ? `Reinstate ${reinstateBatchConfirm.phrasesToReinstate.length} phrase${
-                  reinstateBatchConfirm.phrasesToReinstate.length === 1 ? "" : "s"
-                } from this batch?`
-              : "Reinstate batch?"}
-          </AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-2">
-              {reinstateBatchConfirm && (
-                <>
-                  {(() => {
-                    // Task #470 — re-use the same `removalBatchConflicts`
-                    // memo the picker rows (#242) and history-panel batch
-                    // headers (#339) consult, keyed by ISO `removedAt`.
-                    // Surfacing the same chip on this final confirm dialog
-                    // gives reviewers a last-chance warning before the
-                    // batch reinstate fires — they don't have to have
-                    // noticed the chip on the row above. No extra request:
-                    // the memo is already built from the existing
-                    // handwavy-phrases payload.
-                    const confirmConflict = removalBatchConflicts.get(
-                      reinstateBatchConfirm.removedAtIso,
-                    );
-                    if (!confirmConflict) return null;
-                    return (
-                      <div>
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] border-amber-500/40 text-amber-300 gap-1"
-                          data-testid="handwavy-reinstate-batch-confirm-conflict-chip"
-                          data-conflict-count={confirmConflict.conflictCount}
-                          data-conflict-total={confirmConflict.total}
-                          title={`${confirmConflict.conflictCount} of ${confirmConflict.total} phrase${confirmConflict.total === 1 ? "" : "s"} in this batch ${confirmConflict.conflictCount === 1 ? "is" : "are"} either back on the active list or have a newer removal entry — reinstating this batch will overwrite that newer state.`}
-                          aria-label={`${confirmConflict.conflictCount} of ${confirmConflict.total} phrases in this batch may overwrite recent edits`}
-                        >
-                          <AlertTriangle className="w-3 h-3" />
-                          {confirmConflict.conflictCount} of {confirmConflict.total} may overwrite recent edits
-                        </Badge>
-                      </div>
-                    );
-                  })()}
-                  <div>
-                    Restore the{" "}
-                    <strong>
-                      {reinstateBatchConfirm.phrasesToReinstate.length}
-                    </strong>{" "}
-                    remaining phrase
-                    {reinstateBatchConfirm.phrasesToReinstate.length === 1
+        <AlertDialogContent
+          data-testid="handwavy-reinstate-batch-confirm"
+          data-batch-conflict-count={
+            reinstateBatchConfirm
+              ? (removalBatchConflicts.get(reinstateBatchConfirm.removedAtIso)
+                  ?.conflictCount ?? 0)
+              : 0
+          }
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {reinstateBatchConfirm
+                ? `Reinstate ${reinstateBatchConfirm.phrasesToReinstate.length} phrase${
+                    reinstateBatchConfirm.phrasesToReinstate.length === 1
                       ? ""
-                      : "s"}{" "}
-                    from the batch removal of{" "}
-                    <strong>{reinstateBatchConfirm.batchSize}</strong>
-                    {" by "}
-                    <span className="text-foreground/80">
-                      {reinstateBatchConfirm.removedBy || "anonymous"}
-                    </span>{" "}
-                    to the active list. New triages will start flagging them
-                    again immediately.
-                  </div>
-                  {reinstateBatchConfirm.phrasesToReinstate.length > 0 && (
-                    <ul
-                      className="pl-1 space-y-1 text-foreground/80 max-h-48 overflow-y-auto"
-                      data-testid="handwavy-reinstate-batch-confirm-summary"
-                    >
-                      {reinstateBatchConfirm.phrasesToReinstate.map((p) => (
-                        <li
-                          key={p}
-                          className="flex items-start gap-2 leading-snug"
-                        >
-                          <span
-                            aria-hidden="true"
-                            className="mt-1 text-foreground/40"
+                      : "s"
+                  } from this batch?`
+                : "Reinstate batch?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {reinstateBatchConfirm && (
+                  <>
+                    {(() => {
+                      // Task #470 — re-use the same `removalBatchConflicts`
+                      // memo the picker rows (#242) and history-panel batch
+                      // headers (#339) consult, keyed by ISO `removedAt`.
+                      // Surfacing the same chip on this final confirm dialog
+                      // gives reviewers a last-chance warning before the
+                      // batch reinstate fires — they don't have to have
+                      // noticed the chip on the row above. No extra request:
+                      // the memo is already built from the existing
+                      // handwavy-phrases payload.
+                      const confirmConflict = removalBatchConflicts.get(
+                        reinstateBatchConfirm.removedAtIso,
+                      );
+                      if (!confirmConflict) return null;
+                      return (
+                        <div>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-amber-500/40 text-amber-300 gap-1"
+                            data-testid="handwavy-reinstate-batch-confirm-conflict-chip"
+                            data-conflict-count={confirmConflict.conflictCount}
+                            data-conflict-total={confirmConflict.total}
+                            title={`${confirmConflict.conflictCount} of ${confirmConflict.total} phrase${confirmConflict.total === 1 ? "" : "s"} in this batch ${confirmConflict.conflictCount === 1 ? "is" : "are"} either back on the active list or have a newer removal entry — reinstating this batch will overwrite that newer state.`}
+                            aria-label={`${confirmConflict.conflictCount} of ${confirmConflict.total} phrases in this batch may overwrite recent edits`}
                           >
-                            •
-                          </span>
-                          <span className="font-mono text-foreground/80 break-all flex-1">
-                            “{p}”
-                          </span>
-                          {/* Task #254 — per-row drop button. Mirrors
+                            <AlertTriangle className="w-3 h-3" />
+                            {confirmConflict.conflictCount} of{" "}
+                            {confirmConflict.total} may overwrite recent edits
+                          </Badge>
+                        </div>
+                      );
+                    })()}
+                    <div>
+                      Restore the{" "}
+                      <strong>
+                        {reinstateBatchConfirm.phrasesToReinstate.length}
+                      </strong>{" "}
+                      remaining phrase
+                      {reinstateBatchConfirm.phrasesToReinstate.length === 1
+                        ? ""
+                        : "s"}{" "}
+                      from the batch removal of{" "}
+                      <strong>{reinstateBatchConfirm.batchSize}</strong>
+                      {" by "}
+                      <span className="text-foreground/80">
+                        {reinstateBatchConfirm.removedBy || "anonymous"}
+                      </span>{" "}
+                      to the active list. New triages will start flagging them
+                      again immediately.
+                    </div>
+                    {reinstateBatchConfirm.phrasesToReinstate.length > 0 && (
+                      <ul
+                        className="pl-1 space-y-1 text-foreground/80 max-h-48 overflow-y-auto"
+                        data-testid="handwavy-reinstate-batch-confirm-summary"
+                      >
+                        {reinstateBatchConfirm.phrasesToReinstate.map((p) => (
+                          <li
+                            key={p}
+                            className="flex items-start gap-2 leading-snug"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="mt-1 text-foreground/40"
+                            >
+                              •
+                            </span>
+                            <span className="font-mono text-foreground/80 break-all flex-1">
+                              “{p}”
+                            </span>
+                            {/* Task #254 — per-row drop button. Mirrors
                               the bulk-remove preview's
                               `handwavy-bulk-preview-result-drop` so a
                               reviewer can remove just one phrase from
                               the pending reinstate set without backing
                               out and reopening the dialog. Dropping the
                               last phrase closes the panel. */}
-                          <button
+                            <button
+                              type="button"
+                              onClick={() =>
+                                dropPhraseFromReinstateBatchConfirm(p)
+                              }
+                              className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-foreground hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-foreground/30"
+                              data-testid="handwavy-reinstate-batch-confirm-drop"
+                              data-phrase={p}
+                              aria-label={`Skip "${p}" — leave it on the removal-history list`}
+                              title="Skip this phrase — leave it removed"
+                            >
+                              <XIcon className="w-3 h-3" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {reinstateBatchConfirm.phrasesToReinstate.length <
+                      reinstateBatchConfirm.originalPhraseCount && (
+                      <div
+                        className="text-[11px] text-amber-200 italic"
+                        data-testid="handwavy-reinstate-batch-confirm-dropped-note"
+                      >
+                        {reinstateBatchConfirm.originalPhraseCount -
+                          reinstateBatchConfirm.phrasesToReinstate.length}{" "}
+                        phrase
+                        {reinstateBatchConfirm.originalPhraseCount -
+                          reinstateBatchConfirm.phrasesToReinstate.length ===
+                        1
+                          ? ""
+                          : "s"}{" "}
+                        will stay on the removal-history list. Confirm
+                        reinstates only the rows above.
+                      </div>
+                    )}
+                    <div className="text-xs italic">
+                      The original batch removal entry stays in the history;
+                      each reinstate is recorded as a new audit entry. Cancel
+                      leaves the batch untouched.
+                    </div>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {(() => {
+            const reason = describeHandwavyDisabledReason({
+              mutationsAllowed,
+              extraReason:
+                !reinstateBatchConfirm ||
+                reinstateBatchConfirm.phrasesToReinstate.length === 0
+                  ? "No phrases in this batch are still removed."
+                  : null,
+            });
+            const hintId = reason
+              ? "handwavy-reinstate-batch-confirm-confirm-disabled-hint-id"
+              : undefined;
+            return (
+              <>
+                {reason && (
+                  <div className="px-6 pb-2">
+                    <HandwavyDisabledHint
+                      id={hintId}
+                      reason={reason}
+                      testId="handwavy-reinstate-batch-confirm-confirm-disabled-hint"
+                    />
+                  </div>
+                )}
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="handwavy-reinstate-batch-confirm-cancel">
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    data-testid="handwavy-reinstate-batch-confirm-confirm"
+                    disabled={
+                      !mutationsAllowed ||
+                      !reinstateBatchConfirm ||
+                      reinstateBatchConfirm.phrasesToReinstate.length === 0
+                    }
+                    title={
+                      !mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined
+                    }
+                    data-mutations-blocked={
+                      !mutationsAllowed ? "true" : "false"
+                    }
+                    aria-describedby={hintId}
+                    onClick={() => {
+                      if (reinstateBatchConfirm) {
+                        const {
+                          removedAtIso,
+                          batchSize,
+                          phrasesToReinstate,
+                          originalPhraseCount,
+                        } = reinstateBatchConfirm;
+                        setReinstateBatchConfirm(null);
+                        // Task #254 + #360 — both the full and partial paths
+                        // ride the single-round-trip /reinstate-batch route.
+                        // Partial subsets pass the kept rows through the new
+                        // optional `phrases` allow-list; dropped rows stay on
+                        // the removal-history list as removed.
+                        if (phrasesToReinstate.length === originalPhraseCount) {
+                          void handleReinstateBatch(removedAtIso, batchSize);
+                        } else {
+                          void handleReinstateBatchSubset(
+                            removedAtIso,
+                            phrasesToReinstate,
+                          );
+                        }
+                      }
+                    }}
+                  >
+                    {(() => {
+                      // Task #479 — mirror the picker preview confirm
+                      // (Task #341): when the reviewer has dropped at least
+                      // one row via the trim chips so phrasesToReinstate is a
+                      // strict subset of the original batch, surface the
+                      // remaining count on the button itself instead of the
+                      // generic "Reinstate batch" label.
+                      if (
+                        reinstateBatchConfirm &&
+                        reinstateBatchConfirm.phrasesToReinstate.length !==
+                          reinstateBatchConfirm.originalPhraseCount
+                      ) {
+                        const remaining =
+                          reinstateBatchConfirm.phrasesToReinstate.length;
+                        return `Reinstate ${remaining} remaining phrase${remaining === 1 ? "" : "s"}`;
+                      }
+                      return "Reinstate batch";
+                    })()}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Picker preview-and-confirm dialog: shows every phrase in the
+        batch (from the detail endpoint) before firing the reinstate. */}
+      <AlertDialog
+        open={pickerBatchPreview !== null}
+        onOpenChange={(open) => {
+          if (!open) setPickerBatchPreview(null);
+        }}
+      >
+        <AlertDialogContent
+          data-testid="handwavy-removal-batches-preview-confirm"
+          data-batch-removed-at={pickerBatchPreview?.removedAtIso ?? ""}
+          data-status={pickerBatchPreview?.status ?? "closed"}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {(() => {
+                if (!pickerBatchPreview) return "Reinstate this batch?";
+                if (pickerBatchPreview.status === "loading")
+                  return "Loading batch contents…";
+                if (pickerBatchPreview.status === "error")
+                  return "Couldn’t load batch contents";
+                const count = pickerBatchPreview.detail.phraseCount;
+                return `Reinstate this batch of ${count} phrase${count === 1 ? "" : "s"}?`;
+              })()}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {pickerBatchPreview?.status === "loading" && (
+                  <div
+                    className="text-foreground/80"
+                    data-testid="handwavy-removal-batches-preview-loading"
+                  >
+                    Fetching every phrase in this batch so you can review the
+                    full list before confirming…
+                  </div>
+                )}
+                {pickerBatchPreview?.status === "error" &&
+                  (() => {
+                    // Task #343 — map the HandwavyPhraseRemovalBatchDetailError
+                    // `reason` to a reviewer-facing hint that explains whether
+                    // a retry is likely to help. Unknown / missing reasons
+                    // fall back to the raw transport error.
+                    const reason = pickerBatchPreview.errorReason;
+                    const friendly =
+                      reason === "history-not-found"
+                        ? "This batch removal entry no longer exists in the history (it may have been pruned). Reload the analytics page to refresh the picker, or pick a different batch."
+                        : reason === "not-a-batch"
+                          ? "This entry is a single-phrase removal, not a batch — reinstate it from the per-phrase Removal history panel instead."
+                          : pickerBatchPreview.errorMessage;
+                    return (
+                      <div
+                        className="space-y-2"
+                        data-testid="handwavy-removal-batches-preview-error"
+                        data-error-reason={reason ?? ""}
+                      >
+                        <div className="text-destructive">{friendly}</div>
+                        <div>
+                          <Button
                             type="button"
-                            onClick={() =>
-                              dropPhraseFromReinstateBatchConfirm(p)
-                            }
-                            className="shrink-0 inline-flex items-center justify-center rounded p-0.5 text-muted-foreground/70 hover:text-foreground hover:bg-foreground/10 focus:outline-none focus:ring-1 focus:ring-foreground/30"
-                            data-testid="handwavy-reinstate-batch-confirm-drop"
-                            data-phrase={p}
-                            aria-label={`Skip "${p}" — leave it on the removal-history list`}
-                            title="Skip this phrase — leave it removed"
+                            variant="outline"
+                            size="sm"
+                            data-testid="handwavy-removal-batches-preview-retry"
+                            onClick={() => {
+                              void handleOpenPickerBatchPreview(
+                                pickerBatchPreview.removedAtIso,
+                                pickerBatchPreview.removedBy,
+                                pickerBatchPreview.phraseCount,
+                              );
+                            }}
                           >
-                            <XIcon className="w-3 h-3" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {reinstateBatchConfirm.phrasesToReinstate.length <
-                    reinstateBatchConfirm.originalPhraseCount && (
-                    <div
-                      className="text-[11px] text-amber-200 italic"
-                      data-testid="handwavy-reinstate-batch-confirm-dropped-note"
-                    >
-                      {reinstateBatchConfirm.originalPhraseCount -
-                        reinstateBatchConfirm.phrasesToReinstate.length}{" "}
-                      phrase
-                      {reinstateBatchConfirm.originalPhraseCount -
-                        reinstateBatchConfirm.phrasesToReinstate.length ===
+                            Try again
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                {pickerBatchPreview?.status === "ready" && (
+                  <>
+                    <div>
+                      Restore the{" "}
+                      <strong data-testid="handwavy-removal-batches-preview-remaining">
+                        {Math.max(
+                          0,
+                          pickerBatchPreview.detail.phraseCount -
+                            pickerBatchPreview.detail.reinstatedCount,
+                        )}
+                      </strong>{" "}
+                      not-yet-reinstated phrase
+                      {pickerBatchPreview.detail.phraseCount -
+                        pickerBatchPreview.detail.reinstatedCount ===
                       1
                         ? ""
                         : "s"}{" "}
-                      will stay on the removal-history list. Confirm reinstates
-                      only the rows above.
+                      from the batch removal of{" "}
+                      <strong>{pickerBatchPreview.detail.phraseCount}</strong>{" "}
+                      by{" "}
+                      <span className="text-foreground/80">
+                        {pickerBatchPreview.removedBy ||
+                          pickerBatchPreview.detail.removedBy ||
+                          "anonymous"}
+                      </span>{" "}
+                      to the active list. New triages will start flagging them
+                      again immediately.
                     </div>
-                  )}
-                  <div className="text-xs italic">
-                    The original batch removal entry stays in the history; each
-                    reinstate is recorded as a new audit entry. Cancel leaves
-                    the batch untouched.
-                  </div>
-                </>
-              )}
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {(() => {
-          const reason = describeHandwavyDisabledReason({
-            mutationsAllowed,
-            extraReason:
-              !reinstateBatchConfirm ||
-              reinstateBatchConfirm.phrasesToReinstate.length === 0
-                ? "No phrases in this batch are still removed."
-                : null,
-          });
-          const hintId = reason
-            ? "handwavy-reinstate-batch-confirm-confirm-disabled-hint-id"
-            : undefined;
-          return (
-            <>
-              {reason && (
-                <div className="px-6 pb-2">
-                  <HandwavyDisabledHint
-                    id={hintId}
-                    reason={reason}
-                    testId="handwavy-reinstate-batch-confirm-confirm-disabled-hint"
-                  />
-                </div>
-              )}
-              <AlertDialogFooter>
-                <AlertDialogCancel data-testid="handwavy-reinstate-batch-confirm-cancel">
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  data-testid="handwavy-reinstate-batch-confirm-confirm"
-                  disabled={
-                    !mutationsAllowed ||
-                    !reinstateBatchConfirm ||
-                    reinstateBatchConfirm.phrasesToReinstate.length === 0
-                  }
-                  title={!mutationsAllowed ? MUTATIONS_BLOCKED_TITLE : undefined}
-                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                  aria-describedby={hintId}
-            onClick={() => {
-              if (reinstateBatchConfirm) {
-                const {
-                  removedAtIso,
-                  batchSize,
-                  phrasesToReinstate,
-                  originalPhraseCount,
-                } = reinstateBatchConfirm;
-                setReinstateBatchConfirm(null);
-                // Task #254 + #360 — both the full and partial paths
-                // ride the single-round-trip /reinstate-batch route.
-                // Partial subsets pass the kept rows through the new
-                // optional `phrases` allow-list; dropped rows stay on
-                // the removal-history list as removed.
-                if (phrasesToReinstate.length === originalPhraseCount) {
-                  void handleReinstateBatch(removedAtIso, batchSize);
-                } else {
-                  void handleReinstateBatchSubset(
-                    removedAtIso,
-                    phrasesToReinstate,
-                  );
-                }
-              }
-            }}
-          >
-            {(() => {
-              // Task #479 — mirror the picker preview confirm
-              // (Task #341): when the reviewer has dropped at least
-              // one row via the trim chips so phrasesToReinstate is a
-              // strict subset of the original batch, surface the
-              // remaining count on the button itself instead of the
-              // generic "Reinstate batch" label.
-              if (
-                reinstateBatchConfirm &&
-                reinstateBatchConfirm.phrasesToReinstate.length !==
-                  reinstateBatchConfirm.originalPhraseCount
-              ) {
-                const remaining =
-                  reinstateBatchConfirm.phrasesToReinstate.length;
-                return `Reinstate ${remaining} remaining phrase${remaining === 1 ? "" : "s"}`;
-              }
-              return "Reinstate batch";
-            })()}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-            </>
-          );
-        })()}
-      </AlertDialogContent>
-    </AlertDialog>
-
-    {/* Picker preview-and-confirm dialog: shows every phrase in the
-        batch (from the detail endpoint) before firing the reinstate. */}
-    <AlertDialog
-      open={pickerBatchPreview !== null}
-      onOpenChange={(open) => {
-        if (!open) setPickerBatchPreview(null);
-      }}
-    >
-      <AlertDialogContent
-        data-testid="handwavy-removal-batches-preview-confirm"
-        data-batch-removed-at={pickerBatchPreview?.removedAtIso ?? ""}
-        data-status={pickerBatchPreview?.status ?? "closed"}
-      >
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            {(() => {
-              if (!pickerBatchPreview) return "Reinstate this batch?";
-              if (pickerBatchPreview.status === "loading")
-                return "Loading batch contents…";
-              if (pickerBatchPreview.status === "error")
-                return "Couldn’t load batch contents";
-              const count = pickerBatchPreview.detail.phraseCount;
-              return `Reinstate this batch of ${count} phrase${count === 1 ? "" : "s"}?`;
-            })()}
-          </AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-2">
-              {pickerBatchPreview?.status === "loading" && (
-                <div
-                  className="text-foreground/80"
-                  data-testid="handwavy-removal-batches-preview-loading"
-                >
-                  Fetching every phrase in this batch so you can review the
-                  full list before confirming…
-                </div>
-              )}
-              {pickerBatchPreview?.status === "error" && (() => {
-                // Task #343 — map the HandwavyPhraseRemovalBatchDetailError
-                // `reason` to a reviewer-facing hint that explains whether
-                // a retry is likely to help. Unknown / missing reasons
-                // fall back to the raw transport error.
-                const reason = pickerBatchPreview.errorReason;
-                const friendly =
-                  reason === "history-not-found"
-                    ? "This batch removal entry no longer exists in the history (it may have been pruned). Reload the analytics page to refresh the picker, or pick a different batch."
-                    : reason === "not-a-batch"
-                      ? "This entry is a single-phrase removal, not a batch — reinstate it from the per-phrase Removal history panel instead."
-                      : pickerBatchPreview.errorMessage;
-                return (
-                  <div
-                    className="space-y-2"
-                    data-testid="handwavy-removal-batches-preview-error"
-                    data-error-reason={reason ?? ""}
-                  >
-                    <div className="text-destructive">{friendly}</div>
-                    <div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        data-testid="handwavy-removal-batches-preview-retry"
-                        onClick={() => {
-                          void handleOpenPickerBatchPreview(
-                            pickerBatchPreview.removedAtIso,
-                            pickerBatchPreview.removedBy,
-                            pickerBatchPreview.phraseCount,
-                          );
-                        }}
+                    {pickerBatchPreview.detail.reinstatedCount > 0 && (
+                      <div
+                        className="text-[11px] text-amber-300"
+                        data-testid="handwavy-removal-batches-preview-already-note"
                       >
-                        Try again
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })()}
-              {pickerBatchPreview?.status === "ready" && (
-                <>
-                  <div>
-                    Restore the{" "}
-                    <strong
-                      data-testid="handwavy-removal-batches-preview-remaining"
-                    >
-                      {Math.max(
-                        0,
-                        pickerBatchPreview.detail.phraseCount -
-                          pickerBatchPreview.detail.reinstatedCount,
-                      )}
-                    </strong>{" "}
-                    not-yet-reinstated phrase
-                    {pickerBatchPreview.detail.phraseCount -
-                      pickerBatchPreview.detail.reinstatedCount ===
-                    1
-                      ? ""
-                      : "s"}{" "}
-                    from the batch removal of{" "}
-                    <strong>{pickerBatchPreview.detail.phraseCount}</strong>{" "}
-                    by{" "}
-                    <span className="text-foreground/80">
-                      {pickerBatchPreview.removedBy ||
-                        pickerBatchPreview.detail.removedBy ||
-                        "anonymous"}
-                    </span>{" "}
-                    to the active list. New triages will start flagging them
-                    again immediately.
-                  </div>
-                  {pickerBatchPreview.detail.reinstatedCount > 0 && (
-                    <div
-                      className="text-[11px] text-amber-300"
-                      data-testid="handwavy-removal-batches-preview-already-note"
-                    >
-                      <strong>
-                        {pickerBatchPreview.detail.reinstatedCount}
-                      </strong>{" "}
-                      of {pickerBatchPreview.detail.phraseCount} phrase
-                      {pickerBatchPreview.detail.phraseCount === 1 ? "" : "s"}{" "}
-                      in this batch {""}
-                      {pickerBatchPreview.detail.reinstatedCount === 1
-                        ? "has"
-                        : "have"}{" "}
-                      already been reinstated and will be skipped.
-                    </div>
-                  )}
-                  {/* Task #342 — group rows by category so reviewers
+                        <strong>
+                          {pickerBatchPreview.detail.reinstatedCount}
+                        </strong>{" "}
+                        of {pickerBatchPreview.detail.phraseCount} phrase
+                        {pickerBatchPreview.detail.phraseCount === 1
+                          ? ""
+                          : "s"}{" "}
+                        in this batch {""}
+                        {pickerBatchPreview.detail.reinstatedCount === 1
+                          ? "has"
+                          : "have"}{" "}
+                        already been reinstated and will be skipped.
+                      </div>
+                    )}
+                    {/* Task #342 — group rows by category so reviewers
                       triaging a mixed batch (e.g. 4 hedging + 3 absence)
                       can see the per-category subtotals at a glance and
                       scan related phrases together instead of mentally
                       tagging each row themselves. The per-phrase
                       "already reinstated" / "will reinstate" badges are
                       preserved on every row. */}
-                  {(() => {
-                    type PreviewPhrase = {
-                      phrase: string;
-                      category?: string;
-                      reinstated?: boolean;
-                    };
-                    const phrases = pickerBatchPreview.detail
-                      .phrases as PreviewPhrase[];
-                    // Task #486 — Group rows via the shared
-                    // groupHandwavyPhrasesByCategory helper so the
-                    // dialog and the picker row's compact breakdown
-                    // chip always agree on which categories appear,
-                    // in which order, and under which labels. Stable
-                    // category order: known categories first (in
-                    // HANDWAVY_CATEGORY_LABELS order), then any
-                    // unknown buckets alphabetised, then an
-                    // "Uncategorized" fallback last.
-                    const orderedGroups =
-                      groupHandwavyPhrasesByCategory(phrases);
-                    // Task #485 — within each category bucket, sort
-                    // "will reinstate" rows before "already reinstated"
-                    // rows so the actionable items float to the top of
-                    // the section, then sort case-insensitively by
-                    // phrase within each status group so reviewers can
-                    // scan related phrases without hunting. The
-                    // grouping helper preserves insertion order inside
-                    // each bucket, so this post-pass is the only
-                    // ordering signal inside each section.
-                    for (const group of orderedGroups) {
-                      group.items.sort((a, b) => {
-                        const aDone = a.reinstated === true ? 1 : 0;
-                        const bDone = b.reinstated === true ? 1 : 0;
-                        if (aDone !== bDone) return aDone - bDone;
-                        return a.phrase.localeCompare(b.phrase, undefined, {
-                          sensitivity: "base",
+                    {(() => {
+                      type PreviewPhrase = {
+                        phrase: string;
+                        category?: string;
+                        reinstated?: boolean;
+                      };
+                      const phrases = pickerBatchPreview.detail
+                        .phrases as PreviewPhrase[];
+                      // Task #486 — Group rows via the shared
+                      // groupHandwavyPhrasesByCategory helper so the
+                      // dialog and the picker row's compact breakdown
+                      // chip always agree on which categories appear,
+                      // in which order, and under which labels. Stable
+                      // category order: known categories first (in
+                      // HANDWAVY_CATEGORY_LABELS order), then any
+                      // unknown buckets alphabetised, then an
+                      // "Uncategorized" fallback last.
+                      const orderedGroups =
+                        groupHandwavyPhrasesByCategory(phrases);
+                      // Task #485 — within each category bucket, sort
+                      // "will reinstate" rows before "already reinstated"
+                      // rows so the actionable items float to the top of
+                      // the section, then sort case-insensitively by
+                      // phrase within each status group so reviewers can
+                      // scan related phrases without hunting. The
+                      // grouping helper preserves insertion order inside
+                      // each bucket, so this post-pass is the only
+                      // ordering signal inside each section.
+                      for (const group of orderedGroups) {
+                        group.items.sort((a, b) => {
+                          const aDone = a.reinstated === true ? 1 : 0;
+                          const bDone = b.reinstated === true ? 1 : 0;
+                          if (aDone !== bDone) return aDone - bDone;
+                          return a.phrase.localeCompare(b.phrase, undefined, {
+                            sensitivity: "base",
+                          });
                         });
-                      });
-                    }
-                    return (
-                      <div
-                        className="max-h-56 overflow-y-auto border border-border/30 rounded-md p-2 space-y-3"
-                        data-testid="handwavy-removal-batches-preview-list"
-                      >
-                        {orderedGroups.map((group) => (
-                          <section
-                            key={group.key}
-                            className="space-y-1"
-                            data-testid="handwavy-removal-batches-preview-group"
-                            data-category={group.key}
-                            data-category-count={group.items.length}
-                          >
-                            <header
-                              className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-foreground/70 sticky top-0 bg-background/80 backdrop-blur-sm py-0.5"
-                              data-testid="handwavy-removal-batches-preview-group-header"
+                      }
+                      return (
+                        <div
+                          className="max-h-56 overflow-y-auto border border-border/30 rounded-md p-2 space-y-3"
+                          data-testid="handwavy-removal-batches-preview-list"
+                        >
+                          {orderedGroups.map((group) => (
+                            <section
+                              key={group.key}
+                              className="space-y-1"
+                              data-testid="handwavy-removal-batches-preview-group"
+                              data-category={group.key}
+                              data-category-count={group.items.length}
                             >
-                              <span className="font-medium">
-                                {group.label}
-                              </span>
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] shrink-0"
-                                data-testid="handwavy-removal-batches-preview-group-count"
+                              <header
+                                className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-foreground/70 sticky top-0 bg-background/80 backdrop-blur-sm py-0.5"
+                                data-testid="handwavy-removal-batches-preview-group-header"
                               >
-                                {group.items.length}
-                              </Badge>
-                            </header>
-                            <ul className="list-none pl-0 space-y-1">
-                              {group.items.map((p, idx) => (
-                                <li
-                                  key={`${p.phrase}-${idx}`}
-                                  className="flex items-start gap-2 text-[11px]"
-                                  data-testid="handwavy-removal-batches-preview-row"
-                                  data-phrase={p.phrase}
-                                  data-category={
-                                    typeof p.category === "string"
-                                      ? p.category
-                                      : ""
-                                  }
-                                  data-already-reinstated={
-                                    p.reinstated === true
-                                      ? "true"
-                                      : "false"
-                                  }
+                                <span className="font-medium">
+                                  {group.label}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] shrink-0"
+                                  data-testid="handwavy-removal-batches-preview-group-count"
                                 >
-                                  <span className="font-mono text-foreground/80 break-all flex-1">
-                                    “{p.phrase}”
-                                  </span>
-                                  {p.reinstated === true ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] border-emerald-500/40 text-emerald-300 shrink-0"
-                                      data-testid="handwavy-removal-batches-preview-row-already"
-                                    >
-                                      Already reinstated
-                                    </Badge>
-                                  ) : (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] border-sky-500/40 text-sky-300 shrink-0"
-                                      data-testid="handwavy-removal-batches-preview-row-pending"
-                                    >
-                                      Will reinstate
-                                    </Badge>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          </section>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                  <div className="text-xs italic">
-                    The original batch removal entry stays in the history;
-                    each reinstate is recorded as a new audit entry. Cancel
-                    leaves the batch untouched.
-                  </div>
-                </>
-              )}
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel
-            data-testid="handwavy-removal-batches-preview-cancel"
-          >
-            Cancel — don’t reinstate
-          </AlertDialogCancel>
-          {(() => {
-            // HEAD (Task #257?) — partial-reinstate aware label + title:
-            //   Renders "Nothing left to reinstate" / "Reinstate N
-            //   remaining phrases" when the batch is partially or fully
-            //   reinstated, and disables on nothingToDo.
-            // Task #337 — visible reason caption + aria-describedby for
-            //   the action when it is disabled (not ready / nothing to
-            //   do / mutations blocked).
-            const ready = pickerBatchPreview?.status === "ready"
-              ? pickerBatchPreview
-              : null;
-            const remaining = ready
-              ? Math.max(
-                  0,
-                  ready.detail.phraseCount - ready.detail.reinstatedCount,
-                )
-              : 0;
-            const partial =
-              ready !== null && remaining !== ready.detail.phraseCount;
-            const nothingToDo = ready !== null && remaining === 0;
-            const label = (() => {
-              if (!ready) return "Reinstate batch";
-              if (nothingToDo) return "Nothing left to reinstate";
-              if (partial)
-                return `Reinstate ${remaining} remaining phrase${remaining === 1 ? "" : "s"}`;
-              return "Reinstate batch";
-            })();
-            const title = !mutationsAllowed
-              ? MUTATIONS_BLOCKED_TITLE
-              : nothingToDo
-                ? "Every phrase in this batch has already been reinstated — there's nothing left to do."
-                : undefined;
-            const reason = describeHandwavyDisabledReason({
-              mutationsAllowed,
-              extraReason:
-                pickerBatchPreview?.status === "error"
-                  ? "Batch preview failed to load — retry or cancel."
-                  : pickerBatchPreview?.status !== "ready"
-                    ? "Waiting for the batch preview to finish loading."
-                    : nothingToDo
-                      ? "Every phrase in this batch has already been reinstated."
-                      : null,
-            });
-            const hintId = reason
-              ? "handwavy-removal-batches-preview-confirm-confirm-disabled-hint-id"
-              : undefined;
-            return (
-              <>
-                {reason && (
-                  <div className="basis-full px-1 pt-1">
-                    <HandwavyDisabledHint
-                      id={hintId}
-                      reason={reason}
-                      testId="handwavy-removal-batches-preview-confirm-confirm-disabled-hint"
-                    />
-                  </div>
+                                  {group.items.length}
+                                </Badge>
+                              </header>
+                              <ul className="list-none pl-0 space-y-1">
+                                {group.items.map((p, idx) => (
+                                  <li
+                                    key={`${p.phrase}-${idx}`}
+                                    className="flex items-start gap-2 text-[11px]"
+                                    data-testid="handwavy-removal-batches-preview-row"
+                                    data-phrase={p.phrase}
+                                    data-category={
+                                      typeof p.category === "string"
+                                        ? p.category
+                                        : ""
+                                    }
+                                    data-already-reinstated={
+                                      p.reinstated === true ? "true" : "false"
+                                    }
+                                  >
+                                    <span className="font-mono text-foreground/80 break-all flex-1">
+                                      “{p.phrase}”
+                                    </span>
+                                    {p.reinstated === true ? (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] border-emerald-500/40 text-emerald-300 shrink-0"
+                                        data-testid="handwavy-removal-batches-preview-row-already"
+                                      >
+                                        Already reinstated
+                                      </Badge>
+                                    ) : (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] border-sky-500/40 text-sky-300 shrink-0"
+                                        data-testid="handwavy-removal-batches-preview-row-pending"
+                                      >
+                                        Will reinstate
+                                      </Badge>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </section>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                    <div className="text-xs italic">
+                      The original batch removal entry stays in the history;
+                      each reinstate is recorded as a new audit entry. Cancel
+                      leaves the batch untouched.
+                    </div>
+                  </>
                 )}
-                <AlertDialogAction
-                  data-testid="handwavy-removal-batches-preview-confirm-confirm"
-                  disabled={
-                    !mutationsAllowed ||
-                    pickerBatchPreview?.status !== "ready" ||
-                    nothingToDo
-                  }
-                  title={title}
-                  data-mutations-blocked={!mutationsAllowed ? "true" : "false"}
-                  aria-describedby={hintId}
-                  onClick={() => {
-                    if (pickerBatchPreview?.status === "ready") {
-                      const { removedAtIso, detail } = pickerBatchPreview;
-                      setPickerBatchPreview(null);
-                      void handleReinstateBatch(removedAtIso, detail.phraseCount);
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="handwavy-removal-batches-preview-cancel">
+              Cancel — don’t reinstate
+            </AlertDialogCancel>
+            {(() => {
+              // HEAD (Task #257?) — partial-reinstate aware label + title:
+              //   Renders "Nothing left to reinstate" / "Reinstate N
+              //   remaining phrases" when the batch is partially or fully
+              //   reinstated, and disables on nothingToDo.
+              // Task #337 — visible reason caption + aria-describedby for
+              //   the action when it is disabled (not ready / nothing to
+              //   do / mutations blocked).
+              const ready =
+                pickerBatchPreview?.status === "ready"
+                  ? pickerBatchPreview
+                  : null;
+              const remaining = ready
+                ? Math.max(
+                    0,
+                    ready.detail.phraseCount - ready.detail.reinstatedCount,
+                  )
+                : 0;
+              const partial =
+                ready !== null && remaining !== ready.detail.phraseCount;
+              const nothingToDo = ready !== null && remaining === 0;
+              const label = (() => {
+                if (!ready) return "Reinstate batch";
+                if (nothingToDo) return "Nothing left to reinstate";
+                if (partial)
+                  return `Reinstate ${remaining} remaining phrase${remaining === 1 ? "" : "s"}`;
+                return "Reinstate batch";
+              })();
+              const title = !mutationsAllowed
+                ? MUTATIONS_BLOCKED_TITLE
+                : nothingToDo
+                  ? "Every phrase in this batch has already been reinstated — there's nothing left to do."
+                  : undefined;
+              const reason = describeHandwavyDisabledReason({
+                mutationsAllowed,
+                extraReason:
+                  pickerBatchPreview?.status === "error"
+                    ? "Batch preview failed to load — retry or cancel."
+                    : pickerBatchPreview?.status !== "ready"
+                      ? "Waiting for the batch preview to finish loading."
+                      : nothingToDo
+                        ? "Every phrase in this batch has already been reinstated."
+                        : null,
+              });
+              const hintId = reason
+                ? "handwavy-removal-batches-preview-confirm-confirm-disabled-hint-id"
+                : undefined;
+              return (
+                <>
+                  {reason && (
+                    <div className="basis-full px-1 pt-1">
+                      <HandwavyDisabledHint
+                        id={hintId}
+                        reason={reason}
+                        testId="handwavy-removal-batches-preview-confirm-confirm-disabled-hint"
+                      />
+                    </div>
+                  )}
+                  <AlertDialogAction
+                    data-testid="handwavy-removal-batches-preview-confirm-confirm"
+                    disabled={
+                      !mutationsAllowed ||
+                      pickerBatchPreview?.status !== "ready" ||
+                      nothingToDo
                     }
-                  }}
-                >
-                  {label}
-                </AlertDialogAction>
-              </>
-            );
-          })()}
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+                    title={title}
+                    data-mutations-blocked={
+                      !mutationsAllowed ? "true" : "false"
+                    }
+                    aria-describedby={hintId}
+                    onClick={() => {
+                      if (pickerBatchPreview?.status === "ready") {
+                        const { removedAtIso, detail } = pickerBatchPreview;
+                        setPickerBatchPreview(null);
+                        void handleReinstateBatch(
+                          removedAtIso,
+                          detail.phraseCount,
+                        );
+                      }
+                    }}
+                  >
+                    {label}
+                  </AlertDialogAction>
+                </>
+              );
+            })()}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-    {/* Task #222 — navigate-away guard. Pops when the reviewer triggers
+      {/* Task #222 — navigate-away guard. Pops when the reviewer triggers
         an in-app Link click or back/forward while at least one
         reviewer-added FLAT phrase is still inside its undo window.
         Shows the most-recent candidate phrase + remaining time so the
@@ -12496,57 +13721,56 @@ export function HandwavyPhrasesAdmin({ mutationsAllowed }: { mutationsAllowed: b
         a manual removal if they later need to delete it. The matching
         beforeunload listener handles tab close / hard refresh; the
         browser controls that dialog's copy. */}
-    <AlertDialog
-      open={pendingNavigation !== null && pendingPhrase !== null}
-      onOpenChange={(open) => {
-        if (!open) setPendingNavigation(null);
-      }}
-    >
-      <AlertDialogContent data-testid="handwavy-undo-leave-confirm">
-        <AlertDialogHeader>
-          <AlertDialogTitle>Leave before undoing?</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-2">
-              {pendingPhrase && (
-                <>
-                  <div>
-                    You still have{" "}
-                    <strong data-testid="handwavy-undo-leave-confirm-remaining">
-                      {formatUndoRemaining(pendingPhrase.remainingMs)}
-                    </strong>{" "}
-                    to undo{" "}
-                    <span
-                      className="font-mono text-foreground/80"
-                      data-testid="handwavy-undo-leave-confirm-phrase"
-                    >
-                      “{pendingPhrase.phrase}”
-                    </span>
-                    . Leave anyway?
-                  </div>
-                  <div className="text-xs italic">
-                    If you leave, the row-level Undo affordance disappears
-                    and any later removal will be recorded as a manual
-                    removal in the audit trail rather than as “added then
-                    undone”.
-                  </div>
-                </>
-              )}
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel data-testid="handwavy-undo-leave-confirm-cancel">
-            Stay on this page
-          </AlertDialogCancel>
-          <AlertDialogAction
-            data-testid="handwavy-undo-leave-confirm-confirm"
-            onClick={proceedPendingNavigation}
-          >
-            Leave anyway
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialog
+        open={pendingNavigation !== null && pendingPhrase !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingNavigation(null);
+        }}
+      >
+        <AlertDialogContent data-testid="handwavy-undo-leave-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave before undoing?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {pendingPhrase && (
+                  <>
+                    <div>
+                      You still have{" "}
+                      <strong data-testid="handwavy-undo-leave-confirm-remaining">
+                        {formatUndoRemaining(pendingPhrase.remainingMs)}
+                      </strong>{" "}
+                      to undo{" "}
+                      <span
+                        className="font-mono text-foreground/80"
+                        data-testid="handwavy-undo-leave-confirm-phrase"
+                      >
+                        “{pendingPhrase.phrase}”
+                      </span>
+                      . Leave anyway?
+                    </div>
+                    <div className="text-xs italic">
+                      If you leave, the row-level Undo affordance disappears and
+                      any later removal will be recorded as a manual removal in
+                      the audit trail rather than as “added then undone”.
+                    </div>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="handwavy-undo-leave-confirm-cancel">
+              Stay on this page
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="handwavy-undo-leave-confirm-confirm"
+              onClick={proceedPendingNavigation}
+            >
+              Leave anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -12708,10 +13932,16 @@ export function computeCohortFixtureDelta(
 
 interface ArchetypeHistoryResponse {
   totalSnapshots: number;
-  archetypes: Array<{ archetype: string; snapshots: ArchetypeHistorySnapshot[] }>;
+  archetypes: Array<{
+    archetype: string;
+    snapshots: ArchetypeHistorySnapshot[];
+  }>;
 }
 
-function HeadroomSparkline({ snapshots, ceiling }: {
+function HeadroomSparkline({
+  snapshots,
+  ceiling,
+}: {
   snapshots: ArchetypeHistorySnapshot[];
   ceiling: number;
 }) {
@@ -12725,7 +13955,7 @@ function HeadroomSparkline({ snapshots, ceiling }: {
   const W = 100;
   const H = 28;
   const PAD = 2;
-  const ys = snapshots.map(s => s.minDistanceToCeiling);
+  const ys = snapshots.map((s) => s.minDistanceToCeiling);
   // Y-axis fixed to [0, ceiling] so multiple sparklines compare visually.
   const yMin = 0;
   const yMax = ceiling;
@@ -12737,7 +13967,10 @@ function HeadroomSparkline({ snapshots, ceiling }: {
   });
   const last = ys[ys.length - 1]!;
   const lastX = PAD + (W - 2 * PAD);
-  const lastY = PAD + (1 - (Math.max(0, Math.min(ceiling, last)) - yMin) / (yMax - yMin)) * (H - 2 * PAD);
+  const lastY =
+    PAD +
+    (1 - (Math.max(0, Math.min(ceiling, last)) - yMin) / (yMax - yMin)) *
+      (H - 2 * PAD);
   const stroke = last < 5 ? "#f87171" : last < 10 ? "#facc15" : "#34d399";
 
   // Task #92 — older snapshots are down-sampled to one daily row per
@@ -12745,12 +13978,12 @@ function HeadroomSparkline({ snapshots, ceiling }: {
   // reviewers can tell raw recent points from rolled-up history at a
   // glance. Both segments share the boundary point so the line is
   // continuous.
-  const aggregatedCount = snapshots.filter(s => s.aggregated).length;
+  const aggregatedCount = snapshots.filter((s) => s.aggregated).length;
   const rawCount = snapshots.length - aggregatedCount;
   // Find the actual transition index by scanning the ordered snapshots
   // rather than relying on the count alone — this stays correct even if
   // upstream ordering ever interleaves aggregated/raw rows.
-  const firstRawIdx = snapshots.findIndex(s => !s.aggregated);
+  const firstRawIdx = snapshots.findIndex((s) => !s.aggregated);
   let aggregatedPoints: string[] = [];
   let rawPoints: string[] = [];
   if (firstRawIdx === -1) {
@@ -12765,7 +13998,9 @@ function HeadroomSparkline({ snapshots, ceiling }: {
 
   const parts: string[] = [];
   if (aggregatedCount > 0) {
-    parts.push(`${aggregatedCount} daily aggregate${aggregatedCount === 1 ? "" : "s"}`);
+    parts.push(
+      `${aggregatedCount} daily aggregate${aggregatedCount === 1 ? "" : "s"}`,
+    );
   }
   if (rawCount > 0 || aggregatedCount === 0) {
     parts.push(`${rawCount} recent`);
@@ -12779,9 +14014,21 @@ function HeadroomSparkline({ snapshots, ceiling }: {
     (range ? ` (${range.label})` : "");
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-24 h-7" role="img" aria-label={tooltip}>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-24 h-7"
+      role="img"
+      aria-label={tooltip}
+    >
       <title>{tooltip}</title>
-      <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} />
+      <line
+        x1={PAD}
+        y1={H - PAD}
+        x2={W - PAD}
+        y2={H - PAD}
+        stroke="rgba(255,255,255,0.08)"
+        strokeWidth={0.5}
+      />
       {aggregatedPoints.length >= 2 && (
         <polyline
           fill="none"
@@ -12829,7 +14076,7 @@ export function CompactionRollupsSparkline({
   const PAD = 1;
   const innerW = W - 2 * PAD;
   const innerH = H - 2 * PAD;
-  const max = Math.max(...runs.map(r => r.removed), 0);
+  const max = Math.max(...runs.map((r) => r.removed), 0);
   // gap is a fixed 1px sliver between bars; bar width fills the rest.
   const gap = runs.length > 1 ? 1 : 0;
   const barW = Math.max(0.75, (innerW - gap * (runs.length - 1)) / runs.length);
@@ -12862,7 +14109,9 @@ export function CompactionRollupsSparkline({
             y={y}
             width={barW}
             height={h}
-            fill={r.removed === 0 ? "rgba(148,163,184,0.35)" : "rgb(148,163,184)"}
+            fill={
+              r.removed === 0 ? "rgba(148,163,184,0.35)" : "rgb(148,163,184)"
+            }
           />
         );
       })}
@@ -12915,15 +14164,24 @@ export function ArchetypeRowView({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-foreground">{label}</span>
-            <code className="text-[10px] font-mono text-muted-foreground/60">{row.archetype}</code>
+            <code className="text-[10px] font-mono text-muted-foreground/60">
+              {row.archetype}
+            </code>
             {tight && (
-              <Badge variant="outline" className="text-[10px] gap-1 text-red-400 bg-red-400/10 border-red-400/30">
+              <Badge
+                variant="outline"
+                className="text-[10px] gap-1 text-red-400 bg-red-400/10 border-red-400/30"
+              >
                 <AlertTriangle className="w-3 h-3" /> Tight headroom
               </Badge>
             )}
             {shrinking && (
-              <Badge variant="outline" className="text-[10px] gap-1 text-orange-400 bg-orange-400/10 border-orange-400/30">
-                <TrendingUp className="w-3 h-3 rotate-180" /> Headroom shrinking −{decline.toFixed(1)}pt
+              <Badge
+                variant="outline"
+                className="text-[10px] gap-1 text-orange-400 bg-orange-400/10 border-orange-400/30"
+              >
+                <TrendingUp className="w-3 h-3 rotate-180" /> Headroom shrinking
+                −{decline.toFixed(1)}pt
               </Badge>
             )}
           </div>
@@ -12934,13 +14192,16 @@ export function ArchetypeRowView({
                 {" · worst-case "}
                 <code className="font-mono">{worst.id}</code>
                 {" @ "}
-                <span className="tabular-nums">{worst.avriOnScore.toFixed(1)}</span>
+                <span className="tabular-nums">
+                  {worst.avriOnScore.toFixed(1)}
+                </span>
               </>
             )}
             {history.length > 0 && (
               <>
                 {" · "}
-                <span className="tabular-nums">{history.length}</span> snapshot{history.length === 1 ? "" : "s"}
+                <span className="tabular-nums">{history.length}</span> snapshot
+                {history.length === 1 ? "" : "s"}
               </>
             )}
             {(() => {
@@ -12953,7 +14214,8 @@ export function ArchetypeRowView({
               return (
                 <>
                   {" · "}
-                  <span className="tabular-nums">{range.days}</span> day{range.days === 1 ? "" : "s"}
+                  <span className="tabular-nums">{range.days}</span> day
+                  {range.days === 1 ? "" : "s"}
                   {" ("}
                   <span className="tabular-nums">{range.label}</span>
                   {")"}
@@ -12966,11 +14228,17 @@ export function ArchetypeRowView({
           <HeadroomSparkline snapshots={history} ceiling={row.ceiling} />
         </div>
         <div className="text-right w-20">
-          <div className="text-sm font-bold tabular-nums">{row.avriOnMean.toFixed(1)}</div>
-          <div className="text-[10px] text-muted-foreground">mean (AVRI on)</div>
+          <div className="text-sm font-bold tabular-nums">
+            {row.avriOnMean.toFixed(1)}
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            mean (AVRI on)
+          </div>
         </div>
         <div className="text-right w-20">
-          <div className="text-sm font-bold tabular-nums">{row.avriOnMax.toFixed(1)}</div>
+          <div className="text-sm font-bold tabular-nums">
+            {row.avriOnMax.toFixed(1)}
+          </div>
           <div className="text-[10px] text-muted-foreground">worst score</div>
         </div>
         <div className="text-right w-24">
@@ -12978,7 +14246,9 @@ export function ArchetypeRowView({
             {row.minDistanceToCeiling > 0 ? "+" : ""}
             {row.minDistanceToCeiling.toFixed(1)}
           </div>
-          <div className="text-[10px] text-muted-foreground">to ceiling ({row.ceiling})</div>
+          <div className="text-[10px] text-muted-foreground">
+            to ceiling ({row.ceiling})
+          </div>
         </div>
       </div>
     </div>
@@ -12986,7 +14256,9 @@ export function ArchetypeRowView({
 }
 
 const ARCHETYPE_HISTORY_QUERY_KEY = ["test-run-archetype-history"] as const;
-const ARCHETYPE_HISTORY_CONFIG_QUERY_KEY = ["test-run-archetype-history-config"] as const;
+const ARCHETYPE_HISTORY_CONFIG_QUERY_KEY = [
+  "test-run-archetype-history-config",
+] as const;
 
 // Shape returned by GET /api/test/archetype-history/config — exposes the
 // effective compaction window + source (Task #99), the most recent
@@ -13048,11 +14320,11 @@ function SnapshotCapBadge({
   maxSnapshots: number | undefined;
 }) {
   if (
-    !Number.isFinite(snapshotCount)
-    || snapshotCount < 0
-    || maxSnapshots === undefined
-    || !Number.isFinite(maxSnapshots)
-    || maxSnapshots <= 0
+    !Number.isFinite(snapshotCount) ||
+    snapshotCount < 0 ||
+    maxSnapshots === undefined ||
+    !Number.isFinite(maxSnapshots) ||
+    maxSnapshots <= 0
   ) {
     return null;
   }
@@ -13069,8 +14341,8 @@ function SnapshotCapBadge({
       data-testid="archetype-history-snapshot-cap-badge"
       data-severity={isRed ? "red" : "amber"}
       className={
-        "ml-1.5 inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[10px] font-medium align-baseline "
-        + (isRed
+        "ml-1.5 inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[10px] font-medium align-baseline " +
+        (isRed
           ? "border-red-500/40 bg-red-500/10 text-red-200"
           : "border-amber-500/40 bg-amber-500/10 text-amber-200")
       }
@@ -13102,7 +14374,10 @@ function formatBytes(bytes: number): string | null {
 // routine is running on every /api/test/run (seconds–minutes) or has
 // gone quiet (hours–days). Returns null for unparseable inputs so the
 // caller can fall back to hiding the line entirely.
-function formatRelativeAgo(iso: string, now: number = Date.now()): string | null {
+function formatRelativeAgo(
+  iso: string,
+  now: number = Date.now(),
+): string | null {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return null;
   const diffMs = Math.max(0, now - t);
@@ -13126,23 +14401,43 @@ function runbookUrl(runbookPath: string): string {
   return AVRI_DRIFT_RUNBOOK_REPO_BASE + cleaned;
 }
 
-function DriftFlagBadge({ kind, gapWarn, familyShiftWarn }: {
+function DriftFlagBadge({
+  kind,
+  gapWarn,
+  familyShiftWarn,
+}: {
   kind: AvriDriftFlag["kind"];
   gapWarn: number;
   familyShiftWarn: number;
 }) {
-  const cfg = kind === "GAP_BELOW_45"
-    ? { label: `Gap < ${gapWarn}pt`, color: "text-red-400 bg-red-400/10 border-red-400/30" }
-    : { label: `Family shift ≥ ${familyShiftWarn}pt`, color: "text-orange-400 bg-orange-400/10 border-orange-400/30" };
+  const cfg =
+    kind === "GAP_BELOW_45"
+      ? {
+          label: `Gap < ${gapWarn}pt`,
+          color: "text-red-400 bg-red-400/10 border-red-400/30",
+        }
+      : {
+          label: `Family shift ≥ ${familyShiftWarn}pt`,
+          color: "text-orange-400 bg-orange-400/10 border-orange-400/30",
+        };
   return (
-    <Badge variant="outline" className={cn("text-[10px] gap-1 font-mono", cfg.color)}>
+    <Badge
+      variant="outline"
+      className={cn("text-[10px] gap-1 font-mono", cfg.color)}
+    >
       <AlertTriangle className="w-3 h-3" /> {cfg.label}
     </Badge>
   );
 }
 
-function GapSparkline({ weeks, gapWarn }: { weeks: AvriDriftWeekBucket[]; gapWarn: number }) {
-  const eligible = weeks.filter(w => w.gapEligible && w.gap != null);
+function GapSparkline({
+  weeks,
+  gapWarn,
+}: {
+  weeks: AvriDriftWeekBucket[];
+  gapWarn: number;
+}) {
+  const eligible = weeks.filter((w) => w.gapEligible && w.gap != null);
   if (eligible.length === 0) {
     return (
       <p className="text-xs text-muted-foreground/50 py-4 text-center">
@@ -13155,25 +14450,55 @@ function GapSparkline({ weeks, gapWarn }: { weeks: AvriDriftWeekBucket[]; gapWar
   const PAD = { top: 12, right: 12, bottom: 22, left: 36 };
   const pw = W - PAD.left - PAD.right;
   const ph = H - PAD.top - PAD.bottom;
-  const gaps = eligible.map(w => w.gap as number);
+  const gaps = eligible.map((w) => w.gap as number);
   const minY = Math.min(...gaps, gapWarn) - 5;
   const maxY = Math.max(...gaps, gapWarn) + 5;
   const span = Math.max(1, maxY - minY);
-  const xFor = (i: number) => PAD.left + (eligible.length === 1 ? pw / 2 : (i / (eligible.length - 1)) * pw);
+  const xFor = (i: number) =>
+    PAD.left +
+    (eligible.length === 1 ? pw / 2 : (i / (eligible.length - 1)) * pw);
   const yFor = (g: number) => PAD.top + ph - ((g - minY) / span) * ph;
-  const path = eligible.map((w, i) => `${i === 0 ? "M" : "L"} ${xFor(i)} ${yFor(w.gap as number)}`).join(" ");
+  const path = eligible
+    .map((w, i) => `${i === 0 ? "M" : "L"} ${xFor(i)} ${yFor(w.gap as number)}`)
+    .join(" ");
   const warnY = yFor(gapWarn);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: "140px" }}>
-      <line x1={PAD.left} y1={warnY} x2={W - PAD.right} y2={warnY} stroke="#ef4444" strokeWidth={1} strokeDasharray="3,3" />
-      <text x={PAD.left - 4} y={warnY + 3} textAnchor="end" fill="#ef4444" fontSize={8} fontFamily="monospace">{gapWarn}</text>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full"
+      style={{ maxHeight: "140px" }}
+    >
+      <line
+        x1={PAD.left}
+        y1={warnY}
+        x2={W - PAD.right}
+        y2={warnY}
+        stroke="#ef4444"
+        strokeWidth={1}
+        strokeDasharray="3,3"
+      />
+      <text
+        x={PAD.left - 4}
+        y={warnY + 3}
+        textAnchor="end"
+        fill="#ef4444"
+        fontSize={8}
+        fontFamily="monospace"
+      >
+        {gapWarn}
+      </text>
       <path d={path} fill="none" stroke="#06b6d4" strokeWidth={1.5} />
       {eligible.map((w, i) => {
         const flagged = (w.gap as number) < gapWarn;
         return (
           <g key={w.weekStart}>
-            <circle cx={xFor(i)} cy={yFor(w.gap as number)} r={3} fill={flagged ? "#ef4444" : "#06b6d4"} />
+            <circle
+              cx={xFor(i)}
+              cy={yFor(w.gap as number)}
+              r={3}
+              fill={flagged ? "#ef4444" : "#06b6d4"}
+            />
             <text
               x={xFor(i)}
               y={H - 6}
@@ -13187,10 +14512,24 @@ function GapSparkline({ weeks, gapWarn }: { weeks: AvriDriftWeekBucket[]; gapWar
           </g>
         );
       })}
-      <text x={PAD.left - 4} y={PAD.top + 4} textAnchor="end" fill="rgba(255,255,255,0.3)" fontSize={8} fontFamily="monospace">
+      <text
+        x={PAD.left - 4}
+        y={PAD.top + 4}
+        textAnchor="end"
+        fill="rgba(255,255,255,0.3)"
+        fontSize={8}
+        fontFamily="monospace"
+      >
         {Math.round(maxY)}
       </text>
-      <text x={PAD.left - 4} y={H - PAD.bottom + 2} textAnchor="end" fill="rgba(255,255,255,0.3)" fontSize={8} fontFamily="monospace">
+      <text
+        x={PAD.left - 4}
+        y={H - PAD.bottom + 2}
+        textAnchor="end"
+        fill="rgba(255,255,255,0.3)"
+        fontSize={8}
+        fontFamily="monospace"
+      >
         {Math.round(minY)}
       </text>
     </svg>
@@ -13200,14 +14539,18 @@ function GapSparkline({ weeks, gapWarn }: { weeks: AvriDriftWeekBucket[]; gapWar
 // Format a future timestamp as "in 3m" / "in 2h" / "overdue by 5s".
 // Returns null when the input is unparseable so callers can render a
 // placeholder.
-function formatRelativeUntil(iso: string, now: number = Date.now()): string | null {
+function formatRelativeUntil(
+  iso: string,
+  now: number = Date.now(),
+): string | null {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return null;
   const diffMs = t - now;
   const overdue = diffMs < 0;
   const absMs = Math.abs(diffMs);
   const sec = Math.round(absMs / 1000);
-  const fmt = (label: string) => (overdue ? `overdue by ${label}` : `in ${label}`);
+  const fmt = (label: string) =>
+    overdue ? `overdue by ${label}` : `in ${label}`;
   if (sec < 5) return overdue ? "due now" : "in <5s";
   if (sec < 60) return fmt(`${sec}s`);
   const min = Math.round(sec / 60);
@@ -13305,7 +14648,9 @@ function SchedulerStalledBanner() {
           its next tick is overdue by ~{overdueMin} min
           {stalledCount === 1 ? ` on replica ${worst.replicaId}` : ""}. New
           drift flags will not page reviewers until it resumes. See{" "}
-          <code className="font-mono text-[11px]">docs/avri-drift-runbook.md</code>{" "}
+          <code className="font-mono text-[11px]">
+            docs/avri-drift-runbook.md
+          </code>{" "}
           (&ldquo;Notifications&rdquo;) for recovery steps.
         </p>
       </div>
@@ -13399,7 +14744,10 @@ function CalibrationAuthBruteForceAlertsContent({
     );
   }
   return (
-    <ul className="space-y-1.5" data-testid="calibration-auth-brute-force-alerts">
+    <ul
+      className="space-y-1.5"
+      data-testid="calibration-auth-brute-force-alerts"
+    >
       {alerts.map((alert, idx) => {
         const detectedAgo = formatRelativeAgo(alert.detectedAt, now);
         const detectedLabel = detectedAgo ?? alert.detectedAt;
@@ -13507,8 +14855,7 @@ function ScoreStabilityPanel({
           <span>Score stability — tier flips per day</span>
         </div>
         <div className="text-[11px] text-muted-foreground/70 italic px-3 py-2 rounded-md border border-dashed border-border/40">
-          Reviewer token required to load the score-stability tier-flip
-          summary.
+          Reviewer token required to load the score-stability tier-flip summary.
         </div>
       </div>
     );
@@ -13518,7 +14865,10 @@ function ScoreStabilityPanel({
   }
   if (isError || !data) {
     return (
-      <div data-testid="score-stability-panel-error" className="text-[11px] text-red-400/80 italic">
+      <div
+        data-testid="score-stability-panel-error"
+        className="text-[11px] text-red-400/80 italic"
+      >
         Could not load score-stability summary.
       </div>
     );
@@ -13553,9 +14903,7 @@ function ScoreStabilityPanel({
   const thresholdY =
     PAD_T +
     innerH -
-    (Math.min(1, summary.alertThreshold) *
-      maxTotalForThreshold *
-      innerH) /
+    (Math.min(1, summary.alertThreshold) * maxTotalForThreshold * innerH) /
       maxFlips;
   const barW = days.length > 0 ? innerW / days.length : innerW;
 
@@ -13571,9 +14919,7 @@ function ScoreStabilityPanel({
         <span
           className={
             "normal-case font-normal italic " +
-            (overallExceeded
-              ? "text-red-400/90"
-              : "text-muted-foreground/40")
+            (overallExceeded ? "text-red-400/90" : "text-muted-foreground/40")
           }
         >
           {summary.lookbackDays}-day flip rate{" "}
@@ -13583,9 +14929,8 @@ function ScoreStabilityPanel({
       </div>
       {totalsHeader.total === 0 ? (
         <div className="text-[11px] text-muted-foreground/60 italic px-3 py-2 rounded-md border border-dashed border-border/40">
-          No re-score rows yet. Enable the nightly score-stability
-          scheduler (SCORE_STABILITY_SCHEDULER_ENABLED=true) and wait
-          for the next tick.
+          No re-score rows yet. Enable the nightly score-stability scheduler
+          (SCORE_STABILITY_SCHEDULER_ENABLED=true) and wait for the next tick.
         </div>
       ) : (
         <>
@@ -13620,8 +14965,7 @@ function ScoreStabilityPanel({
             {days.map((d, i) => {
               const x = PAD_L + i * barW + 1;
               const w = Math.max(1, barW - 2);
-              const otherFlips =
-                d.flips - d.legitToSlop - d.slopToLegit;
+              const otherFlips = d.flips - d.legitToSlop - d.slopToLegit;
               const yLegit = yFor(d.legitToSlop);
               const yLegitPlusSlop = yFor(d.legitToSlop + d.slopToLegit);
               const yTop = yFor(d.flips);
@@ -13695,10 +15039,17 @@ function ScoreStabilityPanel({
             </span>
             <span className="flex items-center gap-1">
               <span className="inline-block w-2.5 h-2.5 rounded-sm bg-muted-foreground/40" />
-              other ({totalsHeader.tightened + totalsHeader.loosened + totalsHeader.lateral})
+              other (
+              {totalsHeader.tightened +
+                totalsHeader.loosened +
+                totalsHeader.lateral}
+              )
             </span>
           </div>
-          <ScoreStabilityDailyTable days={days} threshold={summary.alertThreshold} />
+          <ScoreStabilityDailyTable
+            days={days}
+            threshold={summary.alertThreshold}
+          />
         </>
       )}
     </div>
@@ -13713,7 +15064,10 @@ function ScoreStabilityDailyTable({
   threshold: number;
 }) {
   return (
-    <table className="w-full mt-2 text-[10px] border-collapse" data-testid="score-stability-daily-table">
+    <table
+      className="w-full mt-2 text-[10px] border-collapse"
+      data-testid="score-stability-daily-table"
+    >
       <thead>
         <tr className="text-muted-foreground/70 uppercase tracking-wider">
           <th className="text-left font-normal py-1">Day</th>
@@ -13761,11 +15115,7 @@ function ScoreStabilityDailyTable({
 // running with SHADOW_SCORING_ENABLED unset, `report.enabled` is false
 // and the panel surfaces the "shadow mode is OFF" hint so reviewers
 // don't read an empty list as "no regressions".
-function ShadowDriftPanel({
-  authState,
-}: {
-  authState: CalibrationAuthState;
-}) {
+function ShadowDriftPanel({ authState }: { authState: CalibrationAuthState }) {
   const enabled = authState.kind === "valid";
   const queryKey = getGetShadowDriftQueryKey();
   const { data, isLoading, isError } = useGetShadowDrift(undefined, {
@@ -13867,8 +15217,8 @@ function ShadowDriftPanel({
           </div>
           {report.rows.length === 0 ? (
             <div className="text-[11px] text-muted-foreground/60 italic px-3 py-2 rounded-md border border-dashed border-border/40">
-              No divergent rows in this window — shadow scores match live
-              within ±{report.scoreDeltaThreshold} points and the same tier.
+              No divergent rows in this window — shadow scores match live within
+              ±{report.scoreDeltaThreshold} points and the same tier.
             </div>
           ) : (
             <ShadowDriftTable rows={report.rows} />
@@ -13950,7 +15300,9 @@ function ShadowDriftTable({ rows }: { rows: ShadowDriftRow[] }) {
                 </td>
                 <td className="text-right tabular-nums">{r.liveScore}</td>
                 <td className="text-right tabular-nums">{r.shadowScore}</td>
-                <td className={cn("text-right tabular-nums font-bold", deltaCls)}>
+                <td
+                  className={cn("text-right tabular-nums font-bold", deltaCls)}
+                >
                   {r.scoreDiff > 0 ? `+${r.scoreDiff}` : r.scoreDiff}
                 </td>
                 <td className="pl-2">{r.liveTier}</td>
@@ -14123,9 +15475,15 @@ function SchedulerStatusContent({
     };
   }
 
-  const lastAgo = status.lastTickAt ? formatRelativeAgo(status.lastTickAt, now) : null;
-  const nextIn = status.nextTickAt ? formatRelativeUntil(status.nextTickAt, now) : null;
-  const startedAgo = status.startedAt ? formatRelativeAgo(status.startedAt, now) : null;
+  const lastAgo = status.lastTickAt
+    ? formatRelativeAgo(status.lastTickAt, now)
+    : null;
+  const nextIn = status.nextTickAt
+    ? formatRelativeUntil(status.nextTickAt, now)
+    : null;
+  const startedAgo = status.startedAt
+    ? formatRelativeAgo(status.startedAt, now)
+    : null;
   const heartbeatAgo = status.heartbeatAt
     ? formatRelativeAgo(status.heartbeatAt, now)
     : null;
@@ -14176,12 +15534,16 @@ function SchedulerStatusContent({
         </div>
       </div>
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <Badge variant="outline" className={cn("text-[10px] gap-1", headline.color)}>
+        <Badge
+          variant="outline"
+          className={cn("text-[10px] gap-1", headline.color)}
+        >
           {headline.icon}
           {headline.label}
         </Badge>
         <span className="text-[10px] text-muted-foreground/70 tabular-nums">
-          {status.ticksCompleted} tick{status.ticksCompleted === 1 ? "" : "s"} completed
+          {status.ticksCompleted} tick{status.ticksCompleted === 1 ? "" : "s"}{" "}
+          completed
         </span>
       </div>
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -14193,7 +15555,10 @@ function SchedulerStatusContent({
                 <span className="tabular-nums" title={status.lastTickAt}>
                   {lastAgo ?? status.lastTickAt}
                 </span>
-                <span className="text-muted-foreground/60"> · {lastDetail}</span>
+                <span className="text-muted-foreground/60">
+                  {" "}
+                  · {lastDetail}
+                </span>
               </>
             ) : (
               <span className="text-muted-foreground/60">never</span>
@@ -14236,8 +15601,8 @@ function SchedulerStatusContent({
       {status.schedulerStarted && !status.webhookConfigured && (
         <p className="text-[10px] text-muted-foreground/60 italic leading-relaxed">
           Set <code className="font-mono">AVRI_DRIFT_WEBHOOK_URL</code> on the
-          server to enable webhook dispatch — until then the scheduler ticks
-          but skips the database scan.
+          server to enable webhook dispatch — until then the scheduler ticks but
+          skips the database scan.
         </p>
       )}
     </div>
@@ -14278,7 +15643,9 @@ function NotifiedFlagsPanel({
   cooldownSecondsRemaining,
 }: {
   authState: CalibrationAuthState;
-  notificationsQueryKey: ReturnType<typeof getGetAvriDriftNotificationsQueryKey>;
+  notificationsQueryKey: ReturnType<
+    typeof getGetAvriDriftNotificationsQueryKey
+  >;
   driftReportQueryKey: ReturnType<typeof getGetAvriDriftReportQueryKey>;
   // Invalidated alongside the dedup snapshot whenever a re-arm
   // completes so the "Recently re-armed" sibling panel updates
@@ -14296,7 +15663,9 @@ function NotifiedFlagsPanel({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [bulkBusy, setBulkBusy] = useState(false);
   // Per-row "Re-arm with note…" popover state. Only one popover is open at
   // a time. Drafts are kept per key so closing/reopening preserves the
@@ -14326,17 +15695,21 @@ function NotifiedFlagsPanel({
   // build is shipping a valid token; everything else gets a static
   // explainer instead of a load error.
   const enabled = authState.kind === "valid";
-  const { data: liveData, isLoading, isError, refetch } =
-    useGetAvriDriftNotifications({
-      query: {
-        queryKey: notificationsQueryKey,
-        // Pause polling while the cooldown is ticking so a refetch can't
-        // race the per-second countdown re-render and flash the rows empty.
-        refetchInterval: cooldownActive ? false : 300_000,
-        enabled,
-        retry: 1,
-      },
-    });
+  const {
+    data: liveData,
+    isLoading,
+    isError,
+    refetch,
+  } = useGetAvriDriftNotifications({
+    query: {
+      queryKey: notificationsQueryKey,
+      // Pause polling while the cooldown is ticking so a refetch can't
+      // race the per-second countdown re-render and flash the rows empty.
+      refetchInterval: cooldownActive ? false : 300_000,
+      enabled,
+      retry: 1,
+    },
+  });
 
   // Hold the last successful payload so the rows the reviewer was looking
   // at stay on screen for the duration of any active cooldown, even if a
@@ -14356,8 +15729,7 @@ function NotifiedFlagsPanel({
   // snapshot visible until the response settles — that way an empty
   // payload that landed during the cooldown can't briefly paint the
   // empty placeholder right at the moment the cooldown ends.
-  const [postCooldownRefetching, setPostCooldownRefetching] =
-    useState(false);
+  const [postCooldownRefetching, setPostCooldownRefetching] = useState(false);
   const prevCooldownActiveRef = useRef(cooldownActive);
   useEffect(() => {
     if (prevCooldownActiveRef.current && !cooldownActive && enabled) {
@@ -14371,8 +15743,7 @@ function NotifiedFlagsPanel({
   // post-cooldown useEffect sets `postCooldownRefetching = true`; treat
   // that single render as still-pinned so the panel can't briefly paint
   // an empty payload that landed during the cooldown right at the edge.
-  const cooldownJustCleared =
-    prevCooldownActiveRef.current && !cooldownActive;
+  const cooldownJustCleared = prevCooldownActiveRef.current && !cooldownActive;
   const useFallback =
     (cooldownActive || cooldownJustCleared || postCooldownRefetching) &&
     Boolean(lastDataRef.current);
@@ -14626,8 +15997,13 @@ function NotifiedFlagsPanel({
         queryClient.invalidateQueries({ queryKey: rearmHistoryQueryKey });
         await refetch();
       } else {
-        const msg = err instanceof Error ? err.message : "Failed to re-arm flag.";
-        toast({ title: "Re-arm failed", description: msg, variant: "destructive" });
+        const msg =
+          err instanceof Error ? err.message : "Failed to re-arm flag.";
+        toast({
+          title: "Re-arm failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setBusyKey(null);
@@ -14713,7 +16089,9 @@ function NotifiedFlagsPanel({
         await refetch();
       } else {
         const msg =
-          err instanceof Error ? err.message : "Failed to re-arm selected flags.";
+          err instanceof Error
+            ? err.message
+            : "Failed to re-arm selected flags.";
         toast({
           title: "Bulk re-arm failed",
           description: msg,
@@ -14729,353 +16107,362 @@ function NotifiedFlagsPanel({
 
   return (
     <>
-    <div className="space-y-2">
-      {selectedCount > 0 && (
-        <div
-          className="flex flex-wrap items-center gap-2 px-2.5 py-2 rounded-md border border-primary/40 bg-primary/[0.06] text-[11px]"
-          data-testid="notified-flags-bulk-bar"
-        >
-          <span className="text-foreground/80">
-            <span className="font-semibold tabular-nums">{selectedCount}</span>{" "}
-            selected
-          </span>
-          {overCap && (
-            <span
-              className="text-amber-400 flex items-center gap-1"
-              data-testid="notified-flags-bulk-over-cap"
-            >
-              <AlertTriangle className="w-3 h-3" />
-              Capped at {BULK_REARM_CAP} per request — untick some entries.
+      <div className="space-y-2">
+        {selectedCount > 0 && (
+          <div
+            className="flex flex-wrap items-center gap-2 px-2.5 py-2 rounded-md border border-primary/40 bg-primary/[0.06] text-[11px]"
+            data-testid="notified-flags-bulk-bar"
+          >
+            <span className="text-foreground/80">
+              <span className="font-semibold tabular-nums">
+                {selectedCount}
+              </span>{" "}
+              selected
             </span>
-          )}
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-[11px]"
-              onClick={clearSelection}
-              disabled={bulkBusy}
-              data-testid="notified-flags-bulk-clear"
-            >
-              Clear selection
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="default"
-              className="h-7 px-2.5 text-[11px] gap-1"
-              disabled={
-                bulkBusy ||
-                busyKey !== null ||
-                overCap ||
-                !authState.mutationsAllowed ||
-                cooldownActive
-              }
-              onClick={requestBulkRearm}
-              data-cooldown-active={cooldownActive ? "true" : "false"}
-              title={
-                cooldownActive
-                  ? `Calibration cooldown active — wait ${Math.max(1, cooldownSecondsRemaining)}s before retrying re-arm.`
-                  : authState.mutationsAllowed
-                    ? "Re-arm every ticked entry in a single request."
-                    : "A valid reviewer token is required to re-arm flags."
-              }
-              data-testid="notified-flags-bulk-rearm"
-            >
-              <RotateCcw className="w-3 h-3" />
-              {cooldownActive
-                ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
-                : bulkBusy
-                  ? "Re-arming…"
-                  : `Re-arm selected (${selectedCount})`}
-            </Button>
+            {overCap && (
+              <span
+                className="text-amber-400 flex items-center gap-1"
+                data-testid="notified-flags-bulk-over-cap"
+              >
+                <AlertTriangle className="w-3 h-3" />
+                Capped at {BULK_REARM_CAP} per request — untick some entries.
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[11px]"
+                onClick={clearSelection}
+                disabled={bulkBusy}
+                data-testid="notified-flags-bulk-clear"
+              >
+                Clear selection
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                className="h-7 px-2.5 text-[11px] gap-1"
+                disabled={
+                  bulkBusy ||
+                  busyKey !== null ||
+                  overCap ||
+                  !authState.mutationsAllowed ||
+                  cooldownActive
+                }
+                onClick={requestBulkRearm}
+                data-cooldown-active={cooldownActive ? "true" : "false"}
+                title={
+                  cooldownActive
+                    ? `Calibration cooldown active — wait ${Math.max(1, cooldownSecondsRemaining)}s before retrying re-arm.`
+                    : authState.mutationsAllowed
+                      ? "Re-arm every ticked entry in a single request."
+                      : "A valid reviewer token is required to re-arm flags."
+                }
+                data-testid="notified-flags-bulk-rearm"
+              >
+                <RotateCcw className="w-3 h-3" />
+                {cooldownActive
+                  ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
+                  : bulkBusy
+                    ? "Re-arming…"
+                    : `Re-arm selected (${selectedCount})`}
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
-      {/* Task #406 — master checkbox above the list. Mirrors the
+        )}
+        {/* Task #406 — master checkbox above the list. Mirrors the
           select-all affordance in the hand-wavy phrase audit panel so
           reviewers working through a long backlog (e.g. after a
           webhook outage) can tick every visible row in one click. The
           indeterminate state is set imperatively via a ref because
           HTML doesn't expose `indeterminate` as a JSX attribute. */}
-      <div
-        className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted-foreground"
-        data-testid="notified-flags-select-all-row"
-      >
-        <input
-          type="checkbox"
-          className="h-3.5 w-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
-          checked={allSelected}
-          ref={(el) => {
-            if (el) el.indeterminate = someSelected;
-          }}
-          onChange={toggleSelectAll}
-          disabled={bulkBusy || busyKey !== null}
-          aria-label={
-            allSelected
-              ? "Deselect all notified flags"
-              : "Select all notified flags"
-          }
-          aria-checked={
-            someSelected ? "mixed" : allSelected ? "true" : "false"
-          }
-          data-testid="notified-flags-select-all"
-        />
-        <span>
-          {selectedCount > 0
-            ? `${selectedCount} of ${sorted.length} selected`
-            : `Select all ${sorted.length} notified flag${sorted.length === 1 ? "" : "s"}`}
-        </span>
-      </div>
-      <ul className="space-y-1.5">
-        {sorted.map((record) => {
-          const isBusy = busyKey === record.key;
-          const isSelected = selectedKeys.has(record.key);
-          const notifiedAt = new Date(record.notifiedAt);
-          const notifiedAtLabel = Number.isFinite(notifiedAt.getTime())
-            ? notifiedAt.toISOString().replace("T", " ").slice(0, 16) + "Z"
-            : record.notifiedAt;
-          const kindLabel =
-            record.kind === "GAP_BELOW_45" ? "Gap < threshold" : "Family shift";
-          const kindColor =
-            record.kind === "GAP_BELOW_45"
-              ? "text-red-400 bg-red-400/10 border-red-400/30"
-              : "text-orange-400 bg-orange-400/10 border-orange-400/30";
-          const isNoteOpen = liveOpenNoteKey === record.key;
-          const noteDraft = noteDrafts.get(record.key) ?? "";
-          const trimmedNoteDraft = noteDraft.trim();
-          const noteTextareaId = `notified-flag-note-${record.key}`;
-          return (
-            <li
-              key={record.key}
-              className="text-xs p-2 rounded-md border border-border/40 bg-muted/[0.03] space-y-2"
-            >
-              <div className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-3.5 w-3.5 cursor-pointer shrink-0"
-                  checked={isSelected}
-                  onChange={() => toggleSelected(record.key)}
-                  disabled={bulkBusy || isBusy}
-                  aria-label={`Select drift flag ${record.detail}`}
-                  data-testid={`notified-flag-checkbox-${record.key}`}
-                />
-                <Badge
-                  variant="outline"
-                  className={cn("text-[10px] gap-1 font-mono shrink-0", kindColor)}
-                >
-                  <AlertTriangle className="w-3 h-3" /> {kindLabel}
-                </Badge>
-                <div className="flex-1 min-w-0 space-y-0.5">
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70 font-mono">
-                    <span>week {record.weekStart}</span>
-                    <span className="text-muted-foreground/40">·</span>
-                    <span title={record.notifiedAt}>notified {notifiedAtLabel}</span>
-                  </div>
-                  <div className="text-foreground/80 leading-relaxed break-words">
-                    {record.detail}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground/40 font-mono break-all">
-                    key: {record.key}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    type="button"
-                    size="sm"
+        <div
+          className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted-foreground"
+          data-testid="notified-flags-select-all-row"
+        >
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
+            checked={allSelected}
+            ref={(el) => {
+              if (el) el.indeterminate = someSelected;
+            }}
+            onChange={toggleSelectAll}
+            disabled={bulkBusy || busyKey !== null}
+            aria-label={
+              allSelected
+                ? "Deselect all notified flags"
+                : "Select all notified flags"
+            }
+            aria-checked={
+              someSelected ? "mixed" : allSelected ? "true" : "false"
+            }
+            data-testid="notified-flags-select-all"
+          />
+          <span>
+            {selectedCount > 0
+              ? `${selectedCount} of ${sorted.length} selected`
+              : `Select all ${sorted.length} notified flag${sorted.length === 1 ? "" : "s"}`}
+          </span>
+        </div>
+        <ul className="space-y-1.5">
+          {sorted.map((record) => {
+            const isBusy = busyKey === record.key;
+            const isSelected = selectedKeys.has(record.key);
+            const notifiedAt = new Date(record.notifiedAt);
+            const notifiedAtLabel = Number.isFinite(notifiedAt.getTime())
+              ? notifiedAt.toISOString().replace("T", " ").slice(0, 16) + "Z"
+              : record.notifiedAt;
+            const kindLabel =
+              record.kind === "GAP_BELOW_45"
+                ? "Gap < threshold"
+                : "Family shift";
+            const kindColor =
+              record.kind === "GAP_BELOW_45"
+                ? "text-red-400 bg-red-400/10 border-red-400/30"
+                : "text-orange-400 bg-orange-400/10 border-orange-400/30";
+            const isNoteOpen = liveOpenNoteKey === record.key;
+            const noteDraft = noteDrafts.get(record.key) ?? "";
+            const trimmedNoteDraft = noteDraft.trim();
+            const noteTextareaId = `notified-flag-note-${record.key}`;
+            return (
+              <li
+                key={record.key}
+                className="text-xs p-2 rounded-md border border-border/40 bg-muted/[0.03] space-y-2"
+              >
+                <div className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-3.5 w-3.5 cursor-pointer shrink-0"
+                    checked={isSelected}
+                    onChange={() => toggleSelected(record.key)}
+                    disabled={bulkBusy || isBusy}
+                    aria-label={`Select drift flag ${record.detail}`}
+                    data-testid={`notified-flag-checkbox-${record.key}`}
+                  />
+                  <Badge
                     variant="outline"
-                    className="h-7 px-2 text-[11px] gap-1 shrink-0"
-                    disabled={
-                      isBusy ||
-                      bulkBusy ||
-                      !authState.mutationsAllowed ||
-                      cooldownActive
-                    }
-                    onClick={() => handleRearm(record)}
-                    data-testid="avri-drift-rearm-button"
-                    data-cooldown-active={cooldownActive ? "true" : "false"}
-                    title={
-                      cooldownActive
-                        ? `Calibration cooldown active — wait ${Math.max(1, cooldownSecondsRemaining)}s before retrying re-arm.`
-                        : authState.mutationsAllowed
-                          ? "Remove this entry from the dedup state so the flag re-pages reviewers on the next dispatch run."
-                          : "A valid reviewer token is required to re-arm flags."
-                    }
+                    className={cn(
+                      "text-[10px] gap-1 font-mono shrink-0",
+                      kindColor,
+                    )}
                   >
-                    <RotateCcw className="w-3 h-3" />
-                    {cooldownActive
-                      ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
-                      : isBusy
-                        ? "Re-arming…"
-                        : "Re-arm"}
-                  </Button>
-                  {/* Trigger stays available during the wrong-token cooldown
+                    <AlertTriangle className="w-3 h-3" /> {kindLabel}
+                  </Badge>
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70 font-mono">
+                      <span>week {record.weekStart}</span>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span title={record.notifiedAt}>
+                        notified {notifiedAtLabel}
+                      </span>
+                    </div>
+                    <div className="text-foreground/80 leading-relaxed break-words">
+                      {record.detail}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground/40 font-mono break-all">
+                      key: {record.key}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-[11px] gap-1 shrink-0"
+                      disabled={
+                        isBusy ||
+                        bulkBusy ||
+                        !authState.mutationsAllowed ||
+                        cooldownActive
+                      }
+                      onClick={() => handleRearm(record)}
+                      data-testid="avri-drift-rearm-button"
+                      data-cooldown-active={cooldownActive ? "true" : "false"}
+                      title={
+                        cooldownActive
+                          ? `Calibration cooldown active — wait ${Math.max(1, cooldownSecondsRemaining)}s before retrying re-arm.`
+                          : authState.mutationsAllowed
+                            ? "Remove this entry from the dedup state so the flag re-pages reviewers on the next dispatch run."
+                            : "A valid reviewer token is required to re-arm flags."
+                      }
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      {cooldownActive
+                        ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
+                        : isBusy
+                          ? "Re-arming…"
+                          : "Re-arm"}
+                    </Button>
+                    {/* Trigger stays available during the wrong-token cooldown
                       so the reviewer can pre-stage a note while the bucket
                       drains — the popover's submit button is disabled in
                       lock-step with the always-visible Re-arm above. */}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 text-[11px] gap-1 shrink-0"
-                    disabled={
-                      isBusy ||
-                      bulkBusy ||
-                      !authState.mutationsAllowed
-                    }
-                    onClick={() => toggleNotePopover(record.key)}
-                    aria-expanded={isNoteOpen}
-                    aria-controls={isNoteOpen ? noteTextareaId : undefined}
-                    data-testid="avri-drift-rearm-note-toggle"
-                    title={
-                      authState.mutationsAllowed
-                        ? "Re-arm this entry with a one-off rationale, separate from the shared field above."
-                        : "A valid reviewer token is required to re-arm flags."
-                    }
-                  >
-                    <Pencil className="w-3 h-3" />
-                    {isNoteOpen ? "Cancel note" : "Re-arm with note…"}
-                  </Button>
-                </div>
-              </div>
-              {isNoteOpen && (
-                <div
-                  className="ml-7 p-2 rounded-md border border-primary/30 bg-primary/[0.04] space-y-2"
-                  data-testid="avri-drift-rearm-note-popover"
-                >
-                  <label
-                    htmlFor={noteTextareaId}
-                    className="block text-[10px] uppercase tracking-wider text-muted-foreground"
-                  >
-                    One-off rationale for this row
-                    <span className="ml-1 text-muted-foreground/50 normal-case tracking-normal">
-                      (overrides the shared field for this re-arm only)
-                    </span>
-                  </label>
-                  <textarea
-                    id={noteTextareaId}
-                    value={noteDraft}
-                    onChange={(e) => setNoteDraft(record.key, e.target.value)}
-                    placeholder="Why is this flag being re-armed? (e.g. 'fix-by date passed, still seeing drift')"
-                    maxLength={500}
-                    rows={2}
-                    className="w-full px-2 py-1.5 rounded-md border border-border/40 bg-background/40 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y"
-                    aria-label="One-off rationale for this re-arm"
-                    data-testid="avri-drift-rearm-note-textarea"
-                  />
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className="text-[10px] text-muted-foreground/60 tabular-nums"
-                      data-testid="avri-drift-rearm-note-charcount"
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-[11px] gap-1 shrink-0"
+                      disabled={
+                        isBusy || bulkBusy || !authState.mutationsAllowed
+                      }
+                      onClick={() => toggleNotePopover(record.key)}
+                      aria-expanded={isNoteOpen}
+                      aria-controls={isNoteOpen ? noteTextareaId : undefined}
+                      data-testid="avri-drift-rearm-note-toggle"
+                      title={
+                        authState.mutationsAllowed
+                          ? "Re-arm this entry with a one-off rationale, separate from the shared field above."
+                          : "A valid reviewer token is required to re-arm flags."
+                      }
                     >
-                      {noteDraft.length}/500
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-[11px]"
-                        onClick={() => closeNotePopover(record.key)}
-                        disabled={isBusy}
-                        data-testid="avri-drift-rearm-note-cancel"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="default"
-                        className="h-7 px-2.5 text-[11px] gap-1"
-                        disabled={
-                          isBusy ||
-                          bulkBusy ||
-                          !authState.mutationsAllowed ||
-                          cooldownActive ||
-                          trimmedNoteDraft.length === 0
-                        }
-                        onClick={() => handleRearm(record, noteDraft)}
-                        data-cooldown-active={cooldownActive ? "true" : "false"}
-                        data-testid="avri-drift-rearm-note-submit"
-                        title={
-                          cooldownActive
-                            ? `Calibration cooldown active — wait ${Math.max(1, cooldownSecondsRemaining)}s before retrying re-arm.`
-                            : trimmedNoteDraft.length === 0
-                              ? "Type a rationale before re-arming with a note. Use the regular Re-arm button to send no rationale."
-                              : "Re-arm this entry with the note above. The shared rationale field is ignored for this submit."
-                        }
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        {cooldownActive
-                          ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
-                          : isBusy
-                            ? "Re-arming…"
-                            : "Re-arm with note"}
-                      </Button>
-                    </div>
+                      <Pencil className="w-3 h-3" />
+                      {isNoteOpen ? "Cancel note" : "Re-arm with note…"}
+                    </Button>
                   </div>
                 </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-    {/* Confirm before re-arming a large batch — opened by
+                {isNoteOpen && (
+                  <div
+                    className="ml-7 p-2 rounded-md border border-primary/30 bg-primary/[0.04] space-y-2"
+                    data-testid="avri-drift-rearm-note-popover"
+                  >
+                    <label
+                      htmlFor={noteTextareaId}
+                      className="block text-[10px] uppercase tracking-wider text-muted-foreground"
+                    >
+                      One-off rationale for this row
+                      <span className="ml-1 text-muted-foreground/50 normal-case tracking-normal">
+                        (overrides the shared field for this re-arm only)
+                      </span>
+                    </label>
+                    <textarea
+                      id={noteTextareaId}
+                      value={noteDraft}
+                      onChange={(e) => setNoteDraft(record.key, e.target.value)}
+                      placeholder="Why is this flag being re-armed? (e.g. 'fix-by date passed, still seeing drift')"
+                      maxLength={500}
+                      rows={2}
+                      className="w-full px-2 py-1.5 rounded-md border border-border/40 bg-background/40 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y"
+                      aria-label="One-off rationale for this re-arm"
+                      data-testid="avri-drift-rearm-note-textarea"
+                    />
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className="text-[10px] text-muted-foreground/60 tabular-nums"
+                        data-testid="avri-drift-rearm-note-charcount"
+                      >
+                        {noteDraft.length}/500
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-[11px]"
+                          onClick={() => closeNotePopover(record.key)}
+                          disabled={isBusy}
+                          data-testid="avri-drift-rearm-note-cancel"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          className="h-7 px-2.5 text-[11px] gap-1"
+                          disabled={
+                            isBusy ||
+                            bulkBusy ||
+                            !authState.mutationsAllowed ||
+                            cooldownActive ||
+                            trimmedNoteDraft.length === 0
+                          }
+                          onClick={() => handleRearm(record, noteDraft)}
+                          data-cooldown-active={
+                            cooldownActive ? "true" : "false"
+                          }
+                          data-testid="avri-drift-rearm-note-submit"
+                          title={
+                            cooldownActive
+                              ? `Calibration cooldown active — wait ${Math.max(1, cooldownSecondsRemaining)}s before retrying re-arm.`
+                              : trimmedNoteDraft.length === 0
+                                ? "Type a rationale before re-arming with a note. Use the regular Re-arm button to send no rationale."
+                                : "Re-arm this entry with the note above. The shared rationale field is ignored for this submit."
+                          }
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          {cooldownActive
+                            ? `Cooldown — ${Math.max(1, cooldownSecondsRemaining)}s`
+                            : isBusy
+                              ? "Re-arming…"
+                              : "Re-arm with note"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      {/* Confirm before re-arming a large batch — opened by
         requestBulkRearm when the selection exceeds
         BULK_REARM_CONFIRM_THRESHOLD. Cancel sends nothing; only the
         explicit "Re-arm N flags" button POSTs. */}
-    <AlertDialog
-      open={bulkConfirm !== null}
-      onOpenChange={(open) => {
-        if (!open) setBulkConfirm(null);
-      }}
-    >
-      <AlertDialogContent data-testid="notified-flags-bulk-rearm-confirm">
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            {bulkConfirm
-              ? `Re-arm ${bulkConfirmCount} drift flag${bulkConfirmCount === 1 ? "" : "s"}?`
-              : "Re-arm selected drift flags?"}
-          </AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-2">
-              <div>
-                Re-arming <strong>{bulkConfirmCount}</strong> previously-notified
-                drift flag{bulkConfirmCount === 1 ? "" : "s"} clears their
-                dedup entries so they{" "}
-                <strong>
-                  fire again on the next dispatch run
-                </strong>
-                . Each re-arm is recorded in the audit log.
+      <AlertDialog
+        open={bulkConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setBulkConfirm(null);
+        }}
+      >
+        <AlertDialogContent data-testid="notified-flags-bulk-rearm-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkConfirm
+                ? `Re-arm ${bulkConfirmCount} drift flag${bulkConfirmCount === 1 ? "" : "s"}?`
+                : "Re-arm selected drift flags?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <div>
+                  Re-arming <strong>{bulkConfirmCount}</strong>{" "}
+                  previously-notified drift flag
+                  {bulkConfirmCount === 1 ? "" : "s"} clears their dedup entries
+                  so they <strong>fire again on the next dispatch run</strong>.
+                  Each re-arm is recorded in the audit log.
+                </div>
+                <div className="text-xs italic">
+                  Cancel leaves the selection untouched and sends nothing.
+                </div>
               </div>
-              <div className="text-xs italic">
-                Cancel leaves the selection untouched and sends nothing.
-              </div>
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel data-testid="notified-flags-bulk-rearm-confirm-cancel">
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            data-testid="notified-flags-bulk-rearm-confirm-confirm"
-            disabled={bulkBusy || !authState.mutationsAllowed || cooldownActive}
-            onClick={() => {
-              if (!bulkConfirm) return;
-              const keys = bulkConfirm.keys;
-              setBulkConfirm(null);
-              void handleBulkRearm(keys);
-            }}
-          >
-            <RotateCcw className="w-3 h-3 mr-1" />
-            Re-arm {bulkConfirmCount} flag{bulkConfirmCount === 1 ? "" : "s"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="notified-flags-bulk-rearm-confirm-cancel">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="notified-flags-bulk-rearm-confirm-confirm"
+              disabled={
+                bulkBusy || !authState.mutationsAllowed || cooldownActive
+              }
+              onClick={() => {
+                if (!bulkConfirm) return;
+                const keys = bulkConfirm.keys;
+                setBulkConfirm(null);
+                void handleBulkRearm(keys);
+              }}
+            >
+              <RotateCcw className="w-3 h-3 mr-1" />
+              Re-arm {bulkConfirmCount} flag{bulkConfirmCount === 1 ? "" : "s"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -15094,7 +16481,9 @@ function escapeCsvField(value: string | undefined): string {
   return value;
 }
 
-export function buildRearmHistoryCsv(entries: AvriDriftRearmAuditEntry[]): string {
+export function buildRearmHistoryCsv(
+  entries: AvriDriftRearmAuditEntry[],
+): string {
   const header = [
     "rearmedAt",
     "rearmedBy",
@@ -15105,7 +16494,7 @@ export function buildRearmHistoryCsv(entries: AvriDriftRearmAuditEntry[]): strin
     "originalNotifiedAt",
     "originalDetail",
   ].join(",");
-  const rows = entries.map(e =>
+  const rows = entries.map((e) =>
     [
       e.rearmedAt,
       e.rearmedBy,
@@ -15256,8 +16645,8 @@ function RearmHistoryPanel({
           className="text-[11px] text-muted-foreground/60 italic"
           data-testid="avri-drift-rearm-history-filter-empty"
         >
-          No re-arm entries recorded for week {weekFilter} — the audit log
-          may have already trimmed them.
+          No re-arm entries recorded for week {weekFilter} — the audit log may
+          have already trimmed them.
         </p>
       </div>
     );
@@ -15268,75 +16657,99 @@ function RearmHistoryPanel({
       {csvButton}
       {filterChip}
       <ul className="space-y-1.5">
-      {visible.map((entry, idx) => {
-        const rearmedAt = new Date(entry.rearmedAt);
-        const rearmedAtLabel = Number.isFinite(rearmedAt.getTime())
-          ? rearmedAt.toISOString().replace("T", " ").slice(0, 16) + "Z"
-          : entry.rearmedAt;
-        const kindLabel =
-          entry.kind === "GAP_BELOW_45" ? "Gap < threshold" : "Family shift";
-        const kindColor =
-          entry.kind === "GAP_BELOW_45"
-            ? "text-red-400/80 bg-red-400/5 border-red-400/20"
-            : "text-orange-400/80 bg-orange-400/5 border-orange-400/20";
-        return (
-          <li
-            // The audit log can in principle hold duplicate (key,rearmedAt)
-            // pairs (a reviewer rapidly re-arming the same key after a
-            // re-fire), so include the index in the React key to stay safe.
-            key={`${entry.key}|${entry.rearmedAt}|${idx}`}
-            className="flex items-start gap-2 text-xs p-2 rounded-md border border-border/30 bg-muted/[0.02]"
-          >
-            <Badge
-              variant="outline"
-              className={cn("text-[10px] gap-1 font-mono shrink-0", kindColor)}
+        {visible.map((entry, idx) => {
+          const rearmedAt = new Date(entry.rearmedAt);
+          const rearmedAtLabel = Number.isFinite(rearmedAt.getTime())
+            ? rearmedAt.toISOString().replace("T", " ").slice(0, 16) + "Z"
+            : entry.rearmedAt;
+          const kindLabel =
+            entry.kind === "GAP_BELOW_45" ? "Gap < threshold" : "Family shift";
+          const kindColor =
+            entry.kind === "GAP_BELOW_45"
+              ? "text-red-400/80 bg-red-400/5 border-red-400/20"
+              : "text-orange-400/80 bg-orange-400/5 border-orange-400/20";
+          return (
+            <li
+              // The audit log can in principle hold duplicate (key,rearmedAt)
+              // pairs (a reviewer rapidly re-arming the same key after a
+              // re-fire), so include the index in the React key to stay safe.
+              key={`${entry.key}|${entry.rearmedAt}|${idx}`}
+              className="flex items-start gap-2 text-xs p-2 rounded-md border border-border/30 bg-muted/[0.02]"
             >
-              <RotateCcw className="w-3 h-3" /> {kindLabel}
-            </Badge>
-            <div className="flex-1 min-w-0 space-y-0.5">
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70 font-mono flex-wrap">
-                <span title={entry.rearmedAt}>re-armed {rearmedAtLabel}</span>
-                <span className="text-muted-foreground/40">·</span>
-                <span>week {entry.weekStart}</span>
-                {entry.rearmedBy && (
-                  <>
-                    <span className="text-muted-foreground/40">·</span>
-                    <span className="text-foreground/70">by {entry.rearmedBy}</span>
-                  </>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] gap-1 font-mono shrink-0",
+                  kindColor,
                 )}
-              </div>
-              <div className="text-foreground/70 leading-relaxed break-words text-[11px]">
-                {entry.originalDetail}
-              </div>
-              {entry.rationale && (
-                <div className="text-[11px] text-muted-foreground/80 italic leading-relaxed break-words">
-                  “{entry.rationale}”
+              >
+                <RotateCcw className="w-3 h-3" /> {kindLabel}
+              </Badge>
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70 font-mono flex-wrap">
+                  <span title={entry.rearmedAt}>re-armed {rearmedAtLabel}</span>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>week {entry.weekStart}</span>
+                  {entry.rearmedBy && (
+                    <>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="text-foreground/70">
+                        by {entry.rearmedBy}
+                      </span>
+                    </>
+                  )}
                 </div>
-              )}
-              <div className="text-[10px] text-muted-foreground/40 font-mono break-all">
-                key: {entry.key}
+                <div className="text-foreground/70 leading-relaxed break-words text-[11px]">
+                  {entry.originalDetail}
+                </div>
+                {entry.rationale && (
+                  <div className="text-[11px] text-muted-foreground/80 italic leading-relaxed break-words">
+                    “{entry.rationale}”
+                  </div>
+                )}
+                <div className="text-[10px] text-muted-foreground/40 font-mono break-all">
+                  key: {entry.key}
+                </div>
               </div>
-            </div>
-          </li>
-        );
-      })}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
 }
 
-function FamilyMeansTable({ rows, bucket }: { rows: AvriDriftFamilyMean[]; bucket: "T1" | "T3" }) {
+function FamilyMeansTable({
+  rows,
+  bucket,
+}: {
+  rows: AvriDriftFamilyMean[];
+  bucket: "T1" | "T3";
+}) {
   if (rows.length === 0) {
-    return <p className="text-[10px] text-muted-foreground/40 italic">No {bucket} reports this week</p>;
+    return (
+      <p className="text-[10px] text-muted-foreground/40 italic">
+        No {bucket} reports this week
+      </p>
+    );
   }
   return (
     <div className="space-y-1">
-      {rows.map(r => (
-        <div key={`${bucket}-${r.family}`} className="flex items-center justify-between gap-2 text-[11px]">
-          <span className="font-mono text-muted-foreground truncate">{r.family}</span>
+      {rows.map((r) => (
+        <div
+          key={`${bucket}-${r.family}`}
+          className="flex items-center justify-between gap-2 text-[11px]"
+        >
+          <span className="font-mono text-muted-foreground truncate">
+            {r.family}
+          </span>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="tabular-nums text-foreground/80">{r.mean.toFixed(1)}</span>
-            <span className="text-muted-foreground/40 tabular-nums">n={r.count}</span>
+            <span className="tabular-nums text-foreground/80">
+              {r.mean.toFixed(1)}
+            </span>
+            <span className="text-muted-foreground/40 tabular-nums">
+              n={r.count}
+            </span>
           </div>
         </div>
       ))}
@@ -15350,17 +16763,19 @@ function EmergingArchetypesSection() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data, isLoading, isError, dataUpdatedAt } = useQuery<TestRunResponse>({
-    queryKey: ["test-run-archetypes"],
-    queryFn: async () => {
-      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const res = await fetch(`${baseUrl}/api/test/run`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+  const { data, isLoading, isError, dataUpdatedAt } = useQuery<TestRunResponse>(
+    {
+      queryKey: ["test-run-archetypes"],
+      queryFn: async () => {
+        const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+        const res = await fetch(`${baseUrl}/api/test/run`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      },
+      refetchInterval: 300_000,
+      retry: false,
     },
-    refetchInterval: 300_000,
-    retry: false,
-  });
+  );
 
   // Invalidate the persisted-history query whenever a fresh /api/test/run
   // result lands so the new snapshot appears in the sparkline immediately,
@@ -15372,7 +16787,9 @@ function EmergingArchetypesSection() {
   useEffect(() => {
     if (data) {
       queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_QUERY_KEY });
-      queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_CONFIG_QUERY_KEY });
+      queryClient.invalidateQueries({
+        queryKey: ARCHETYPE_HISTORY_CONFIG_QUERY_KEY,
+      });
       // Task #263 — `/api/test/run` also appends to the dataset cohort
       // history file, so invalidate that query on the same beat. Without
       // this, the dataset cohort drift sparklines would stay stale until
@@ -15431,20 +16848,25 @@ function EmergingArchetypesSection() {
   const compactMax = configData?.max ?? 365;
   const compactDraftNum = Number(compactDraft);
   const compactDraftValid =
-    Number.isFinite(compactDraftNum)
-    && Number.isInteger(compactDraftNum)
-    && compactDraftNum >= compactMin
-    && compactDraftNum <= compactMax;
+    Number.isFinite(compactDraftNum) &&
+    Number.isInteger(compactDraftNum) &&
+    compactDraftNum >= compactMin &&
+    compactDraftNum <= compactMax;
   const compactDraftDirty =
-    configData != null && compactDraftValid && compactDraftNum !== configData.effectiveDays;
+    configData != null &&
+    compactDraftValid &&
+    compactDraftNum !== configData.effectiveDays;
   const envLocked = configData?.envOverride != null;
 
   async function saveCompactWindow() {
-    if (!compactDraftValid || compactSaving || compactResetting || envLocked) return;
+    if (!compactDraftValid || compactSaving || compactResetting || envLocked)
+      return;
     setCompactSaving(true);
     try {
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const headers: Record<string, string> = { "content-type": "application/json" };
+      const headers: Record<string, string> = {
+        "content-type": "application/json",
+      };
       const tok = getCalibrationToken();
       if (tok) headers["x-calibration-token"] = tok;
       const res = await fetch(`${baseUrl}/api/test/archetype-history/config`, {
@@ -15463,11 +16885,20 @@ function EmergingArchetypesSection() {
         title: "Compaction window updated",
         description: `Snapshots older than ${body.effectiveDays}d will be rolled up to one row per day on the next /api/test/run.`,
       });
-      queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_CONFIG_QUERY_KEY });
+      queryClient.invalidateQueries({
+        queryKey: ARCHETYPE_HISTORY_CONFIG_QUERY_KEY,
+      });
       queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_QUERY_KEY });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to update the compaction window.";
-      toast({ title: "Could not save", description: msg, variant: "destructive" });
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Failed to update the compaction window.";
+      toast({
+        title: "Could not save",
+        description: msg,
+        variant: "destructive",
+      });
     } finally {
       setCompactSaving(false);
     }
@@ -15502,11 +16933,20 @@ function EmergingArchetypesSection() {
         title: "Compaction window reset",
         description: `Reverted to the built-in default (${body.effectiveDays ?? body.defaultDays}d).`,
       });
-      queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_CONFIG_QUERY_KEY });
+      queryClient.invalidateQueries({
+        queryKey: ARCHETYPE_HISTORY_CONFIG_QUERY_KEY,
+      });
       queryClient.invalidateQueries({ queryKey: ARCHETYPE_HISTORY_QUERY_KEY });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to reset the compaction window.";
-      toast({ title: "Could not reset", description: msg, variant: "destructive" });
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Failed to reset the compaction window.";
+      toast({
+        title: "Could not reset",
+        description: msg,
+        variant: "destructive",
+      });
     } finally {
       setCompactResetting(false);
     }
@@ -15527,8 +16967,10 @@ function EmergingArchetypesSection() {
   for (const a of historyData?.archetypes ?? []) {
     historyByArchetype.set(a.archetype, a.snapshots);
   }
-  const tightCount = rows.filter(r => r.minDistanceToCeiling < threshold).length;
-  const shrinkingCount = rows.filter(r => {
+  const tightCount = rows.filter(
+    (r) => r.minDistanceToCeiling < threshold,
+  ).length;
+  const shrinkingCount = rows.filter((r) => {
     const h = historyByArchetype.get(r.archetype) ?? [];
     return h.length >= 2 && recentHeadroomDecline(h) >= declineThreshold;
   }).length;
@@ -15541,15 +16983,24 @@ function EmergingArchetypesSection() {
           <CardTitle className="text-base flex items-center gap-2">
             <Layers className="w-4 h-4 text-primary" />
             Emerging Slop Archetypes
-            <Badge variant="secondary" className="text-[10px]">{rows.length}</Badge>
+            <Badge variant="secondary" className="text-[10px]">
+              {rows.length}
+            </Badge>
             {tightCount > 0 && (
-              <Badge variant="outline" className="text-[10px] gap-1 text-red-400 bg-red-400/10 border-red-400/30">
+              <Badge
+                variant="outline"
+                className="text-[10px] gap-1 text-red-400 bg-red-400/10 border-red-400/30"
+              >
                 <AlertTriangle className="w-3 h-3" /> {tightCount} tight
               </Badge>
             )}
             {shrinkingCount > 0 && (
-              <Badge variant="outline" className="text-[10px] gap-1 text-orange-400 bg-orange-400/10 border-orange-400/30">
-                <TrendingUp className="w-3 h-3 rotate-180" /> {shrinkingCount} shrinking
+              <Badge
+                variant="outline"
+                className="text-[10px] gap-1 text-orange-400 bg-orange-400/10 border-orange-400/30"
+              >
+                <TrendingUp className="w-3 h-3 rotate-180" /> {shrinkingCount}{" "}
+                shrinking
               </Badge>
             )}
           </CardTitle>
@@ -15562,9 +17013,10 @@ function EmergingArchetypesSection() {
                 max={ceilingMax}
                 step={1}
                 value={threshold}
-                onChange={e => {
+                onChange={(e) => {
                   const v = Number(e.target.value);
-                  if (!Number.isNaN(v)) setThreshold(Math.max(0, Math.min(ceilingMax, v)));
+                  if (!Number.isNaN(v))
+                    setThreshold(Math.max(0, Math.min(ceilingMax, v)));
                 }}
                 className="w-14 px-2 py-1 rounded-md bg-background border border-border text-foreground tabular-nums text-xs"
               />
@@ -15578,9 +17030,10 @@ function EmergingArchetypesSection() {
                 max={ceilingMax}
                 step={1}
                 value={declineThreshold}
-                onChange={e => {
+                onChange={(e) => {
                   const v = Number(e.target.value);
-                  if (!Number.isNaN(v)) setDeclineThreshold(Math.max(1, Math.min(ceilingMax, v)));
+                  if (!Number.isNaN(v))
+                    setDeclineThreshold(Math.max(1, Math.min(ceilingMax, v)));
                 }}
                 className="w-14 px-2 py-1 rounded-md bg-background border border-border text-foreground tabular-nums text-xs"
               />
@@ -15589,15 +17042,19 @@ function EmergingArchetypesSection() {
           </div>
         </div>
         <CardDescription>
-          Each row groups the dev fixture battery by reviewer-facing slop archetype.
-          Distance to ceiling is the worst-case AVRI-on composite vs. the LIKELY-INVALID
-          cutoff (35) — small numbers mean the next regression could escape auto-rejection.
-          The sparkline plots persisted headroom over the last {historyData?.totalSnapshots ?? 0} run snapshots,
-          and rows where headroom shrank by ≥ {declineThreshold}pt are flagged.
+          Each row groups the dev fixture battery by reviewer-facing slop
+          archetype. Distance to ceiling is the worst-case AVRI-on composite vs.
+          the LIKELY-INVALID cutoff (35) — small numbers mean the next
+          regression could escape auto-rejection. The sparkline plots persisted
+          headroom over the last {historyData?.totalSnapshots ?? 0} run
+          snapshots, and rows where headroom shrank by ≥ {declineThreshold}pt
+          are flagged.
         </CardDescription>
         {configData && (
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 text-[11px] text-muted-foreground">
-            <span className="font-medium text-foreground">Compaction window</span>
+            <span className="font-medium text-foreground">
+              Compaction window
+            </span>
             <input
               type="number"
               min={compactMin}
@@ -15605,8 +17062,8 @@ function EmergingArchetypesSection() {
               step={1}
               value={compactDraft}
               disabled={envLocked || compactSaving || compactResetting}
-              onChange={e => setCompactDraft(e.target.value)}
-              onKeyDown={e => {
+              onChange={(e) => setCompactDraft(e.target.value)}
+              onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
                   void saveCompactWindow();
@@ -15618,7 +17075,8 @@ function EmergingArchetypesSection() {
                 compactDraft.length > 0 && !compactDraftValid
                   ? "border-red-400/60"
                   : "border-border",
-                (envLocked || compactSaving || compactResetting) && "opacity-60 cursor-not-allowed",
+                (envLocked || compactSaving || compactResetting) &&
+                  "opacity-60 cursor-not-allowed",
               )}
             />
             <span>days</span>
@@ -15626,7 +17084,12 @@ function EmergingArchetypesSection() {
               size="sm"
               variant="outline"
               className="h-7 px-2 text-[11px]"
-              disabled={!compactDraftDirty || compactSaving || compactResetting || envLocked}
+              disabled={
+                !compactDraftDirty ||
+                compactSaving ||
+                compactResetting ||
+                envLocked
+              }
               onClick={() => void saveCompactWindow()}
             >
               {compactSaving ? "Saving…" : "Save"}
@@ -15636,10 +17099,10 @@ function EmergingArchetypesSection() {
               variant="ghost"
               className="h-7 px-2 text-[11px]"
               disabled={
-                envLocked
-                || compactSaving
-                || compactResetting
-                || configData.persistedDays == null
+                envLocked ||
+                compactSaving ||
+                compactResetting ||
+                configData.persistedDays == null
               }
               onClick={() => void resetCompactWindow()}
               title={
@@ -15653,16 +17116,29 @@ function EmergingArchetypesSection() {
               {compactResetting ? "Resetting…" : "Reset to default"}
             </Button>
             <span className="text-muted-foreground/70">
-              effective <span className="font-mono text-foreground">{configData.effectiveDays}d</span>
+              effective{" "}
+              <span className="font-mono text-foreground">
+                {configData.effectiveDays}d
+              </span>
               {" · "}
               {configData.source === "env" && (
-                <>source <span className="font-mono">env</span> (ARCHETYPE_HISTORY_COMPACT_DAYS)</>
+                <>
+                  source <span className="font-mono">env</span>{" "}
+                  (ARCHETYPE_HISTORY_COMPACT_DAYS)
+                </>
               )}
               {configData.source === "persisted" && (
-                <>source <span className="font-mono">reviewer setting</span></>
+                <>
+                  source <span className="font-mono">reviewer setting</span>
+                </>
               )}
               {configData.source === "default" && (
-                <>source <span className="font-mono">default ({configData.defaultDays}d)</span></>
+                <>
+                  source{" "}
+                  <span className="font-mono">
+                    default ({configData.defaultDays}d)
+                  </span>
+                </>
               )}
             </span>
             {envLocked && (
@@ -15671,12 +17147,13 @@ function EmergingArchetypesSection() {
                 className="text-[10px] gap-1 text-orange-400 bg-orange-400/10 border-orange-400/30"
               >
                 <AlertTriangle className="w-3 h-3" />
-                env override active — reviewer changes won't take effect until ARCHETYPE_HISTORY_COMPACT_DAYS is unset
+                env override active — reviewer changes won't take effect until
+                ARCHETYPE_HISTORY_COMPACT_DAYS is unset
               </Badge>
             )}
-            {!envLocked
-              && configData.persistedDays != null
-              && configData.persistedDays !== configData.effectiveDays && (
+            {!envLocked &&
+              configData.persistedDays != null &&
+              configData.persistedDays !== configData.effectiveDays && (
                 <span className="text-muted-foreground/60">
                   (persisted: {configData.persistedDays}d)
                 </span>
@@ -15698,14 +17175,16 @@ function EmergingArchetypesSection() {
               >
                 Last compacted{" "}
                 <span className="font-mono text-foreground/80">
-                  {formatRelativeAgo(configData.lastCompaction.lastCompactedAt)
-                    ?? configData.lastCompaction.lastCompactedAt}
+                  {formatRelativeAgo(
+                    configData.lastCompaction.lastCompactedAt,
+                  ) ?? configData.lastCompaction.lastCompactedAt}
                 </span>
                 {" — removed "}
                 <span className="font-mono text-foreground/80 tabular-nums">
                   {configData.lastCompaction.lastRemovedCount}
                 </span>{" "}
-                snapshot{configData.lastCompaction.lastRemovedCount === 1 ? "" : "s"}
+                snapshot
+                {configData.lastCompaction.lastRemovedCount === 1 ? "" : "s"}
               </span>
             )}
             {/* Task #289 — recent compaction-pass cadence, oldest -> newest.
@@ -15714,11 +17193,11 @@ function EmergingArchetypesSection() {
                 sparkline so trend pops at a glance; the exact removed
                 counts stay reachable via the parent span's `title`
                 tooltip (same gating as the prior comma list). */}
-            {configData.lastCompaction
-              && configData.lastCompaction.recentRuns.length >= 2 && (
+            {configData.lastCompaction &&
+              configData.lastCompaction.recentRuns.length >= 2 && (
                 <span
                   className="basis-full text-muted-foreground/60 inline-flex items-center gap-2"
-                  title={`Removed counts from the last ${configData.lastCompaction.recentRuns.length} compaction passes (oldest first): ${configData.lastCompaction.recentRuns.map(r => r.removed).join(", ")}`}
+                  title={`Removed counts from the last ${configData.lastCompaction.recentRuns.length} compaction passes (oldest first): ${configData.lastCompaction.recentRuns.map((r) => r.removed).join(", ")}`}
                 >
                   Recent rollups:
                   <CompactionRollupsSparkline
@@ -15730,38 +17209,40 @@ function EmergingArchetypesSection() {
                 size + snapshot count for storage-sizing decisions.
                 Hidden until the file exists or if the size can't be
                 formatted. */}
-            {configData.historyFile && formatBytes(configData.historyFile.sizeBytes) && (
-              <span
-                className="basis-full text-muted-foreground/70"
-                title={`${configData.historyFile.sizeBytes} bytes on disk`}
-              >
-                History file:{" "}
-                <span className="font-mono text-foreground/80 tabular-nums">
-                  {formatBytes(configData.historyFile.sizeBytes)}
-                </span>
-                {" · "}
-                <span className="font-mono text-foreground/80 tabular-nums">
-                  {configData.historyFile.snapshotCount}
-                </span>{" "}
-                snapshot{configData.historyFile.snapshotCount === 1 ? "" : "s"}
-                {/* Task #403 — color-coded heads-up when snapshotCount
+            {configData.historyFile &&
+              formatBytes(configData.historyFile.sizeBytes) && (
+                <span
+                  className="basis-full text-muted-foreground/70"
+                  title={`${configData.historyFile.sizeBytes} bytes on disk`}
+                >
+                  History file:{" "}
+                  <span className="font-mono text-foreground/80 tabular-nums">
+                    {formatBytes(configData.historyFile.sizeBytes)}
+                  </span>
+                  {" · "}
+                  <span className="font-mono text-foreground/80 tabular-nums">
+                    {configData.historyFile.snapshotCount}
+                  </span>{" "}
+                  snapshot
+                  {configData.historyFile.snapshotCount === 1 ? "" : "s"}
+                  {/* Task #403 — color-coded heads-up when snapshotCount
                     is closing in on the writer's hard MAX_SNAPSHOTS row
                     cap. Hidden when usage is comfortably under the
                     amber threshold or when the server didn't surface a
                     cap (older API). Reviewers can act on the hint by
                     tightening the compaction window above before raw
                     rows start being evicted. */}
-                <SnapshotCapBadge
-                  snapshotCount={configData.historyFile.snapshotCount}
-                  maxSnapshots={configData.maxSnapshots}
-                />
-              </span>
-            )}
+                  <SnapshotCapBadge
+                    snapshotCount={configData.historyFile.snapshotCount}
+                    maxSnapshots={configData.maxSnapshots}
+                  />
+                </span>
+              )}
           </div>
         )}
       </CardHeader>
       <CardContent>
-        {rows.map(r => (
+        {rows.map((r) => (
           <ArchetypeRowView
             key={r.archetype}
             row={r}
@@ -15856,7 +17337,8 @@ export function buildSampleReportLinkResolver(
   // back to the numeric id, since `/verify/:id` is parsed as an integer.
   const byKey = new Map<string, number>();
   for (const r of reports) {
-    if (typeof r.id !== "number" || !Number.isInteger(r.id) || r.id <= 0) continue;
+    if (typeof r.id !== "number" || !Number.isInteger(r.id) || r.id <= 0)
+      continue;
     byKey.set(String(r.id), r.id);
     if (typeof r.reportCode === "string" && r.reportCode.length > 0) {
       byKey.set(r.reportCode, r.id);
@@ -15880,8 +17362,11 @@ function DatasetCohortSampleTable({
   // the previous plain-text behaviour without having to wire up a resolver.
   resolveReportPath?: (sampleId: string) => string | null;
 }) {
-  const cohortSamples = samples.filter(s => s.tier === cohort.tier);
-  const sorted = sortDatasetSamplesByDistanceFromMean(cohortSamples, cohort.compositeMean);
+  const cohortSamples = samples.filter((s) => s.tier === cohort.tier);
+  const sorted = sortDatasetSamplesByDistanceFromMean(
+    cohortSamples,
+    cohort.compositeMean,
+  );
 
   if (sorted.length === 0) {
     return (
@@ -15891,16 +17376,20 @@ function DatasetCohortSampleTable({
     );
   }
 
-  const meanLabel = cohort.compositeMean != null
-    ? `mean ${cohort.compositeMean.toFixed(1)}`
-    : "no cohort mean";
+  const meanLabel =
+    cohort.compositeMean != null
+      ? `mean ${cohort.compositeMean.toFixed(1)}`
+      : "no cohort mean";
 
   return (
     <div className="rounded-md border border-border/40 bg-muted/[0.03] overflow-hidden">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground/80">
         <span>
-          {DATASET_COHORT_TIER_LABELS[cohort.tier] ?? cohort.tier}
-          {" "}<span className="font-mono normal-case tracking-normal text-muted-foreground/60">· {sorted.length} sample{sorted.length === 1 ? "" : "s"}, {meanLabel}, sorted by |Δ| from mean</span>
+          {DATASET_COHORT_TIER_LABELS[cohort.tier] ?? cohort.tier}{" "}
+          <span className="font-mono normal-case tracking-normal text-muted-foreground/60">
+            · {sorted.length} sample{sorted.length === 1 ? "" : "s"},{" "}
+            {meanLabel}, sorted by |Δ| from mean
+          </span>
         </span>
       </div>
       <div className="overflow-x-auto">
@@ -15909,7 +17398,12 @@ function DatasetCohortSampleTable({
             <tr>
               <th className="text-left font-medium px-3 py-1.5">Report</th>
               <th className="text-right font-medium px-2 py-1.5">Composite</th>
-              <th className="text-right font-medium px-2 py-1.5" title="Composite minus cohort mean">Δ mean</th>
+              <th
+                className="text-right font-medium px-2 py-1.5"
+                title="Composite minus cohort mean"
+              >
+                Δ mean
+              </th>
               <th className="text-right font-medium px-2 py-1.5">E1</th>
               <th className="text-right font-medium px-2 py-1.5">E2</th>
               <th className="text-right font-medium px-2 py-1.5">E3</th>
@@ -15917,24 +17411,32 @@ function DatasetCohortSampleTable({
             </tr>
           </thead>
           <tbody>
-            {sorted.map(s => {
-              const delta = cohort.compositeMean != null
-                ? s.composite - cohort.compositeMean
-                : null;
-              const deltaText = delta == null
-                ? "—"
-                : `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(1)}`;
-              const triageColor = DATASET_SAMPLE_TRIAGE_COLOR[s.triage]
-                ?? "text-muted-foreground bg-muted/20 border-border/40";
+            {sorted.map((s) => {
+              const delta =
+                cohort.compositeMean != null
+                  ? s.composite - cohort.compositeMean
+                  : null;
+              const deltaText =
+                delta == null
+                  ? "—"
+                  : `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(1)}`;
+              const triageColor =
+                DATASET_SAMPLE_TRIAGE_COLOR[s.triage] ??
+                "text-muted-foreground bg-muted/20 border-border/40";
               // Task #371 — when the sample id resolves to a live-feed
               // report, render it as a link to the report detail view so
               // reviewers can jump straight from "T1 outlier with composite
               // 18" into the report. Otherwise stay on plain text rather
               // than render a broken link.
-              const reportPath = resolveReportPath ? resolveReportPath(s.id) : null;
+              const reportPath = resolveReportPath
+                ? resolveReportPath(s.id)
+                : null;
               return (
                 <tr key={s.id} className="border-t border-border/30">
-                  <td className="px-3 py-1 font-mono max-w-[16rem] truncate" title={s.id}>
+                  <td
+                    className="px-3 py-1 font-mono max-w-[16rem] truncate"
+                    title={s.id}
+                  >
                     {reportPath ? (
                       <Link
                         to={reportPath}
@@ -15947,15 +17449,21 @@ function DatasetCohortSampleTable({
                       <span className="text-foreground/90">{s.id}</span>
                     )}
                   </td>
-                  <td className="px-2 py-1 text-right text-foreground">{s.composite.toFixed(1)}</td>
-                  <td className={cn(
-                    "px-2 py-1 text-right",
-                    delta == null
-                      ? "text-muted-foreground"
-                      : Math.abs(delta) >= 15
-                        ? "text-orange-400"
-                        : "text-muted-foreground",
-                  )}>{deltaText}</td>
+                  <td className="px-2 py-1 text-right text-foreground">
+                    {s.composite.toFixed(1)}
+                  </td>
+                  <td
+                    className={cn(
+                      "px-2 py-1 text-right",
+                      delta == null
+                        ? "text-muted-foreground"
+                        : Math.abs(delta) >= 15
+                          ? "text-orange-400"
+                          : "text-muted-foreground",
+                    )}
+                  >
+                    {deltaText}
+                  </td>
                   <td className="px-2 py-1 text-right text-muted-foreground">
                     {s.e1 != null ? s.e1.toFixed(1) : "—"}
                   </td>
@@ -15966,7 +17474,10 @@ function DatasetCohortSampleTable({
                     {s.e3 != null ? s.e3.toFixed(1) : "—"}
                   </td>
                   <td className="px-3 py-1">
-                    <Badge variant="outline" className={cn("text-[9px] font-mono", triageColor)}>
+                    <Badge
+                      variant="outline"
+                      className={cn("text-[9px] font-mono", triageColor)}
+                    >
                       {s.triage}
                     </Badge>
                   </td>
@@ -16039,9 +17550,11 @@ export function DatasetCohortMeansSection() {
   // drill into the underlying dataset reports behind each cohort mean.
   // Stored as a Set keyed by tier so multiple cohorts can be open at
   // once for side-by-side comparison.
-  const [expandedTiers, setExpandedTiers] = useState<Set<string>>(() => new Set());
+  const [expandedTiers, setExpandedTiers] = useState<Set<string>>(
+    () => new Set(),
+  );
   const toggleTier = (tier: string) => {
-    setExpandedTiers(prev => {
+    setExpandedTiers((prev) => {
       const next = new Set(prev);
       if (next.has(tier)) next.delete(tier);
       else next.add(tier);
@@ -16058,10 +17571,13 @@ export function DatasetCohortMeansSection() {
   const [searchParams, setSearchParams] = useSearchParams();
   const rawUrlWarn = searchParams.get(COHORT_DELTA_WARN_THRESHOLD_QUERY_KEY);
   const urlWarnPresent = rawUrlWarn !== null;
-  const urlWarn = urlWarnPresent ? parseCohortDeltaWarnThreshold(rawUrlWarn) : null;
+  const urlWarn = urlWarnPresent
+    ? parseCohortDeltaWarnThreshold(rawUrlWarn)
+    : null;
   const warnThreshold: CohortDeltaWarnThreshold = urlWarnPresent
     ? (urlWarn ?? COHORT_DELTA_WARN_THRESHOLD_DEFAULT)
-    : (readStoredCohortDeltaWarnThreshold() ?? COHORT_DELTA_WARN_THRESHOLD_DEFAULT);
+    : (readStoredCohortDeltaWarnThreshold() ??
+      COHORT_DELTA_WARN_THRESHOLD_DEFAULT);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -16090,7 +17606,10 @@ export function DatasetCohortMeansSection() {
         if (urlInvalid) {
           next.delete(COHORT_DELTA_WARN_THRESHOLD_QUERY_KEY);
         } else {
-          next.set(COHORT_DELTA_WARN_THRESHOLD_QUERY_KEY, String(warnThreshold));
+          next.set(
+            COHORT_DELTA_WARN_THRESHOLD_QUERY_KEY,
+            String(warnThreshold),
+          );
         }
         return next;
       },
@@ -16143,16 +17662,19 @@ export function DatasetCohortMeansSection() {
             Curated Dataset Cohort Means
           </CardTitle>
           <CardDescription>
-            Per-cohort composite means and the T1−T3 gap from up to 75 sampled real reports.
+            Per-cohort composite means and the T1−T3 gap from up to 75 sampled
+            real reports.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-start gap-2 rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 text-[11px] text-muted-foreground">
             <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground/70" />
             <span>
-              Dataset not mounted — set <span className="font-mono">VULNRAP_DATASETS_DIR</span> (or
-              place <span className="font-mono">vuln_reports_dataset_v2.json.gz</span> at
-              {" "}<span className="font-mono">/mnt/vulnrap/data</span>) to surface drift on real reports.
+              Dataset not mounted — set{" "}
+              <span className="font-mono">VULNRAP_DATASETS_DIR</span> (or place{" "}
+              <span className="font-mono">vuln_reports_dataset_v2.json.gz</span>{" "}
+              at <span className="font-mono">/mnt/vulnrap/data</span>) to
+              surface drift on real reports.
             </span>
           </div>
         </CardContent>
@@ -16160,10 +17682,10 @@ export function DatasetCohortMeansSection() {
     );
   }
 
-  const cohortByTier = new Map(ds.cohorts.map(c => [c.tier, c]));
-  const orderedCohorts = DATASET_COHORT_ORDER
-    .map(t => cohortByTier.get(t))
-    .filter((c): c is DatasetCohort => c != null);
+  const cohortByTier = new Map(ds.cohorts.map((c) => [c.tier, c]));
+  const orderedCohorts = DATASET_COHORT_ORDER.map((t) =>
+    cohortByTier.get(t),
+  ).filter((c): c is DatasetCohort => c != null);
 
   // Task #256 — index the synthetic-fixture summary so each dataset cohort
   // tile can render the per-tier delta against its hand-written counterpart.
@@ -16171,9 +17693,9 @@ export function DatasetCohortMeansSection() {
   // still defend against `undefined` because the typed shape is optional and
   // older deploys / partial failures could omit it.
   const fixtureMeanByTier = new Map<string, number>(
-    (data.summary ?? []).map(s => [s.tier, s.compositeMean]),
+    (data.summary ?? []).map((s) => [s.tier, s.compositeMean]),
   );
-  const tierDeltas = orderedCohorts.map(c => {
+  const tierDeltas = orderedCohorts.map((c) => {
     const fxMean = fixtureMeanByTier.get(c.tier) ?? null;
     // Task #363 — pass through the reviewer-chosen warn threshold so a tighter
     // recalibration sprint (3pt) or a noisier steady-state run (8 / 10pt)
@@ -16183,9 +17705,17 @@ export function DatasetCohortMeansSection() {
       fxMean,
       warnThreshold,
     );
-    return { tier: c.tier, dsMean: c.compositeMean, fxMean, delta, isDivergent };
+    return {
+      tier: c.tier,
+      dsMean: c.compositeMean,
+      fxMean,
+      delta,
+      isDivergent,
+    };
   });
-  const divergentTiers = tierDeltas.filter(d => d.isDivergent && d.delta != null);
+  const divergentTiers = tierDeltas.filter(
+    (d) => d.isDivergent && d.delta != null,
+  );
 
   // Task #362 — index the persisted per-tier delta series so each tile
   // can render its own sparkline. summarizeDatasetHistory does the
@@ -16196,15 +17726,16 @@ export function DatasetCohortMeansSection() {
   // history" hint inside the sparkline component.
   const historySummary = summarizeDatasetHistory(historyData);
   const deltaPointsByTier = new Map<string, DatasetHistorySeriesPoint[]>(
-    historySummary.tiers.map(t => [t.tier, t.deltaPoints]),
+    historySummary.tiers.map((t) => [t.tier, t.deltaPoints]),
   );
 
   const gapText = ds.gap != null ? `${ds.gap.toFixed(1)}pt` : "n/a";
-  const gapColor = ds.gap == null
-    ? "text-muted-foreground bg-muted/20 border-border/40"
-    : ds.gapMeetsTarget
-      ? "text-green-400 bg-green-400/10 border-green-400/30"
-      : "text-orange-400 bg-orange-400/10 border-orange-400/30";
+  const gapColor =
+    ds.gap == null
+      ? "text-muted-foreground bg-muted/20 border-border/40"
+      : ds.gapMeetsTarget
+        ? "text-green-400 bg-green-400/10 border-green-400/30"
+        : "text-orange-400 bg-orange-400/10 border-orange-400/30";
 
   return (
     <Card className="glass-card rounded-xl border-primary/10">
@@ -16213,7 +17744,9 @@ export function DatasetCohortMeansSection() {
           <CardTitle className="text-base flex items-center gap-2">
             <Layers className="w-4 h-4 text-primary" />
             Curated Dataset Cohort Means
-            <Badge variant="secondary" className="text-[10px]">{ds.sampleCount} samples</Badge>
+            <Badge variant="secondary" className="text-[10px]">
+              {ds.sampleCount} samples
+            </Badge>
             <Badge
               variant="outline"
               className="text-[10px] gap-1 tabular-nums font-mono text-muted-foreground border-border/40"
@@ -16242,7 +17775,7 @@ export function DatasetCohortMeansSection() {
               >
                 warn |Δ|&gt;
               </span>
-              {COHORT_DELTA_WARN_THRESHOLD_OPTIONS.map(opt => {
+              {COHORT_DELTA_WARN_THRESHOLD_OPTIONS.map((opt) => {
                 const active = opt === warnThreshold;
                 return (
                   <button
@@ -16264,40 +17797,47 @@ export function DatasetCohortMeansSection() {
                 );
               })}
             </div>
-            <Badge variant="outline" className={cn("text-[10px] gap-1 tabular-nums", gapColor)}>
+            <Badge
+              variant="outline"
+              className={cn("text-[10px] gap-1 tabular-nums", gapColor)}
+            >
               <Shield className="w-3 h-3" />
               T1−T3 gap {gapText} (target ≥{ds.gapTarget}pt)
             </Badge>
           </div>
         </div>
         <CardDescription>
-          Per-cohort composite means and the T1−T3 gap from up to {ds.sampleSizeRequestedPerLabel} sampled
-          real reports per label, drawn from the {ds.sampleDateKey} UTC slice (rotates daily) so calibration
-          drift shows up on a much larger sample than the {data.archetypes?.reduce((n, a) => n + a.count, 0) ?? 0}-fixture
-          synthetic battery. A jump in legit-mean / slop-gap that lines up with a new slice key is usually a
-          rotation, not real drift.
+          Per-cohort composite means and the T1−T3 gap from up to{" "}
+          {ds.sampleSizeRequestedPerLabel} sampled real reports per label, drawn
+          from the {ds.sampleDateKey} UTC slice (rotates daily) so calibration
+          drift shows up on a much larger sample than the{" "}
+          {data.archetypes?.reduce((n, a) => n + a.count, 0) ?? 0}-fixture
+          synthetic battery. A jump in legit-mean / slop-gap that lines up with
+          a new slice key is usually a rotation, not real drift.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {orderedCohorts.map(c => {
+          {orderedCohorts.map((c) => {
             // Task #256 — per-tier fixture-vs-dataset delta data, surfaced as
             // a sub-block inside each tile (see below).
-            const tierDelta = tierDeltas.find(d => d.tier === c.tier);
+            const tierDelta = tierDeltas.find((d) => d.tier === c.tier);
             const delta = tierDelta?.delta ?? null;
             const fxMean = tierDelta?.fxMean ?? null;
             const isDivergent = tierDelta?.isDivergent ?? false;
-            const deltaColor = delta == null
-              ? "text-muted-foreground/60"
-              : isDivergent
-                ? "text-orange-400"
-                : "text-muted-foreground/80";
+            const deltaColor =
+              delta == null
+                ? "text-muted-foreground/60"
+                : isDivergent
+                  ? "text-orange-400"
+                  : "text-muted-foreground/80";
             // Format the delta with an explicit sign so reviewers don't have
             // to read it as "is the synthetic mean higher or lower?". Δ+ means
             // the dataset cohort is hotter than the synthetic fixtures.
-            const deltaText = delta == null
-              ? "Δ —"
-              : `Δ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`;
+            const deltaText =
+              delta == null
+                ? "Δ —"
+                : `Δ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`;
             // Task #255 — chevron-toggle expansion state for the per-tile
             // sampled-reports drilldown (rendered after the grid).
             const isExpanded = expandedTiers.has(c.tier);
@@ -16325,13 +17865,17 @@ export function DatasetCohortMeansSection() {
                     <Chevron className="w-3 h-3" />
                     {DATASET_COHORT_TIER_LABELS[c.tier] ?? c.tier}
                   </span>
-                  <span className="tabular-nums text-muted-foreground/60">n={c.count}</span>
+                  <span className="tabular-nums text-muted-foreground/60">
+                    n={c.count}
+                  </span>
                 </div>
                 <div className="mt-1 flex items-baseline gap-2">
                   <span className="text-lg font-semibold tabular-nums text-foreground">
                     {c.compositeMean != null ? c.compositeMean.toFixed(1) : "—"}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">composite mean</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    composite mean
+                  </span>
                 </div>
                 {/* Task #256 — surface the per-tier dataset-vs-fixture
                     composite delta. When the synthetic battery agrees with
@@ -16346,9 +17890,12 @@ export function DatasetCohortMeansSection() {
                   )}
                   data-testid={`dataset-cohort-fixture-delta-${c.tier}`}
                 >
-                  {isDivergent && <AlertTriangle className="w-3 h-3 shrink-0" />}
+                  {isDivergent && (
+                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                  )}
                   <span>
-                    fixtures {fxMean != null ? fxMean.toFixed(1) : "—"} · {deltaText}
+                    fixtures {fxMean != null ? fxMean.toFixed(1) : "—"} ·{" "}
+                    {deltaText}
                   </span>
                 </div>
                 {/* Task #362 — per-tier (datasetMean − fixtureMean) trend
@@ -16370,16 +17917,23 @@ export function DatasetCohortMeansSection() {
                   />
                 </div>
                 <div className="mt-0.5 text-[10px] text-muted-foreground/70 tabular-nums">
-                  {c.compositeMin != null && c.compositeMax != null
-                    ? <>range {c.compositeMin.toFixed(1)}–{c.compositeMax.toFixed(1)}</>
-                    : "no samples"}
+                  {c.compositeMin != null && c.compositeMax != null ? (
+                    <>
+                      range {c.compositeMin.toFixed(1)}–
+                      {c.compositeMax.toFixed(1)}
+                    </>
+                  ) : (
+                    "no samples"
+                  )}
                   {c.engine2Mean != null && (
                     <> · E2 mean {c.engine2Mean.toFixed(1)}</>
                   )}
                 </div>
                 <div className="mt-1 text-[10px] text-muted-foreground/60">
                   {hasSamples
-                    ? (isExpanded ? "Hide sampled reports" : "Show sampled reports")
+                    ? isExpanded
+                      ? "Hide sampled reports"
+                      : "Show sampled reports"
                     : "No sampled reports to drill into"}
                 </div>
               </button>
@@ -16400,10 +17954,14 @@ export function DatasetCohortMeansSection() {
             <span>
               Synthetic battery has drifted from the real-report cohorts on{" "}
               {divergentTiers
-                .map(d => `${DATASET_COHORT_TIER_LABELS[d.tier] ?? d.tier} (Δ${d.delta! >= 0 ? "+" : ""}${d.delta!.toFixed(1)})`)
+                .map(
+                  (d) =>
+                    `${DATASET_COHORT_TIER_LABELS[d.tier] ?? d.tier} (Δ${d.delta! >= 0 ? "+" : ""}${d.delta!.toFixed(1)})`,
+                )
                 .join(", ")}{" "}
-              — |Δ| &gt; {warnThreshold}pt means the 42-fixture sample no longer mirrors
-              the curated dataset for that tier; review whether new fixtures are needed.
+              — |Δ| &gt; {warnThreshold}pt means the 42-fixture sample no longer
+              mirrors the curated dataset for that tier; review whether new
+              fixtures are needed.
             </span>
           </div>
         )}
@@ -16411,8 +17969,8 @@ export function DatasetCohortMeansSection() {
             mounts its own table below the grid so multiple cohorts can be
             compared side-by-side. */}
         {orderedCohorts
-          .filter(c => expandedTiers.has(c.tier))
-          .map(c => (
+          .filter((c) => expandedTiers.has(c.tier))
+          .map((c) => (
             <div key={c.tier} id={`dataset-cohort-samples-${c.tier}`}>
               <DatasetCohortSampleTable
                 cohort={c}
@@ -16602,10 +18160,14 @@ export function summarizeDatasetHistory(
   response: DatasetHistoryResponse | null | undefined,
 ): DatasetHistorySummary {
   const cohorts = response?.cohorts ?? [];
-  const total = response?.totalSnapshots ?? cohorts.reduce((n, c) => n + c.snapshots.length, 0);
+  const total =
+    response?.totalSnapshots ??
+    cohorts.reduce((n, c) => n + c.snapshots.length, 0);
 
-  const cohortByTier = new Map(cohorts.map(c => [c.tier, c.snapshots] as const));
-  const tiers: DatasetHistorySeries[] = DATASET_COHORT_ORDER.map(tier => {
+  const cohortByTier = new Map(
+    cohorts.map((c) => [c.tier, c.snapshots] as const),
+  );
+  const tiers: DatasetHistorySeries[] = DATASET_COHORT_ORDER.map((tier) => {
     const snaps = cohortByTier.get(tier) ?? [];
     const points: DatasetHistorySeriesPoint[] = [];
     // Task #362 — build the per-tier (datasetMean − fixtureMean) series
@@ -16619,7 +18181,10 @@ export function summarizeDatasetHistory(
     const deltaPoints: DatasetHistorySeriesPoint[] = [];
     for (const s of snaps) {
       if (s.compositeMean != null && Number.isFinite(s.compositeMean)) {
-        const point: DatasetHistorySeriesPoint = { timestamp: s.timestamp, value: s.compositeMean };
+        const point: DatasetHistorySeriesPoint = {
+          timestamp: s.timestamp,
+          value: s.compositeMean,
+        };
         if (typeof s.sampleDateKey === "string" && s.sampleDateKey.length > 0) {
           point.sampleDateKey = s.sampleDateKey;
         }
@@ -16658,11 +18223,18 @@ export function summarizeDatasetHistory(
       if (cur.sampleDateKey) latestSampleDateKey = cur.sampleDateKey;
       if (i === 0) continue;
       const prev = points[i - 1]!;
-      if (prev.sampleDateKey && cur.sampleDateKey && prev.sampleDateKey !== cur.sampleDateKey) {
+      if (
+        prev.sampleDateKey &&
+        cur.sampleDateKey &&
+        prev.sampleDateKey !== cur.sampleDateKey
+      ) {
         rotationCount += 1;
       }
     }
-    const aggregatedCount = points.reduce((n, p) => (p.aggregated === true ? n + 1 : n), 0);
+    const aggregatedCount = points.reduce(
+      (n, p) => (p.aggregated === true ? n + 1 : n),
+      0,
+    );
     return {
       tier,
       snapshotCount: snaps.length,
@@ -16671,7 +18243,10 @@ export function summarizeDatasetHistory(
       latestSampleDateKey,
       rotationCount,
       deltaPoints,
-      latestDelta: deltaPoints.length > 0 ? deltaPoints[deltaPoints.length - 1]!.value : null,
+      latestDelta:
+        deltaPoints.length > 0
+          ? deltaPoints[deltaPoints.length - 1]!.value
+          : null,
       aggregatedCount,
       rawCount: points.length - aggregatedCount,
     };
@@ -16687,7 +18262,10 @@ export function summarizeDatasetHistory(
       if (s.gap == null || !Number.isFinite(s.gap)) continue;
       if (seenTimestamps.has(s.timestamp)) continue;
       seenTimestamps.add(s.timestamp);
-      const entry: DatasetHistorySeriesPoint = { timestamp: s.timestamp, value: s.gap };
+      const entry: DatasetHistorySeriesPoint = {
+        timestamp: s.timestamp,
+        value: s.gap,
+      };
       if (typeof s.sampleDateKey === "string" && s.sampleDateKey.length > 0) {
         entry.sampleDateKey = s.sampleDateKey;
       }
@@ -16741,7 +18319,7 @@ export function summarizeDatasetHistory(
   // the visual stays hidden — there is no rotation signal to display
   // in that scenario, mirroring the per-tier `rotationCount` of 0.
   const sliceKeyedEntries = gapEntries.filter(
-    p => typeof p.sampleDateKey === "string" && p.sampleDateKey.length > 0,
+    (p) => typeof p.sampleDateKey === "string" && p.sampleDateKey.length > 0,
   );
   if (sliceKeyedEntries.length >= 2) {
     const counts = new Map<string, number>();
@@ -16756,9 +18334,9 @@ export function summarizeDatasetHistory(
       const prev = gapEntries[i - 1]!;
       const cur = gapEntries[i]!;
       if (
-        prev.sampleDateKey
-        && cur.sampleDateKey
-        && prev.sampleDateKey !== cur.sampleDateKey
+        prev.sampleDateKey &&
+        cur.sampleDateKey &&
+        prev.sampleDateKey !== cur.sampleDateKey
       ) {
         const day = cur.timestamp.slice(0, 10);
         counts.set(day, (counts.get(day) ?? 0) + 1);
@@ -16775,7 +18353,11 @@ export function summarizeDatasetHistory(
       // a wild timestamp can't blow the visual up.
       const maxBuckets = 400;
       let bucketCount = 0;
-      for (let t = startMs; t <= endMs && bucketCount < maxBuckets; t += dayMs) {
+      for (
+        let t = startMs;
+        t <= endMs && bucketCount < maxBuckets;
+        t += dayMs
+      ) {
         const dayKey = new Date(t).toISOString().slice(0, 10);
         rotationsByDay.push({ date: dayKey, count: counts.get(dayKey) ?? 0 });
         bucketCount += 1;
@@ -16784,10 +18366,11 @@ export function summarizeDatasetHistory(
   }
 
   return {
-    isEmpty: total === 0 || cohorts.every(c => c.snapshots.length === 0),
+    isEmpty: total === 0 || cohorts.every((c) => c.snapshots.length === 0),
     tiers,
     gapPoints: gapEntries,
-    latestGap: gapEntries.length > 0 ? gapEntries[gapEntries.length - 1]!.value : null,
+    latestGap:
+      gapEntries.length > 0 ? gapEntries[gapEntries.length - 1]!.value : null,
     latestSampleDateKey,
     gapAggregatedCount,
     gapRawCount: gapEntries.length - gapAggregatedCount,
@@ -16824,7 +18407,11 @@ export function DatasetHistoryMeanSparkline({
   targetLine?: { value: number };
 }) {
   if (points.length === 0) {
-    return <span className="text-[10px] text-muted-foreground/50 italic">no history</span>;
+    return (
+      <span className="text-[10px] text-muted-foreground/50 italic">
+        no history
+      </span>
+    );
   }
   if (points.length === 1) {
     const onlyPt = points[0]!;
@@ -16836,12 +18423,16 @@ export function DatasetHistoryMeanSparkline({
           "text-[10px] italic",
           flagged ? "text-red-400" : "text-muted-foreground/50",
         )}
-        data-testid={flagged ? "dataset-cohort-drift-gap-breach-text" : undefined}
+        data-testid={
+          flagged ? "dataset-cohort-drift-gap-breach-text" : undefined
+        }
       >
-        1 {onlyAggregated ? "daily aggregate" : "snapshot"} · {onlyPt.value.toFixed(1)}
+        1 {onlyAggregated ? "daily aggregate" : "snapshot"} ·{" "}
+        {onlyPt.value.toFixed(1)}
         {targetLine != null && (
           <span className="not-italic text-muted-foreground/50">
-            {" "}(target ≥{targetLine.value})
+            {" "}
+            (target ≥{targetLine.value})
           </span>
         )}
       </span>
@@ -16850,14 +18441,16 @@ export function DatasetHistoryMeanSparkline({
   const W = 120;
   const H = 32;
   const PAD = 3;
-  const ys = points.map(p => p.value);
+  const ys = points.map((p) => p.value);
   const dataMinY = Math.min(...ys);
   const dataMaxY = Math.max(...ys);
   // Task #370 — fold the target threshold into the visible range so
   // the dashed reference line never slips out of the chart, even when
   // every observed gap sits well above (or below) the calibration target.
-  const minY = targetLine != null ? Math.min(dataMinY, targetLine.value) : dataMinY;
-  const maxY = targetLine != null ? Math.max(dataMaxY, targetLine.value) : dataMaxY;
+  const minY =
+    targetLine != null ? Math.min(dataMinY, targetLine.value) : dataMinY;
+  const maxY =
+    targetLine != null ? Math.max(dataMaxY, targetLine.value) : dataMaxY;
   // Pad the y-range slightly so a flat line still draws across the
   // middle of the chart instead of being clipped to the bottom edge.
   const span = Math.max(0.5, maxY - minY);
@@ -16866,7 +18459,9 @@ export function DatasetHistoryMeanSparkline({
   const yRange = yMax - yMin;
   const xAt = (i: number) => PAD + (i / (points.length - 1)) * (W - 2 * PAD);
   const yAt = (v: number) => PAD + (1 - (v - yMin) / yRange) * (H - 2 * PAD);
-  const coords = points.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.value).toFixed(1)}`);
+  const coords = points.map(
+    (p, i) => `${xAt(i).toFixed(1)},${yAt(p.value).toFixed(1)}`,
+  );
   const lastPt = points[points.length - 1]!;
   const lastX = xAt(points.length - 1);
   const lastY = yAt(lastPt.value);
@@ -16881,7 +18476,11 @@ export function DatasetHistoryMeanSparkline({
   for (let i = 1; i < points.length; i++) {
     const prev = points[i - 1]!;
     const cur = points[i]!;
-    if (prev.sampleDateKey && cur.sampleDateKey && prev.sampleDateKey !== cur.sampleDateKey) {
+    if (
+      prev.sampleDateKey &&
+      cur.sampleDateKey &&
+      prev.sampleDateKey !== cur.sampleDateKey
+    ) {
       rotationXs.push((xAt(i - 1) + xAt(i)) / 2);
     }
   }
@@ -16889,14 +18488,18 @@ export function DatasetHistoryMeanSparkline({
   // Task #370 — pre-compute the indices of points that fall below the
   // calibration target so each gets a small red marker, making breaches
   // legible at a glance even on a 32px-tall sparkline.
-  const breachIndices = targetLine != null
-    ? points
-        .map((p, i) => ({ p, i }))
-        .filter(({ p, i }) => p.value < targetLine.value && i !== points.length - 1)
-    : [];
-  const breachCount = targetLine != null
-    ? points.filter(p => p.value < targetLine.value).length
-    : 0;
+  const breachIndices =
+    targetLine != null
+      ? points
+          .map((p, i) => ({ p, i }))
+          .filter(
+            ({ p, i }) => p.value < targetLine.value && i !== points.length - 1,
+          )
+      : [];
+  const breachCount =
+    targetLine != null
+      ? points.filter((p) => p.value < targetLine.value).length
+      : 0;
 
   // Task #380 — split into dashed aggregated prefix + solid raw suffix.
   // Assumes the prefix-then-suffix shape produced by the api-server's
@@ -16907,7 +18510,7 @@ export function DatasetHistoryMeanSparkline({
     0,
   );
   const rawPointCount = points.length - aggregatedPointCount;
-  const firstRawIdx = points.findIndex(p => p.aggregated !== true);
+  const firstRawIdx = points.findIndex((p) => p.aggregated !== true);
   let aggregatedCoords: string[] = [];
   let rawCoords: string[] = [];
   if (firstRawIdx === -1) {
@@ -16920,29 +18523,43 @@ export function DatasetHistoryMeanSparkline({
   }
 
   const tooltipBase =
-    `${points.length} snapshots: ${ys[0]!.toFixed(1)} → ${lastPt.value.toFixed(1)}`
-    + ` (range ${dataMinY.toFixed(1)}–${dataMaxY.toFixed(1)})`;
+    `${points.length} snapshots: ${ys[0]!.toFixed(1)} → ${lastPt.value.toFixed(1)}` +
+    ` (range ${dataMinY.toFixed(1)}–${dataMaxY.toFixed(1)})`;
   const tooltipParts = [tooltipBase];
   if (aggregatedPointCount > 0) {
     tooltipParts.push(
-      `${aggregatedPointCount} daily aggregate${aggregatedPointCount === 1 ? "" : "s"}`
-        + ` + ${rawPointCount} raw`,
+      `${aggregatedPointCount} daily aggregate${aggregatedPointCount === 1 ? "" : "s"}` +
+        ` + ${rawPointCount} raw`,
     );
   }
   if (rotationXs.length > 0) {
-    tooltipParts.push(`${rotationXs.length} slice rotation${rotationXs.length === 1 ? "" : "s"}`);
+    tooltipParts.push(
+      `${rotationXs.length} slice rotation${rotationXs.length === 1 ? "" : "s"}`,
+    );
   }
   if (targetLine != null) {
     tooltipParts.push(
-      `target ≥${targetLine.value}`
-        + (breachCount > 0 ? ` (${breachCount} below)` : ""),
+      `target ≥${targetLine.value}` +
+        (breachCount > 0 ? ` (${breachCount} below)` : ""),
     );
   }
   const tooltip = tooltipParts.join(" · ");
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-8" role="img" aria-label={tooltip}>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full h-8"
+      role="img"
+      aria-label={tooltip}
+    >
       <title>{tooltip}</title>
-      <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="rgba(255,255,255,0.08)" strokeWidth={0.5} />
+      <line
+        x1={PAD}
+        y1={H - PAD}
+        x2={W - PAD}
+        y2={H - PAD}
+        stroke="rgba(255,255,255,0.08)"
+        strokeWidth={0.5}
+      />
       {targetLine != null && (
         <line
           x1={PAD}
@@ -17007,7 +18624,9 @@ export function DatasetHistoryMeanSparkline({
         cy={lastY}
         r={1.8}
         fill={lastFlagged ? "#ef4444" : "#06b6d4"}
-        data-testid={lastFlagged ? "dataset-cohort-drift-gap-breach-point" : undefined}
+        data-testid={
+          lastFlagged ? "dataset-cohort-drift-gap-breach-point" : undefined
+        }
       />
     </svg>
   );
@@ -17049,14 +18668,15 @@ export function DatasetCohortFixtureDeltaSparkline({
         className="text-[10px] text-muted-foreground/50 italic"
         data-testid="dataset-cohort-fixture-delta-sparkline-single"
       >
-        1 snapshot · Δ{only >= 0 ? "+" : ""}{only.toFixed(1)}
+        1 snapshot · Δ{only >= 0 ? "+" : ""}
+        {only.toFixed(1)}
       </span>
     );
   }
   const W = 120;
   const H = 28;
   const PAD = 3;
-  const ys = points.map(p => p.value);
+  const ys = points.map((p) => p.value);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
   // Anchor the y-axis on 0 and keep the warn band visible even when every
@@ -17070,7 +18690,9 @@ export function DatasetCohortFixtureDeltaSparkline({
   const yRange = yMax - yMin;
   const yFor = (v: number) => PAD + (1 - (v - yMin) / yRange) * (H - 2 * PAD);
   const xFor = (i: number) => PAD + (i / (points.length - 1)) * (W - 2 * PAD);
-  const coords = points.map((p, i) => `${xFor(i).toFixed(1)},${yFor(p.value).toFixed(1)}`);
+  const coords = points.map(
+    (p, i) => `${xFor(i).toFixed(1)},${yFor(p.value).toFixed(1)}`,
+  );
   const lastPt = points[points.length - 1]!;
   const lastX = xFor(points.length - 1);
   const lastY = yFor(lastPt.value);
@@ -17092,7 +18714,7 @@ export function DatasetCohortFixtureDeltaSparkline({
     0,
   );
   const rawPointCount = points.length - aggregatedPointCount;
-  const firstRawIdx = points.findIndex(p => p.aggregated !== true);
+  const firstRawIdx = points.findIndex((p) => p.aggregated !== true);
   let aggregatedCoords: string[] = [];
   let rawCoords: string[] = [];
   if (firstRawIdx === -1) {
@@ -17105,14 +18727,14 @@ export function DatasetCohortFixtureDeltaSparkline({
   }
 
   const tooltipParts = [
-    `${points.length} snapshots: Δ${ys[0]! >= 0 ? "+" : ""}${ys[0]!.toFixed(1)}`
-      + ` → Δ${lastPt.value >= 0 ? "+" : ""}${lastPt.value.toFixed(1)}`,
+    `${points.length} snapshots: Δ${ys[0]! >= 0 ? "+" : ""}${ys[0]!.toFixed(1)}` +
+      ` → Δ${lastPt.value >= 0 ? "+" : ""}${lastPt.value.toFixed(1)}`,
     `warn band ±${warnThreshold}`,
   ];
   if (aggregatedPointCount > 0) {
     tooltipParts.push(
-      `${aggregatedPointCount} daily aggregate${aggregatedPointCount === 1 ? "" : "s"}`
-        + ` + ${rawPointCount} raw`,
+      `${aggregatedPointCount} daily aggregate${aggregatedPointCount === 1 ? "" : "s"}` +
+        ` + ${rawPointCount} raw`,
     );
   }
   const tooltip = tooltipParts.join(" · ");
@@ -17190,7 +18812,7 @@ export function DatasetRotationDensityBar({
 }) {
   if (buckets.length === 0) return null;
   const totalRotations = buckets.reduce((n, b) => n + b.count, 0);
-  const maxCount = Math.max(1, ...buckets.map(b => b.count));
+  const maxCount = Math.max(1, ...buckets.map((b) => b.count));
   const W = 480;
   const H = 24;
   const PAD = 2;
@@ -17201,9 +18823,9 @@ export function DatasetRotationDensityBar({
   const firstDay = buckets[0]!.date;
   const lastDay = buckets[buckets.length - 1]!.date;
   const tooltip =
-    `${totalRotations} slice rotation${totalRotations === 1 ? "" : "s"}`
-    + ` across ${buckets.length} UTC day${buckets.length === 1 ? "" : "s"}`
-    + ` (${firstDay} → ${lastDay})`;
+    `${totalRotations} slice rotation${totalRotations === 1 ? "" : "s"}` +
+    ` across ${buckets.length} UTC day${buckets.length === 1 ? "" : "s"}` +
+    ` (${firstDay} → ${lastDay})`;
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
@@ -17270,7 +18892,9 @@ interface DatasetHistoryConfigResponse {
   max: number;
 }
 
-const DATASET_HISTORY_CONFIG_QUERY_KEY = ["test-dataset-history-config"] as const;
+const DATASET_HISTORY_CONFIG_QUERY_KEY = [
+  "test-dataset-history-config",
+] as const;
 
 export function DatasetCohortDriftSection() {
   const queryClient = useQueryClient();
@@ -17319,20 +18943,25 @@ export function DatasetCohortDriftSection() {
   const compactMax = configData?.max ?? 365;
   const compactDraftNum = Number(compactDraft);
   const compactDraftValid =
-    Number.isFinite(compactDraftNum)
-    && Number.isInteger(compactDraftNum)
-    && compactDraftNum >= compactMin
-    && compactDraftNum <= compactMax;
+    Number.isFinite(compactDraftNum) &&
+    Number.isInteger(compactDraftNum) &&
+    compactDraftNum >= compactMin &&
+    compactDraftNum <= compactMax;
   const compactDraftDirty =
-    configData != null && compactDraftValid && compactDraftNum !== configData.effectiveDays;
+    configData != null &&
+    compactDraftValid &&
+    compactDraftNum !== configData.effectiveDays;
   const envLocked = configData?.envOverride != null;
 
   async function saveCompactWindow() {
-    if (!compactDraftValid || compactSaving || compactResetting || envLocked) return;
+    if (!compactDraftValid || compactSaving || compactResetting || envLocked)
+      return;
     setCompactSaving(true);
     try {
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const headers: Record<string, string> = { "content-type": "application/json" };
+      const headers: Record<string, string> = {
+        "content-type": "application/json",
+      };
       const tok = getCalibrationToken();
       if (tok) headers["x-calibration-token"] = tok;
       const res = await fetch(`${baseUrl}/api/test/dataset-history/config`, {
@@ -17351,11 +18980,20 @@ export function DatasetCohortDriftSection() {
         title: "Dataset trend rollup window updated",
         description: `Snapshots older than ${body.effectiveDays}d will be rolled up to one row per day on the next /api/test/run.`,
       });
-      queryClient.invalidateQueries({ queryKey: DATASET_HISTORY_CONFIG_QUERY_KEY });
+      queryClient.invalidateQueries({
+        queryKey: DATASET_HISTORY_CONFIG_QUERY_KEY,
+      });
       queryClient.invalidateQueries({ queryKey: DATASET_HISTORY_QUERY_KEY });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to update the rollup window.";
-      toast({ title: "Could not save", description: msg, variant: "destructive" });
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Failed to update the rollup window.";
+      toast({
+        title: "Could not save",
+        description: msg,
+        variant: "destructive",
+      });
     } finally {
       setCompactSaving(false);
     }
@@ -17386,11 +19024,20 @@ export function DatasetCohortDriftSection() {
         title: "Dataset trend rollup window reset",
         description: `Reverted to the built-in default (${body.effectiveDays ?? body.defaultDays}d).`,
       });
-      queryClient.invalidateQueries({ queryKey: DATASET_HISTORY_CONFIG_QUERY_KEY });
+      queryClient.invalidateQueries({
+        queryKey: DATASET_HISTORY_CONFIG_QUERY_KEY,
+      });
       queryClient.invalidateQueries({ queryKey: DATASET_HISTORY_QUERY_KEY });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to reset the rollup window.";
-      toast({ title: "Could not reset", description: msg, variant: "destructive" });
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Failed to reset the rollup window.";
+      toast({
+        title: "Could not reset",
+        description: msg,
+        variant: "destructive",
+      });
     } finally {
       setCompactResetting(false);
     }
@@ -17427,17 +19074,23 @@ export function DatasetCohortDriftSection() {
 
   const summary = summarizeDatasetHistory(data);
   const latestGapBelowTarget =
-    gapTarget != null && summary.latestGap != null && summary.latestGap < gapTarget;
+    gapTarget != null &&
+    summary.latestGap != null &&
+    summary.latestGap < gapTarget;
 
   return (
-    <Card className="glass-card rounded-xl border-primary/10" data-testid="dataset-cohort-drift-section">
+    <Card
+      className="glass-card rounded-xl border-primary/10"
+      data-testid="dataset-cohort-drift-section"
+    >
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-primary" />
           Curated Dataset Cohort Drift
           {!summary.isEmpty && (
             <Badge variant="secondary" className="text-[10px] tabular-nums">
-              {data.totalSnapshots} snapshot{data.totalSnapshots === 1 ? "" : "s"}
+              {data.totalSnapshots} snapshot
+              {data.totalSnapshots === 1 ? "" : "s"}
             </Badge>
           )}
           {/*
@@ -17458,9 +19111,10 @@ export function DatasetCohortDriftSection() {
           )}
         </CardTitle>
         <CardDescription>
-          Per-tier composite mean and the T1−T3 gap over time, drawn from the persisted history of
-          /api/test/run on the curated 25-per-label real-report cohort. Vertical dashed ticks mark
-          UTC slice rotations so reviewers can distinguish daily-slice flips from real cohort drift.
+          Per-tier composite mean and the T1−T3 gap over time, drawn from the
+          persisted history of /api/test/run on the curated 25-per-label
+          real-report cohort. Vertical dashed ticks mark UTC slice rotations so
+          reviewers can distinguish daily-slice flips from real cohort drift.
         </CardDescription>
         {/* Task #379 — confirm the older-than-window roll-up routine
             (Task #264) is alive and surface what it did on its most
@@ -17478,8 +19132,8 @@ export function DatasetCohortDriftSection() {
           >
             Last compacted{" "}
             <span className="font-mono text-foreground/80">
-              {formatRelativeAgo(data.lastCompaction.lastCompactedAt)
-                ?? data.lastCompaction.lastCompactedAt}
+              {formatRelativeAgo(data.lastCompaction.lastCompactedAt) ??
+                data.lastCompaction.lastCompactedAt}
             </span>
             {" — removed "}
             <span className="font-mono text-foreground/80 tabular-nums">
@@ -17503,7 +19157,9 @@ export function DatasetCohortDriftSection() {
             className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 text-[11px] text-muted-foreground"
             data-testid="dataset-history-compact-config"
           >
-            <span className="font-mono text-muted-foreground/80">Trend rollup window:</span>
+            <span className="font-mono text-muted-foreground/80">
+              Trend rollup window:
+            </span>
             <span
               className="tabular-nums text-foreground/80"
               data-testid="dataset-history-compact-effective"
@@ -17530,7 +19186,7 @@ export function DatasetCohortDriftSection() {
               max={configData.max}
               step={1}
               value={compactDraft}
-              onChange={e => setCompactDraft(e.target.value)}
+              onChange={(e) => setCompactDraft(e.target.value)}
               disabled={envLocked || compactSaving || compactResetting}
               className={cn(
                 "ml-auto w-16 rounded border bg-background px-2 py-0.5 text-[11px] tabular-nums",
@@ -17552,10 +19208,10 @@ export function DatasetCohortDriftSection() {
               type="button"
               onClick={saveCompactWindow}
               disabled={
-                envLocked
-                || !compactDraftDirty
-                || compactSaving
-                || compactResetting
+                envLocked ||
+                !compactDraftDirty ||
+                compactSaving ||
+                compactResetting
               }
               className="rounded border border-border/60 bg-background px-2 py-0.5 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
               data-testid="dataset-history-compact-save"
@@ -17566,10 +19222,10 @@ export function DatasetCohortDriftSection() {
               type="button"
               onClick={resetCompactWindow}
               disabled={
-                envLocked
-                || configData.persistedDays == null
-                || compactSaving
-                || compactResetting
+                envLocked ||
+                configData.persistedDays == null ||
+                compactSaving ||
+                compactResetting
               }
               className="rounded border border-border/60 bg-background px-2 py-0.5 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
               data-testid="dataset-history-compact-reset"
@@ -17585,18 +19241,25 @@ export function DatasetCohortDriftSection() {
             data-testid="dataset-cohort-drift-empty"
           >
             <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground/70" />
-            <span>Dataset not mounted on this runner — no cohort drift snapshots yet.</span>
+            <span>
+              Dataset not mounted on this runner — no cohort drift snapshots
+              yet.
+            </span>
           </div>
         ) : (
           <>
             {/* Task #380 — legend gated on the presence of agg points. */}
-            {(summary.tiers.some(t => t.aggregatedCount > 0)
-              || summary.gapAggregatedCount > 0) && (
+            {(summary.tiers.some((t) => t.aggregatedCount > 0) ||
+              summary.gapAggregatedCount > 0) && (
               <div
                 className="mb-2 flex items-center gap-2 rounded-md border border-border/40 bg-muted/[0.03] px-3 py-1.5 text-[11px] text-muted-foreground"
                 data-testid="dataset-cohort-drift-aggregation-legend"
               >
-                <svg viewBox="0 0 36 8" className="w-9 h-2 shrink-0" aria-hidden="true">
+                <svg
+                  viewBox="0 0 36 8"
+                  className="w-9 h-2 shrink-0"
+                  aria-hidden="true"
+                >
                   <line
                     x1="0"
                     y1="4"
@@ -17619,82 +19282,89 @@ export function DatasetCohortDriftSection() {
                   />
                 </svg>
                 <span>
-                  Dashed prefix = daily roll-up (one row per UTC day for snapshots older than the
-                  rollup window above). Solid suffix = raw per-run resolution.
+                  Dashed prefix = daily roll-up (one row per UTC day for
+                  snapshots older than the rollup window above). Solid suffix =
+                  raw per-run resolution.
                 </span>
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            {summary.tiers.map(series => {
-              // Task #515 — surface the same dataset-vs-fixture trend the
-              // Cohort Means tiles already render (Task #362) on this
-              // standalone Drift panel, so a reviewer landing here
-              // doesn't have to scroll back up to the means card to see
-              // the synthetic-vs-real Δ trend. We reuse the warn-state
-              // logic from `computeCohortFixtureDelta` so the orange
-              // "divergent" treatment matches the means tile exactly,
-              // and the signed-Δ caption uses the same `Δ+x.x / Δ —`
-              // formatting the means panel uses above.
-              const latestDelta = series.latestDelta;
-              const isDeltaDivergent =
-                latestDelta != null
-                && Math.abs(latestDelta) > FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD;
-              const deltaCaption = latestDelta == null
-                ? "Δ —"
-                : `Δ${latestDelta >= 0 ? "+" : ""}${latestDelta.toFixed(1)}`;
-              const deltaCaptionColor = isDeltaDivergent
-                ? "text-orange-400"
-                : "text-muted-foreground/80";
-              return (
-              <div
-                key={series.tier}
-                className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 space-y-1"
-                data-testid={`dataset-cohort-drift-tier-${series.tier}`}
-              >
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span className="font-mono">
-                    {DATASET_COHORT_TIER_LABELS[series.tier] ?? series.tier}
-                  </span>
-                  <span className="tabular-nums text-muted-foreground/60 flex items-center gap-1">
-                    {series.snapshotCount} pt{series.snapshotCount === 1 ? "" : "s"}
-                    {/* Task #380 — agg/raw breakdown chip. */}
-                    {series.aggregatedCount > 0 && (
-                      <span
-                        className="text-cyan-400/80 font-mono normal-case"
-                        title={
-                          `${series.aggregatedCount} daily aggregate`
-                          + `${series.aggregatedCount === 1 ? "" : "s"}`
-                          + ` + ${series.rawCount} raw point${series.rawCount === 1 ? "" : "s"}.`
-                          + " Rolled-up older history is drawn as a dashed prefix on the sparkline."
-                        }
-                        data-testid={`dataset-cohort-drift-aggregated-${series.tier}`}
-                      >
-                        · {series.aggregatedCount} agg + {series.rawCount} raw
+              {summary.tiers.map((series) => {
+                // Task #515 — surface the same dataset-vs-fixture trend the
+                // Cohort Means tiles already render (Task #362) on this
+                // standalone Drift panel, so a reviewer landing here
+                // doesn't have to scroll back up to the means card to see
+                // the synthetic-vs-real Δ trend. We reuse the warn-state
+                // logic from `computeCohortFixtureDelta` so the orange
+                // "divergent" treatment matches the means tile exactly,
+                // and the signed-Δ caption uses the same `Δ+x.x / Δ —`
+                // formatting the means panel uses above.
+                const latestDelta = series.latestDelta;
+                const isDeltaDivergent =
+                  latestDelta != null &&
+                  Math.abs(latestDelta) >
+                    FIXTURE_VS_DATASET_DELTA_WARN_THRESHOLD;
+                const deltaCaption =
+                  latestDelta == null
+                    ? "Δ —"
+                    : `Δ${latestDelta >= 0 ? "+" : ""}${latestDelta.toFixed(1)}`;
+                const deltaCaptionColor = isDeltaDivergent
+                  ? "text-orange-400"
+                  : "text-muted-foreground/80";
+                return (
+                  <div
+                    key={series.tier}
+                    className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 space-y-1"
+                    data-testid={`dataset-cohort-drift-tier-${series.tier}`}
+                  >
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span className="font-mono">
+                        {DATASET_COHORT_TIER_LABELS[series.tier] ?? series.tier}
                       </span>
-                    )}
-                    {/*
+                      <span className="tabular-nums text-muted-foreground/60 flex items-center gap-1">
+                        {series.snapshotCount} pt
+                        {series.snapshotCount === 1 ? "" : "s"}
+                        {/* Task #380 — agg/raw breakdown chip. */}
+                        {series.aggregatedCount > 0 && (
+                          <span
+                            className="text-cyan-400/80 font-mono normal-case"
+                            title={
+                              `${series.aggregatedCount} daily aggregate` +
+                              `${series.aggregatedCount === 1 ? "" : "s"}` +
+                              ` + ${series.rawCount} raw point${series.rawCount === 1 ? "" : "s"}.` +
+                              " Rolled-up older history is drawn as a dashed prefix on the sparkline."
+                            }
+                            data-testid={`dataset-cohort-drift-aggregated-${series.tier}`}
+                          >
+                            · {series.aggregatedCount} agg + {series.rawCount}{" "}
+                            raw
+                          </span>
+                        )}
+                        {/*
                       Task #358 — note rotation count when present so a
                       jittery sparkline isn't confused for model drift.
                     */}
-                    {series.rotationCount > 0 && (
-                      <span
-                        className="text-amber-500/80 font-mono normal-case"
-                        title={`${series.rotationCount} UTC slice rotation${series.rotationCount === 1 ? "" : "s"} observed across the trend.`}
-                        data-testid={`dataset-cohort-drift-rotations-${series.tier}`}
-                      >
-                        · {series.rotationCount} rot
+                        {series.rotationCount > 0 && (
+                          <span
+                            className="text-amber-500/80 font-mono normal-case"
+                            title={`${series.rotationCount} UTC slice rotation${series.rotationCount === 1 ? "" : "s"} observed across the trend.`}
+                            data-testid={`dataset-cohort-drift-rotations-${series.tier}`}
+                          >
+                            · {series.rotationCount} rot
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-base font-semibold tabular-nums text-foreground">
-                    {series.latest != null ? series.latest.toFixed(1) : "—"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">latest mean</span>
-                </div>
-                <DatasetHistoryMeanSparkline points={series.points} />
-                {/*
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-base font-semibold tabular-nums text-foreground">
+                        {series.latest != null ? series.latest.toFixed(1) : "—"}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        latest mean
+                      </span>
+                    </div>
+                    <DatasetHistoryMeanSparkline points={series.points} />
+                    {/*
                   Task #515 — second sparkline tracks (datasetMean −
                   fixtureMean) over the same history window so the panel
                   literally named "Drift" surfaces the synthetic-vs-real
@@ -17704,86 +19374,96 @@ export function DatasetCohortDriftSection() {
                   shows the latest Δ in the same signed `Δ+x.x` format
                   the Cohort Means card uses.
                 */}
-                <div className="flex items-center justify-between gap-2 pt-1 text-[10px] text-muted-foreground">
-                  <span className="font-mono">fixture Δ</span>
-                  <span
-                    className={cn("tabular-nums", deltaCaptionColor)}
-                    data-testid={`dataset-cohort-drift-fixture-delta-latest-${series.tier}`}
-                  >
-                    {deltaCaption}
-                  </span>
-                </div>
-                <div data-testid={`dataset-cohort-drift-fixture-delta-trend-${series.tier}`}>
-                  <DatasetCohortFixtureDeltaSparkline
-                    points={series.deltaPoints}
-                    isDivergent={isDeltaDivergent}
-                  />
-                </div>
-              </div>
-              );
-            })}
-            <div
-              className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 space-y-1"
-              data-testid="dataset-cohort-drift-tier-gap"
-            >
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                <span className="font-mono">T1 − T3 gap</span>
-                <span className="tabular-nums text-muted-foreground/60 flex items-center gap-1">
-                  {summary.gapPoints.length} pt{summary.gapPoints.length === 1 ? "" : "s"}
-                  {/* Task #380 — agg/raw breakdown chip for the gap series. */}
-                  {summary.gapAggregatedCount > 0 && (
-                    <span
-                      className="text-cyan-400/80 font-mono normal-case"
-                      title={
-                        `${summary.gapAggregatedCount} daily aggregate`
-                        + `${summary.gapAggregatedCount === 1 ? "" : "s"}`
-                        + ` + ${summary.gapRawCount} raw point${summary.gapRawCount === 1 ? "" : "s"}.`
-                        + " Rolled-up older history is drawn as a dashed prefix on the sparkline."
-                      }
-                      data-testid="dataset-cohort-drift-aggregated-gap"
+                    <div className="flex items-center justify-between gap-2 pt-1 text-[10px] text-muted-foreground">
+                      <span className="font-mono">fixture Δ</span>
+                      <span
+                        className={cn("tabular-nums", deltaCaptionColor)}
+                        data-testid={`dataset-cohort-drift-fixture-delta-latest-${series.tier}`}
+                      >
+                        {deltaCaption}
+                      </span>
+                    </div>
+                    <div
+                      data-testid={`dataset-cohort-drift-fixture-delta-trend-${series.tier}`}
                     >
-                      · {summary.gapAggregatedCount} agg + {summary.gapRawCount} raw
-                    </span>
-                  )}
-                  {/*
+                      <DatasetCohortFixtureDeltaSparkline
+                        points={series.deltaPoints}
+                        isDivergent={isDeltaDivergent}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              <div
+                className="rounded-md border border-border/40 bg-muted/[0.04] px-3 py-2 space-y-1"
+                data-testid="dataset-cohort-drift-tier-gap"
+              >
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span className="font-mono">T1 − T3 gap</span>
+                  <span className="tabular-nums text-muted-foreground/60 flex items-center gap-1">
+                    {summary.gapPoints.length} pt
+                    {summary.gapPoints.length === 1 ? "" : "s"}
+                    {/* Task #380 — agg/raw breakdown chip for the gap series. */}
+                    {summary.gapAggregatedCount > 0 && (
+                      <span
+                        className="text-cyan-400/80 font-mono normal-case"
+                        title={
+                          `${summary.gapAggregatedCount} daily aggregate` +
+                          `${summary.gapAggregatedCount === 1 ? "" : "s"}` +
+                          ` + ${summary.gapRawCount} raw point${summary.gapRawCount === 1 ? "" : "s"}.` +
+                          " Rolled-up older history is drawn as a dashed prefix on the sparkline."
+                        }
+                        data-testid="dataset-cohort-drift-aggregated-gap"
+                      >
+                        · {summary.gapAggregatedCount} agg +{" "}
+                        {summary.gapRawCount} raw
+                      </span>
+                    )}
+                    {/*
                     Task #370 — chip the calibration target alongside the
                     point count so reviewers know what the dashed line in
                     the sparkline represents without hovering for the
                     tooltip. Mirrors the "(target ≥{ds.gapTarget}pt)"
                     badge from DatasetCohortMeansSection above.
                   */}
-                  {gapTarget != null && (
-                    <span
-                      className="text-muted-foreground/60 font-mono normal-case"
-                      title={`Calibration target: T1−T3 gap should stay ≥ ${gapTarget}pt. Snapshots that fall below this threshold are highlighted in red on the sparkline.`}
-                      data-testid="dataset-cohort-drift-gap-target-chip"
-                    >
-                      · target ≥{gapTarget}
-                    </span>
-                  )}
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span
-                  className={cn(
-                    "text-base font-semibold tabular-nums",
-                    latestGapBelowTarget ? "text-red-400" : "text-foreground",
-                  )}
-                  data-testid={
-                    latestGapBelowTarget
-                      ? "dataset-cohort-drift-latest-gap-breach"
-                      : undefined
+                    {gapTarget != null && (
+                      <span
+                        className="text-muted-foreground/60 font-mono normal-case"
+                        title={`Calibration target: T1−T3 gap should stay ≥ ${gapTarget}pt. Snapshots that fall below this threshold are highlighted in red on the sparkline.`}
+                        data-testid="dataset-cohort-drift-gap-target-chip"
+                      >
+                        · target ≥{gapTarget}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span
+                    className={cn(
+                      "text-base font-semibold tabular-nums",
+                      latestGapBelowTarget ? "text-red-400" : "text-foreground",
+                    )}
+                    data-testid={
+                      latestGapBelowTarget
+                        ? "dataset-cohort-drift-latest-gap-breach"
+                        : undefined
+                    }
+                  >
+                    {summary.latestGap != null
+                      ? summary.latestGap.toFixed(1)
+                      : "—"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    latest gap
+                  </span>
+                </div>
+                <DatasetHistoryMeanSparkline
+                  points={summary.gapPoints}
+                  targetLine={
+                    gapTarget != null ? { value: gapTarget } : undefined
                   }
-                >
-                  {summary.latestGap != null ? summary.latestGap.toFixed(1) : "—"}
-                </span>
-                <span className="text-[10px] text-muted-foreground">latest gap</span>
+                />
               </div>
-              <DatasetHistoryMeanSparkline
-                points={summary.gapPoints}
-                targetLine={gapTarget != null ? { value: gapTarget } : undefined}
-              />
-            </div>
             </div>
             {/*
               Task #510 — per-UTC-day rotation-density bar so reviewers
@@ -17833,16 +19513,21 @@ export function DatasetCohortDriftSection() {
 }
 
 export const AVRI_DRIFT_LOOKBACK_OPTIONS = [4, 8, 13, 26] as const;
-export type AvriDriftLookbackWeeks = (typeof AVRI_DRIFT_LOOKBACK_OPTIONS)[number];
+export type AvriDriftLookbackWeeks =
+  (typeof AVRI_DRIFT_LOOKBACK_OPTIONS)[number];
 const AVRI_DRIFT_DEFAULT_WEEKS: AvriDriftLookbackWeeks = 8;
 const AVRI_DRIFT_LOOKBACK_QUERY_KEY = "driftWeeks";
 export const AVRI_DRIFT_LOOKBACK_STORAGE_KEY = "vulnrap.avri.driftWeeks";
 
-export function isValidDriftLookback(value: number): value is AvriDriftLookbackWeeks {
+export function isValidDriftLookback(
+  value: number,
+): value is AvriDriftLookbackWeeks {
   return (AVRI_DRIFT_LOOKBACK_OPTIONS as readonly number[]).includes(value);
 }
 
-export function parseDriftLookback(raw: string | null | undefined): AvriDriftLookbackWeeks | null {
+export function parseDriftLookback(
+  raw: string | null | undefined,
+): AvriDriftLookbackWeeks | null {
   if (raw == null || raw === "") return null;
   const n = Number(raw);
   if (!Number.isFinite(n)) return null;
@@ -17852,7 +19537,9 @@ export function parseDriftLookback(raw: string | null | undefined): AvriDriftLoo
 export function readStoredDriftLookback(): AvriDriftLookbackWeeks | null {
   if (typeof window === "undefined") return null;
   try {
-    return parseDriftLookback(window.localStorage.getItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY));
+    return parseDriftLookback(
+      window.localStorage.getItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY),
+    );
   } catch {
     return null;
   }
@@ -17878,7 +19565,10 @@ function AvriDriftSection() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      window.localStorage.setItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY, String(weeks));
+      window.localStorage.setItem(
+        AVRI_DRIFT_LOOKBACK_STORAGE_KEY,
+        String(weeks),
+      );
     } catch {
       // Ignore quota / privacy-mode write errors — the URL param still works.
     }
@@ -17892,7 +19582,8 @@ function AvriDriftSection() {
   // Uses replace so we don't add an extra history entry.
   useEffect(() => {
     const urlInvalid = urlPresent && urlWeeks === null;
-    const shouldAddFromStorage = !urlPresent && weeks !== AVRI_DRIFT_DEFAULT_WEEKS;
+    const shouldAddFromStorage =
+      !urlPresent && weeks !== AVRI_DRIFT_DEFAULT_WEEKS;
     if (!urlInvalid && !shouldAddFromStorage) return;
     setSearchParams(
       (prev) => {
@@ -17917,7 +19608,10 @@ function AvriDriftSection() {
     // previous non-default value and the chooser would visibly snap back.
     if (typeof window !== "undefined") {
       try {
-        window.localStorage.setItem(AVRI_DRIFT_LOOKBACK_STORAGE_KEY, String(value));
+        window.localStorage.setItem(
+          AVRI_DRIFT_LOOKBACK_STORAGE_KEY,
+          String(value),
+        );
       } catch {
         // Ignore quota / privacy-mode write errors — URL handling still works.
       }
@@ -18038,328 +19732,375 @@ function AvriDriftSection() {
   }
   const recentWeeks = [...report.weeks].slice(-6).reverse();
   const flaggedCount = report.flags.length;
-  const headerColor = flaggedCount === 0
-    ? "text-green-400 bg-green-400/10"
-    : "text-orange-400 bg-orange-400/10";
+  const headerColor =
+    flaggedCount === 0
+      ? "text-green-400 bg-green-400/10"
+      : "text-orange-400 bg-orange-400/10";
 
   return (
     <>
-    {/* Task #296 — wrong-token throttle countdown, repeated above the AVRI
+      {/* Task #296 — wrong-token throttle countdown, repeated above the AVRI
         drift card so reviewers using the re-arm panel see the same friendly
         banner CalibrationSection / HandwavyPhrasesAdmin already render
         rather than a raw "HTTP 429" toast. Hidden when the cooldown is
         not active, so the panel layout is unchanged in the common case. */}
-    <CalibrationCooldownBanner state={cooldown} />
-    <Card className="glass-card rounded-xl border-primary/10">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Activity className="w-4 h-4 text-primary" />
-            AVRI Drift Dashboard
-            <span className="text-[10px] font-normal text-muted-foreground tabular-nums">
-              · last {report.weeksRequested} weeks
+      <CalibrationCooldownBanner state={cooldown} />
+      <Card className="glass-card rounded-xl border-primary/10">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Activity className="w-4 h-4 text-primary" />
+              AVRI Drift Dashboard
+              <span className="text-[10px] font-normal text-muted-foreground tabular-nums">
+                · last {report.weeksRequested} weeks
+              </span>
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <div
+                role="radiogroup"
+                aria-label="Lookback window (weeks)"
+                className="inline-flex items-center rounded-md border border-border/50 bg-muted/20 p-0.5"
+              >
+                {AVRI_DRIFT_LOOKBACK_OPTIONS.map((opt) => {
+                  const active = opt === weeks;
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      disabled={isFetching && active}
+                      onClick={() => setWeeks(opt)}
+                      className={cn(
+                        "px-2 py-0.5 text-[10px] font-mono rounded-sm transition-colors tabular-nums",
+                        active
+                          ? "bg-primary/15 text-primary"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+                      )}
+                    >
+                      {opt}w
+                    </button>
+                  );
+                })}
+              </div>
+              <Badge
+                variant="outline"
+                className={cn("text-[10px] gap-1", headerColor)}
+              >
+                <Shield className="w-3 h-3" />
+                {flaggedCount === 0
+                  ? "No drift flags"
+                  : `${flaggedCount} flag${flaggedCount === 1 ? "" : "s"}`}
+              </Badge>
+              <Badge variant="secondary" className="text-[10px]">
+                {report.totalReportsScanned} reports · {report.weeksRequested}w
+              </Badge>
+            </div>
+          </div>
+          <CardDescription className="space-y-1">
+            <span className="block">
+              Rolling weekly view of the AVRI composite, bucketed by triage
+              outcome (T1-equivalent vs T3-equivalent). Flags fire when the
+              T1−T3 gap drops below {report.thresholds.gapWarn}pt or any family
+              mean shifts by ≥{report.thresholds.familyShiftWarn}pt
+              week-over-week (min {report.thresholds.minBucketSize} reports per
+              bucket).
             </span>
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <div
-              role="radiogroup"
-              aria-label="Lookback window (weeks)"
-              className="inline-flex items-center rounded-md border border-border/50 bg-muted/20 p-0.5"
+            <a
+              href={runbookUrl(report.runbookPath)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
             >
-              {AVRI_DRIFT_LOOKBACK_OPTIONS.map(opt => {
-                const active = opt === weeks;
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    disabled={isFetching && active}
-                    onClick={() => setWeeks(opt)}
-                    className={cn(
-                      "px-2 py-0.5 text-[10px] font-mono rounded-sm transition-colors tabular-nums",
-                      active
-                        ? "bg-primary/15 text-primary"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
-                    )}
-                  >
-                    {opt}w
-                  </button>
-                );
-              })}
+              <BookOpen className="w-3 h-3" />
+              Open the AVRI drift runbook
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+              Weekly T1−T3 composite gap (warn line at{" "}
+              {report.thresholds.gapWarn}pt)
             </div>
-            <Badge variant="outline" className={cn("text-[10px] gap-1", headerColor)}>
-              <Shield className="w-3 h-3" />
-              {flaggedCount === 0 ? "No drift flags" : `${flaggedCount} flag${flaggedCount === 1 ? "" : "s"}`}
-            </Badge>
-            <Badge variant="secondary" className="text-[10px]">
-              {report.totalReportsScanned} reports · {report.weeksRequested}w
-            </Badge>
+            <GapSparkline
+              weeks={report.weeks}
+              gapWarn={report.thresholds.gapWarn}
+            />
           </div>
-        </div>
-        <CardDescription className="space-y-1">
-          <span className="block">
-            Rolling weekly view of the AVRI composite, bucketed by triage outcome
-            (T1-equivalent vs T3-equivalent). Flags fire when the T1−T3 gap drops
-            below {report.thresholds.gapWarn}pt or any family mean shifts by ≥{report.thresholds.familyShiftWarn}pt
-            week-over-week (min {report.thresholds.minBucketSize} reports per bucket).
-          </span>
-          <a
-            href={runbookUrl(report.runbookPath)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-          >
-            <BookOpen className="w-3 h-3" />
-            Open the AVRI drift runbook
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-            Weekly T1−T3 composite gap (warn line at {report.thresholds.gapWarn}pt)
-          </div>
-          <GapSparkline weeks={report.weeks} gapWarn={report.thresholds.gapWarn} />
-        </div>
 
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-            Drift flags
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+              Drift flags
+            </div>
+            {report.flags.length === 0 ? (
+              <p className="text-xs text-muted-foreground/60 py-2 flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+                No drift flags fired in the last {report.weeksRequested} weeks.
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {report.flags.map((f, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs">
+                    <DriftFlagBadge
+                      kind={f.kind}
+                      gapWarn={report.thresholds.gapWarn}
+                      familyShiftWarn={report.thresholds.familyShiftWarn}
+                    />
+                    <span className="text-muted-foreground/80 font-mono text-[10px] shrink-0 pt-0.5">
+                      {f.weekStart}
+                    </span>
+                    <span className="text-foreground/80 leading-relaxed">
+                      {f.detail}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          {report.flags.length === 0 ? (
-            <p className="text-xs text-muted-foreground/60 py-2 flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-              No drift flags fired in the last {report.weeksRequested} weeks.
-            </p>
-          ) : (
-            <ul className="space-y-1.5">
-              {report.flags.map((f, i) => (
-                <li key={i} className="flex items-start gap-2 text-xs">
-                  <DriftFlagBadge
-                    kind={f.kind}
-                    gapWarn={report.thresholds.gapWarn}
-                    familyShiftWarn={report.thresholds.familyShiftWarn}
-                  />
-                  <span className="text-muted-foreground/80 font-mono text-[10px] shrink-0 pt-0.5">
-                    {f.weekStart}
-                  </span>
-                  <span className="text-foreground/80 leading-relaxed">{f.detail}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
 
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-            Recent weeks (T1/T3 means and per-family breakdown)
-          </div>
-          {recentWeeks.length === 0 ? (
-            <p className="text-xs text-muted-foreground/50 py-4 text-center">
-              No AVRI-scored reports in the lookback window yet.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {recentWeeks.map(week => {
-                const weekFlags = flagsByWeek.get(week.weekStart) ?? [];
-                return (
-                  <div
-                    key={week.weekStart}
-                    className={cn(
-                      "p-3 rounded-lg border space-y-3",
-                      weekFlags.length > 0
-                        ? "border-orange-400/30 bg-orange-400/[0.03]"
-                        : "border-border/40 bg-muted/[0.03]",
-                    )}
-                  >
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs text-foreground">{week.weekStart}</span>
-                        <span className="text-[10px] text-muted-foreground">
-                          {week.reportCount} report{week.reportCount === 1 ? "" : "s"}
-                        </span>
-                        {weekFlags.map((f, i) => (
-                          <DriftFlagBadge
-                            key={i}
-                            kind={f.kind}
-                            gapWarn={report.thresholds.gapWarn}
-                            familyShiftWarn={report.thresholds.familyShiftWarn}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+              Recent weeks (T1/T3 means and per-family breakdown)
+            </div>
+            {recentWeeks.length === 0 ? (
+              <p className="text-xs text-muted-foreground/50 py-4 text-center">
+                No AVRI-scored reports in the lookback window yet.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {recentWeeks.map((week) => {
+                  const weekFlags = flagsByWeek.get(week.weekStart) ?? [];
+                  return (
+                    <div
+                      key={week.weekStart}
+                      className={cn(
+                        "p-3 rounded-lg border space-y-3",
+                        weekFlags.length > 0
+                          ? "border-orange-400/30 bg-orange-400/[0.03]"
+                          : "border-border/40 bg-muted/[0.03]",
+                      )}
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs text-foreground">
+                            {week.weekStart}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {week.reportCount} report
+                            {week.reportCount === 1 ? "" : "s"}
+                          </span>
+                          {weekFlags.map((f, i) => (
+                            <DriftFlagBadge
+                              key={i}
+                              kind={f.kind}
+                              gapWarn={report.thresholds.gapWarn}
+                              familyShiftWarn={
+                                report.thresholds.familyShiftWarn
+                              }
+                            />
+                          ))}
+                          {(() => {
+                            const count =
+                              rearmCountByWeek.get(week.weekStart) ?? 0;
+                            if (count === 0) return null;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  focusRearmHistoryForWeek(week.weekStart)
+                                }
+                                className={cn(
+                                  "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium",
+                                  "border-primary/30 bg-primary/5 text-primary/90",
+                                  "hover:bg-primary/10 hover:border-primary/50 hover:text-primary",
+                                  "focus:outline-none focus:ring-1 focus:ring-primary/40 transition-colors",
+                                )}
+                                data-testid="avri-drift-week-rearm-badge"
+                                data-week-start={week.weekStart}
+                                data-rearm-count={count}
+                                title={`${count} re-arm event${count === 1 ? "" : "s"} recorded for week ${week.weekStart} — click to filter the audit log to this week`}
+                                aria-label={`Show ${count} re-arm event${count === 1 ? "" : "s"} for week ${week.weekStart} in the audit log`}
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                re-armed {count} time{count === 1 ? "" : "s"}
+                              </button>
+                            );
+                          })()}
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px]">
+                          <span className="tabular-nums">
+                            <span className="text-muted-foreground">T1 </span>
+                            <span className="text-foreground font-medium">
+                              {week.t1.mean != null
+                                ? week.t1.mean.toFixed(1)
+                                : "—"}
+                            </span>
+                            <span className="text-muted-foreground/50">
+                              {" "}
+                              (n={week.t1.count})
+                            </span>
+                          </span>
+                          <span className="tabular-nums">
+                            <span className="text-muted-foreground">T3 </span>
+                            <span className="text-foreground font-medium">
+                              {week.t3.mean != null
+                                ? week.t3.mean.toFixed(1)
+                                : "—"}
+                            </span>
+                            <span className="text-muted-foreground/50">
+                              {" "}
+                              (n={week.t3.count})
+                            </span>
+                          </span>
+                          <span
+                            className={cn(
+                              "tabular-nums font-mono px-1.5 py-0.5 rounded",
+                              week.gapEligible &&
+                                week.gap != null &&
+                                week.gap < report.thresholds.gapWarn
+                                ? "bg-red-400/10 text-red-400"
+                                : "bg-primary/10 text-primary",
+                            )}
+                          >
+                            gap {week.gap != null ? week.gap.toFixed(1) : "—"}
+                            {!week.gapEligible && (
+                              <span className="text-muted-foreground/50 ml-1">
+                                ·n/a
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">
+                            T1 families
+                          </div>
+                          <FamilyMeansTable
+                            rows={week.perFamily.t1}
+                            bucket="T1"
                           />
-                        ))}
-                        {(() => {
-                          const count = rearmCountByWeek.get(week.weekStart) ?? 0;
-                          if (count === 0) return null;
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => focusRearmHistoryForWeek(week.weekStart)}
-                              className={cn(
-                                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium",
-                                "border-primary/30 bg-primary/5 text-primary/90",
-                                "hover:bg-primary/10 hover:border-primary/50 hover:text-primary",
-                                "focus:outline-none focus:ring-1 focus:ring-primary/40 transition-colors",
-                              )}
-                              data-testid="avri-drift-week-rearm-badge"
-                              data-week-start={week.weekStart}
-                              data-rearm-count={count}
-                              title={`${count} re-arm event${count === 1 ? "" : "s"} recorded for week ${week.weekStart} — click to filter the audit log to this week`}
-                              aria-label={`Show ${count} re-arm event${count === 1 ? "" : "s"} for week ${week.weekStart} in the audit log`}
-                            >
-                              <RotateCcw className="w-3 h-3" />
-                              re-armed {count} time{count === 1 ? "" : "s"}
-                            </button>
-                          );
-                        })()}
-                      </div>
-                      <div className="flex items-center gap-3 text-[11px]">
-                        <span className="tabular-nums">
-                          <span className="text-muted-foreground">T1 </span>
-                          <span className="text-foreground font-medium">
-                            {week.t1.mean != null ? week.t1.mean.toFixed(1) : "—"}
-                          </span>
-                          <span className="text-muted-foreground/50"> (n={week.t1.count})</span>
-                        </span>
-                        <span className="tabular-nums">
-                          <span className="text-muted-foreground">T3 </span>
-                          <span className="text-foreground font-medium">
-                            {week.t3.mean != null ? week.t3.mean.toFixed(1) : "—"}
-                          </span>
-                          <span className="text-muted-foreground/50"> (n={week.t3.count})</span>
-                        </span>
-                        <span className={cn(
-                          "tabular-nums font-mono px-1.5 py-0.5 rounded",
-                          week.gapEligible && week.gap != null && week.gap < report.thresholds.gapWarn
-                            ? "bg-red-400/10 text-red-400"
-                            : "bg-primary/10 text-primary",
-                        )}>
-                          gap {week.gap != null ? week.gap.toFixed(1) : "—"}
-                          {!week.gapEligible && (
-                            <span className="text-muted-foreground/50 ml-1">·n/a</span>
-                          )}
-                        </span>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">
+                            T3 families
+                          </div>
+                          <FamilyMeansTable
+                            rows={week.perFamily.t3}
+                            bucket="T3"
+                          />
+                        </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">
-                          T1 families
-                        </div>
-                        <FamilyMeansTable rows={week.perFamily.t1} bucket="T1" />
-                      </div>
-                      <div>
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">
-                          T3 families
-                        </div>
-                        <FamilyMeansTable rows={week.perFamily.t3} bucket="T3" />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
-            <span>Notified flags (suppressed from re-paging)</span>
-            <span className="text-muted-foreground/40 normal-case font-normal italic">
-              re-arm to re-fire on the next dispatch run
-            </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          {/* Reviewer + rationale audit context the re-arm button
+
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+              <span>Notified flags (suppressed from re-paging)</span>
+              <span className="text-muted-foreground/40 normal-case font-normal italic">
+                re-arm to re-fire on the next dispatch run
+              </span>
+            </div>
+            {/* Reviewer + rationale audit context the re-arm button
               forwards to the backend. Only shown when the reviewer
               has a valid token (mutations are gated there). */}
-          {authState.kind === "valid" && (
-            <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-2 mb-2">
-              <input
-                type="text"
-                value={rearmReviewer}
-                onChange={(e) => setRearmReviewer(e.target.value)}
-                placeholder="Reviewer (optional)"
-                maxLength={200}
-                className="h-7 px-2 rounded-md border border-border/40 bg-background/40 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
-                aria-label="Reviewer name for the re-arm audit log"
-                title="Recorded in the re-arm audit log alongside the next re-arm click."
-                data-testid="avri-drift-rearm-reviewer"
-              />
-              <input
-                type="text"
-                value={rearmRationale}
-                onChange={(e) => setRearmRationale(e.target.value)}
-                placeholder="Rationale (optional, e.g. 'fix-by date passed')"
-                maxLength={500}
-                className="h-7 px-2 rounded-md border border-border/40 bg-background/40 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
-                aria-label="Rationale for the next re-arm action"
-                title="Recorded in the re-arm audit log alongside the next re-arm click; cleared after a successful re-arm."
-                data-testid="avri-drift-rearm-rationale"
-              />
-            </div>
-          )}
-          <NotifiedFlagsPanel
-            authState={authState}
-            notificationsQueryKey={notificationsQueryKey}
-            driftReportQueryKey={driftReportQueryKey}
-            rearmHistoryQueryKey={rearmHistoryQueryKey}
-            reviewer={rearmReviewer}
-            rationale={rearmRationale}
-            onRationaleChange={setRearmRationale}
-            cooldownActive={cooldown.active}
-            cooldownSecondsRemaining={cooldown.secondsRemaining}
-          />
-        </div>
-
-        {/* Audit trail of who re-armed which dedup entry and when —
-            a sibling read-only log alongside the notified-flags panel. */}
-        <div ref={rearmHistoryPanelRef} data-testid="avri-drift-rearm-history-panel">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
-            <span>Recently re-armed</span>
-            <span className="text-muted-foreground/40 normal-case font-normal italic">
-              audit trail (last 200, newest first)
-            </span>
+            {authState.kind === "valid" && (
+              <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-2 mb-2">
+                <input
+                  type="text"
+                  value={rearmReviewer}
+                  onChange={(e) => setRearmReviewer(e.target.value)}
+                  placeholder="Reviewer (optional)"
+                  maxLength={200}
+                  className="h-7 px-2 rounded-md border border-border/40 bg-background/40 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
+                  aria-label="Reviewer name for the re-arm audit log"
+                  title="Recorded in the re-arm audit log alongside the next re-arm click."
+                  data-testid="avri-drift-rearm-reviewer"
+                />
+                <input
+                  type="text"
+                  value={rearmRationale}
+                  onChange={(e) => setRearmRationale(e.target.value)}
+                  placeholder="Rationale (optional, e.g. 'fix-by date passed')"
+                  maxLength={500}
+                  className="h-7 px-2 rounded-md border border-border/40 bg-background/40 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
+                  aria-label="Rationale for the next re-arm action"
+                  title="Recorded in the re-arm audit log alongside the next re-arm click; cleared after a successful re-arm."
+                  data-testid="avri-drift-rearm-rationale"
+                />
+              </div>
+            )}
+            <NotifiedFlagsPanel
+              authState={authState}
+              notificationsQueryKey={notificationsQueryKey}
+              driftReportQueryKey={driftReportQueryKey}
+              rearmHistoryQueryKey={rearmHistoryQueryKey}
+              reviewer={rearmReviewer}
+              rationale={rearmRationale}
+              onRationaleChange={setRearmRationale}
+              cooldownActive={cooldown.active}
+              cooldownSecondsRemaining={cooldown.secondsRemaining}
+            />
           </div>
-          <RearmHistoryPanel
-            authState={authState}
-            rearmHistoryQueryKey={rearmHistoryQueryKey}
-            weekFilter={rearmHistoryWeekFilter}
-            onClearWeekFilter={() => setRearmHistoryWeekFilter(null)}
-          />
-        </div>
 
-        <SchedulerStatusPanel />
+          {/* Audit trail of who re-armed which dedup entry and when —
+            a sibling read-only log alongside the notified-flags panel. */}
+          <div
+            ref={rearmHistoryPanelRef}
+            data-testid="avri-drift-rearm-history-panel"
+          >
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+              <span>Recently re-armed</span>
+              <span className="text-muted-foreground/40 normal-case font-normal italic">
+                audit trail (last 200, newest first)
+              </span>
+            </div>
+            <RearmHistoryPanel
+              authState={authState}
+              rearmHistoryQueryKey={rearmHistoryQueryKey}
+              weekFilter={rearmHistoryWeekFilter}
+              onClearWeekFilter={() => setRearmHistoryWeekFilter(null)}
+            />
+          </div>
 
-        {/* Task #620 — Reviewer-only score-stability chart. Renders the
+          <SchedulerStatusPanel />
+
+          {/* Task #620 — Reviewer-only score-stability chart. Renders the
             nightly tier-flip count per day with direction breakdown
             (legit→slop, slop→legit) plus the dashed 2 % alert
             threshold the scheduler uses to page reviewers. Auth-gated
             on the same reviewer token as the rest of this dashboard,
             since an elevated flip-rate is a leading signal of an
             active scoring regression. */}
-        <ScoreStabilityPanel authState={authState} />
+          <ScoreStabilityPanel authState={authState} />
 
-        {/* Task #639 — Reviewer-only shadow scoring drift listing.
+          {/* Task #639 — Reviewer-only shadow scoring drift listing.
             When SHADOW_SCORING_ENABLED=1 on the API server every
             production submission is also scored through the in-flight
             shadow pipeline; this panel surfaces the rows whose live
             vs. shadow result diverges by ≥1 tier or ≥10 score points
             so reviewers can spot regressions before promoting the
             shadow rules to live. */}
-        <ShadowDriftPanel authState={authState} />
+          <ShadowDriftPanel authState={authState} />
 
-        {/* Task #399 — Recent calibration auth brute-force alerts.
+          {/* Task #399 — Recent calibration auth brute-force alerts.
             Same auth-gating model as the dedup-state and re-arm-history
             panels above, so reviewers can confirm at a glance whether
             the latest alert was them fat-fingering a token or a real
             probe without scraping pino logs. */}
-        <CalibrationAuthBruteForceAlertsPanel authState={authState} />
+          <CalibrationAuthBruteForceAlertsPanel authState={authState} />
 
-        <p className="text-[10px] text-muted-foreground/60 italic leading-relaxed border-t border-border/30 pt-3">
-          {report.bucketingNote}
-        </p>
-      </CardContent>
-    </Card>
+          <p className="text-[10px] text-muted-foreground/60 italic leading-relaxed border-t border-border/30 pt-3">
+            {report.bucketingNote}
+          </p>
+        </CardContent>
+      </Card>
     </>
   );
 }
@@ -18370,10 +20111,13 @@ function EmptyState() {
       <div className="p-4 rounded-full bg-primary/10 mb-4">
         <MessageSquare className="w-10 h-10 text-primary/50" />
       </div>
-      <h3 className="text-lg font-medium text-foreground mb-2">No feedback yet</h3>
+      <h3 className="text-lg font-medium text-foreground mb-2">
+        No feedback yet
+      </h3>
       <p className="text-sm text-muted-foreground max-w-md">
-        As PSIRT teams analyze reports and leave feedback, this dashboard will surface patterns
-        in accuracy, outliers where the engine disagrees with human judgment, and trends over time.
+        As PSIRT teams analyze reports and leave feedback, this dashboard will
+        surface patterns in accuracy, outliers where the engine disagrees with
+        human judgment, and trends over time.
       </p>
     </div>
   );
@@ -18385,15 +20129,29 @@ function EmptyState() {
 // so reviewers can spot when the in-sample numbers were optimistic. Each
 // metric renders "—" when its denominator is empty rather than a
 // misleading 0.
-function HoldoutMetric({ label, value, suffix }: { label: string; value: number | null; suffix?: string }) {
+function HoldoutMetric({
+  label,
+  value,
+  suffix,
+}: {
+  label: string;
+  value: number | null;
+  suffix?: string;
+}) {
   return (
     <div className="space-y-0.5">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
       <div className="text-lg font-bold tabular-nums">
-        {value == null ? <span className="text-muted-foreground/50">—</span> : (
+        {value == null ? (
+          <span className="text-muted-foreground/50">—</span>
+        ) : (
           <>
             {(value * 100).toFixed(1)}
-            <span className="text-xs text-muted-foreground/60">{suffix ?? "%"}</span>
+            <span className="text-xs text-muted-foreground/60">
+              {suffix ?? "%"}
+            </span>
           </>
         )}
       </div>
@@ -18401,7 +20159,12 @@ function HoldoutMetric({ label, value, suffix }: { label: string; value: number 
   );
 }
 
-function HoldoutPartitionCard({ title, subtitle, partition, accent }: {
+function HoldoutPartitionCard({
+  title,
+  subtitle,
+  partition,
+  accent,
+}: {
   title: string;
   subtitle: string;
   partition: HoldoutEvalPartition;
@@ -18434,19 +20197,27 @@ function HoldoutPartitionCard({ title, subtitle, partition, accent }: {
           <div className="grid grid-cols-4 gap-1 pt-2 border-t border-border/30">
             <div className="text-center">
               <div className="text-[10px] text-muted-foreground">TP</div>
-              <div className="text-xs font-mono tabular-nums text-green-400">{partition.tp}</div>
+              <div className="text-xs font-mono tabular-nums text-green-400">
+                {partition.tp}
+              </div>
             </div>
             <div className="text-center">
               <div className="text-[10px] text-muted-foreground">FP</div>
-              <div className="text-xs font-mono tabular-nums text-red-400">{partition.fp}</div>
+              <div className="text-xs font-mono tabular-nums text-red-400">
+                {partition.fp}
+              </div>
             </div>
             <div className="text-center">
               <div className="text-[10px] text-muted-foreground">FN</div>
-              <div className="text-xs font-mono tabular-nums text-orange-400">{partition.fn}</div>
+              <div className="text-xs font-mono tabular-nums text-orange-400">
+                {partition.fn}
+              </div>
             </div>
             <div className="text-center">
               <div className="text-[10px] text-muted-foreground">TN</div>
-              <div className="text-xs font-mono tabular-nums text-muted-foreground">{partition.tn}</div>
+              <div className="text-xs font-mono tabular-nums text-muted-foreground">
+                {partition.tn}
+              </div>
             </div>
           </div>
         </>
@@ -18480,7 +20251,11 @@ function WebhooksSection() {
   const deleteMutation = useDeleteWebhook();
 
   const [newUrl, setNewUrl] = useState("");
-  const [revealedSecret, setRevealedSecret] = useState<{ id: number; url: string; secret: string } | null>(null);
+  const [revealedSecret, setRevealedSecret] = useState<{
+    id: number;
+    url: string;
+    secret: string;
+  } | null>(null);
 
   if (!enabled) return null;
 
@@ -18489,49 +20264,74 @@ function WebhooksSection() {
     const url = newUrl.trim();
     if (url.length === 0) return;
     try {
-      const res = (await createMutation.mutateAsync({ data: { url, eventTypes: ["report.scored"] } })) as WebhookCreateResponse;
+      const res = (await createMutation.mutateAsync({
+        data: { url, eventTypes: ["report.scored"] },
+      })) as WebhookCreateResponse;
       setNewUrl("");
       setRevealedSecret({ id: res.id, url: res.url, secret: res.secret });
-      await queryClient.invalidateQueries({ queryKey: getListWebhooksQueryKey() });
+      await queryClient.invalidateQueries({
+        queryKey: getListWebhooksQueryKey(),
+      });
       toast({
         title: "Webhook registered",
         description: "Copy the signing secret now — it is shown only once.",
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to register webhook.";
-      toast({ title: "Could not register webhook", description: msg, variant: "destructive" });
+      const msg =
+        err instanceof Error ? err.message : "Failed to register webhook.";
+      toast({
+        title: "Could not register webhook",
+        description: msg,
+        variant: "destructive",
+      });
     }
   }
 
   async function handleDelete(id: number) {
     try {
       await deleteMutation.mutateAsync({ id });
-      await queryClient.invalidateQueries({ queryKey: getListWebhooksQueryKey() });
+      await queryClient.invalidateQueries({
+        queryKey: getListWebhooksQueryKey(),
+      });
       if (revealedSecret?.id === id) setRevealedSecret(null);
       toast({ title: "Webhook deleted" });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to delete webhook.";
-      toast({ title: "Could not delete webhook", description: msg, variant: "destructive" });
+      const msg =
+        err instanceof Error ? err.message : "Failed to delete webhook.";
+      toast({
+        title: "Could not delete webhook",
+        description: msg,
+        variant: "destructive",
+      });
     }
   }
 
   const webhooks: Webhook[] = data?.webhooks ?? [];
 
   return (
-    <Card className="glass-card rounded-xl border-primary/10" data-testid="webhooks-section">
+    <Card
+      className="glass-card rounded-xl border-primary/10"
+      data-testid="webhooks-section"
+    >
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Plug className="w-4 h-4 text-primary" />
           Webhooks
-          <Badge variant="secondary" className="ml-auto text-[10px]">{webhooks.length}</Badge>
+          <Badge variant="secondary" className="ml-auto text-[10px]">
+            {webhooks.length}
+          </Badge>
         </CardTitle>
         <CardDescription>
           Reviewer-only. Register a destination URL to receive a signed POST
-          whenever a report is scored. v1 emits one event: <code className="font-mono">report.scored</code>.
+          whenever a report is scored. v1 emits one event:{" "}
+          <code className="font-mono">report.scored</code>.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-2">
+        <form
+          onSubmit={handleCreate}
+          className="flex flex-col sm:flex-row gap-2"
+        >
           <input
             type="url"
             placeholder="https://example.com/hooks/vulnrap"
@@ -18541,16 +20341,25 @@ function WebhooksSection() {
             data-testid="webhook-url-input"
             required
           />
-          <Button type="submit" disabled={createMutation.isPending || newUrl.trim().length === 0} data-testid="webhook-register-button">
+          <Button
+            type="submit"
+            disabled={createMutation.isPending || newUrl.trim().length === 0}
+            data-testid="webhook-register-button"
+          >
             <Plus className="w-4 h-4 mr-1" /> Register
           </Button>
         </form>
 
         {revealedSecret && (
-          <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 space-y-2" data-testid="webhook-secret-reveal">
+          <div
+            className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 space-y-2"
+            data-testid="webhook-secret-reveal"
+          >
             <div className="flex items-center gap-2 text-xs text-yellow-300">
               <KeyRound className="w-3.5 h-3.5" />
-              <span className="font-medium">Signing secret for {revealedSecret.url} (id {revealedSecret.id})</span>
+              <span className="font-medium">
+                Signing secret for {revealedSecret.url} (id {revealedSecret.id})
+              </span>
               <button
                 type="button"
                 className="ml-auto text-muted-foreground hover:text-foreground"
@@ -18564,7 +20373,8 @@ function WebhooksSection() {
               {revealedSecret.secret}
             </div>
             <div className="text-[11px] text-muted-foreground">
-              Copy this now — only its SHA-256 hash is stored on the server. Re-register the webhook to receive a new secret.
+              Copy this now — only its SHA-256 hash is stored on the server.
+              Re-register the webhook to receive a new secret.
             </div>
           </div>
         )}
@@ -18573,20 +20383,38 @@ function WebhooksSection() {
           <Skeleton className="h-24 rounded-md" />
         ) : isError ? (
           <div className="text-xs text-red-400">
-            Failed to load webhooks: {error instanceof Error ? error.message : "unknown error"}
+            Failed to load webhooks:{" "}
+            {error instanceof Error ? error.message : "unknown error"}
           </div>
         ) : webhooks.length === 0 ? (
-          <div className="text-xs text-muted-foreground/60 py-4 text-center">No webhooks registered yet.</div>
+          <div className="text-xs text-muted-foreground/60 py-4 text-center">
+            No webhooks registered yet.
+          </div>
         ) : (
-          <div className="divide-y divide-border/10" data-testid="webhooks-list">
+          <div
+            className="divide-y divide-border/10"
+            data-testid="webhooks-list"
+          >
             {webhooks.map((w) => (
               <div key={w.id} className="py-2 flex items-center gap-3 text-xs">
                 <div className="flex-1 min-w-0">
-                  <div className="font-mono truncate text-foreground" title={w.url}>{w.url}</div>
+                  <div
+                    className="font-mono truncate text-foreground"
+                    title={w.url}
+                  >
+                    {w.url}
+                  </div>
                   <div className="text-muted-foreground/70 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
                     <span>events: {w.eventTypes.join(", ")}</span>
-                    <span>registered {new Date(w.createdAt).toLocaleString()}</span>
-                    <span>last delivery: {w.lastDeliveredAt ? new Date(w.lastDeliveredAt).toLocaleString() : "never"}</span>
+                    <span>
+                      registered {new Date(w.createdAt).toLocaleString()}
+                    </span>
+                    <span>
+                      last delivery:{" "}
+                      {w.lastDeliveredAt
+                        ? new Date(w.lastDeliveredAt).toLocaleString()
+                        : "never"}
+                    </span>
                     <span className={w.failureCount > 0 ? "text-red-400" : ""}>
                       failures: {w.failureCount}
                     </span>
@@ -18619,7 +20447,12 @@ function HoldoutEvalSection() {
   });
 
   if (isLoading) {
-    return <Skeleton className="h-64 rounded-xl" data-testid="holdout-eval-loading" />;
+    return (
+      <Skeleton
+        className="h-64 rounded-xl"
+        data-testid="holdout-eval-loading"
+      />
+    );
   }
   if (isError || !data) {
     return null;
@@ -18629,19 +20462,26 @@ function HoldoutEvalSection() {
   const totalRows = eval_.holdout.totalFeedback + eval_.inSample.totalFeedback;
 
   return (
-    <Card className="glass-card rounded-xl border-blue-500/10" data-testid="holdout-eval-card">
+    <Card
+      className="glass-card rounded-xl border-blue-500/10"
+      data-testid="holdout-eval-card"
+    >
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Shield className="w-4 h-4 text-blue-400" />
           Holdout Evaluation
-          <Badge variant="outline" className="ml-auto text-[10px] text-blue-400 border-blue-400/40">
+          <Badge
+            variant="outline"
+            className="ml-auto text-[10px] text-blue-400 border-blue-400/40"
+          >
             {Math.round(eval_.holdoutFraction * 100)}% locked
           </Badge>
         </CardTitle>
         <CardDescription>
           Honest precision / recall measured ONLY on the deterministic{" "}
-          {Math.round(eval_.holdoutFraction * 100)}% feedback holdout that calibration
-          suggestions never see — compare against in-sample to spot over-fitting.
+          {Math.round(eval_.holdoutFraction * 100)}% feedback holdout that
+          calibration suggestions never see — compare against in-sample to spot
+          over-fitting.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -18685,10 +20525,14 @@ export default function FeedbackAnalytics() {
             <BarChart3 className="w-6 h-6 text-primary" />
             Feedback Analytics
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Loading analysis feedback data...</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Loading analysis feedback data...
+          </p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Skeleton className="h-64 rounded-xl" />
@@ -18704,7 +20548,9 @@ export default function FeedbackAnalytics() {
         <Card className="glass-card rounded-xl border-red-500/20">
           <CardContent className="p-8 text-center">
             <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-3" />
-            <p className="text-sm text-red-400">Failed to load feedback analytics.</p>
+            <p className="text-sm text-red-400">
+              Failed to load feedback analytics.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -18719,15 +20565,27 @@ export default function FeedbackAnalytics() {
             <BarChart3 className="w-6 h-6 text-primary" />
             Feedback Analytics
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">How the community rates our analysis accuracy</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            How the community rates our analysis accuracy
+          </p>
         </div>
         <EmptyState />
       </div>
     );
   }
 
-  const { summary, ratingDistribution, dailyTrend, scoreCorrelation, outliers, recentFeedback } = data;
-  const maxRatingCount = Math.max(...Object.values(ratingDistribution).map(Number), 1);
+  const {
+    summary,
+    ratingDistribution,
+    dailyTrend,
+    scoreCorrelation,
+    outliers,
+    recentFeedback,
+  } = data;
+  const maxRatingCount = Math.max(
+    ...Object.values(ratingDistribution).map(Number),
+    1,
+  );
 
   return (
     // Task #419 — Hoist the wrong-token cooldown banner to a single visible
@@ -18738,187 +20596,232 @@ export default function FeedbackAnalytics() {
     // up to three identical stacked copies. Sections rendered standalone on
     // a different page (no provider) keep their own visible banner.
     <CalibrationCooldownBannerProvider>
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <BarChart3 className="w-6 h-6 text-primary" />
-          Feedback Analytics
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          How triage teams rate our analysis — {summary.totalFeedback} feedback entries so far
-        </p>
-      </div>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-primary" />
+            Feedback Analytics
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            How triage teams rate our analysis — {summary.totalFeedback}{" "}
+            feedback entries so far
+          </p>
+        </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Feedback"
-          value={summary.totalFeedback}
-          subtitle={`${summary.linkedToReport} linked to reports`}
-          icon={<MessageSquare className="w-4 h-4 text-primary" />}
-          color="bg-primary/10"
-        />
-        <StatCard
-          title="Avg Rating"
-          value={summary.avgRating.toFixed(1)}
-          subtitle="out of 5.0"
-          icon={<Star className="w-4 h-4 text-yellow-400" />}
-          color="bg-yellow-400/10"
-        />
-        <StatCard
-          title="Helpful Rate"
-          value={`${summary.helpfulnessRate}%`}
-          subtitle={`${summary.helpfulCount} helpful / ${summary.notHelpfulCount} not`}
-          icon={<ThumbsUp className="w-4 h-4 text-green-400" />}
-          color="bg-green-400/10"
-        />
-        <StatCard
-          title="With Comments"
-          value={summary.withComments}
-          subtitle="actionable text feedback"
-          icon={<Users className="w-4 h-4 text-blue-400" />}
-          color="bg-blue-400/10"
-        />
-      </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard
+            title="Total Feedback"
+            value={summary.totalFeedback}
+            subtitle={`${summary.linkedToReport} linked to reports`}
+            icon={<MessageSquare className="w-4 h-4 text-primary" />}
+            color="bg-primary/10"
+          />
+          <StatCard
+            title="Avg Rating"
+            value={summary.avgRating.toFixed(1)}
+            subtitle="out of 5.0"
+            icon={<Star className="w-4 h-4 text-yellow-400" />}
+            color="bg-yellow-400/10"
+          />
+          <StatCard
+            title="Helpful Rate"
+            value={`${summary.helpfulnessRate}%`}
+            subtitle={`${summary.helpfulCount} helpful / ${summary.notHelpfulCount} not`}
+            icon={<ThumbsUp className="w-4 h-4 text-green-400" />}
+            color="bg-green-400/10"
+          />
+          <StatCard
+            title="With Comments"
+            value={summary.withComments}
+            subtitle="actionable text feedback"
+            icon={<Users className="w-4 h-4 text-blue-400" />}
+            color="bg-blue-400/10"
+          />
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="glass-card rounded-xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Star className="w-4 h-4 text-yellow-400" />
-              Rating Distribution
-            </CardTitle>
-            <CardDescription>How users rate analysis accuracy (1-5 stars)</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {[5, 4, 3, 2, 1].map(r => (
-              <RatingBar
-                key={r}
-                rating={r}
-                count={ratingDistribution[String(r)] ?? 0}
-                maxCount={maxRatingCount}
-              />
-            ))}
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="glass-card rounded-xl">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Star className="w-4 h-4 text-yellow-400" />
+                Rating Distribution
+              </CardTitle>
+              <CardDescription>
+                How users rate analysis accuracy (1-5 stars)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {[5, 4, 3, 2, 1].map((r) => (
+                <RatingBar
+                  key={r}
+                  rating={r}
+                  count={ratingDistribution[String(r)] ?? 0}
+                  maxCount={maxRatingCount}
+                />
+              ))}
+            </CardContent>
+          </Card>
 
-        <Card className="glass-card rounded-xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-primary" />
-              Score vs. Feedback Correlation
-            </CardTitle>
-            <CardDescription>How user ratings correlate with slop scores — are we calibrated?</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CorrelationScatter data={scoreCorrelation} />
-          </CardContent>
-        </Card>
-      </div>
+          <Card className="glass-card rounded-xl">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-primary" />
+                Score vs. Feedback Correlation
+              </CardTitle>
+              <CardDescription>
+                How user ratings correlate with slop scores — are we calibrated?
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CorrelationScatter data={scoreCorrelation} />
+            </CardContent>
+          </Card>
+        </div>
 
-      <HoldoutEvalSection />
+        <HoldoutEvalSection />
 
-      <WebhooksSection />
+        <WebhooksSection />
 
-      <CalibrationSection />
+        <CalibrationSection />
 
-      <EmergingArchetypesSection />
+        <EmergingArchetypesSection />
 
-      <DatasetCohortMeansSection />
+        <DatasetCohortMeansSection />
 
-      <DatasetCohortDriftSection />
+        <DatasetCohortDriftSection />
 
-      {dailyTrend.length > 0 && (
-        <Card className="glass-card rounded-xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="w-4 h-4 text-primary" />
-              30-Day Trend
-            </CardTitle>
-            <CardDescription>Daily feedback volume, average rating, and helpfulness</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <div className="min-w-[600px]">
-                <div className="flex items-end gap-1 h-32">
-                  {dailyTrend.map((day: FeedbackAnalyticsDailyTrendItem) => {
-                    const maxCount = Math.max(...dailyTrend.map((d: FeedbackAnalyticsDailyTrendItem) => d.count), 1);
-                    const h = Math.max(8, (day.count / maxCount) * 100);
-                    const ratingColor = day.avgRating >= 4 ? "bg-green-400/60" : day.avgRating >= 3 ? "bg-yellow-400/60" : "bg-red-400/60";
-                    return (
-                      <div key={day.date} className="flex-1 flex flex-col items-center gap-1 group relative">
-                        <div className="absolute bottom-full mb-2 hidden group-hover:block z-10">
-                          <div className="bg-popover border border-border rounded-md px-2 py-1 text-[10px] shadow-lg whitespace-nowrap">
-                            <div className="font-medium">{day.date}</div>
-                            <div>{day.count} feedback · {day.avgRating.toFixed(1)}★ · {day.helpfulPct}% helpful</div>
-                          </div>
-                        </div>
+        {dailyTrend.length > 0 && (
+          <Card className="glass-card rounded-xl">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                30-Day Trend
+              </CardTitle>
+              <CardDescription>
+                Daily feedback volume, average rating, and helpfulness
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <div className="min-w-[600px]">
+                  <div className="flex items-end gap-1 h-32">
+                    {dailyTrend.map((day: FeedbackAnalyticsDailyTrendItem) => {
+                      const maxCount = Math.max(
+                        ...dailyTrend.map(
+                          (d: FeedbackAnalyticsDailyTrendItem) => d.count,
+                        ),
+                        1,
+                      );
+                      const h = Math.max(8, (day.count / maxCount) * 100);
+                      const ratingColor =
+                        day.avgRating >= 4
+                          ? "bg-green-400/60"
+                          : day.avgRating >= 3
+                            ? "bg-yellow-400/60"
+                            : "bg-red-400/60";
+                      return (
                         <div
-                          className={cn("w-full rounded-t-sm transition-all", ratingColor)}
-                          style={{ height: `${h}%` }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex gap-1 mt-1">
-                  {dailyTrend.map((day: FeedbackAnalyticsDailyTrendItem, i: number) => (
-                    <div key={day.date} className="flex-1 text-center">
-                      {(i === 0 || i === dailyTrend.length - 1 || i % 7 === 0) && (
-                        <span className="text-[9px] text-muted-foreground/40">
-                          {new Date(day.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                          key={day.date}
+                          className="flex-1 flex flex-col items-center gap-1 group relative"
+                        >
+                          <div className="absolute bottom-full mb-2 hidden group-hover:block z-10">
+                            <div className="bg-popover border border-border rounded-md px-2 py-1 text-[10px] shadow-lg whitespace-nowrap">
+                              <div className="font-medium">{day.date}</div>
+                              <div>
+                                {day.count} feedback ·{" "}
+                                {day.avgRating.toFixed(1)}★ · {day.helpfulPct}%
+                                helpful
+                              </div>
+                            </div>
+                          </div>
+                          <div
+                            className={cn(
+                              "w-full rounded-t-sm transition-all",
+                              ratingColor,
+                            )}
+                            style={{ height: `${h}%` }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-1 mt-1">
+                    {dailyTrend.map(
+                      (day: FeedbackAnalyticsDailyTrendItem, i: number) => (
+                        <div key={day.date} className="flex-1 text-center">
+                          {(i === 0 ||
+                            i === dailyTrend.length - 1 ||
+                            i % 7 === 0) && (
+                            <span className="text-[9px] text-muted-foreground/40">
+                              {new Date(day.date).toLocaleDateString(
+                                undefined,
+                                { month: "short", day: "numeric" },
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      ),
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        )}
 
-      {outliers.length > 0 && (
-        <Card className="glass-card rounded-xl border-orange-500/10">
+        {outliers.length > 0 && (
+          <Card className="glass-card rounded-xl border-orange-500/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-orange-400" />
+                Outliers &amp; Disagreements
+                <Badge variant="secondary" className="ml-auto text-[10px]">
+                  {outliers.length}
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                Reports where user feedback disagrees with engine scoring — the
+                most valuable signals for tuning
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 max-h-[600px] overflow-y-auto">
+              {outliers.map((o: FeedbackAnalyticsOutliersItem) => (
+                <OutlierCard key={o.feedbackId} outlier={o} />
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="glass-card rounded-xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-orange-400" />
-              Outliers &amp; Disagreements
-              <Badge variant="secondary" className="ml-auto text-[10px]">{outliers.length}</Badge>
+              <Hash className="w-4 h-4 text-primary" />
+              Recent Feedback
+              <Badge variant="secondary" className="ml-auto text-[10px]">
+                {recentFeedback.length}
+              </Badge>
             </CardTitle>
             <CardDescription>
-              Reports where user feedback disagrees with engine scoring — the most valuable signals for tuning
+              Latest feedback entries from triage teams
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 max-h-[600px] overflow-y-auto">
-            {outliers.map((o: FeedbackAnalyticsOutliersItem) => (
-              <OutlierCard key={o.feedbackId} outlier={o} />
-            ))}
+          <CardContent>
+            {recentFeedback.length === 0 ? (
+              <p className="text-xs text-muted-foreground/50 py-4 text-center">
+                No feedback entries yet
+              </p>
+            ) : (
+              <div className="divide-y divide-border/10">
+                {recentFeedback.map(
+                  (item: FeedbackAnalyticsRecentFeedbackItem) => (
+                    <RecentRow key={item.feedbackId} item={item} />
+                  ),
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
-      )}
-
-      <Card className="glass-card rounded-xl">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Hash className="w-4 h-4 text-primary" />
-            Recent Feedback
-            <Badge variant="secondary" className="ml-auto text-[10px]">{recentFeedback.length}</Badge>
-          </CardTitle>
-          <CardDescription>Latest feedback entries from triage teams</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {recentFeedback.length === 0 ? (
-            <p className="text-xs text-muted-foreground/50 py-4 text-center">No feedback entries yet</p>
-          ) : (
-            <div className="divide-y divide-border/10">
-              {recentFeedback.map((item: FeedbackAnalyticsRecentFeedbackItem) => (
-                <RecentRow key={item.feedbackId} item={item} />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      </div>
     </CalibrationCooldownBannerProvider>
   );
 }

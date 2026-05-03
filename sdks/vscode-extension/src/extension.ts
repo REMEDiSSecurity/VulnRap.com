@@ -118,9 +118,7 @@ async function scoreText(
     } catch {
       detail = await res.text().catch(() => "");
     }
-    throw new Error(
-      `API error ${res.status}${detail ? `: ${detail}` : ""}`,
-    );
+    throw new Error(`API error ${res.status}${detail ? `: ${detail}` : ""}`);
   }
 
   return (await res.json()) as CheckResult;
@@ -170,10 +168,8 @@ function renderHtml(r: CheckResult, baseUrl: string): string {
   const llmFeedback = (r.llmFeedback ?? []) as string[];
   const allFeedback = [...feedback, ...llmFeedback].slice(0, 10);
   const feedbackHtml = allFeedback.length
-    ? `<ul>${allFeedback
-        .map((f) => `<li>${escapeHtml(f)}</li>`)
-        .join("")}</ul>`
-    : "<p class=\"muted\">No heuristic feedback returned.</p>";
+    ? `<ul>${allFeedback.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>`
+    : '<p class="muted">No heuristic feedback returned.</p>';
 
   const matches = r.similarityMatches?.length ?? 0;
   const quadrant = escapeHtml(r.quadrant ?? "—");
@@ -181,10 +177,8 @@ function renderHtml(r: CheckResult, baseUrl: string): string {
   const mode = escapeHtml(r.analysisMode ?? "—");
   const authenticity =
     typeof r.authenticityScore === "number" ? r.authenticityScore : "—";
-  const validity =
-    typeof r.validityScore === "number" ? r.validityScore : "—";
-  const quality =
-    typeof r.qualityScore === "number" ? r.qualityScore : "—";
+  const validity = typeof r.validityScore === "number" ? r.validityScore : "—";
+  const quality = typeof r.qualityScore === "number" ? r.qualityScore : "—";
 
   return `<!doctype html>
 <html lang="en">
@@ -277,9 +271,11 @@ function renderHtml(r: CheckResult, baseUrl: string): string {
   </div>
 
   <h2>Top evidence signals</h2>
-  ${evidenceRows
-    ? `<table>${evidenceRows}</table>`
-    : "<p class=\"muted\">No fired evidence signals.</p>"}
+  ${
+    evidenceRows
+      ? `<table>${evidenceRows}</table>`
+      : '<p class="muted">No fired evidence signals.</p>'
+  }
 
   <h2>Feedback</h2>
   ${feedbackHtml}

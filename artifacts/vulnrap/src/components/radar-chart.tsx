@@ -78,7 +78,7 @@ export function RadarChart({
 
   const animatedPoints = useMemo(() => {
     return points.map((p) => {
-      const r = ((p.value / p.max) * radius) * progress;
+      const r = (p.value / p.max) * radius * progress;
       return {
         ...p,
         ax: center + r * Math.cos(p.angle),
@@ -105,10 +105,16 @@ export function RadarChart({
     return overlayData.map((d, i) => {
       const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
       const r = (d.value / d.max) * radius * progress;
-      return { x: center + r * Math.cos(angle), y: center + r * Math.sin(angle), ...d };
+      return {
+        x: center + r * Math.cos(angle),
+        y: center + r * Math.sin(angle),
+        ...d,
+      };
     });
   }, [overlayData, n, center, radius, progress]);
-  const overlayPolygon = overlayPoints ? overlayPoints.map((p) => `${p.x},${p.y}`).join(" ") : null;
+  const overlayPolygon = overlayPoints
+    ? overlayPoints.map((p) => `${p.x},${p.y}`).join(" ")
+    : null;
 
   const valueColor = (val: number, max: number) => {
     const pct = val / max;
@@ -118,9 +124,15 @@ export function RadarChart({
   };
 
   const polished = variant === "polished";
-  const gridColor = polished ? "rgba(148, 163, 184, 0.12)" : "rgba(255, 255, 255, 0.08)";
-  const axisColor = polished ? "rgba(148, 163, 184, 0.18)" : "rgba(255, 255, 255, 0.08)";
-  const labelColor = polished ? "rgba(226, 232, 240, 0.75)" : "rgba(255, 255, 255, 0.55)";
+  const gridColor = polished
+    ? "rgba(148, 163, 184, 0.12)"
+    : "rgba(255, 255, 255, 0.08)";
+  const axisColor = polished
+    ? "rgba(148, 163, 184, 0.18)"
+    : "rgba(255, 255, 255, 0.08)";
+  const labelColor = polished
+    ? "rgba(226, 232, 240, 0.75)"
+    : "rgba(255, 255, 255, 0.55)";
 
   const polyGradId = `radarPoly-${uid}`;
   const strokeGradId = `radarStroke-${uid}`;
@@ -134,7 +146,10 @@ export function RadarChart({
       height={size}
       className="mx-auto"
       role="img"
-      aria-label={ariaLabel ?? `Radar chart showing ${n} sub-scores: ${data.map((d) => `${d.label} ${Math.round(d.value)} of ${d.max}`).join(", ")}.`}
+      aria-label={
+        ariaLabel ??
+        `Radar chart showing ${n} sub-scores: ${data.map((d) => `${d.label} ${Math.round(d.value)} of ${d.max}`).join(", ")}.`
+      }
     >
       <title>{ariaLabel ?? `Radar chart of ${n} sub-scores`}</title>
       <defs>
@@ -226,7 +241,10 @@ export function RadarChart({
         stroke={polished ? `url(#${strokeGradId})` : "rgba(6, 182, 212, 0.7)"}
         strokeWidth={1.75}
         strokeLinejoin="round"
-        style={{ opacity: progress, filter: polished ? `url(#${softGlowId})` : undefined }}
+        style={{
+          opacity: progress,
+          filter: polished ? `url(#${softGlowId})` : undefined,
+        }}
       />
 
       {animatedPoints.map((p, i) => {
@@ -256,12 +274,19 @@ export function RadarChart({
       })}
 
       {points.map((p, i) => {
-        const anchor = Math.abs(p.angle + Math.PI / 2) < 0.1 || Math.abs(p.angle - Math.PI / 2) < 0.1
-          ? "middle"
-          : p.angle > -Math.PI / 2 && p.angle < Math.PI / 2
-            ? "start"
-            : "end";
-        const dy = p.angle > 0 && p.angle < Math.PI ? 12 : p.angle < 0 && p.angle > -Math.PI ? -4 : 4;
+        const anchor =
+          Math.abs(p.angle + Math.PI / 2) < 0.1 ||
+          Math.abs(p.angle - Math.PI / 2) < 0.1
+            ? "middle"
+            : p.angle > -Math.PI / 2 && p.angle < Math.PI / 2
+              ? "start"
+              : "end";
+        const dy =
+          p.angle > 0 && p.angle < Math.PI
+            ? 12
+            : p.angle < 0 && p.angle > -Math.PI
+              ? -4
+              : 4;
         const valC = valueColor(p.value, p.max);
         return (
           <g key={`label-${i}`} style={{ opacity: progress }}>
@@ -285,7 +310,11 @@ export function RadarChart({
               fontSize={10}
               fontWeight={700}
               fontFamily="ui-monospace, SFMono-Regular, monospace"
-              style={polished ? { filter: `drop-shadow(0 0 4px ${valC})` } : undefined}
+              style={
+                polished
+                  ? { filter: `drop-shadow(0 0 4px ${valC})` }
+                  : undefined
+              }
             >
               {Math.round(p.value * progress)}
             </text>

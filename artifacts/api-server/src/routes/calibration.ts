@@ -1,8 +1,15 @@
 import { Router, type IRouter } from "express";
 import { db, reportsTable } from "@workspace/db";
 import { and, isNotNull, sql } from "drizzle-orm";
-import { generateCalibrationReport, type BucketAnalysis } from "../lib/calibration";
-import { getCurrentConfig, getConfigHistory, applyNewConfig } from "../lib/scoring-config";
+import {
+  generateCalibrationReport,
+  type BucketAnalysis,
+} from "../lib/calibration";
+import {
+  getCurrentConfig,
+  getConfigHistory,
+  applyNewConfig,
+} from "../lib/scoring-config";
 import { generateAvriDriftReport } from "../lib/avri-drift";
 import {
   notifyDriftFlagsIfNew,
@@ -78,7 +85,12 @@ function normalizeForMatch(raw: string): string {
 
 interface DryRunMatches {
   total: number;
-  byTier: { t1Legit: number; t2Borderline: number; t3Slop: number; t4Hallucinated: number };
+  byTier: {
+    t1Legit: number;
+    t2Borderline: number;
+    t3Slop: number;
+    t4Hallucinated: number;
+  };
   falsePositives: number;
   corpusSize: number;
   // Task #495 — each sample match also carries a short context snippet
@@ -89,7 +101,11 @@ interface DryRunMatches {
   // only for the defensive fallback where the matched phrase can no longer
   // be found in the original text (should not happen on the path that
   // produced the match).
-  sampleMatches: Array<{ id: string; tier: CorpusTier; snippet: SampleMatchSnippet | null }>;
+  sampleMatches: Array<{
+    id: string;
+    tier: CorpusTier;
+    snippet: SampleMatchSnippet | null;
+  }>;
   warning: string | null;
   // Task #124 — for production scans, the createdAt range of the scanned
   // sample so reviewers can tell whether the false-positive signal reflects
@@ -103,9 +119,17 @@ interface DryRunMatches {
 function tallyMatches(
   needle: string,
   rows: Iterable<{ id: string; tier: CorpusTier; text: string }>,
-): { total: number; byTier: DryRunMatches["byTier"]; sampleMatches: DryRunMatches["sampleMatches"] } {
+): {
+  total: number;
+  byTier: DryRunMatches["byTier"];
+  sampleMatches: DryRunMatches["sampleMatches"];
+} {
   const byTier = { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 };
-  const sampleMatches: Array<{ id: string; tier: CorpusTier; snippet: SampleMatchSnippet | null }> = [];
+  const sampleMatches: Array<{
+    id: string;
+    tier: CorpusTier;
+    snippet: SampleMatchSnippet | null;
+  }> = [];
   let total = 0;
   for (const r of rows) {
     const haystack = r.text.toLowerCase().replace(/\s+/g, " ");
@@ -130,7 +154,10 @@ function tallyMatches(
 
 function previewHandwavyPhrase(phrase: string): DryRunMatches {
   const needle = normalizeForMatch(phrase);
-  const cohorts: Array<{ tier: CorpusTier; fixtures: typeof TEST_FIXTURE_COHORTS.T1 }> = [
+  const cohorts: Array<{
+    tier: CorpusTier;
+    fixtures: typeof TEST_FIXTURE_COHORTS.T1;
+  }> = [
     { tier: "T1_LEGIT", fixtures: TEST_FIXTURE_COHORTS.T1 },
     { tier: "T2_BORDERLINE", fixtures: TEST_FIXTURE_COHORTS.T2 },
     { tier: "T3_SLOP", fixtures: TEST_FIXTURE_COHORTS.T3 },
@@ -146,7 +173,8 @@ function previewHandwavyPhrase(phrase: string): DryRunMatches {
   const falsePositives = byTier.t1Legit + byTier.t2Borderline;
   let warning: string | null = null;
   if (falsePositives > 0) {
-    const noun = falsePositives === 1 ? "legitimate report" : "legitimate reports";
+    const noun =
+      falsePositives === 1 ? "legitimate report" : "legitimate reports";
     warning = `This phrase would have flagged ${falsePositives} ${noun} (${byTier.t1Legit} GREEN, ${byTier.t2Borderline} YELLOW) in the curated benchmark corpus — consider rewording.`;
   }
   // Curated fixtures have no wall-clock timestamp — Task #124's date-range
@@ -263,7 +291,10 @@ function scoreProductionRows(
     if (!tier || r.contentText == null) continue;
     tiered.push({ id: String(r.id), tier, text: r.contentText });
     if (r.createdAt != null) {
-      const t = r.createdAt instanceof Date ? r.createdAt.getTime() : new Date(r.createdAt).getTime();
+      const t =
+        r.createdAt instanceof Date
+          ? r.createdAt.getTime()
+          : new Date(r.createdAt).getTime();
       if (Number.isFinite(t)) {
         if (oldestMs === null || t < oldestMs) oldestMs = t;
         if (newestMs === null || t > newestMs) newestMs = t;
@@ -274,7 +305,8 @@ function scoreProductionRows(
   const falsePositives = byTier.t1Legit + byTier.t2Borderline;
   let warning: string | null = null;
   if (falsePositives > 0) {
-    const noun = falsePositives === 1 ? "legitimate report" : "legitimate reports";
+    const noun =
+      falsePositives === 1 ? "legitimate report" : "legitimate reports";
     warning = `This phrase would have flagged ${falsePositives} ${noun} (${byTier.t1Legit} GREEN, ${byTier.t2Borderline} YELLOW) in the most recent ${tiered.length} production reports — consider rewording.`;
   }
   return {
@@ -284,8 +316,10 @@ function scoreProductionRows(
     corpusSize: tiered.length,
     sampleMatches,
     warning,
-    oldestCreatedAt: oldestMs === null ? null : new Date(oldestMs).toISOString(),
-    newestCreatedAt: newestMs === null ? null : new Date(newestMs).toISOString(),
+    oldestCreatedAt:
+      oldestMs === null ? null : new Date(oldestMs).toISOString(),
+    newestCreatedAt:
+      newestMs === null ? null : new Date(newestMs).toISOString(),
   };
 }
 
@@ -323,7 +357,10 @@ async function previewHandwavyPhraseAgainstProduction(
 // to eyeball the GET response separately. Matching mirrors the engine path:
 // both sides are normalized to lowercase + collapsed whitespace, then
 // compared via plain substring containment.
-type OverlapRelation = "equal" | "candidate-contains-existing" | "existing-contains-candidate";
+type OverlapRelation =
+  | "equal"
+  | "candidate-contains-existing"
+  | "existing-contains-candidate";
 
 interface DryRunOverlap {
   phrase: string;
@@ -385,7 +422,12 @@ export interface SampleMatchSnippet {
 
 interface RemovalImpact {
   total: number;
-  byTier: { t1Legit: number; t2Borderline: number; t3Slop: number; t4Hallucinated: number };
+  byTier: {
+    t1Legit: number;
+    t2Borderline: number;
+    t3Slop: number;
+    t4Hallucinated: number;
+  };
   /** T3 + T4 lost matches — the "real slop detection lost" metric that drives the warning. */
   validDetectionsLost: number;
   /** T1 + T2 lost matches — false-positive flags that would also disappear. */
@@ -397,7 +439,11 @@ interface RemovalImpact {
   // each fixture/report ID. `snippet` is null only for the defensive
   // fallback where the matched phrase can no longer be found in the
   // original text (should not happen on the path that produced the match).
-  sampleMatches: Array<{ id: string; tier: CorpusTier; snippet: SampleMatchSnippet | null }>;
+  sampleMatches: Array<{
+    id: string;
+    tier: CorpusTier;
+    snippet: SampleMatchSnippet | null;
+  }>;
   warning: string | null;
   // Task #218 — for production scans, the createdAt range of the scanned
   // sample so reviewers using the bulk-retire flow have the same "is this
@@ -418,7 +464,10 @@ interface RemovalImpact {
   archiveTotal: number | null;
 }
 
-function fixtureMatchesAny(haystackNormalized: string, phrases: Iterable<string>): boolean {
+function fixtureMatchesAny(
+  haystackNormalized: string,
+  phrases: Iterable<string>,
+): boolean {
   for (const p of phrases) {
     if (!p) continue;
     if (haystackNormalized.includes(p)) return true;
@@ -528,7 +577,11 @@ function computeRemovalImpactOnRows(
   archiveTotal: number | null = null,
 ): RemovalImpact {
   const byTier = { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 };
-  const sampleMatches: Array<{ id: string; tier: CorpusTier; snippet: SampleMatchSnippet | null }> = [];
+  const sampleMatches: Array<{
+    id: string;
+    tier: CorpusTier;
+    snippet: SampleMatchSnippet | null;
+  }> = [];
   let total = 0;
   // Task #218 — track the createdAt window of the rows that actually made it
   // into the scanned sample (i.e. survived the label/content filter at the
@@ -541,7 +594,10 @@ function computeRemovalImpactOnRows(
   const removedSet = removedPhrases.filter((p) => p.length > 0);
   for (const r of rows) {
     if (r.createdAt != null) {
-      const t = r.createdAt instanceof Date ? r.createdAt.getTime() : new Date(r.createdAt).getTime();
+      const t =
+        r.createdAt instanceof Date
+          ? r.createdAt.getTime()
+          : new Date(r.createdAt).getTime();
       if (Number.isFinite(t)) {
         if (oldestMs === null || t < oldestMs) oldestMs = t;
         if (newestMs === null || t > newestMs) newestMs = t;
@@ -583,8 +639,10 @@ function computeRemovalImpactOnRows(
     corpusSize: rows.length,
     sampleMatches,
     warning,
-    oldestCreatedAt: oldestMs === null ? null : new Date(oldestMs).toISOString(),
-    newestCreatedAt: newestMs === null ? null : new Date(newestMs).toISOString(),
+    oldestCreatedAt:
+      oldestMs === null ? null : new Date(oldestMs).toISOString(),
+    newestCreatedAt:
+      newestMs === null ? null : new Date(newestMs).toISOString(),
     archiveTotal,
   };
 }
@@ -593,7 +651,10 @@ function previewRemovalAgainstCorpus(
   removedPhrases: string[],
   remainingPhrases: string[],
 ): RemovalImpact {
-  const cohorts: Array<{ tier: CorpusTier; fixtures: typeof TEST_FIXTURE_COHORTS.T1 }> = [
+  const cohorts: Array<{
+    tier: CorpusTier;
+    fixtures: typeof TEST_FIXTURE_COHORTS.T1;
+  }> = [
     { tier: "T1_LEGIT", fixtures: TEST_FIXTURE_COHORTS.T1 },
     { tier: "T2_BORDERLINE", fixtures: TEST_FIXTURE_COHORTS.T2 },
     { tier: "T3_SLOP", fixtures: TEST_FIXTURE_COHORTS.T3 },
@@ -603,7 +664,12 @@ function previewRemovalAgainstCorpus(
   for (const { tier, fixtures } of cohorts) {
     for (const f of fixtures) flat.push({ id: f.id, tier, text: f.text });
   }
-  return computeRemovalImpactOnRows(removedPhrases, remainingPhrases, flat, "the curated benchmark corpus");
+  return computeRemovalImpactOnRows(
+    removedPhrases,
+    remainingPhrases,
+    flat,
+    "the curated benchmark corpus",
+  );
 }
 
 async function previewRemovalAgainstProduction(
@@ -700,23 +766,33 @@ function buildSuggestedAdjustments(buckets: BucketAnalysis[]): Array<{
   delta: number;
   recommendation: string;
 }> {
-  const out: Array<{ scope: string; metric: string; observed: number; target: number; delta: number; recommendation: string }> = [];
+  const out: Array<{
+    scope: string;
+    metric: string;
+    observed: number;
+    target: number;
+    delta: number;
+    recommendation: string;
+  }> = [];
   for (const b of buckets) {
     if (!b.meetsThreshold) continue;
     if (b.signal === "over-scoring" && Math.abs(b.ratingDeviation) >= 0.5) {
       out.push({
         scope: b.bucket,
         metric: "rating_deviation",
-        observed: Number((b.avgRating).toFixed(2)),
+        observed: Number(b.avgRating.toFixed(2)),
         target: Number((b.avgRating + Math.abs(b.ratingDeviation)).toFixed(2)),
         delta: Number(b.ratingDeviation.toFixed(2)),
         recommendation: `Bucket "${b.bucket}" is over-scoring. Consider lowering Engine 1 weight or relaxing slop thresholds for this band.`,
       });
-    } else if (b.signal === "under-scoring" && Math.abs(b.ratingDeviation) >= 0.5) {
+    } else if (
+      b.signal === "under-scoring" &&
+      Math.abs(b.ratingDeviation) >= 0.5
+    ) {
       out.push({
         scope: b.bucket,
         metric: "rating_deviation",
-        observed: Number((b.avgRating).toFixed(2)),
+        observed: Number(b.avgRating.toFixed(2)),
         target: Number((b.avgRating - Math.abs(b.ratingDeviation)).toFixed(2)),
         delta: Number(b.ratingDeviation.toFixed(2)),
         recommendation: `Bucket "${b.bucket}" is under-scoring. Consider tightening evidence requirements (Engine 2) for this band.`,
@@ -729,20 +805,38 @@ function buildSuggestedAdjustments(buckets: BucketAnalysis[]): Array<{
 router.get("/feedback/calibration", async (_req, res) => {
   try {
     const report = await generateCalibrationReport();
-    const suggestedAdjustments = buildSuggestedAdjustments(report.bucketAnalysis);
+    const suggestedAdjustments = buildSuggestedAdjustments(
+      report.bucketAnalysis,
+    );
     res.json({
       ...report,
       // v3.6.0: read-only suggestion field; no auto-apply.
       suggestedAdjustments,
       v3_6_0: {
-        engineWeights: { engine1: 0.05, engine2: 0.60, engine3: 0.35 },
+        engineWeights: { engine1: 0.05, engine2: 0.6, engine3: 0.35 },
         evidenceTypeMultipliers: {
-          CRASH_OUTPUT: 2.5, CODE_DIFF: 2.2, STACK_TRACE: 2.0, SHELL_COMMAND: 1.8,
-          HTTP_REQUEST: 1.6, MEMORY_ADDRESS: 1.5, LINE_NUMBER: 1.4, FUNCTION_NAME: 1.3,
-          FILE_PATH: 1.2, CVSS_VECTOR: 1.2, CVE_REFERENCE: 1.1, VERSION_PIN: 1.1,
-          ENDPOINT_URL: 1.0, ENVIRONMENT_DETAIL: 1.0,
+          CRASH_OUTPUT: 2.5,
+          CODE_DIFF: 2.2,
+          STACK_TRACE: 2.0,
+          SHELL_COMMAND: 1.8,
+          HTTP_REQUEST: 1.6,
+          MEMORY_ADDRESS: 1.5,
+          LINE_NUMBER: 1.4,
+          FUNCTION_NAME: 1.3,
+          FILE_PATH: 1.2,
+          CVSS_VECTOR: 1.2,
+          CVE_REFERENCE: 1.1,
+          VERSION_PIN: 1.1,
+          ENDPOINT_URL: 1.0,
+          ENVIRONMENT_DETAIL: 1.0,
         },
-        cweCalibration: { default: 42, vulnTypeNoCwe: 38, strongFitFloor: 68, perfectFitFloor: 78, wrongCweCeiling: 25 },
+        cweCalibration: {
+          default: 42,
+          vulnTypeNoCwe: 38,
+          strongFitFloor: 68,
+          perfectFitFloor: 78,
+          wrongCweCeiling: 25,
+        },
       },
     });
   } catch (err) {
@@ -757,7 +851,8 @@ router.get("/feedback/calibration", async (_req, res) => {
 router.get("/feedback/calibration/avri-drift", async (req, res) => {
   try {
     const weeksRaw = req.query.weeks;
-    const weeksParsed = typeof weeksRaw === "string" ? Number.parseInt(weeksRaw, 10) : undefined;
+    const weeksParsed =
+      typeof weeksRaw === "string" ? Number.parseInt(weeksRaw, 10) : undefined;
     const weeks = Number.isFinite(weeksParsed) ? weeksParsed : undefined;
     const report = await generateAvriDriftReport({ weeks });
     res.json(report);
@@ -792,7 +887,8 @@ router.post(
       const weeks = Number.isFinite(weeksParsed) ? weeksParsed : undefined;
       const driftReport = await generateAvriDriftReport({ weeks });
       const outcome = await notifyDriftFlagsIfNew(driftReport);
-      const status = outcome.dispatchResult && !outcome.dispatchResult.ok ? 502 : 200;
+      const status =
+        outcome.dispatchResult && !outcome.dispatchResult.ok ? 502 : 200;
       res.status(status).json({
         weeksRequested: driftReport.weeksRequested,
         totalFlags: driftReport.flags.length,
@@ -812,7 +908,9 @@ router.post(
       });
     } catch (err) {
       req.log?.error(err, "Failed to dispatch AVRI drift notifications");
-      res.status(500).json({ error: "Failed to dispatch AVRI drift notifications." });
+      res
+        .status(500)
+        .json({ error: "Failed to dispatch AVRI drift notifications." });
     }
   },
 );
@@ -866,23 +964,23 @@ router.post(
       };
       const rawKeys = body.keys;
       if (!Array.isArray(rawKeys) || rawKeys.length === 0) {
-        res
-          .status(400)
-          .json({ error: "Body must include a non-empty 'keys' string array." });
+        res.status(400).json({
+          error: "Body must include a non-empty 'keys' string array.",
+        });
         return;
       }
       if (rawKeys.length > 200) {
-        res
-          .status(400)
-          .json({ error: "'keys' batch is capped at 200 entries per request." });
+        res.status(400).json({
+          error: "'keys' batch is capped at 200 entries per request.",
+        });
         return;
       }
       const cleaned: string[] = [];
       for (const k of rawKeys) {
         if (typeof k !== "string" || k.trim().length === 0) {
-          res
-            .status(400)
-            .json({ error: "Every entry in 'keys' must be a non-empty string." });
+          res.status(400).json({
+            error: "Every entry in 'keys' must be a non-empty string.",
+          });
           return;
         }
         cleaned.push(k);
@@ -942,7 +1040,9 @@ router.post(
       });
     } catch (err) {
       req.log?.error(err, "Failed to re-arm AVRI drift notifications");
-      res.status(500).json({ error: "Failed to re-arm AVRI drift notifications." });
+      res
+        .status(500)
+        .json({ error: "Failed to re-arm AVRI drift notifications." });
     }
   },
 );
@@ -977,10 +1077,7 @@ router.get(
       const status = getRescoreBackfillSchedulerStatus();
       res.json(status);
     } catch (err) {
-      _req.log?.error(
-        err,
-        "Failed to read rescore backfill scheduler status",
-      );
+      _req.log?.error(err, "Failed to read rescore backfill scheduler status");
       res
         .status(500)
         .json({ error: "Failed to read rescore backfill scheduler status." });
@@ -1030,10 +1127,7 @@ router.get(
       const status = getScoreStabilitySchedulerStatus();
       res.json(status);
     } catch (err) {
-      _req.log?.error(
-        err,
-        "Failed to read score stability scheduler status",
-      );
+      _req.log?.error(err, "Failed to read score stability scheduler status");
       res
         .status(500)
         .json({ error: "Failed to read score stability scheduler status." });
@@ -1099,10 +1193,13 @@ router.get(
         bufferSize: RECENT_BRUTE_FORCE_ALERTS_MAX_LIMIT,
       });
     } catch (err) {
-      req.log?.error(err, "Failed to read recent calibration auth brute-force alerts");
-      res
-        .status(500)
-        .json({ error: "Failed to read recent calibration auth brute-force alerts." });
+      req.log?.error(
+        err,
+        "Failed to read recent calibration auth brute-force alerts",
+      );
+      res.status(500).json({
+        error: "Failed to read recent calibration auth brute-force alerts.",
+      });
     }
   },
 );
@@ -1132,129 +1229,173 @@ router.get("/feedback/calibration/auth-status", (req, res) => {
   res.json(status);
 });
 
-router.post("/feedback/calibration/apply", requireCalibrationAuth, async (req, res) => {
-  try {
-    const { changes, description } = req.body;
+router.post(
+  "/feedback/calibration/apply",
+  requireCalibrationAuth,
+  async (req, res) => {
+    try {
+      const { changes, description } = req.body;
 
-    if (!changes || typeof changes !== "object") {
-      res.status(400).json({ error: "Changes object is required." });
-      return;
-    }
-
-    if (!description || typeof description !== "string") {
-      res.status(400).json({ error: "Description string is required." });
-      return;
-    }
-
-    const allowedKeys = ["prior", "floor", "ceiling", "axisThresholds", "tierThresholds", "fabricationBoost"];
-    const filteredChanges: Record<string, unknown> = {};
-    for (const key of allowedKeys) {
-      if (key in changes) {
-        filteredChanges[key] = changes[key];
-      }
-    }
-
-    if (Object.keys(filteredChanges).length === 0) {
-      res.status(400).json({ error: "No valid changes provided. Allowed: prior, floor, ceiling, axisThresholds, tierThresholds, fabricationBoost." });
-      return;
-    }
-
-    if (filteredChanges.prior !== undefined) {
-      const v = Number(filteredChanges.prior);
-      if (isNaN(v) || v < 0 || v > 50) {
-        res.status(400).json({ error: "prior must be between 0 and 50." });
+      if (!changes || typeof changes !== "object") {
+        res.status(400).json({ error: "Changes object is required." });
         return;
       }
-      filteredChanges.prior = v;
-    }
-    if (filteredChanges.floor !== undefined) {
-      const v = Number(filteredChanges.floor);
-      if (isNaN(v) || v < 0 || v > 30) {
-        res.status(400).json({ error: "floor must be between 0 and 30." });
+
+      if (!description || typeof description !== "string") {
+        res.status(400).json({ error: "Description string is required." });
         return;
       }
-      filteredChanges.floor = v;
-    }
-    if (filteredChanges.ceiling !== undefined) {
-      const v = Number(filteredChanges.ceiling);
-      if (isNaN(v) || v < 70 || v > 100) {
-        res.status(400).json({ error: "ceiling must be between 70 and 100." });
+
+      const allowedKeys = [
+        "prior",
+        "floor",
+        "ceiling",
+        "axisThresholds",
+        "tierThresholds",
+        "fabricationBoost",
+      ];
+      const filteredChanges: Record<string, unknown> = {};
+      for (const key of allowedKeys) {
+        if (key in changes) {
+          filteredChanges[key] = changes[key];
+        }
+      }
+
+      if (Object.keys(filteredChanges).length === 0) {
+        res.status(400).json({
+          error:
+            "No valid changes provided. Allowed: prior, floor, ceiling, axisThresholds, tierThresholds, fabricationBoost.",
+        });
         return;
       }
-      filteredChanges.ceiling = v;
-    }
-    if (filteredChanges.fabricationBoost !== undefined) {
-      const v = Number(filteredChanges.fabricationBoost);
-      if (isNaN(v) || v < 1.0 || v > 3.0) {
-        res.status(400).json({ error: "fabricationBoost must be between 1.0 and 3.0." });
-        return;
-      }
-      filteredChanges.fabricationBoost = v;
-    }
-    if (filteredChanges.axisThresholds !== undefined) {
-      const at = filteredChanges.axisThresholds;
-      if (typeof at !== "object" || at === null || Array.isArray(at)) {
-        res.status(400).json({ error: "axisThresholds must be an object mapping axis names to numbers." });
-        return;
-      }
-      const validAxes = ["linguistic", "factual", "template", "llm", "verification"];
-      const cleaned: Record<string, number> = {};
-      for (const [key, val] of Object.entries(at as Record<string, unknown>)) {
-        if (!validAxes.includes(key)) continue;
-        const v = Number(val);
-        if (isNaN(v) || v < 0 || v > 100) {
-          res.status(400).json({ error: `axisThresholds.${key} must be between 0 and 100.` });
+
+      if (filteredChanges.prior !== undefined) {
+        const v = Number(filteredChanges.prior);
+        if (isNaN(v) || v < 0 || v > 50) {
+          res.status(400).json({ error: "prior must be between 0 and 50." });
           return;
         }
-        cleaned[key] = v;
+        filteredChanges.prior = v;
       }
-      filteredChanges.axisThresholds = cleaned;
-    }
-    if (filteredChanges.tierThresholds !== undefined) {
-      const tt = filteredChanges.tierThresholds;
-      if (typeof tt !== "object" || tt === null || Array.isArray(tt)) {
-        res.status(400).json({ error: "tierThresholds must be an object with low and high numbers." });
-        return;
-      }
-      const ttObj = tt as Record<string, unknown>;
-      const cleaned: Record<string, number> = {};
-      if (ttObj.low !== undefined) {
-        const v = Number(ttObj.low);
-        if (isNaN(v) || v < 0 || v > 100) {
-          res.status(400).json({ error: "tierThresholds.low must be between 0 and 100." });
+      if (filteredChanges.floor !== undefined) {
+        const v = Number(filteredChanges.floor);
+        if (isNaN(v) || v < 0 || v > 30) {
+          res.status(400).json({ error: "floor must be between 0 and 30." });
           return;
         }
-        cleaned.low = v;
+        filteredChanges.floor = v;
       }
-      if (ttObj.high !== undefined) {
-        const v = Number(ttObj.high);
-        if (isNaN(v) || v < 0 || v > 100) {
-          res.status(400).json({ error: "tierThresholds.high must be between 0 and 100." });
+      if (filteredChanges.ceiling !== undefined) {
+        const v = Number(filteredChanges.ceiling);
+        if (isNaN(v) || v < 70 || v > 100) {
+          res
+            .status(400)
+            .json({ error: "ceiling must be between 70 and 100." });
           return;
         }
-        cleaned.high = v;
+        filteredChanges.ceiling = v;
       }
-      if (cleaned.low !== undefined && cleaned.high !== undefined && cleaned.low >= cleaned.high) {
-        res.status(400).json({ error: "tierThresholds.low must be less than tierThresholds.high." });
-        return;
+      if (filteredChanges.fabricationBoost !== undefined) {
+        const v = Number(filteredChanges.fabricationBoost);
+        if (isNaN(v) || v < 1.0 || v > 3.0) {
+          res
+            .status(400)
+            .json({ error: "fabricationBoost must be between 1.0 and 3.0." });
+          return;
+        }
+        filteredChanges.fabricationBoost = v;
       }
-      filteredChanges.tierThresholds = cleaned;
+      if (filteredChanges.axisThresholds !== undefined) {
+        const at = filteredChanges.axisThresholds;
+        if (typeof at !== "object" || at === null || Array.isArray(at)) {
+          res.status(400).json({
+            error:
+              "axisThresholds must be an object mapping axis names to numbers.",
+          });
+          return;
+        }
+        const validAxes = [
+          "linguistic",
+          "factual",
+          "template",
+          "llm",
+          "verification",
+        ];
+        const cleaned: Record<string, number> = {};
+        for (const [key, val] of Object.entries(
+          at as Record<string, unknown>,
+        )) {
+          if (!validAxes.includes(key)) continue;
+          const v = Number(val);
+          if (isNaN(v) || v < 0 || v > 100) {
+            res.status(400).json({
+              error: `axisThresholds.${key} must be between 0 and 100.`,
+            });
+            return;
+          }
+          cleaned[key] = v;
+        }
+        filteredChanges.axisThresholds = cleaned;
+      }
+      if (filteredChanges.tierThresholds !== undefined) {
+        const tt = filteredChanges.tierThresholds;
+        if (typeof tt !== "object" || tt === null || Array.isArray(tt)) {
+          res.status(400).json({
+            error:
+              "tierThresholds must be an object with low and high numbers.",
+          });
+          return;
+        }
+        const ttObj = tt as Record<string, unknown>;
+        const cleaned: Record<string, number> = {};
+        if (ttObj.low !== undefined) {
+          const v = Number(ttObj.low);
+          if (isNaN(v) || v < 0 || v > 100) {
+            res
+              .status(400)
+              .json({ error: "tierThresholds.low must be between 0 and 100." });
+            return;
+          }
+          cleaned.low = v;
+        }
+        if (ttObj.high !== undefined) {
+          const v = Number(ttObj.high);
+          if (isNaN(v) || v < 0 || v > 100) {
+            res.status(400).json({
+              error: "tierThresholds.high must be between 0 and 100.",
+            });
+            return;
+          }
+          cleaned.high = v;
+        }
+        if (
+          cleaned.low !== undefined &&
+          cleaned.high !== undefined &&
+          cleaned.low >= cleaned.high
+        ) {
+          res.status(400).json({
+            error: "tierThresholds.low must be less than tierThresholds.high.",
+          });
+          return;
+        }
+        filteredChanges.tierThresholds = cleaned;
+      }
+
+      const newConfig = applyNewConfig(
+        filteredChanges as Parameters<typeof applyNewConfig>[0],
+        description,
+      );
+
+      res.status(201).json({
+        message: "Scoring configuration updated successfully.",
+        config: newConfig,
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to apply calibration changes");
+      res.status(500).json({ error: "Failed to apply calibration changes." });
     }
-
-    const newConfig = applyNewConfig(
-      filteredChanges as Parameters<typeof applyNewConfig>[0],
-      description
-    );
-
-    res.status(201).json({
-      message: "Scoring configuration updated successfully.",
-      config: newConfig,
-    });
-  } catch (err) {
-    req.log?.error(err, "Failed to apply calibration changes");
-    res.status(500).json({ error: "Failed to apply calibration changes." });
-  }
-});
+  },
+);
 
 // Task #108 — Reviewer-curated FLAT hand-wavy marker phrases. The list lives
 // in data/handwavy-phrases.json and is loaded by the AVRI Engine 2 FLAT path
@@ -1262,16 +1403,20 @@ router.post("/feedback/calibration/apply", requireCalibrationAuth, async (req, r
 // DELETE removes one. Phrases are normalized to lowercase + collapsed
 // whitespace before storage so reviewers don't have to worry about case or
 // stray spaces matching the engine's matcher.
-router.get("/feedback/calibration/handwavy-phrases", requireCalibrationAuthStrict, (_req, res) => {
-  try {
-    const phrases = getHandwavyPhrases();
-    const history = getHandwavyPhraseHistory();
-    res.json({ phrases, total: phrases.length, history });
-  } catch (err) {
-    _req.log?.error(err, "Failed to read hand-wavy phrases");
-    res.status(500).json({ error: "Failed to read hand-wavy phrases." });
-  }
-});
+router.get(
+  "/feedback/calibration/handwavy-phrases",
+  requireCalibrationAuthStrict,
+  (_req, res) => {
+    try {
+      const phrases = getHandwavyPhrases();
+      const history = getHandwavyPhraseHistory();
+      res.json({ phrases, total: phrases.length, history });
+    } catch (err) {
+      _req.log?.error(err, "Failed to read hand-wavy phrases");
+      res.status(500).json({ error: "Failed to read hand-wavy phrases." });
+    }
+  },
+);
 
 // Task #160 — Slim, picker-friendly summary of recent BATCH removal entries
 // from the hand-wavy phrase history log. The reinstate-batch CLI fetches this
@@ -1311,17 +1456,23 @@ router.get(
             removedBy: h.removedBy,
             phraseCount: phrases.length,
             reinstated: h.reinstated === true,
-            samplePhrases: phrases.slice(0, REMOVAL_BATCHES_SAMPLE_SIZE).map((p) => p.phrase),
+            samplePhrases: phrases
+              .slice(0, REMOVAL_BATCHES_SAMPLE_SIZE)
+              .map((p) => p.phrase),
           };
         });
       res.json({
         limit,
-        totalBatches: history.filter((h) => Array.isArray(h.phrases) && h.phrases.length > 0).length,
+        totalBatches: history.filter(
+          (h) => Array.isArray(h.phrases) && h.phrases.length > 0,
+        ).length,
         batches,
       });
     } catch (err) {
       req.log?.error(err, "Failed to list hand-wavy removal batches");
-      res.status(500).json({ error: "Failed to list hand-wavy removal batches." });
+      res
+        .status(500)
+        .json({ error: "Failed to list hand-wavy removal batches." });
     }
   },
 );
@@ -1349,8 +1500,13 @@ router.get(
   (req, res) => {
     try {
       const removedAtParam = req.params.removedAt;
-      if (typeof removedAtParam !== "string" || removedAtParam.trim().length === 0) {
-        res.status(400).json({ error: "removedAt path parameter is required." });
+      if (
+        typeof removedAtParam !== "string" ||
+        removedAtParam.trim().length === 0
+      ) {
+        res
+          .status(400)
+          .json({ error: "removedAt path parameter is required." });
         return;
       }
       const history = getHandwavyPhraseHistory();
@@ -1366,7 +1522,8 @@ router.get(
         // Single-phrase legacy entry — not addressable through this batch
         // detail endpoint. The CLI maps this to a "use /reinstate" hint.
         res.status(404).json({
-          error: "That history entry is a single-phrase removal — use /reinstate for single-phrase entries.",
+          error:
+            "That history entry is a single-phrase removal — use /reinstate for single-phrase entries.",
           reason: "not-a-batch",
         });
         return;
@@ -1375,7 +1532,9 @@ router.get(
       // copy the entries so callers can't accidentally mutate the cached
       // history through the response shape.
       const phrases = entry.phrases.map((p) => ({ ...p }));
-      const reinstatedCount = phrases.filter((p) => p.reinstated === true).length;
+      const reinstatedCount = phrases.filter(
+        (p) => p.reinstated === true,
+      ).length;
       res.json({
         removedAt: entry.removedAt,
         removedBy: entry.removedBy,
@@ -1388,161 +1547,198 @@ router.get(
       });
     } catch (err) {
       req.log?.error(err, "Failed to fetch hand-wavy removal batch detail");
-      res.status(500).json({ error: "Failed to fetch hand-wavy removal batch detail." });
+      res
+        .status(500)
+        .json({ error: "Failed to fetch hand-wavy removal batch detail." });
     }
   },
 );
 
-router.post("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, async (req, res) => {
-  try {
-    const { phrase, category, dryRun, reviewer, rationale, productionScanLimit, addedAt } = (req.body ?? {}) as {
-      phrase?: unknown;
-      category?: unknown;
-      dryRun?: unknown;
-      reviewer?: unknown;
-      rationale?: unknown;
-      productionScanLimit?: unknown;
-      // Task #223 — test-only override for the marker's `addedAt` ISO
-      // timestamp. Lets the e2e suite seed a phrase whose 5-minute undo
-      // window is about to elapse so the urgent-state styling
-      // (text-red-400 + animate-pulse + data-undo-urgent="true") can be
-      // exercised without the spec having to wait 4m 30s of real wall-
-      // clock time. Only honored when HANDWAVY_ALLOW_TEST_BACKDATE=1 is
-      // set on the api-server process so a production deployment cannot
-      // be tricked into rewriting the audit timestamp.
-      addedAt?: unknown;
-    };
-    if (typeof phrase !== "string" || phrase.trim().length === 0) {
-      res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
-      return;
-    }
-    if (
-      category !== undefined &&
-      category !== "absence" &&
-      category !== "hedging" &&
-      category !== "buzzword"
-    ) {
-      res.status(400).json({ error: "category must be one of 'absence', 'hedging', 'buzzword'." });
-      return;
-    }
-    if (reviewer !== undefined && typeof reviewer !== "string") {
-      res.status(400).json({ error: "reviewer must be a string when provided." });
-      return;
-    }
-    if (rationale !== undefined && typeof rationale !== "string") {
-      res.status(400).json({ error: "rationale must be a string when provided." });
-      return;
-    }
-    // Task #125 — optional reviewer override for the production-scan window.
-    // Only meaningful on the dry-run path (the only place the production
-    // scan runs), but we validate it on every POST so a malformed value
-    // never makes it past the input layer.
-    // Task #230 — validation lives in the shared `parseProductionScanLimit`
-    // helper so the DELETE single/batch dry-run paths reject identical bad
-    // inputs with identical error messages.
-    const productionLimitParse = parseProductionScanLimit(productionScanLimit);
-    if (!productionLimitParse.ok) {
-      res.status(400).json({ error: productionLimitParse.error });
-      return;
-    }
-    const effectiveProductionLimit = productionLimitParse.limit;
-    // Task #114 — dry-run mode: validate length the same way as a real add so
-    // reviewers see the same "too short / too long" errors before committing,
-    // then return a corpus-match preview without persisting anything.
-    if (dryRun === true) {
-      const normalized = phrase.toLowerCase().replace(/\s+/g, " ").trim();
-      if (normalized.length < 3) {
-        res.status(400).json({ error: "Phrase must be at least 3 characters after normalization." });
+router.post(
+  "/feedback/calibration/handwavy-phrases",
+  requireCalibrationAuth,
+  async (req, res) => {
+    try {
+      const {
+        phrase,
+        category,
+        dryRun,
+        reviewer,
+        rationale,
+        productionScanLimit,
+        addedAt,
+      } = (req.body ?? {}) as {
+        phrase?: unknown;
+        category?: unknown;
+        dryRun?: unknown;
+        reviewer?: unknown;
+        rationale?: unknown;
+        productionScanLimit?: unknown;
+        // Task #223 — test-only override for the marker's `addedAt` ISO
+        // timestamp. Lets the e2e suite seed a phrase whose 5-minute undo
+        // window is about to elapse so the urgent-state styling
+        // (text-red-400 + animate-pulse + data-undo-urgent="true") can be
+        // exercised without the spec having to wait 4m 30s of real wall-
+        // clock time. Only honored when HANDWAVY_ALLOW_TEST_BACKDATE=1 is
+        // set on the api-server process so a production deployment cannot
+        // be tricked into rewriting the audit timestamp.
+        addedAt?: unknown;
+      };
+      if (typeof phrase !== "string" || phrase.trim().length === 0) {
+        res
+          .status(400)
+          .json({ error: "Body must include a non-empty 'phrase' string." });
         return;
       }
-      if (normalized.length > 200) {
-        res.status(400).json({ error: "Phrase must be at most 200 characters." });
+      if (
+        category !== undefined &&
+        category !== "absence" &&
+        category !== "hedging" &&
+        category !== "buzzword"
+      ) {
+        res.status(400).json({
+          error: "category must be one of 'absence', 'hedging', 'buzzword'.",
+        });
         return;
       }
-      const matches = previewHandwavyPhrase(normalized);
-      // Task #119 — Also score the candidate against the most recent production
-      // reports (capped at PRODUCTION_PREVIEW_LIMIT). The curated cohorts are
-      // tiny (~50 fixtures) so a domain-specific phrase can easily score 0/0
-      // there yet flag dozens of legitimate production reports. We surface the
-      // production block as a SECOND signal so reviewers see both. If the DB
-      // probe fails we don't fail the whole preview — the curated block is
-      // still useful — but we DO record the failure so the UI can render a
-      // clear "production scan unavailable" notice rather than silently
-      // hiding the second signal.
-      let productionMatches: DryRunMatches | null = null;
-      let productionError: string | null = null;
-      try {
-        // Task #125 — honor the reviewer-supplied scan window if any (already
-        // validated above), otherwise the legacy 2000-row default.
-        productionMatches = await previewHandwavyPhraseAgainstProduction(
-          normalized,
-          effectiveProductionLimit,
-        );
-      } catch (err) {
-        req.log?.error(err, "Production dry-run scan failed");
-        productionError = "Production archive scan failed; only curated-corpus signal is shown.";
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
+        return;
       }
-      const phrases = getHandwavyPhrases();
-      const effectiveCategory = (category ?? "absence") as "absence" | "hedging" | "buzzword";
-      // Task #123 — flag overlap with existing curated entries so the reviewer
-      // can spot near-duplicates before they crowd the active list.
-      const overlaps = detectCuratedOverlaps(normalized, phrases);
-      res.status(200).json({
-        dryRun: true,
-        added: false,
-        phrase: normalized,
-        category: effectiveCategory,
-        total: phrases.length,
-        phrases,
-        dryRunMatches: matches,
-        dryRunMatchesProduction: productionMatches,
-        dryRunMatchesProductionError: productionError,
-        // Task #125 — echo the effective limit (default or reviewer override)
-        // so the UI can render "scanned the last N reports" accurately.
-        dryRunMatchesProductionLimit: effectiveProductionLimit,
-        dryRunOverlaps: overlaps,
+      if (rationale !== undefined && typeof rationale !== "string") {
+        res
+          .status(400)
+          .json({ error: "rationale must be a string when provided." });
+        return;
+      }
+      // Task #125 — optional reviewer override for the production-scan window.
+      // Only meaningful on the dry-run path (the only place the production
+      // scan runs), but we validate it on every POST so a malformed value
+      // never makes it past the input layer.
+      // Task #230 — validation lives in the shared `parseProductionScanLimit`
+      // helper so the DELETE single/batch dry-run paths reject identical bad
+      // inputs with identical error messages.
+      const productionLimitParse =
+        parseProductionScanLimit(productionScanLimit);
+      if (!productionLimitParse.ok) {
+        res.status(400).json({ error: productionLimitParse.error });
+        return;
+      }
+      const effectiveProductionLimit = productionLimitParse.limit;
+      // Task #114 — dry-run mode: validate length the same way as a real add so
+      // reviewers see the same "too short / too long" errors before committing,
+      // then return a corpus-match preview without persisting anything.
+      if (dryRun === true) {
+        const normalized = phrase.toLowerCase().replace(/\s+/g, " ").trim();
+        if (normalized.length < 3) {
+          res.status(400).json({
+            error: "Phrase must be at least 3 characters after normalization.",
+          });
+          return;
+        }
+        if (normalized.length > 200) {
+          res
+            .status(400)
+            .json({ error: "Phrase must be at most 200 characters." });
+          return;
+        }
+        const matches = previewHandwavyPhrase(normalized);
+        // Task #119 — Also score the candidate against the most recent production
+        // reports (capped at PRODUCTION_PREVIEW_LIMIT). The curated cohorts are
+        // tiny (~50 fixtures) so a domain-specific phrase can easily score 0/0
+        // there yet flag dozens of legitimate production reports. We surface the
+        // production block as a SECOND signal so reviewers see both. If the DB
+        // probe fails we don't fail the whole preview — the curated block is
+        // still useful — but we DO record the failure so the UI can render a
+        // clear "production scan unavailable" notice rather than silently
+        // hiding the second signal.
+        let productionMatches: DryRunMatches | null = null;
+        let productionError: string | null = null;
+        try {
+          // Task #125 — honor the reviewer-supplied scan window if any (already
+          // validated above), otherwise the legacy 2000-row default.
+          productionMatches = await previewHandwavyPhraseAgainstProduction(
+            normalized,
+            effectiveProductionLimit,
+          );
+        } catch (err) {
+          req.log?.error(err, "Production dry-run scan failed");
+          productionError =
+            "Production archive scan failed; only curated-corpus signal is shown.";
+        }
+        const phrases = getHandwavyPhrases();
+        const effectiveCategory = (category ?? "absence") as
+          | "absence"
+          | "hedging"
+          | "buzzword";
+        // Task #123 — flag overlap with existing curated entries so the reviewer
+        // can spot near-duplicates before they crowd the active list.
+        const overlaps = detectCuratedOverlaps(normalized, phrases);
+        res.status(200).json({
+          dryRun: true,
+          added: false,
+          phrase: normalized,
+          category: effectiveCategory,
+          total: phrases.length,
+          phrases,
+          dryRunMatches: matches,
+          dryRunMatchesProduction: productionMatches,
+          dryRunMatchesProductionError: productionError,
+          // Task #125 — echo the effective limit (default or reviewer override)
+          // so the UI can render "scanned the last N reports" accurately.
+          dryRunMatchesProductionLimit: effectiveProductionLimit,
+          dryRunOverlaps: overlaps,
+        });
+        return;
+      }
+      // Task #223 — only honor a caller-supplied addedAt when the api-server
+      // process has explicitly opted in via HANDWAVY_ALLOW_TEST_BACKDATE=1.
+      // The e2e suite sets this in playwright.config.ts so the urgent-state
+      // styling on the per-row Undo button can be tested without 4m 30s of
+      // real wait. Production deployments leave the env var unset, so this
+      // path is a no-op there: the addedAt body field is silently dropped
+      // and addHandwavyPhrase falls back to its default `new Date()` clock.
+      let now: string | undefined;
+      if (
+        process.env.HANDWAVY_ALLOW_TEST_BACKDATE === "1" &&
+        typeof addedAt === "string"
+      ) {
+        const trimmed = addedAt.trim();
+        if (trimmed.length > 0 && Number.isFinite(Date.parse(trimmed))) {
+          now = trimmed;
+        }
+      }
+      const result = addHandwavyPhrase(phrase, category, {
+        reviewer: typeof reviewer === "string" ? reviewer : undefined,
+        rationale: typeof rationale === "string" ? rationale : undefined,
+        now,
       });
-      return;
-    }
-    // Task #223 — only honor a caller-supplied addedAt when the api-server
-    // process has explicitly opted in via HANDWAVY_ALLOW_TEST_BACKDATE=1.
-    // The e2e suite sets this in playwright.config.ts so the urgent-state
-    // styling on the per-row Undo button can be tested without 4m 30s of
-    // real wait. Production deployments leave the env var unset, so this
-    // path is a no-op there: the addedAt body field is silently dropped
-    // and addHandwavyPhrase falls back to its default `new Date()` clock.
-    let now: string | undefined;
-    if (process.env.HANDWAVY_ALLOW_TEST_BACKDATE === "1" && typeof addedAt === "string") {
-      const trimmed = addedAt.trim();
-      if (trimmed.length > 0 && Number.isFinite(Date.parse(trimmed))) {
-        now = trimmed;
+      if (result.added) {
+        invalidateAllRemovalImpactCaches();
       }
+      res.status(result.added ? 201 : 200).json({
+        added: result.added,
+        phrase: result.phrase,
+        category: result.category,
+        total: result.total,
+        marker: result.marker,
+        phrases: getHandwavyPhrases(),
+      });
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        /must be at (?:least|most)/.test(err.message)
+      ) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      req.log?.error(err, "Failed to add hand-wavy phrase");
+      res.status(500).json({ error: "Failed to add hand-wavy phrase." });
     }
-    const result = addHandwavyPhrase(phrase, category, {
-      reviewer: typeof reviewer === "string" ? reviewer : undefined,
-      rationale: typeof rationale === "string" ? rationale : undefined,
-      now,
-    });
-    if (result.added) {
-      invalidateAllRemovalImpactCaches();
-    }
-    res.status(result.added ? 201 : 200).json({
-      added: result.added,
-      phrase: result.phrase,
-      category: result.category,
-      total: result.total,
-      marker: result.marker,
-      phrases: getHandwavyPhrases(),
-    });
-  } catch (err) {
-    if (err instanceof Error && /must be at (?:least|most)/.test(err.message)) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
-    req.log?.error(err, "Failed to add hand-wavy phrase");
-    res.status(500).json({ error: "Failed to add hand-wavy phrase." });
-  }
-});
+  },
+);
 
 // Task #121 — reinstate a previously removed phrase straight from the
 // removal-history log. The reviewer doesn't have to retype the phrase or
@@ -1562,17 +1758,22 @@ router.post(
         reviewer?: unknown;
       };
       if (typeof phrase !== "string" || phrase.trim().length === 0) {
-        res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
+        res
+          .status(400)
+          .json({ error: "Body must include a non-empty 'phrase' string." });
         return;
       }
       if (typeof removedAt !== "string" || removedAt.trim().length === 0) {
         res.status(400).json({
-          error: "Body must include the 'removedAt' ISO timestamp of the history entry to reinstate.",
+          error:
+            "Body must include the 'removedAt' ISO timestamp of the history entry to reinstate.",
         });
         return;
       }
       if (reviewer !== undefined && typeof reviewer !== "string") {
-        res.status(400).json({ error: "reviewer must be a string when provided." });
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
         return;
       }
       const result = reinstateHandwavyPhrase(phrase, removedAt, {
@@ -1581,7 +1782,8 @@ router.post(
       if (!result.ok) {
         if (result.reason === "history-not-found") {
           res.status(404).json({
-            error: "No matching removal-history entry found for that phrase + removedAt.",
+            error:
+              "No matching removal-history entry found for that phrase + removedAt.",
             reason: result.reason,
           });
           return;
@@ -1637,16 +1839,21 @@ router.post(
       };
       if (typeof removedAt !== "string" || removedAt.trim().length === 0) {
         res.status(400).json({
-          error: "Body must include the 'removedAt' ISO timestamp of the batch entry to reinstate.",
+          error:
+            "Body must include the 'removedAt' ISO timestamp of the batch entry to reinstate.",
         });
         return;
       }
       if (reviewer !== undefined && typeof reviewer !== "string") {
-        res.status(400).json({ error: "reviewer must be a string when provided." });
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
         return;
       }
       if (dryRun !== undefined && typeof dryRun !== "boolean") {
-        res.status(400).json({ error: "dryRun must be a boolean when provided." });
+        res
+          .status(400)
+          .json({ error: "dryRun must be a boolean when provided." });
         return;
       }
       if (
@@ -1667,14 +1874,16 @@ router.post(
       if (!result.ok) {
         if (result.reason === "history-not-found") {
           res.status(404).json({
-            error: "No matching removal-history entry found for that removedAt.",
+            error:
+              "No matching removal-history entry found for that removedAt.",
             reason: result.reason,
           });
           return;
         }
         // not-a-batch
         res.status(409).json({
-          error: "That history entry is not a batch removal — use /reinstate for single-phrase entries.",
+          error:
+            "That history entry is not a batch removal — use /reinstate for single-phrase entries.",
           reason: result.reason,
         });
         return;
@@ -1723,7 +1932,9 @@ router.post(
       });
     } catch (err) {
       req.log?.error(err, "Failed to reinstate hand-wavy phrase batch");
-      res.status(500).json({ error: "Failed to reinstate hand-wavy phrase batch." });
+      res
+        .status(500)
+        .json({ error: "Failed to reinstate hand-wavy phrase batch." });
     }
   },
 );
@@ -1740,87 +1951,115 @@ router.post(
 // is a rename no-op; the request can still apply concurrent
 // category/rationale updates. A normalized `newPhrase` that collides
 // with another active marker is rejected.
-router.patch("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, (req, res) => {
-  try {
-    const { phrase, category, rationale, newPhrase, reviewer } = (req.body ?? {}) as {
-      phrase?: unknown;
-      category?: unknown;
-      rationale?: unknown;
-      newPhrase?: unknown;
-      reviewer?: unknown;
-    };
-    if (typeof phrase !== "string" || phrase.trim().length === 0) {
-      res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
-      return;
-    }
-    if (
-      category !== undefined &&
-      category !== "absence" &&
-      category !== "hedging" &&
-      category !== "buzzword"
-    ) {
-      res.status(400).json({ error: "category must be one of 'absence', 'hedging', 'buzzword'." });
-      return;
-    }
-    if (rationale !== undefined && typeof rationale !== "string") {
-      res.status(400).json({ error: "rationale must be a string when provided." });
-      return;
-    }
-    if (newPhrase !== undefined && typeof newPhrase !== "string") {
-      res.status(400).json({ error: "newPhrase must be a string when provided." });
-      return;
-    }
-    if (typeof newPhrase === "string" && newPhrase.trim().length === 0) {
-      res.status(400).json({ error: "newPhrase must be a non-empty string when provided." });
-      return;
-    }
-    if (reviewer !== undefined && typeof reviewer !== "string") {
-      res.status(400).json({ error: "reviewer must be a string when provided." });
-      return;
-    }
-    if (category === undefined && rationale === undefined && newPhrase === undefined) {
-      res.status(400).json({
-        error: "Provide at least one of 'category', 'rationale', or 'newPhrase' to edit.",
+router.patch(
+  "/feedback/calibration/handwavy-phrases",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const { phrase, category, rationale, newPhrase, reviewer } = (req.body ??
+        {}) as {
+        phrase?: unknown;
+        category?: unknown;
+        rationale?: unknown;
+        newPhrase?: unknown;
+        reviewer?: unknown;
+      };
+      if (typeof phrase !== "string" || phrase.trim().length === 0) {
+        res
+          .status(400)
+          .json({ error: "Body must include a non-empty 'phrase' string." });
+        return;
+      }
+      if (
+        category !== undefined &&
+        category !== "absence" &&
+        category !== "hedging" &&
+        category !== "buzzword"
+      ) {
+        res.status(400).json({
+          error: "category must be one of 'absence', 'hedging', 'buzzword'.",
+        });
+        return;
+      }
+      if (rationale !== undefined && typeof rationale !== "string") {
+        res
+          .status(400)
+          .json({ error: "rationale must be a string when provided." });
+        return;
+      }
+      if (newPhrase !== undefined && typeof newPhrase !== "string") {
+        res
+          .status(400)
+          .json({ error: "newPhrase must be a string when provided." });
+        return;
+      }
+      if (typeof newPhrase === "string" && newPhrase.trim().length === 0) {
+        res.status(400).json({
+          error: "newPhrase must be a non-empty string when provided.",
+        });
+        return;
+      }
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
+        return;
+      }
+      if (
+        category === undefined &&
+        rationale === undefined &&
+        newPhrase === undefined
+      ) {
+        res.status(400).json({
+          error:
+            "Provide at least one of 'category', 'rationale', or 'newPhrase' to edit.",
+        });
+        return;
+      }
+      const result = editHandwavyPhrase(
+        phrase,
+        {
+          category: category as "absence" | "hedging" | "buzzword" | undefined,
+          rationale: typeof rationale === "string" ? rationale : undefined,
+          newPhrase: typeof newPhrase === "string" ? newPhrase : undefined,
+        },
+        { reviewer: typeof reviewer === "string" ? reviewer : undefined },
+      );
+      if (result.edited) {
+        invalidateAllRemovalImpactCaches();
+      }
+      res.status(200).json({
+        edited: result.edited,
+        phrase: result.phrase,
+        total: result.total,
+        marker: result.marker,
+        editEntry: result.editEntry,
+        phrases: getHandwavyPhrases(),
       });
-      return;
+    } catch (err) {
+      if (err instanceof Error && /not found/i.test(err.message)) {
+        res.status(404).json({ error: err.message });
+        return;
+      }
+      if (
+        err instanceof Error &&
+        /already uses that normalized form/i.test(err.message)
+      ) {
+        res.status(409).json({ error: err.message });
+        return;
+      }
+      if (
+        err instanceof Error &&
+        /(must be|category|Phrase must|Rationale)/i.test(err.message)
+      ) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      req.log?.error(err, "Failed to edit hand-wavy phrase");
+      res.status(500).json({ error: "Failed to edit hand-wavy phrase." });
     }
-    const result = editHandwavyPhrase(
-      phrase,
-      {
-        category: category as "absence" | "hedging" | "buzzword" | undefined,
-        rationale: typeof rationale === "string" ? rationale : undefined,
-        newPhrase: typeof newPhrase === "string" ? newPhrase : undefined,
-      },
-      { reviewer: typeof reviewer === "string" ? reviewer : undefined },
-    );
-    if (result.edited) {
-      invalidateAllRemovalImpactCaches();
-    }
-    res.status(200).json({
-      edited: result.edited,
-      phrase: result.phrase,
-      total: result.total,
-      marker: result.marker,
-      editEntry: result.editEntry,
-      phrases: getHandwavyPhrases(),
-    });
-  } catch (err) {
-    if (err instanceof Error && /not found/i.test(err.message)) {
-      res.status(404).json({ error: err.message });
-      return;
-    }
-    if (err instanceof Error && /already uses that normalized form/i.test(err.message)) {
-      res.status(409).json({ error: err.message });
-      return;
-    }
-    if (err instanceof Error && /(must be|category|Phrase must|Rationale)/i.test(err.message)) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
-    req.log?.error(err, "Failed to edit hand-wavy phrase");
-    res.status(500).json({ error: "Failed to edit hand-wavy phrase." });
-  }
-});
+  },
+);
 
 // Task #130 — undo a brand-new add inside a short window. Mirror of the
 // /reinstate flow: takes the phrase + addedAt of the live marker, removes
@@ -1838,17 +2077,22 @@ router.post(
         reviewer?: unknown;
       };
       if (typeof phrase !== "string" || phrase.trim().length === 0) {
-        res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
+        res
+          .status(400)
+          .json({ error: "Body must include a non-empty 'phrase' string." });
         return;
       }
       if (typeof addedAt !== "string" || addedAt.trim().length === 0) {
         res.status(400).json({
-          error: "Body must include the 'addedAt' ISO timestamp of the marker to undo.",
+          error:
+            "Body must include the 'addedAt' ISO timestamp of the marker to undo.",
         });
         return;
       }
       if (reviewer !== undefined && typeof reviewer !== "string") {
-        res.status(400).json({ error: "reviewer must be a string when provided." });
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
         return;
       }
       const result = undoHandwavyPhrase(phrase, addedAt, {
@@ -1867,14 +2111,16 @@ router.post(
         }
         if (result.reason === "addedAt-mismatch") {
           res.status(409).json({
-            error: "The active phrase's addedAt no longer matches — refresh and try again.",
+            error:
+              "The active phrase's addedAt no longer matches — refresh and try again.",
             reason: result.reason,
           });
           return;
         }
         // window-expired
         res.status(409).json({
-          error: "The undo window has elapsed. Use the regular Trash flow instead.",
+          error:
+            "The undo window has elapsed. Use the regular Trash flow instead.",
           reason: result.reason,
         });
         return;
@@ -1933,7 +2179,9 @@ router.post(
         return;
       }
       if (reviewer !== undefined && typeof reviewer !== "string") {
-        res.status(400).json({ error: "reviewer must be a string when provided." });
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
         return;
       }
       const normalized: { phrase: string; addedAt: string }[] = [];
@@ -2000,17 +2248,22 @@ router.post(
         reviewer?: unknown;
       };
       if (typeof phrase !== "string" || phrase.trim().length === 0) {
-        res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
+        res
+          .status(400)
+          .json({ error: "Body must include a non-empty 'phrase' string." });
         return;
       }
       if (typeof editedAt !== "string" || editedAt.trim().length === 0) {
         res.status(400).json({
-          error: "Body must include the 'editedAt' ISO timestamp of the edit entry to revert.",
+          error:
+            "Body must include the 'editedAt' ISO timestamp of the edit entry to revert.",
         });
         return;
       }
       if (reviewer !== undefined && typeof reviewer !== "string") {
-        res.status(400).json({ error: "reviewer must be a string when provided." });
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
         return;
       }
       const result = revertHandwavyPhraseEdit(phrase, editedAt, {
@@ -2018,12 +2271,16 @@ router.post(
       });
       if (!result.ok) {
         if (result.reason === "phrase-not-found") {
-          res.status(404).json({ error: "Phrase not found in active list.", reason: result.reason });
+          res.status(404).json({
+            error: "Phrase not found in active list.",
+            reason: result.reason,
+          });
           return;
         }
         // edit-not-found
         res.status(404).json({
-          error: "No matching edit entry on that phrase for the supplied editedAt.",
+          error:
+            "No matching edit entry on that phrase for the supplied editedAt.",
           reason: result.reason,
         });
         return;
@@ -2041,7 +2298,9 @@ router.post(
       });
     } catch (err) {
       req.log?.error(err, "Failed to revert hand-wavy phrase edit");
-      res.status(500).json({ error: "Failed to revert hand-wavy phrase edit." });
+      res
+        .status(500)
+        .json({ error: "Failed to revert hand-wavy phrase edit." });
     }
   },
 );
@@ -2051,87 +2310,254 @@ router.post(
 // file rewrite, and one history-log append (containing the list of removed
 // phrases) so a release-checklist cleanup of a dozen phrases stops doing a
 // dozen round-trips and a dozen history rows.
-router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, async (req, res) => {
-  try {
-    const body = (req.body ?? {}) as {
-      phrase?: unknown;
-      phrases?: unknown;
-      reviewer?: unknown;
-      dryRun?: unknown;
-      productionScanLimit?: unknown;
-    };
-    const { phrase, phrases, reviewer, dryRun, productionScanLimit } = body;
-    if (reviewer !== undefined && typeof reviewer !== "string") {
-      res.status(400).json({ error: "reviewer must be a string when provided." });
-      return;
-    }
-    const reviewerStr = typeof reviewer === "string" ? reviewer : undefined;
-    // Task #230 — optional reviewer override for the production-scan window,
-    // honored on both the single and batch dry-run paths so the
-    // reviewer-chosen window persisted in the calibration UI applies to every
-    // production-archive scan, not just the add-phrase preview. We validate
-    // on every DELETE (not just dryRun) so a malformed value never makes it
-    // past the input layer; non-dry-run paths simply ignore the resolved
-    // limit since they don't probe production.
-    const productionLimitParse = parseProductionScanLimit(productionScanLimit);
-    if (!productionLimitParse.ok) {
-      res.status(400).json({ error: productionLimitParse.error });
-      return;
-    }
-    const effectiveProductionLimit = productionLimitParse.limit;
+router.delete(
+  "/feedback/calibration/handwavy-phrases",
+  requireCalibrationAuth,
+  async (req, res) => {
+    try {
+      const body = (req.body ?? {}) as {
+        phrase?: unknown;
+        phrases?: unknown;
+        reviewer?: unknown;
+        dryRun?: unknown;
+        productionScanLimit?: unknown;
+      };
+      const { phrase, phrases, reviewer, dryRun, productionScanLimit } = body;
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
+        return;
+      }
+      const reviewerStr = typeof reviewer === "string" ? reviewer : undefined;
+      // Task #230 — optional reviewer override for the production-scan window,
+      // honored on both the single and batch dry-run paths so the
+      // reviewer-chosen window persisted in the calibration UI applies to every
+      // production-archive scan, not just the add-phrase preview. We validate
+      // on every DELETE (not just dryRun) so a malformed value never makes it
+      // past the input layer; non-dry-run paths simply ignore the resolved
+      // limit since they don't probe production.
+      const productionLimitParse =
+        parseProductionScanLimit(productionScanLimit);
+      if (!productionLimitParse.ok) {
+        res.status(400).json({ error: productionLimitParse.error });
+        return;
+      }
+      const effectiveProductionLimit = productionLimitParse.limit;
 
-    // Batch path — `{phrases: string[]}`. Mutually exclusive with `phrase`.
-    if (phrases !== undefined) {
-      if (phrase !== undefined) {
-        res.status(400).json({
-          error: "Provide either 'phrase' (single removal) or 'phrases' (batch removal), not both.",
+      // Batch path — `{phrases: string[]}`. Mutually exclusive with `phrase`.
+      if (phrases !== undefined) {
+        if (phrase !== undefined) {
+          res.status(400).json({
+            error:
+              "Provide either 'phrase' (single removal) or 'phrases' (batch removal), not both.",
+          });
+          return;
+        }
+        if (!Array.isArray(phrases)) {
+          res
+            .status(400)
+            .json({ error: "'phrases' must be an array of strings." });
+          return;
+        }
+        if (phrases.length === 0) {
+          res
+            .status(400)
+            .json({ error: "'phrases' must contain at least one phrase." });
+          return;
+        }
+        if (phrases.length > 200) {
+          res.status(400).json({
+            error: "'phrases' batch is capped at 200 entries per request.",
+          });
+          return;
+        }
+        const cleaned: string[] = [];
+        for (const p of phrases) {
+          if (typeof p !== "string" || p.trim().length === 0) {
+            res.status(400).json({
+              error: "Every entry in 'phrases' must be a non-empty string.",
+            });
+            return;
+          }
+          cleaned.push(p);
+        }
+        // Task #145 — preview mode: compute the same per-phrase results plus a
+        // corpus impact summary, but DO NOT mutate the active list, history, or
+        // cache. Reviewers (and the CLI `--dry-run` flag) get a "of these N,
+        // X are not on the active list, Y are duplicates, the remaining Z
+        // currently flag W legitimate hand-wavy reports between them" preview
+        // before they pull the trigger.
+        if (dryRun === true) {
+          // Task #501 — server-side bulk dry-run cache. Keyed by the SORTED
+          // set of normalized input phrases plus `(productionScanLimit,
+          // activeListVersion)`, mirroring the single-phrase cache so a
+          // reviewer ticking-and-unticking in the bulk-retire UI replays
+          // any combination they revisit instead of re-paying the curated
+          // + production scan. Normalize first (lowercase + collapse
+          // whitespace + trim) so cosmetic differences in the request body
+          // can't fragment the cache; preserve duplicates so
+          // `["foo","foo"]` and `["foo"]` get distinct entries (their
+          // `duplicateInBatch` counts differ).
+          const phrasesNow = getHandwavyPhrases();
+          const activeListVersion =
+            computeHandwavyActiveListVersion(phrasesNow);
+          const normalizedKeyPhrases = cleaned.map((p) =>
+            p.toLowerCase().replace(/\s+/g, " ").trim(),
+          );
+          const cached = handwavyBulkRemovalImpactCache.get(
+            normalizedKeyPhrases,
+            effectiveProductionLimit,
+            activeListVersion,
+          );
+          if (cached) {
+            res.status(200).json({
+              ...cached.response,
+              cacheHit: true,
+              cachedAt: cached.cachedAt,
+            });
+            return;
+          }
+          const preview = previewRemoveHandwavyPhrasesBatch(cleaned);
+          const removedNormalized = preview.results
+            .filter((r) => r.removed)
+            .map((r) => r.phrase);
+          const remainingNormalized = preview.nextMarkers.map((m) => m.phrase);
+          const corpusImpact = previewRemovalAgainstCorpus(
+            removedNormalized,
+            remainingNormalized,
+          );
+          let productionImpact: RemovalImpact | null = null;
+          let productionError: string | null = null;
+          if (removedNormalized.length === 0) {
+            // Skip the DB probe entirely when nothing would be removed — there
+            // is by definition no impact and no point spending the query.
+            productionImpact = {
+              total: 0,
+              byTier: {
+                t1Legit: 0,
+                t2Borderline: 0,
+                t3Slop: 0,
+                t4Hallucinated: 0,
+              },
+              validDetectionsLost: 0,
+              falsePositivesDropped: 0,
+              corpusSize: 0,
+              sampleMatches: [],
+              warning: null,
+              // Task #218 — empty/skipped scan has no createdAt window to
+              // report; mirrors `scoreProductionRows` for a zero-row scan.
+              oldestCreatedAt: null,
+              newestCreatedAt: null,
+              // Task #323 — same rationale: a skipped scan has no archive count
+              // to report, and there is no impact for the coverage banner to
+              // qualify anyway.
+              archiveTotal: null,
+            };
+          } else {
+            try {
+              // Task #229 / #230 — honor the reviewer-supplied scan window
+              // from the shared calibration preference (already validated
+              // above), falling back to the legacy 2000-row default when
+              // omitted. Mirrors the add-time preview (Task #125).
+              productionImpact = await previewRemovalAgainstProduction(
+                removedNormalized,
+                remainingNormalized,
+                effectiveProductionLimit,
+              );
+            } catch (err) {
+              req.log?.error(err, "Production removal dry-run scan failed");
+              productionError =
+                "Production archive scan failed; only curated-corpus signal is shown.";
+            }
+          }
+          const responseBody = {
+            dryRun: true as const,
+            batch: true as const,
+            // Mirror the post-mutation field names so the client can reuse the
+            // same renderer; the `wouldRemove` count is what would have been
+            // removed had this not been a dry run.
+            wouldRemove: preview.wouldRemove,
+            notFound: preview.notFound,
+            duplicateInBatch: preview.duplicateInBatch,
+            // Active list size BEFORE the batch (no mutation occurred).
+            total: preview.total,
+            // Projected size AFTER the batch would be applied.
+            projectedTotal: preview.nextMarkers.length,
+            results: preview.results,
+            dryRunImpact: {
+              corpus: corpusImpact,
+              production: productionImpact,
+              productionError,
+              // Task #229 / #230 — echo the reviewer-chosen window (or default)
+              // so the UI can label the production block ("last N of up to M
+              // reports") with the window it actually scanned, matching the
+              // add-phrase preview's behavior.
+              productionLimit: effectiveProductionLimit,
+            },
+            phrases: phrasesNow,
+          };
+          // Task #501 — don't cache transient production-scan failures so
+          // the next reviewer sees a fresh attempt rather than the cached
+          // error; mirrors the single-phrase cache's policy.
+          if (productionError === null) {
+            const cacheable: CachedRemovalImpactResponse = responseBody;
+            handwavyBulkRemovalImpactCache.set(
+              normalizedKeyPhrases,
+              effectiveProductionLimit,
+              activeListVersion,
+              cacheable,
+            );
+          }
+          res.status(200).json({ ...responseBody, cacheHit: false });
+          return;
+        }
+        const result = removeHandwavyPhrasesBatch(cleaned, {
+          reviewer: reviewerStr,
+        });
+        if (result.removed > 0) {
+          invalidateAllRemovalImpactCaches();
+        }
+        // Status code policy: 200 when at least one phrase was removed (even if
+        // some were not-found), 404 only when nothing matched at all.
+        const status = result.removed > 0 ? 200 : 404;
+        res.status(status).json({
+          batch: true,
+          removed: result.removed,
+          notFound: result.notFound,
+          total: result.total,
+          results: result.results,
+          historyEntry: result.historyEntry ?? null,
+          phrases: getHandwavyPhrases(),
+          history: getHandwavyPhraseHistory(),
         });
         return;
       }
-      if (!Array.isArray(phrases)) {
-        res.status(400).json({ error: "'phrases' must be an array of strings." });
+
+      // Single-phrase legacy path.
+      if (typeof phrase !== "string" || phrase.trim().length === 0) {
+        res
+          .status(400)
+          .json({ error: "Body must include a non-empty 'phrase' string." });
         return;
       }
-      if (phrases.length === 0) {
-        res.status(400).json({ error: "'phrases' must contain at least one phrase." });
-        return;
-      }
-      if (phrases.length > 200) {
-        res.status(400).json({ error: "'phrases' batch is capped at 200 entries per request." });
-        return;
-      }
-      const cleaned: string[] = [];
-      for (const p of phrases) {
-        if (typeof p !== "string" || p.trim().length === 0) {
-          res.status(400).json({ error: "Every entry in 'phrases' must be a non-empty string." });
-          return;
-        }
-        cleaned.push(p);
-      }
-      // Task #145 — preview mode: compute the same per-phrase results plus a
-      // corpus impact summary, but DO NOT mutate the active list, history, or
-      // cache. Reviewers (and the CLI `--dry-run` flag) get a "of these N,
-      // X are not on the active list, Y are duplicates, the remaining Z
-      // currently flag W legitimate hand-wavy reports between them" preview
-      // before they pull the trigger.
+
+      // Task #155 — single-phrase dry-run preview. Mirrors the batch dry-run
+      // shape (with `batch: false`) so the in-UI Trash flow can show the same
+      // corpus + production removal-impact warning before a one-click removal,
+      // without mutating the active list, history, or cache. Reuses
+      // previewRemoveHandwavyPhrasesBatch with a one-element list so the
+      // per-phrase result and the impact computation are identical to the
+      // batch path.
       if (dryRun === true) {
-        // Task #501 — server-side bulk dry-run cache. Keyed by the SORTED
-        // set of normalized input phrases plus `(productionScanLimit,
-        // activeListVersion)`, mirroring the single-phrase cache so a
-        // reviewer ticking-and-unticking in the bulk-retire UI replays
-        // any combination they revisit instead of re-paying the curated
-        // + production scan. Normalize first (lowercase + collapse
-        // whitespace + trim) so cosmetic differences in the request body
-        // can't fragment the cache; preserve duplicates so
-        // `["foo","foo"]` and `["foo"]` get distinct entries (their
-        // `duplicateInBatch` counts differ).
         const phrasesNow = getHandwavyPhrases();
         const activeListVersion = computeHandwavyActiveListVersion(phrasesNow);
-        const normalizedKeyPhrases = cleaned.map((p) =>
-          p.toLowerCase().replace(/\s+/g, " ").trim(),
-        );
-        const cached = handwavyBulkRemovalImpactCache.get(
-          normalizedKeyPhrases,
+        const normalizedKeyPhrase = phrase
+          .toLowerCase()
+          .replace(/\s+/g, " ")
+          .trim();
+        const cached = handwavyRemovalImpactCache.get(
+          normalizedKeyPhrase,
           effectiveProductionLimit,
           activeListVersion,
         );
@@ -2143,20 +2569,29 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
           });
           return;
         }
-        const preview = previewRemoveHandwavyPhrasesBatch(cleaned);
+        const preview = previewRemoveHandwavyPhrasesBatch([phrase]);
         const removedNormalized = preview.results
           .filter((r) => r.removed)
           .map((r) => r.phrase);
         const remainingNormalized = preview.nextMarkers.map((m) => m.phrase);
-        const corpusImpact = previewRemovalAgainstCorpus(removedNormalized, remainingNormalized);
+        const corpusImpact = previewRemovalAgainstCorpus(
+          removedNormalized,
+          remainingNormalized,
+        );
         let productionImpact: RemovalImpact | null = null;
         let productionError: string | null = null;
         if (removedNormalized.length === 0) {
-          // Skip the DB probe entirely when nothing would be removed — there
-          // is by definition no impact and no point spending the query.
+          // Skip the DB probe entirely when the phrase is not on the active
+          // list — there is by definition no impact and no point spending
+          // the query.
           productionImpact = {
             total: 0,
-            byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
+            byTier: {
+              t1Legit: 0,
+              t2Borderline: 0,
+              t3Slop: 0,
+              t4Hallucinated: 0,
+            },
             validDetectionsLost: 0,
             falsePositivesDropped: 0,
             corpusSize: 0,
@@ -2173,10 +2608,9 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
           };
         } else {
           try {
-            // Task #229 / #230 — honor the reviewer-supplied scan window
-            // from the shared calibration preference (already validated
-            // above), falling back to the legacy 2000-row default when
-            // omitted. Mirrors the add-time preview (Task #125).
+            // Task #230 — honor the reviewer-supplied scan window from the
+            // shared calibration preference, falling back to the legacy
+            // 2000-row default when omitted.
             productionImpact = await previewRemovalAgainstProduction(
               removedNormalized,
               remainingNormalized,
@@ -2184,42 +2618,45 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
             );
           } catch (err) {
             req.log?.error(err, "Production removal dry-run scan failed");
-            productionError = "Production archive scan failed; only curated-corpus signal is shown.";
+            productionError =
+              "Production archive scan failed; only curated-corpus signal is shown.";
           }
         }
+        const single = preview.results[0];
         const responseBody = {
           dryRun: true as const,
-          batch: true as const,
-          // Mirror the post-mutation field names so the client can reuse the
-          // same renderer; the `wouldRemove` count is what would have been
-          // removed had this not been a dry run.
+          batch: false as const,
+          // Mirror the batch dry-run field names so the client can reuse the
+          // same renderer; here `wouldRemove` is 0 or 1.
           wouldRemove: preview.wouldRemove,
           notFound: preview.notFound,
           duplicateInBatch: preview.duplicateInBatch,
-          // Active list size BEFORE the batch (no mutation occurred).
+          phrase: single.phrase,
+          raw: single.raw,
+          removed: single.removed,
+          reason: single.reason ?? null,
+          // Active list size BEFORE the removal (no mutation occurred).
           total: preview.total,
-          // Projected size AFTER the batch would be applied.
+          // Projected size AFTER the removal would be applied.
           projectedTotal: preview.nextMarkers.length,
           results: preview.results,
           dryRunImpact: {
             corpus: corpusImpact,
             production: productionImpact,
             productionError,
-            // Task #229 / #230 — echo the reviewer-chosen window (or default)
-            // so the UI can label the production block ("last N of up to M
-            // reports") with the window it actually scanned, matching the
-            // add-phrase preview's behavior.
+            // Task #230 — echo the reviewer-chosen window (or default) so the
+            // UI can label the production block with the window it actually
+            // scanned, matching the add-phrase preview's behavior.
             productionLimit: effectiveProductionLimit,
           },
           phrases: phrasesNow,
         };
-        // Task #501 — don't cache transient production-scan failures so
-        // the next reviewer sees a fresh attempt rather than the cached
-        // error; mirrors the single-phrase cache's policy.
+        // Don't cache transient production-scan failures — the next reviewer
+        // would otherwise see the same error instead of a fresh attempt.
         if (productionError === null) {
           const cacheable: CachedRemovalImpactResponse = responseBody;
-          handwavyBulkRemovalImpactCache.set(
-            normalizedKeyPhrases,
+          handwavyRemovalImpactCache.set(
+            normalizedKeyPhrase,
             effectiveProductionLimit,
             activeListVersion,
             cacheable,
@@ -2228,163 +2665,27 @@ router.delete("/feedback/calibration/handwavy-phrases", requireCalibrationAuth, 
         res.status(200).json({ ...responseBody, cacheHit: false });
         return;
       }
-      const result = removeHandwavyPhrasesBatch(cleaned, { reviewer: reviewerStr });
-      if (result.removed > 0) {
-        invalidateAllRemovalImpactCaches();
+
+      const result = removeHandwavyPhrase(phrase, { reviewer: reviewerStr });
+      if (!result.removed) {
+        res.status(404).json({ ...result, error: "Phrase not found." });
+        return;
       }
-      // Status code policy: 200 when at least one phrase was removed (even if
-      // some were not-found), 404 only when nothing matched at all.
-      const status = result.removed > 0 ? 200 : 404;
-      res.status(status).json({
-        batch: true,
+      invalidateAllRemovalImpactCaches();
+      res.json({
         removed: result.removed,
-        notFound: result.notFound,
+        phrase: result.phrase,
         total: result.total,
-        results: result.results,
-        historyEntry: result.historyEntry ?? null,
+        historyEntry: result.historyEntry,
         phrases: getHandwavyPhrases(),
         history: getHandwavyPhraseHistory(),
       });
-      return;
+    } catch (err) {
+      req.log?.error(err, "Failed to remove hand-wavy phrase");
+      res.status(500).json({ error: "Failed to remove hand-wavy phrase." });
     }
-
-    // Single-phrase legacy path.
-    if (typeof phrase !== "string" || phrase.trim().length === 0) {
-      res.status(400).json({ error: "Body must include a non-empty 'phrase' string." });
-      return;
-    }
-
-    // Task #155 — single-phrase dry-run preview. Mirrors the batch dry-run
-    // shape (with `batch: false`) so the in-UI Trash flow can show the same
-    // corpus + production removal-impact warning before a one-click removal,
-    // without mutating the active list, history, or cache. Reuses
-    // previewRemoveHandwavyPhrasesBatch with a one-element list so the
-    // per-phrase result and the impact computation are identical to the
-    // batch path.
-    if (dryRun === true) {
-      const phrasesNow = getHandwavyPhrases();
-      const activeListVersion = computeHandwavyActiveListVersion(phrasesNow);
-      const normalizedKeyPhrase = phrase.toLowerCase().replace(/\s+/g, " ").trim();
-      const cached = handwavyRemovalImpactCache.get(
-        normalizedKeyPhrase,
-        effectiveProductionLimit,
-        activeListVersion,
-      );
-      if (cached) {
-        res.status(200).json({
-          ...cached.response,
-          cacheHit: true,
-          cachedAt: cached.cachedAt,
-        });
-        return;
-      }
-      const preview = previewRemoveHandwavyPhrasesBatch([phrase]);
-      const removedNormalized = preview.results
-        .filter((r) => r.removed)
-        .map((r) => r.phrase);
-      const remainingNormalized = preview.nextMarkers.map((m) => m.phrase);
-      const corpusImpact = previewRemovalAgainstCorpus(removedNormalized, remainingNormalized);
-      let productionImpact: RemovalImpact | null = null;
-      let productionError: string | null = null;
-      if (removedNormalized.length === 0) {
-        // Skip the DB probe entirely when the phrase is not on the active
-        // list — there is by definition no impact and no point spending
-        // the query.
-        productionImpact = {
-          total: 0,
-          byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 0, t4Hallucinated: 0 },
-          validDetectionsLost: 0,
-          falsePositivesDropped: 0,
-          corpusSize: 0,
-          sampleMatches: [],
-          warning: null,
-          // Task #218 — empty/skipped scan has no createdAt window to
-          // report; mirrors `scoreProductionRows` for a zero-row scan.
-          oldestCreatedAt: null,
-          newestCreatedAt: null,
-          // Task #323 — same rationale: a skipped scan has no archive count
-          // to report, and there is no impact for the coverage banner to
-          // qualify anyway.
-          archiveTotal: null,
-        };
-      } else {
-        try {
-          // Task #230 — honor the reviewer-supplied scan window from the
-          // shared calibration preference, falling back to the legacy
-          // 2000-row default when omitted.
-          productionImpact = await previewRemovalAgainstProduction(
-            removedNormalized,
-            remainingNormalized,
-            effectiveProductionLimit,
-          );
-        } catch (err) {
-          req.log?.error(err, "Production removal dry-run scan failed");
-          productionError = "Production archive scan failed; only curated-corpus signal is shown.";
-        }
-      }
-      const single = preview.results[0];
-      const responseBody = {
-        dryRun: true as const,
-        batch: false as const,
-        // Mirror the batch dry-run field names so the client can reuse the
-        // same renderer; here `wouldRemove` is 0 or 1.
-        wouldRemove: preview.wouldRemove,
-        notFound: preview.notFound,
-        duplicateInBatch: preview.duplicateInBatch,
-        phrase: single.phrase,
-        raw: single.raw,
-        removed: single.removed,
-        reason: single.reason ?? null,
-        // Active list size BEFORE the removal (no mutation occurred).
-        total: preview.total,
-        // Projected size AFTER the removal would be applied.
-        projectedTotal: preview.nextMarkers.length,
-        results: preview.results,
-        dryRunImpact: {
-          corpus: corpusImpact,
-          production: productionImpact,
-          productionError,
-          // Task #230 — echo the reviewer-chosen window (or default) so the
-          // UI can label the production block with the window it actually
-          // scanned, matching the add-phrase preview's behavior.
-          productionLimit: effectiveProductionLimit,
-        },
-        phrases: phrasesNow,
-      };
-      // Don't cache transient production-scan failures — the next reviewer
-      // would otherwise see the same error instead of a fresh attempt.
-      if (productionError === null) {
-        const cacheable: CachedRemovalImpactResponse = responseBody;
-        handwavyRemovalImpactCache.set(
-          normalizedKeyPhrase,
-          effectiveProductionLimit,
-          activeListVersion,
-          cacheable,
-        );
-      }
-      res.status(200).json({ ...responseBody, cacheHit: false });
-      return;
-    }
-
-    const result = removeHandwavyPhrase(phrase, { reviewer: reviewerStr });
-    if (!result.removed) {
-      res.status(404).json({ ...result, error: "Phrase not found." });
-      return;
-    }
-    invalidateAllRemovalImpactCaches();
-    res.json({
-      removed: result.removed,
-      phrase: result.phrase,
-      total: result.total,
-      historyEntry: result.historyEntry,
-      phrases: getHandwavyPhrases(),
-      history: getHandwavyPhraseHistory(),
-    });
-  } catch (err) {
-    req.log?.error(err, "Failed to remove hand-wavy phrase");
-    res.status(500).json({ error: "Failed to remove hand-wavy phrase." });
-  }
-});
+  },
+);
 
 // Task #429 — Reviewer-curated AI self-disclosure phrase patterns. The list
 // lives in data/ai-self-disclosure-phrases.json and is loaded by the AVRI
@@ -2408,7 +2709,9 @@ router.get(
       });
     } catch (err) {
       _req.log?.error(err, "Failed to read AI self-disclosure phrases");
-      res.status(500).json({ error: "Failed to read AI self-disclosure phrases." });
+      res
+        .status(500)
+        .json({ error: "Failed to read AI self-disclosure phrases." });
     }
   },
 );
@@ -2426,11 +2729,15 @@ router.post(
         rationale?: unknown;
       };
       if (reviewer !== undefined && typeof reviewer !== "string") {
-        res.status(400).json({ error: "reviewer must be a string when provided." });
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
         return;
       }
       if (rationale !== undefined && typeof rationale !== "string") {
-        res.status(400).json({ error: "rationale must be a string when provided." });
+        res
+          .status(400)
+          .json({ error: "rationale must be a string when provided." });
         return;
       }
       const result = addAiSelfDisclosurePhrase(id, pattern, flags, {
@@ -2456,7 +2763,9 @@ router.post(
         return;
       }
       req.log?.error(err, "Failed to add AI self-disclosure phrase");
-      res.status(500).json({ error: "Failed to add AI self-disclosure phrase." });
+      res
+        .status(500)
+        .json({ error: "Failed to add AI self-disclosure phrase." });
     }
   },
 );

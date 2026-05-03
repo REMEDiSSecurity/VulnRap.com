@@ -10,7 +10,14 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Sparkles, Loader2, AlertCircle, ArrowRight, Trophy, Telescope, Handshake, Quote,
+  Sparkles,
+  Loader2,
+  AlertCircle,
+  ArrowRight,
+  Trophy,
+  Telescope,
+  Handshake,
+  Quote,
 } from "lucide-react";
 import {
   useListShowcase,
@@ -18,7 +25,13 @@ import {
   ShowcaseEntryCategory,
   ShowcaseEntryTier,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -69,17 +82,33 @@ const TIER_LABEL: Record<Tier, string> = {
   obvious_slop: "Obvious slop",
 };
 
-const FILTER_ORDER: FilterValue[] = ["all", "high_confidence", "edge_case", "surprising_agreement"];
+const FILTER_ORDER: FilterValue[] = [
+  "all",
+  "high_confidence",
+  "edge_case",
+  "surprising_agreement",
+];
 
 function ShowcaseCard({ entry }: { entry: ShowcaseEntry }) {
   const meta = CATEGORY_META[entry.category];
   const tierTone = TIER_TONE[entry.tier];
   return (
-    <Card className="glass-card rounded-xl flex flex-col h-full" data-testid={`showcase-card-${entry.id}`}>
+    <Card
+      className="glass-card rounded-xl flex flex-col h-full"
+      data-testid={`showcase-card-${entry.id}`}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base leading-tight">{entry.title}</CardTitle>
-          <Badge variant="outline" className={cn("text-[9px] uppercase tracking-wider shrink-0 inline-flex items-center gap-1", meta.tone)}>
+          <CardTitle className="text-base leading-tight">
+            {entry.title}
+          </CardTitle>
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[9px] uppercase tracking-wider shrink-0 inline-flex items-center gap-1",
+              meta.tone,
+            )}
+          >
             {meta.icon}
             {meta.short}
           </Badge>
@@ -97,8 +126,15 @@ function ShowcaseCard({ entry }: { entry: ShowcaseEntry }) {
             Score / Tier
           </div>
           <div className="flex items-baseline gap-2">
-            <div className={cn("font-mono text-lg font-bold", tierTone)}>{entry.score}</div>
-            <div className={cn("text-[10px] uppercase tracking-wider font-mono", tierTone)}>
+            <div className={cn("font-mono text-lg font-bold", tierTone)}>
+              {entry.score}
+            </div>
+            <div
+              className={cn(
+                "text-[10px] uppercase tracking-wider font-mono",
+                tierTone,
+              )}
+            >
               {TIER_LABEL[entry.tier]}
             </div>
           </div>
@@ -135,7 +171,10 @@ export default function Showcase() {
 
   const counts = useMemo(() => {
     const out: Record<FilterValue, number> = {
-      all: 0, high_confidence: 0, edge_case: 0, surprising_agreement: 0,
+      all: 0,
+      high_confidence: 0,
+      edge_case: 0,
+      surprising_agreement: 0,
     };
     if (!data) return out;
     out.all = data.entries.length;
@@ -157,7 +196,9 @@ export default function Showcase() {
           Showcase
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-          Hand-picked reports the platform has scored — high-confidence catches, edge cases the engines disagreed on, and the rare cases where everything aligned. Public proof, not marketing.
+          Hand-picked reports the platform has scored — high-confidence catches,
+          edge cases the engines disagreed on, and the rare cases where
+          everything aligned. Public proof, not marketing.
         </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-4" />
       </div>
@@ -171,10 +212,17 @@ export default function Showcase() {
         </CardHeader>
         <CardContent className="text-xs sm:text-sm text-muted-foreground leading-relaxed space-y-2">
           <p>
-            Each card carries a redacted excerpt, the final composite score, and a one-paragraph note from the curator about why the entry is worth a look. <span className="font-mono text-primary">Open full breakdown</span> jumps to the same results page you'd see after submitting your own report.
+            Each card carries a redacted excerpt, the final composite score, and
+            a one-paragraph note from the curator about why the entry is worth a
+            look.{" "}
+            <span className="font-mono text-primary">Open full breakdown</span>{" "}
+            jumps to the same results page you'd see after submitting your own
+            report.
           </p>
           <p className="text-[11px] text-muted-foreground/70">
-            Entries are picked manually from production submissions. Auto-curation and personalised showcases are explicitly out of scope for v1.
+            Entries are picked manually from production submissions.
+            Auto-curation and personalised showcases are explicitly out of scope
+            for v1.
           </p>
         </CardContent>
       </Card>
@@ -191,12 +239,16 @@ export default function Showcase() {
           <CardContent className="py-6 flex flex-col sm:flex-row items-start gap-3">
             <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
             <div className="flex-1 text-sm">
-              <div className="font-semibold text-destructive mb-1">Failed to load showcase</div>
+              <div className="font-semibold text-destructive mb-1">
+                Failed to load showcase
+              </div>
               <div className="text-muted-foreground text-xs leading-relaxed">
                 {error instanceof Error ? error.message : "Unknown error"}
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Retry
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -217,7 +269,10 @@ export default function Showcase() {
           >
             {FILTER_ORDER.map((value) => {
               const active = filter === value;
-              const label = value === "all" ? "All" : CATEGORY_META[value as Category].label;
+              const label =
+                value === "all"
+                  ? "All"
+                  : CATEGORY_META[value as Category].label;
               return (
                 <button
                   key={value}
@@ -234,10 +289,12 @@ export default function Showcase() {
                 >
                   {value !== "all" && CATEGORY_META[value as Category].icon}
                   {label}
-                  <span className={cn(
-                    "text-[10px] font-mono px-1.5 py-0.5 rounded",
-                    active ? "bg-primary/20" : "bg-muted/40",
-                  )}>
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono px-1.5 py-0.5 rounded",
+                      active ? "bg-primary/20" : "bg-muted/40",
+                    )}
+                  >
                     {counts[value]}
                   </span>
                 </button>

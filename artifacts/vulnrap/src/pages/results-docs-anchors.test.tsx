@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { MatrixInputsWidget, TriageCard } from "./results";
 import type {
   TriageRecommendation,
   TriageMatrixInputs,
 } from "@workspace/api-client-react";
-import { MatrixInputsWidget, TriageCard } from "./results";
 
 const noopToast = (() => {}) as unknown as Parameters<
   typeof TriageCard
@@ -45,8 +45,7 @@ describe("results page docs anchor links (Task 374)", () => {
     );
     const links = screen.getAllByRole("link", { name: /learn more/i });
     const triageLink = links.find(
-      (a) =>
-        a.getAttribute("href") === "/changelog#triage-recommendation",
+      (a) => a.getAttribute("href") === "/changelog#triage-recommendation",
     );
     expect(triageLink).toBeDefined();
   });
@@ -66,8 +65,7 @@ describe("results page docs anchor links (Task 374)", () => {
     );
     const links = screen.getAllByRole("link", { name: /learn more/i });
     const matrixLink = links.find(
-      (a) =>
-        a.getAttribute("href") === "/changelog#triage-matrix-inputs",
+      (a) => a.getAttribute("href") === "/changelog#triage-matrix-inputs",
     );
     expect(matrixLink).toBeDefined();
   });
@@ -79,8 +77,6 @@ describe("results page docs anchor links (Task 374)", () => {
       </MemoryRouter>,
     );
     const link = screen.getByRole("link", { name: /learn more/i });
-    expect(link.getAttribute("href")).toBe(
-      "/changelog#triage-matrix-inputs",
-    );
+    expect(link.getAttribute("href")).toBe("/changelog#triage-matrix-inputs");
   });
 });

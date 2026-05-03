@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { Settings, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getSettings, saveSettings, resetSettings, type VulnRapSettings } from "@/lib/settings";
+import {
+  getSettings,
+  saveSettings,
+  resetSettings,
+  type VulnRapSettings,
+} from "@/lib/settings";
 
 export function SettingsButton() {
   const [open, setOpen] = useState(false);
@@ -40,33 +45,51 @@ export function SettingsButton() {
           Threshold Settings
         </h3>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleReset} title="Reset to defaults">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={handleReset}
+            title="Reset to defaults"
+          >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOpen(false)} title="Close">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setOpen(false)}
+            title="Close"
+          >
             <X className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground leading-relaxed">
-        Customize how scores are categorized. These are stored in your browser and apply only to your view.
+        Customize how scores are categorized. These are stored in your browser
+        and apply only to your view.
       </p>
 
       <div className="space-y-3">
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium">
-              Slop Score — <span className="text-green-500">Clean</span> threshold
+              Slop Score — <span className="text-green-500">Clean</span>{" "}
+              threshold
             </label>
-            <span className="text-xs font-mono text-muted-foreground">&lt; {values.slopThresholdLow}</span>
+            <span className="text-xs font-mono text-muted-foreground">
+              &lt; {values.slopThresholdLow}
+            </span>
           </div>
           <input
             type="range"
             min={0}
             max={100}
             value={values.slopThresholdLow}
-            onChange={(e) => handleChange("slopThresholdLow", parseInt(e.target.value))}
+            onChange={(e) =>
+              handleChange("slopThresholdLow", parseInt(e.target.value))
+            }
             className="w-full accent-green-500 h-1.5"
           />
           <div className="flex justify-between text-[10px] text-muted-foreground/50">
@@ -79,21 +102,28 @@ export function SettingsButton() {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium">
-              Slop Score — <span className="text-destructive">Danger</span> threshold
+              Slop Score — <span className="text-destructive">Danger</span>{" "}
+              threshold
             </label>
-            <span className="text-xs font-mono text-muted-foreground">&ge; {values.slopThresholdHigh}</span>
+            <span className="text-xs font-mono text-muted-foreground">
+              &ge; {values.slopThresholdHigh}
+            </span>
           </div>
           <input
             type="range"
             min={0}
             max={100}
             value={values.slopThresholdHigh}
-            onChange={(e) => handleChange("slopThresholdHigh", parseInt(e.target.value))}
+            onChange={(e) =>
+              handleChange("slopThresholdHigh", parseInt(e.target.value))
+            }
             className="w-full accent-red-500 h-1.5"
           />
           <div className="flex justify-between text-[10px] text-muted-foreground/50">
             <span>0</span>
-            <span>Scores at or above {values.slopThresholdHigh} show as red</span>
+            <span>
+              Scores at or above {values.slopThresholdHigh} show as red
+            </span>
             <span>100</span>
           </div>
         </div>
@@ -101,21 +131,29 @@ export function SettingsButton() {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium">
-              Similarity — <span className="text-destructive">Duplicate</span> threshold
+              Similarity — <span className="text-destructive">Duplicate</span>{" "}
+              threshold
             </label>
-            <span className="text-xs font-mono text-muted-foreground">&ge; {values.similarityThreshold}%</span>
+            <span className="text-xs font-mono text-muted-foreground">
+              &ge; {values.similarityThreshold}%
+            </span>
           </div>
           <input
             type="range"
             min={0}
             max={100}
             value={values.similarityThreshold}
-            onChange={(e) => handleChange("similarityThreshold", parseInt(e.target.value))}
+            onChange={(e) =>
+              handleChange("similarityThreshold", parseInt(e.target.value))
+            }
             className="w-full accent-red-500 h-1.5"
           />
           <div className="flex justify-between text-[10px] text-muted-foreground/50">
             <span>0%</span>
-            <span>Matches at or above {values.similarityThreshold}% flagged as duplicates</span>
+            <span>
+              Matches at or above {values.similarityThreshold}% flagged as
+              duplicates
+            </span>
             <span>100%</span>
           </div>
         </div>
@@ -123,13 +161,16 @@ export function SettingsButton() {
 
       <div className="flex gap-2 pt-1">
         <div className="flex items-center gap-1.5 text-[10px]">
-          <span className="w-2 h-2 rounded-full bg-green-500" /> &lt; {values.slopThresholdLow}
+          <span className="w-2 h-2 rounded-full bg-green-500" /> &lt;{" "}
+          {values.slopThresholdLow}
         </div>
         <div className="flex items-center gap-1.5 text-[10px]">
-          <span className="w-2 h-2 rounded-full bg-yellow-500" /> {values.slopThresholdLow}–{values.slopThresholdHigh - 1}
+          <span className="w-2 h-2 rounded-full bg-yellow-500" />{" "}
+          {values.slopThresholdLow}–{values.slopThresholdHigh - 1}
         </div>
         <div className="flex items-center gap-1.5 text-[10px]">
-          <span className="w-2 h-2 rounded-full bg-destructive" /> &ge; {values.slopThresholdHigh}
+          <span className="w-2 h-2 rounded-full bg-destructive" /> &ge;{" "}
+          {values.slopThresholdHigh}
         </div>
       </div>
     </div>

@@ -1,9 +1,14 @@
-import { Router, type IRouter, type Request } from "express";
 import crypto from "crypto";
+import { Router, type IRouter, type Request } from "express";
 import multer from "multer";
 import { and, eq, or, sql, desc } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { reportsTable, reportHashesTable, similarityResultsTable, reportStatsTable } from "@workspace/db";
+import {
+  reportsTable,
+  reportHashesTable,
+  similarityResultsTable,
+  reportStatsTable,
+} from "@workspace/db";
 import {
   GetReportParams,
   GetReportResponse,
@@ -20,31 +25,66 @@ import {
   CompareReportsParams,
   CompareReportsResponse,
 } from "@workspace/api-zod";
-import { computeMinHash, computeSimhash, computeContentHash, computeLSHBuckets, findSimilarReports } from "../lib/similarity";
-import { analyzeSloppiness } from "../lib/sloppiness";
-import { analyzeSlopWithLLM, shouldCallLLM, evaluateLlmGate, isLLMAvailable, type LLMSlopResult, type LlmGateDecision } from "../lib/llm-slop";
-import { analyzeLinguistic } from "../lib/linguistic-analysis";
-import { analyzeFactual } from "../lib/factual-verification";
-import { fuseScores, recomputeSlopScoreWithoutLlm, type FusionResult, type EvidenceItem, type Quadrant, type Archetype, type AnalysisMode } from "../lib/score-fusion";
-import { generateConfigImpactNotices, type ConfigImpactNotice } from "../lib/config-notices";
-import { redactReport } from "../lib/redactor";
-import { detectAgentFingerprint, AGENT_DISPLAY_LABEL } from "../lib/agent-fingerprint";
-import { parseSections, findSectionMatches } from "../lib/section-parser";
-import { sanitizeText, sanitizeForAnalysis, sanitizeFileName, detectBinaryContent } from "../lib/sanitize";
-import { extractTextFromPdf } from "../lib/pdf";
-import { logger } from "../lib/logger";
-import { buildPublicUrl } from "../lib/public-url";
-import { performActiveVerification, type VerificationResult } from "../lib/active-verification";
-import { classifyReport } from "../lib/engines/avri/classify";
-import type { VerificationMode } from "../lib/engines/avri/families";
-import { visitorHash, type VisitorAttribution } from "../lib/visitor";
-import { recordAndScore as recordVelocity } from "../lib/engines/avri/velocity";
-import { recordAndScore as recordTemplateFingerprint } from "../lib/engines/avri/template-fingerprint";
 import {
   buildAvriRubricMarkdown,
   type AvriCompositeBlock as AvriRubricCompositeBlock,
   type AvriEngine2Block as AvriRubricEngine2Block,
 } from "@workspace/avri-rubric";
+import { analysisTracesTable } from "@workspace/db";
+import {
+  computeMinHash,
+  computeSimhash,
+  computeContentHash,
+  computeLSHBuckets,
+  findSimilarReports,
+} from "../lib/similarity";
+import { analyzeSloppiness } from "../lib/sloppiness";
+import {
+  analyzeSlopWithLLM,
+  shouldCallLLM,
+  evaluateLlmGate,
+  isLLMAvailable,
+  type LLMSlopResult,
+  type LlmGateDecision,
+} from "../lib/llm-slop";
+import { analyzeLinguistic } from "../lib/linguistic-analysis";
+import { analyzeFactual } from "../lib/factual-verification";
+import {
+  fuseScores,
+  recomputeSlopScoreWithoutLlm,
+  type FusionResult,
+  type EvidenceItem,
+  type Quadrant,
+  type Archetype,
+  type AnalysisMode,
+} from "../lib/score-fusion";
+import {
+  generateConfigImpactNotices,
+  type ConfigImpactNotice,
+} from "../lib/config-notices";
+import { redactReport } from "../lib/redactor";
+import {
+  detectAgentFingerprint,
+  AGENT_DISPLAY_LABEL,
+} from "../lib/agent-fingerprint";
+import { parseSections, findSectionMatches } from "../lib/section-parser";
+import {
+  sanitizeText,
+  sanitizeForAnalysis,
+  sanitizeFileName,
+  detectBinaryContent,
+} from "../lib/sanitize";
+import { extractTextFromPdf } from "../lib/pdf";
+import { logger } from "../lib/logger";
+import { buildPublicUrl } from "../lib/public-url";
+import {
+  performActiveVerification,
+  type VerificationResult,
+} from "../lib/active-verification";
+import { classifyReport } from "../lib/engines/avri/classify";
+import { visitorHash, type VisitorAttribution } from "../lib/visitor";
+import { recordAndScore as recordVelocity } from "../lib/engines/avri/velocity";
+import { recordAndScore as recordTemplateFingerprint } from "../lib/engines/avri/template-fingerprint";
 import {
   analyzeWithEngines,
   analyzeWithEnginesTraced,
@@ -54,7 +94,6 @@ import {
   type CompositeResult as VulnrapComposite,
   type PipelineTrace,
 } from "../lib/engines";
-import { analysisTracesTable } from "@workspace/db";
 import { runShadowScore, isShadowScoringEnabled } from "../lib/scoring-shadow";
 import { dispatchReportScoredEvent } from "../lib/webhook-delivery";
 import {
@@ -73,6 +112,7 @@ import {
 import { deriveFabricatedEvidenceFlags } from "../lib/fabricated-evidence-flags";
 import { getCurrentEngineVersions } from "../lib/engine-versions";
 import { deriveInferredCwe } from "../lib/inferred-cwe";
+import type { VerificationMode } from "../lib/engines/avri/families";
 
 function parseBoolParam(value: unknown): boolean {
   return value === "true" || value === true;
@@ -110,9 +150,10 @@ function buildChangelogDocsLink(req: Request, anchor: string): string {
   return buildPublicUrl({ req, path: `/changelog#${anchor}` });
 }
 
-function deriveVerificationStrategy(
-  text: string,
-): { verificationMode: VerificationMode; familyName: string } {
+function deriveVerificationStrategy(text: string): {
+  verificationMode: VerificationMode;
+  familyName: string;
+} {
   try {
     const claimedCwes = extractCitedCwes(text);
     const classification = classifyReport(text, claimedCwes);
@@ -126,29 +167,57 @@ function deriveVerificationStrategy(
 }
 
 function safeBreakdown(bd: unknown): {
-  linguistic: number; factual: number; template: number;
-  llm: number | null; verification: number | null; quality: number;
-  scoringConfigVersion?: string; spectral?: number; evidenceQuality?: number;
-  hallucinationDetector?: number; claimSpecificity?: number; internalConsistency?: number;
+  linguistic: number;
+  factual: number;
+  template: number;
+  llm: number | null;
+  verification: number | null;
+  quality: number;
+  scoringConfigVersion?: string;
+  spectral?: number;
+  evidenceQuality?: number;
+  hallucinationDetector?: number;
+  claimSpecificity?: number;
+  internalConsistency?: number;
 } {
-  const raw = (bd && typeof bd === "object" ? bd : {}) as Record<string, unknown>;
+  const raw = (bd && typeof bd === "object" ? bd : {}) as Record<
+    string,
+    unknown
+  >;
   return {
     linguistic: typeof raw.linguistic === "number" ? raw.linguistic : 0,
     factual: typeof raw.factual === "number" ? raw.factual : 0,
     template: typeof raw.template === "number" ? raw.template : 0,
     llm: typeof raw.llm === "number" ? raw.llm : null,
-    verification: typeof raw.verification === "number" ? raw.verification : null,
+    verification:
+      typeof raw.verification === "number" ? raw.verification : null,
     quality: typeof raw.quality === "number" ? raw.quality : 50,
-    ...(typeof raw.scoringConfigVersion === "string" ? { scoringConfigVersion: raw.scoringConfigVersion } : {}),
+    ...(typeof raw.scoringConfigVersion === "string"
+      ? { scoringConfigVersion: raw.scoringConfigVersion }
+      : {}),
     ...(typeof raw.spectral === "number" ? { spectral: raw.spectral } : {}),
-    ...(typeof raw.evidenceQuality === "number" ? { evidenceQuality: raw.evidenceQuality } : {}),
-    ...(typeof raw.hallucinationDetector === "number" ? { hallucinationDetector: raw.hallucinationDetector } : {}),
-    ...(typeof raw.claimSpecificity === "number" ? { claimSpecificity: raw.claimSpecificity } : {}),
-    ...(typeof raw.internalConsistency === "number" ? { internalConsistency: raw.internalConsistency } : {}),
-    ...(raw.substanceScore != null ? { substanceScore: raw.substanceScore } : {}),
-    ...(raw.coherenceScore != null ? { coherenceScore: raw.coherenceScore } : {}),
+    ...(typeof raw.evidenceQuality === "number"
+      ? { evidenceQuality: raw.evidenceQuality }
+      : {}),
+    ...(typeof raw.hallucinationDetector === "number"
+      ? { hallucinationDetector: raw.hallucinationDetector }
+      : {}),
+    ...(typeof raw.claimSpecificity === "number"
+      ? { claimSpecificity: raw.claimSpecificity }
+      : {}),
+    ...(typeof raw.internalConsistency === "number"
+      ? { internalConsistency: raw.internalConsistency }
+      : {}),
+    ...(raw.substanceScore != null
+      ? { substanceScore: raw.substanceScore }
+      : {}),
+    ...(raw.coherenceScore != null
+      ? { coherenceScore: raw.coherenceScore }
+      : {}),
     ...(raw.pocValidity != null ? { pocValidity: raw.pocValidity } : {}),
-    ...(raw.domainCoherence != null ? { domainCoherence: raw.domainCoherence } : {}),
+    ...(raw.domainCoherence != null
+      ? { domainCoherence: raw.domainCoherence }
+      : {}),
   };
 }
 
@@ -230,8 +299,15 @@ async function runStage<T>(
     return result;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    diagnostics.stages[name] = { status: "error", durationMs: Date.now() - start, error: msg };
-    diagnostics.parseWarnings.push({ type: `stage_failed_${name}`, detail: `${name} stage threw: ${msg}` });
+    diagnostics.stages[name] = {
+      status: "error",
+      durationMs: Date.now() - start,
+      error: msg,
+    };
+    diagnostics.parseWarnings.push({
+      type: `stage_failed_${name}`,
+      detail: `${name} stage threw: ${msg}`,
+    });
     logger.warn({ err, stage: name }, `Analysis stage ${name} failed`);
     return null;
   }
@@ -259,7 +335,9 @@ async function performAnalysis(
       lineCount: lines.length,
       wordCount: (safeOriginal.match(/\b\w+\b/g) || []).length,
       maxLineLength,
-      containsPlaceholders: /\[REDACTED\]|\[REMOVED\]|\[CENSORED\]/i.test(safeOriginal),
+      containsPlaceholders: /\[REDACTED\]|\[REMOVED\]|\[CENSORED\]/i.test(
+        safeOriginal,
+      ),
     },
     stages: {},
     parseWarnings: [],
@@ -277,7 +355,11 @@ async function performAnalysis(
   try {
     const userSkippedLlm = opts?.skipLlm === true;
 
-    const heuristic = await runStage("heuristic_analysis", () => analyzeSloppiness(safeOriginal), diagnostics);
+    const heuristic = await runStage(
+      "heuristic_analysis",
+      () => analyzeSloppiness(safeOriginal),
+      diagnostics,
+    );
 
     const heuristicScore = heuristic?.score ?? 50;
 
@@ -315,12 +397,19 @@ async function performAnalysis(
             );
           }
         } catch (avriErr) {
-          logger.warn({ err: avriErr }, "[AVRI] velocity/template scoring failed (non-fatal)");
+          logger.warn(
+            { err: avriErr },
+            "[AVRI] velocity/template scoring failed (non-fatal)",
+          );
         }
       }
       const traced = await runStage(
         "vulnrap_engines",
-        () => analyzeWithEnginesTraced(safeRedacted, { velocityPenalty, templatePenalty }),
+        () =>
+          analyzeWithEnginesTraced(safeRedacted, {
+            velocityPenalty,
+            templatePenalty,
+          }),
         diagnostics,
       );
       if (traced) {
@@ -328,7 +417,11 @@ async function performAnalysis(
         vulnrapTrace = traced.trace;
       }
     } else {
-      diagnostics.stages["vulnrap_engines"] = { status: "ok", durationMs: 0, error: "feature_flag_disabled" };
+      diagnostics.stages["vulnrap_engines"] = {
+        status: "ok",
+        durationMs: 0,
+        error: "feature_flag_disabled",
+      };
     }
 
     // Task #209 — capture the structured gate decision (with reason) so it can
@@ -338,49 +431,118 @@ async function performAnalysis(
     // Task #442 — composite (when available) is now the primary signal that
     // drives the gate; heuristic acts as a tiebreaker. See evaluateLlmGate.
     const compositeForGate = vulnrapComposite?.overallScore ?? null;
-    const gateDecision: LlmGateDecision = evaluateLlmGate(heuristicScore, 1.0, compositeForGate);
+    const gateDecision: LlmGateDecision = evaluateLlmGate(
+      heuristicScore,
+      1.0,
+      compositeForGate,
+    );
     const callLlm = !userSkippedLlm && gateDecision.shouldCall;
 
     const llmPromise = callLlm
-      ? runStage("llm_analysis", () => analyzeSlopWithLLM(safeRedacted), diagnostics)
+      ? runStage(
+          "llm_analysis",
+          () => analyzeSlopWithLLM(safeRedacted),
+          diagnostics,
+        )
       : Promise.resolve(null);
 
     const [linguistic, factual, verification] = await Promise.all([
-      runStage("linguistic_analysis", () => analyzeLinguistic(safeOriginal), diagnostics),
-      runStage("factual_verification", () => analyzeFactual(safeOriginal), diagnostics),
-      runStage("active_verification", () => {
-        const strategy = deriveVerificationStrategy(safeRedacted);
-        return performActiveVerification(safeRedacted, strategy);
-      }, diagnostics),
+      runStage(
+        "linguistic_analysis",
+        () => analyzeLinguistic(safeOriginal),
+        diagnostics,
+      ),
+      runStage(
+        "factual_verification",
+        () => analyzeFactual(safeOriginal),
+        diagnostics,
+      ),
+      runStage(
+        "active_verification",
+        () => {
+          const strategy = deriveVerificationStrategy(safeRedacted);
+          return performActiveVerification(safeRedacted, strategy);
+        },
+        diagnostics,
+      ),
     ]);
 
     const llmResult: LLMSlopResult | null = (await llmPromise) ?? null;
 
     if (!callLlm) {
-      diagnostics.stages["llm_analysis"] = { status: "ok", durationMs: 0, error: userSkippedLlm ? "skipped_by_user" : "not_needed" };
+      diagnostics.stages["llm_analysis"] = {
+        status: "ok",
+        durationMs: 0,
+        error: userSkippedLlm ? "skipped_by_user" : "not_needed",
+      };
     }
 
-    const safeLinguistic = linguistic ?? { score: 0, lexicalScore: 0, statisticalScore: 0, templateScore: 0, evidence: [], promptInjectionAttempted: false, promptInjectionMatches: [] };
-    const safeFactual = factual ?? { score: 0, severityInflationScore: 0, placeholderScore: 0, fabricatedOutputScore: 0, evidence: [] };
+    const safeLinguistic = linguistic ?? {
+      score: 0,
+      lexicalScore: 0,
+      statisticalScore: 0,
+      templateScore: 0,
+      evidence: [],
+      promptInjectionAttempted: false,
+      promptInjectionMatches: [],
+    };
+    const safeFactual = factual ?? {
+      score: 0,
+      severityInflationScore: 0,
+      placeholderScore: 0,
+      fabricatedOutputScore: 0,
+      evidence: [],
+    };
     const safeQuality = heuristic?.qualityScore ?? 50;
 
     logger.info(
-      { llmAvailable: isLLMAvailable(), callLlm, userSkippedLlm, llmSucceeded: !!llmResult },
-      "LLM decision"
+      {
+        llmAvailable: isLLMAvailable(),
+        callLlm,
+        userSkippedLlm,
+        llmSucceeded: !!llmResult,
+      },
+      "LLM decision",
     );
 
-    const fusion = await runStage("score_fusion", () =>
-      fuseScores(safeLinguistic, safeFactual, llmResult, safeQuality, safeOriginal, undefined, verification),
+    const fusion = await runStage(
+      "score_fusion",
+      () =>
+        fuseScores(
+          safeLinguistic,
+          safeFactual,
+          llmResult,
+          safeQuality,
+          safeOriginal,
+          undefined,
+          verification,
+        ),
       diagnostics,
     );
 
     const safeFusion = fusion ?? {
-      slopScore: 50, qualityScore: safeQuality, confidence: 0.3,
-      breakdown: { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: safeQuality },
-      evidence: [], humanIndicators: [], slopTier: "Questionable",
-      authenticityScore: 50, validityScore: 50, quadrant: "WEAK_HUMAN" as const,
-      archetype: "REQUEST_DETAILS" as const, analysisMode: "heuristic_only" as const, confidenceNote: null,
-      claims: null, substance: null,
+      slopScore: 50,
+      qualityScore: safeQuality,
+      confidence: 0.3,
+      breakdown: {
+        linguistic: 0,
+        factual: 0,
+        template: 0,
+        llm: null,
+        verification: null,
+        quality: safeQuality,
+      },
+      evidence: [],
+      humanIndicators: [],
+      slopTier: "Questionable",
+      authenticityScore: 50,
+      validityScore: 50,
+      quadrant: "WEAK_HUMAN" as const,
+      archetype: "REQUEST_DETAILS" as const,
+      analysisMode: "heuristic_only" as const,
+      confidenceNote: null,
+      claims: null,
+      substance: null,
       // Task #209 — fallback validityFusion when fuseScores itself crashed.
       // The audit panel will render "—" for the missing components.
       validityFusion: {
@@ -429,22 +591,43 @@ async function performAnalysis(
     // (composite × engine 2 × verification ratio × strong-evidence count).
 
     let triageRecommendation: TriageRecommendation | null = null;
-    const triageRecResult = await runStage("triage_recommendation", () => {
-      const base = generateTriageRecommendation(
-        safeFusion.slopScore, safeFusion.confidence, verification, safeFusion.evidence,
-        buildV36TriageContextFromComposite(vulnrapComposite, verification),
-      );
-      const temporalSignals = computeTemporalSignals(verification);
-      return { ...base, temporalSignals, templateMatch: null, revision: null };
-    }, diagnostics);
+    const triageRecResult = await runStage(
+      "triage_recommendation",
+      () => {
+        const base = generateTriageRecommendation(
+          safeFusion.slopScore,
+          safeFusion.confidence,
+          verification,
+          safeFusion.evidence,
+          buildV36TriageContextFromComposite(vulnrapComposite, verification),
+        );
+        const temporalSignals = computeTemporalSignals(verification);
+        return {
+          ...base,
+          temporalSignals,
+          templateMatch: null,
+          revision: null,
+        };
+      },
+      diagnostics,
+    );
     triageRecommendation = triageRecResult;
 
     let triageAssistant: TriageAssistantResult | null = null;
-    const triageAstResult = await runStage("triage_assistant", () =>
-      generateTriageAssistant(
-        safeOriginal, safeFusion.slopScore, safeFusion.confidence, safeFusion.evidence,
-        verification, llmResult?.llmTriageGuidance ?? null, llmResult?.llmReproRecipe ?? null,
-      ), diagnostics);
+    const triageAstResult = await runStage(
+      "triage_assistant",
+      () =>
+        generateTriageAssistant(
+          safeOriginal,
+          safeFusion.slopScore,
+          safeFusion.confidence,
+          safeFusion.evidence,
+          verification,
+          llmResult?.llmTriageGuidance ?? null,
+          llmResult?.llmReproRecipe ?? null,
+        ),
+      diagnostics,
+    );
     triageAssistant = triageAstResult;
 
     diagnostics.totalDurationMs = Date.now() - pipelineStart;
@@ -466,14 +649,22 @@ async function performAnalysis(
     const stack = err instanceof Error ? err.stack : undefined;
 
     logger.error(
-      { err, inputLength: safeOriginal.length, inputPreview: safeOriginal.substring(0, 200), stages: diagnostics.stages },
-      "=== ANALYSIS PIPELINE CRASH ==="
+      {
+        err,
+        inputLength: safeOriginal.length,
+        inputPreview: safeOriginal.substring(0, 200),
+        stages: diagnostics.stages,
+      },
+      "=== ANALYSIS PIPELINE CRASH ===",
     );
 
     diagnostics.totalDurationMs = Date.now() - pipelineStart;
     diagnostics.crashInfo = {
       message: msg,
-      stage: Object.entries(diagnostics.stages).find(([, v]) => v.status !== "ok" && v.status !== "error")?.[0] || "unknown",
+      stage:
+        Object.entries(diagnostics.stages).find(
+          ([, v]) => v.status !== "ok" && v.status !== "error",
+        )?.[0] || "unknown",
       inputLength: safeOriginal.length,
     };
 
@@ -481,7 +672,14 @@ async function performAnalysis(
       slopScore: 30,
       qualityScore: 50,
       confidence: 0.3,
-      breakdown: { linguistic: 0, factual: 0, template: 0, llm: null, verification: null, quality: 50 },
+      breakdown: {
+        linguistic: 0,
+        factual: 0,
+        template: 0,
+        llm: null,
+        verification: null,
+        quality: 50,
+      },
       evidence: [],
       humanIndicators: [],
       slopTier: "Likely Human" as const,
@@ -490,7 +688,8 @@ async function performAnalysis(
       quadrant: "WEAK_HUMAN" as const,
       archetype: "REQUEST_DETAILS" as const,
       analysisMode: "heuristic_only" as const,
-      confidenceNote: "Analysis ran in degraded mode due to an internal error. Scores may be unreliable.",
+      confidenceNote:
+        "Analysis ran in degraded mode due to an internal error. Scores may be unreliable.",
       claims: null,
       substance: null,
       // Task #209 — degraded-mode validityFusion: heuristic 0 / no LLM /
@@ -565,13 +764,13 @@ const ALLOWED_URL_HOSTS = [
 
 function normalizeGitHubUrl(url: string): string {
   const ghBlobMatch = url.match(
-    /^https?:\/\/github\.com\/([^/]+\/[^/]+)\/blob\/(.+)$/
+    /^https?:\/\/github\.com\/([^/]+\/[^/]+)\/blob\/(.+)$/,
   );
   if (ghBlobMatch) {
     return `https://raw.githubusercontent.com/${ghBlobMatch[1]}/${ghBlobMatch[2]}`;
   }
   const gistMatch = url.match(
-    /^https?:\/\/gist\.github\.com\/([^/]+\/[a-f0-9]+)\/?$/
+    /^https?:\/\/gist\.github\.com\/([^/]+\/[a-f0-9]+)\/?$/,
   );
   if (gistMatch) {
     return `https://gist.githubusercontent.com/${gistMatch[1]}/raw`;
@@ -579,7 +778,9 @@ function normalizeGitHubUrl(url: string): string {
   return url;
 }
 
-async function fetchUrlContent(rawUrl: string): Promise<{ text: string; sourceUrl: string } | { error: string }> {
+async function fetchUrlContent(
+  rawUrl: string,
+): Promise<{ text: string; sourceUrl: string } | { error: string }> {
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(rawUrl);
@@ -600,7 +801,9 @@ async function fetchUrlContent(rawUrl: string): Promise<{ text: string; sourceUr
   }
 
   if (!ALLOWED_URL_HOSTS.includes(normalizedHost)) {
-    return { error: `Unsupported host. Allowed sources: ${ALLOWED_URL_HOSTS.join(", ")}` };
+    return {
+      error: `Unsupported host. Allowed sources: ${ALLOWED_URL_HOSTS.join(", ")}`,
+    };
   }
 
   const controller = new AbortController();
@@ -628,7 +831,9 @@ async function fetchUrlContent(rawUrl: string): Promise<{ text: string; sourceUr
           return { error: "Redirect to non-HTTPS URL blocked." };
         }
         if (!ALLOWED_URL_HOSTS.includes(redirectUrl.hostname)) {
-          return { error: `Redirect to disallowed host (${redirectUrl.hostname}) blocked.` };
+          return {
+            error: `Redirect to disallowed host (${redirectUrl.hostname}) blocked.`,
+          };
         }
         currentUrl = redirectUrl.toString();
         continue;
@@ -641,22 +846,34 @@ async function fetchUrlContent(rawUrl: string): Promise<{ text: string; sourceUr
     }
 
     if (!response.ok) {
-      return { error: `Failed to fetch URL: HTTP ${response.status} ${response.statusText}` };
+      return {
+        error: `Failed to fetch URL: HTTP ${response.status} ${response.statusText}`,
+      };
     }
 
     const contentLength = response.headers.get("content-length");
     if (contentLength && parseInt(contentLength, 10) > MAX_URL_SIZE) {
-      return { error: `Remote file too large (${(parseInt(contentLength, 10) / 1024 / 1024).toFixed(1)}MB). Max 5MB for URL imports.` };
+      return {
+        error: `Remote file too large (${(parseInt(contentLength, 10) / 1024 / 1024).toFixed(1)}MB). Max 5MB for URL imports.`,
+      };
     }
 
     const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("text/html") && !contentType.includes("text/plain")) {
-      return { error: "URL returned HTML instead of plain text. Use a raw/plain-text link (e.g. GitHub raw URL)." };
+    if (
+      contentType.includes("text/html") &&
+      !contentType.includes("text/plain")
+    ) {
+      return {
+        error:
+          "URL returned HTML instead of plain text. Use a raw/plain-text link (e.g. GitHub raw URL).",
+      };
     }
 
     const buffer = await response.arrayBuffer();
     if (buffer.byteLength > MAX_URL_SIZE) {
-      return { error: `Remote file too large (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB). Max 5MB for URL imports.` };
+      return {
+        error: `Remote file too large (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB). Max 5MB for URL imports.`,
+      };
     }
 
     const text = new TextDecoder("utf-8").decode(buffer);
@@ -679,7 +896,7 @@ const upload = multer({
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
     const ext = file.originalname.toLowerCase();
-    const hasValidExt = ALLOWED_EXTENSIONS.some(e => ext.endsWith(e));
+    const hasValidExt = ALLOWED_EXTENSIONS.some((e) => ext.endsWith(e));
 
     if (!hasValidExt) {
       cb(new Error("Unsupported file type. Accepted formats: .txt, .md, .pdf"));
@@ -707,9 +924,11 @@ router.post("/reports", (req, res, next): void => {
 });
 
 router.post("/reports", async (req, res): Promise<void> => {
-  const contentMode = (req.body.contentMode === "full" || req.body.contentMode === "similarity_only")
-    ? req.body.contentMode
-    : "full";
+  const contentMode =
+    req.body.contentMode === "full" ||
+    req.body.contentMode === "similarity_only"
+      ? req.body.contentMode
+      : "full";
   const showInFeed = req.body.showInFeed === "true";
   const skipRedaction = parseBoolParam(req.body.skipRedaction);
   const skipLlm = parseBoolParam(req.body.skipLlm) || skipRedaction;
@@ -719,7 +938,8 @@ router.post("/reports", async (req, res): Promise<void> => {
   let rawFileSize: number;
 
   const rawText = typeof req.body.rawText === "string" ? req.body.rawText : "";
-  const reportUrl = typeof req.body.reportUrl === "string" ? req.body.reportUrl.trim() : "";
+  const reportUrl =
+    typeof req.body.reportUrl === "string" ? req.body.reportUrl.trim() : "";
 
   if (req.file) {
     const fileName = req.file.originalname.toLowerCase();
@@ -732,12 +952,17 @@ router.post("/reports", async (req, res): Promise<void> => {
       text = sanitizeText(pdfResult.text);
     } else {
       if (detectBinaryContent(req.file.buffer)) {
-        res.status(400).json({ error: "File appears to contain binary content. Only plain text (.txt, .md) and PDF files are accepted." });
+        res.status(400).json({
+          error:
+            "File appears to contain binary content. Only plain text (.txt, .md) and PDF files are accepted.",
+        });
         return;
       }
       text = sanitizeText(req.file.buffer.toString("utf-8"));
     }
-    safeFileName = req.file.originalname ? sanitizeFileName(req.file.originalname) : null;
+    safeFileName = req.file.originalname
+      ? sanitizeFileName(req.file.originalname)
+      : null;
     rawFileSize = req.file.size;
   } else if (reportUrl.length > 0) {
     const urlResult = await fetchUrlContent(reportUrl);
@@ -757,12 +982,17 @@ router.post("/reports", async (req, res): Promise<void> => {
       return;
     }
   } else {
-    res.status(400).json({ error: "No content provided. Upload a file, paste text, or provide a URL." });
+    res.status(400).json({
+      error:
+        "No content provided. Upload a file, paste text, or provide a URL.",
+    });
     return;
   }
 
   if (text.length === 0) {
-    res.status(400).json({ error: "Content is empty or contains no readable text." });
+    res
+      .status(400)
+      .json({ error: "Content is empty or contains no readable text." });
     return;
   }
 
@@ -790,43 +1020,59 @@ router.post("/reports", async (req, res): Promise<void> => {
     sections = parsed.sections;
     sectionHashes = parsed.sectionHashes;
 
-    const lshConditions = lshBuckets.map(bucket =>
-      sql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
+    const lshConditions = lshBuckets.map(
+      (bucket) =>
+        sql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`,
     );
 
-    const candidateReports = lshConditions.length > 0
-      ? await db
-          .select({
-            id: reportsTable.id,
-            minhashSignature: reportsTable.minhashSignature,
-            simhash: reportsTable.simhash,
-            lshBuckets: reportsTable.lshBuckets,
-            sectionHashes: reportsTable.sectionHashes,
-          })
-          .from(reportsTable)
-          .where(or(...lshConditions))
-          .limit(500)
-      : [];
+    const candidateReports =
+      lshConditions.length > 0
+        ? await db
+            .select({
+              id: reportsTable.id,
+              minhashSignature: reportsTable.minhashSignature,
+              simhash: reportsTable.simhash,
+              lshBuckets: reportsTable.lshBuckets,
+              sectionHashes: reportsTable.sectionHashes,
+            })
+            .from(reportsTable)
+            .where(or(...lshConditions))
+            .limit(500)
+        : [];
 
     similarityMatches = findSimilarReports(
       minhashSignature,
       simhash,
       lshBuckets,
-      candidateReports as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
+      candidateReports as Array<{
+        id: number;
+        minhashSignature: number[];
+        simhash: string;
+        lshBuckets: string[];
+      }>,
     );
 
     sectionMatches = findSectionMatches(
       sectionHashes,
-      candidateReports as Array<{ id: number; sectionHashes: Record<string, string> }>,
+      candidateReports as Array<{
+        id: number;
+        sectionHashes: Record<string, string>;
+      }>,
     );
   } catch (simErr) {
-    logger.error({ err: simErr, inputLength: analysisText.length }, "[SIMILARITY CRASH] Similarity/section analysis failed");
+    logger.error(
+      { err: simErr, inputLength: analysisText.length },
+      "[SIMILARITY CRASH] Similarity/section analysis failed",
+    );
   }
 
   const llmUsed = !skipLlm && isLLMAvailable();
   const analysisResult = await performAnalysis(text, redactedText, {
     skipLlm,
-    visitor: { ip: req.ip ?? req.socket.remoteAddress ?? null, userAgent: req.headers["user-agent"] ?? null },
+    visitor: {
+      ip: req.ip ?? req.socket.remoteAddress ?? null,
+      userAgent: req.headers["user-agent"] ?? null,
+    },
   });
   const { llmResult } = analysisResult;
 
@@ -836,7 +1082,10 @@ router.post("/reports", async (req, res): Promise<void> => {
   const vulnrapComposite = analysisResult.vulnrapComposite;
   const vulnrapTrace = analysisResult.vulnrapTrace;
   if (vulnrapComposite == null && !isNewCompositeEnabled()) {
-    logger.info({ flag: "VULNRAP_USE_NEW_COMPOSITE=false" }, "[VULNRAP] new composite disabled by feature flag");
+    logger.info(
+      { flag: "VULNRAP_USE_NEW_COMPOSITE=false" },
+      "[VULNRAP] new composite disabled by feature flag",
+    );
   }
 
   const deleteToken = crypto.randomBytes(32).toString("hex");
@@ -852,7 +1101,7 @@ router.post("/reports", async (req, res): Promise<void> => {
     if (templateDuplicates.length > 0) {
       templateMatch = {
         templateHash,
-        matchedReportIds: templateDuplicates.map(r => r.id),
+        matchedReportIds: templateDuplicates.map((r) => r.id),
         weight: 25,
       };
     }
@@ -860,11 +1109,15 @@ router.post("/reports", async (req, res): Promise<void> => {
 
   let revisionResult: TriageRecommendation["revision"] = null;
   try {
-    const highSimMatch = similarityMatches.find(m => m.similarity >= 70);
+    const highSimMatch = similarityMatches.find((m) => m.similarity >= 70);
     if (highSimMatch) {
       const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
       const [matchedRow] = await db
-        .select({ id: reportsTable.id, slopScore: reportsTable.slopScore, createdAt: reportsTable.createdAt })
+        .select({
+          id: reportsTable.id,
+          slopScore: reportsTable.slopScore,
+          createdAt: reportsTable.createdAt,
+        })
         .from(reportsTable)
         .where(eq(reportsTable.id, highSimMatch.reportId));
       if (matchedRow && matchedRow.createdAt >= cutoff48h) {
@@ -879,7 +1132,8 @@ router.post("/reports", async (req, res): Promise<void> => {
 
   const isRevision = revisionResult !== null;
 
-  const temporalSignals = analysisResult.triageRecommendation?.temporalSignals ?? [];
+  const temporalSignals =
+    analysisResult.triageRecommendation?.temporalSignals ?? [];
 
   if (templateMatch) {
     analysisResult.evidence.push({
@@ -887,7 +1141,10 @@ router.post("/reports", async (req, res): Promise<void> => {
       description: `Report structure matches ${templateMatch.matchedReportIds.length} previous submission(s) — possible mass-generated template`,
       weight: templateMatch.weight,
     });
-    analysisResult.slopScore = Math.min(95, analysisResult.slopScore + templateMatch.weight);
+    analysisResult.slopScore = Math.min(
+      95,
+      analysisResult.slopScore + templateMatch.weight,
+    );
   }
 
   for (const ts of temporalSignals) {
@@ -896,7 +1153,10 @@ router.post("/reports", async (req, res): Promise<void> => {
       description: `${ts.cveId}: report submitted ${ts.hoursSincePublication.toFixed(1)}h after CVE publication (${ts.signal.replace(/_/g, " ")})`,
       weight: ts.weight,
     });
-    analysisResult.slopScore = Math.min(95, analysisResult.slopScore + ts.weight);
+    analysisResult.slopScore = Math.min(
+      95,
+      analysisResult.slopScore + ts.weight,
+    );
   }
 
   try {
@@ -904,12 +1164,20 @@ router.post("/reports", async (req, res): Promise<void> => {
     // diagnostics panel can show reviewers WHERE each verified check came
     // from (explicit URL in report vs. search fallback). Mutates the
     // already-computed engine result; safe because we're still pre-persist.
-    const e2 = vulnrapComposite?.engineResults.find(r => r.engine === "Technical Substance Analyzer");
+    const e2 = vulnrapComposite?.engineResults.find(
+      (r) => r.engine === "Technical Substance Analyzer",
+    );
     if (e2 && analysisResult.verification) {
       const checks = analysisResult.verification.checks ?? [];
-      const referencedChecks = checks.filter((c: { source?: string }) => c.source === "referenced_in_report");
-      const fallbackChecks = checks.filter((c: { source?: string }) => c.source === "search_fallback");
-      const verifiedRef = referencedChecks.filter((c: { result: string }) => c.result === "verified").length;
+      const referencedChecks = checks.filter(
+        (c: { source?: string }) => c.source === "referenced_in_report",
+      );
+      const fallbackChecks = checks.filter(
+        (c: { source?: string }) => c.source === "search_fallback",
+      );
+      const verifiedRef = referencedChecks.filter(
+        (c: { result: string }) => c.result === "verified",
+      ).length;
       // Flat shape matches the existing diagnostics UI contract:
       // verified X/total · referenced: N · search-fallback: M
       (e2.signalBreakdown as Record<string, unknown>).verificationSources = {
@@ -930,7 +1198,8 @@ router.post("/reports", async (req, res): Promise<void> => {
           // For MANUAL_ONLY families, the lib already pushed the "skipped, route
           // to a human reviewer" hint as the first triage note — pass it through
           // so the panel can render it verbatim.
-          skipReason: v.mode === "MANUAL_ONLY" ? (v.triageNotes[0] ?? null) : null,
+          skipReason:
+            v.mode === "MANUAL_ONLY" ? (v.triageNotes[0] ?? null) : null,
         };
       }
     }
@@ -943,7 +1212,10 @@ router.post("/reports", async (req, res): Promise<void> => {
       analysisResult.confidence,
       analysisResult.verification,
       analysisResult.evidence,
-      buildV36TriageContextFromComposite(vulnrapComposite, analysisResult.verification),
+      buildV36TriageContextFromComposite(
+        vulnrapComposite,
+        analysisResult.verification,
+      ),
     );
     analysisResult.triageRecommendation = {
       ...updatedBase,
@@ -1000,8 +1272,13 @@ router.post("/reports", async (req, res): Promise<void> => {
               // count, behavioural penalties) so the diagnostics endpoint can
               // surface them to the "Why this score?" panel without re-running
               // the engines. Present only when AVRI is enabled.
-              ...((vulnrapComposite as VulnrapComposite & { avri?: unknown }).avri
-                ? { avri: (vulnrapComposite as VulnrapComposite & { avri?: unknown }).avri }
+              ...((vulnrapComposite as VulnrapComposite & { avri?: unknown })
+                .avri
+                ? {
+                    avri: (
+                      vulnrapComposite as VulnrapComposite & { avri?: unknown }
+                    ).avri,
+                  }
                 : {}),
               // Task #209 — observation-only audit telemetry. Stored on the
               // existing engines blob (rather than its own column) so we don't
@@ -1026,7 +1303,11 @@ router.post("/reports", async (req, res): Promise<void> => {
         // ran; null when AVRI is disabled or the composite didn't include
         // an AVRI block.
         avriFamily:
-          (vulnrapComposite as (VulnrapComposite & { avri?: { family?: string } }) | null)?.avri?.family ?? null,
+          (
+            vulnrapComposite as
+              | (VulnrapComposite & { avri?: { family?: string } })
+              | null
+          )?.avri?.family ?? null,
         // Cache the AVRI Engine 2 fabricated-evidence flags so the feed
         // filter can hit a partial index instead of jsonb_path_exists.
         ...(vulnrapComposite
@@ -1043,8 +1324,12 @@ router.post("/reports", async (req, res): Promise<void> => {
       // with a report that has a correlation_id pointing at a non-existent trace.
       // Set VULNRAP_TRACE_BEST_EFFORT=true to downgrade to logged-warning behavior
       // (useful only during the analysis_traces table rollout).
-      const persistedTrace: PipelineTrace = { ...vulnrapTrace, reportId: inserted.id };
-      const bestEffort = (process.env.VULNRAP_TRACE_BEST_EFFORT ?? "").toLowerCase() === "true";
+      const persistedTrace: PipelineTrace = {
+        ...vulnrapTrace,
+        reportId: inserted.id,
+      };
+      const bestEffort =
+        (process.env.VULNRAP_TRACE_BEST_EFFORT ?? "").toLowerCase() === "true";
       try {
         await tx.insert(analysisTracesTable).values({
           correlationId: persistedTrace.correlationId,
@@ -1054,9 +1339,15 @@ router.post("/reports", async (req, res): Promise<void> => {
         });
       } catch (traceErr) {
         if (bestEffort) {
-          logger.warn({ err: traceErr, correlationId: persistedTrace.correlationId }, "[VULNRAP] best-effort trace persistence failed");
+          logger.warn(
+            { err: traceErr, correlationId: persistedTrace.correlationId },
+            "[VULNRAP] best-effort trace persistence failed",
+          );
         } else {
-          logger.error({ err: traceErr, correlationId: persistedTrace.correlationId }, "[VULNRAP] trace persistence failed; rolling back report");
+          logger.error(
+            { err: traceErr, correlationId: persistedTrace.correlationId },
+            "[VULNRAP] trace persistence failed; rolling back report",
+          );
           throw traceErr;
         }
       }
@@ -1069,12 +1360,12 @@ router.post("/reports", async (req, res): Promise<void> => {
 
     if (similarityMatches.length > 0) {
       await tx.insert(similarityResultsTable).values(
-        similarityMatches.map(m => ({
+        similarityMatches.map((m) => ({
           sourceReportId: inserted.id,
           matchedReportId: m.reportId,
           similarityScore: m.similarity / 100,
           matchType: m.matchType,
-        }))
+        })),
       );
     }
 
@@ -1121,7 +1412,10 @@ router.post("/reports", async (req, res): Promise<void> => {
     sectionHashes: report.sectionHashes ?? {},
     sectionMatches: report.sectionMatches ?? [],
     redactedText: report.redactedText,
-    redactionSummary: report.redactionSummary ?? { totalRedactions: 0, categories: {} },
+    redactionSummary: report.redactionSummary ?? {
+      totalRedactions: 0,
+      categories: {},
+    },
     feedback: report.feedback,
     llmSlopScore: report.llmSlopScore ?? null,
     llmFeedback: report.llmFeedback ?? null,
@@ -1220,7 +1514,8 @@ router.post("/reports/check", async (req, res): Promise<void> => {
 
   let text: string;
   const rawText = typeof req.body.rawText === "string" ? req.body.rawText : "";
-  const reportUrl = typeof req.body.reportUrl === "string" ? req.body.reportUrl.trim() : "";
+  const reportUrl =
+    typeof req.body.reportUrl === "string" ? req.body.reportUrl.trim() : "";
 
   if (req.file) {
     const fileName = req.file.originalname.toLowerCase();
@@ -1233,7 +1528,10 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       text = sanitizeText(pdfResult.text);
     } else {
       if (detectBinaryContent(req.file.buffer)) {
-        res.status(400).json({ error: "File appears to contain binary content. Only plain text (.txt, .md) and PDF files are accepted." });
+        res.status(400).json({
+          error:
+            "File appears to contain binary content. Only plain text (.txt, .md) and PDF files are accepted.",
+        });
         return;
       }
       text = sanitizeText(req.file.buffer.toString("utf-8"));
@@ -1252,12 +1550,17 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       return;
     }
   } else {
-    res.status(400).json({ error: "No content provided. Upload a file, paste text, or provide a URL." });
+    res.status(400).json({
+      error:
+        "No content provided. Upload a file, paste text, or provide a URL.",
+    });
     return;
   }
 
   if (text.length === 0) {
-    res.status(400).json({ error: "Content is empty or contains no readable text." });
+    res
+      .status(400)
+      .json({ error: "Content is empty or contains no readable text." });
     return;
   }
 
@@ -1298,12 +1601,20 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       vulnrapEngineResults: reportsTable.vulnrapEngineResults,
     })
     .from(reportsTable)
-    .where(and(eq(reportsTable.contentHash, contentHash), eq(reportsTable.showInFeed, true)))
+    .where(
+      and(
+        eq(reportsTable.contentHash, contentHash),
+        eq(reportsTable.showInFeed, true),
+      ),
+    )
     .limit(1);
 
   if (cachedReports.length > 0) {
     const cached = cachedReports[0];
-    logger.info({ contentHash, existingId: cached.id }, "Check: returning cached result for identical content");
+    logger.info(
+      { contentHash, existingId: cached.id },
+      "Check: returning cached result for identical content",
+    );
 
     await db
       .insert(reportStatsTable)
@@ -1322,7 +1633,10 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       // the live path so re-checks of the same content return the same
       // recommendation instead of the legacy single-axis verdict.
       const baseRec = generateTriageRecommendation(
-        cached.slopScore, cached.confidence as number, null, cachedEvidence,
+        cached.slopScore,
+        cached.confidence as number,
+        null,
+        cachedEvidence,
         buildV36TriageContext(cached, null),
       );
       cachedTriageRecommendation = {
@@ -1334,8 +1648,12 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     } catch {}
     try {
       cachedTriageAssistant = generateTriageAssistant(
-        analysisText, cached.slopScore, cached.confidence as number,
-        cachedEvidence, null, null,
+        analysisText,
+        cached.slopScore,
+        cached.confidence as number,
+        cachedEvidence,
+        null,
+        null,
       );
     } catch {}
 
@@ -1356,7 +1674,11 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     if (stripLlm && cached.breakdown) {
       const bd = cached.breakdown as import("@workspace/db").ScoreBreakdown;
       const allEvidence = (cached.evidence || []) as EvidenceItem[];
-      const recomputed = recomputeSlopScoreWithoutLlm(bd, allEvidence, analysisText);
+      const recomputed = recomputeSlopScoreWithoutLlm(
+        bd,
+        allEvidence,
+        analysisText,
+      );
       responseSlopScore = recomputed.slopScore;
       responseSlopTier = recomputed.slopTier;
       responseConfidence = recomputed.confidence;
@@ -1364,15 +1686,27 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       responseValidityScore = recomputed.validityScore;
       responseQuadrant = recomputed.quadrant;
       responseArchetype = recomputed.archetype;
-      responseBreakdown = { ...bd, llm: null, llmUsed: false, redactionApplied };
-      responseEvidence = allEvidence.filter(e => e.type !== "llm_red_flag" && e.type !== "llm_observation");
+      responseBreakdown = {
+        ...bd,
+        llm: null,
+        llmUsed: false,
+        redactionApplied,
+      };
+      responseEvidence = allEvidence.filter(
+        (e) => e.type !== "llm_red_flag" && e.type !== "llm_observation",
+      );
     }
 
-    const cachedAnalysisMode = (skipLlm || !cachedHadLlm) ? "heuristic_only" : "llm_enhanced";
-    const cachedConfidenceNote = cachedAnalysisMode === "heuristic_only"
-      ? "Running in heuristic-only mode — confidence reduced by 15%. Enable LLM analysis for higher precision on borderline reports."
-      : null;
-    const cachedConfigNotices = generateConfigImpactNotices({ skipLlm, skipRedaction });
+    const cachedAnalysisMode =
+      skipLlm || !cachedHadLlm ? "heuristic_only" : "llm_enhanced";
+    const cachedConfidenceNote =
+      cachedAnalysisMode === "heuristic_only"
+        ? "Running in heuristic-only mode — confidence reduced by 15%. Enable LLM analysis for higher precision on borderline reports."
+        : null;
+    const cachedConfigNotices = generateConfigImpactNotices({
+      skipLlm,
+      skipRedaction,
+    });
 
     const response = CheckReportResponse.parse({
       slopScore: responseSlopScore,
@@ -1423,40 +1757,58 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     const parsed = parseSections(analysisText);
     sectionHashes = parsed.sectionHashes;
 
-    const checkLshConditions = lshBuckets.map(bucket =>
-      sql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`
+    const checkLshConditions = lshBuckets.map(
+      (bucket) =>
+        sql`${reportsTable.lshBuckets}::jsonb @> ${JSON.stringify([bucket])}::jsonb`,
     );
 
-    const checkCandidates = checkLshConditions.length > 0
-      ? await db
-          .select({
-            id: reportsTable.id,
-            minhashSignature: reportsTable.minhashSignature,
-            simhash: reportsTable.simhash,
-            lshBuckets: reportsTable.lshBuckets,
-            sectionHashes: reportsTable.sectionHashes,
-          })
-          .from(reportsTable)
-          .where(or(...checkLshConditions))
-          .limit(500)
-      : [];
+    const checkCandidates =
+      checkLshConditions.length > 0
+        ? await db
+            .select({
+              id: reportsTable.id,
+              minhashSignature: reportsTable.minhashSignature,
+              simhash: reportsTable.simhash,
+              lshBuckets: reportsTable.lshBuckets,
+              sectionHashes: reportsTable.sectionHashes,
+            })
+            .from(reportsTable)
+            .where(or(...checkLshConditions))
+            .limit(500)
+        : [];
 
     similarityMatches = findSimilarReports(
-      minhashSignature, simhash, lshBuckets,
-      checkCandidates as Array<{ id: number; minhashSignature: number[]; simhash: string; lshBuckets: string[] }>,
+      minhashSignature,
+      simhash,
+      lshBuckets,
+      checkCandidates as Array<{
+        id: number;
+        minhashSignature: number[];
+        simhash: string;
+        lshBuckets: string[];
+      }>,
     );
 
     sectionMatches = findSectionMatches(
       sectionHashes,
-      checkCandidates as Array<{ id: number; sectionHashes: Record<string, string> }>,
+      checkCandidates as Array<{
+        id: number;
+        sectionHashes: Record<string, string>;
+      }>,
     );
   } catch (simErr) {
-    logger.error({ err: simErr, inputLength: analysisText.length }, "[SIMILARITY CRASH] Check: Similarity/section analysis failed");
+    logger.error(
+      { err: simErr, inputLength: analysisText.length },
+      "[SIMILARITY CRASH] Check: Similarity/section analysis failed",
+    );
   }
 
   const analysisResult = await performAnalysis(text, analysisText, {
     skipLlm,
-    visitor: { ip: req.ip ?? req.socket.remoteAddress ?? null, userAgent: req.headers["user-agent"] ?? null },
+    visitor: {
+      ip: req.ip ?? req.socket.remoteAddress ?? null,
+      userAgent: req.headers["user-agent"] ?? null,
+    },
   });
 
   const { llmResult: checkLlmResult } = analysisResult;
@@ -1515,11 +1867,21 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   // filter") rather than 400, since the openapi schema already constrains
   // generated clients.
   const AVRI_FAMILY_IDS = new Set<string>([
-    "MEMORY_CORRUPTION", "INJECTION", "WEB_CLIENT", "AUTHN_AUTHZ",
-    "CRYPTO", "DESERIALIZATION", "RACE_CONCURRENCY", "REQUEST_SMUGGLING", "FLAT",
+    "MEMORY_CORRUPTION",
+    "INJECTION",
+    "WEB_CLIENT",
+    "AUTHN_AUTHZ",
+    "CRYPTO",
+    "DESERIALIZATION",
+    "RACE_CONCURRENCY",
+    "REQUEST_SMUGGLING",
+    "FLAT",
   ]);
-  const rawAvriFamily = req.query.avriFamily ? String(req.query.avriFamily) : null;
-  const avriFamilyFilter = rawAvriFamily && AVRI_FAMILY_IDS.has(rawAvriFamily) ? rawAvriFamily : null;
+  const rawAvriFamily = req.query.avriFamily
+    ? String(req.query.avriFamily)
+    : null;
+  const avriFamilyFilter =
+    rawAvriFamily && AVRI_FAMILY_IDS.has(rawAvriFamily) ? rawAvriFamily : null;
 
   // Task #279 — fabricated-evidence filter (FAKE_RAW_HTTP / STRIPPED_CRASH_TRACE).
   // Mirrors avriFamily: unknown values fall through to no-op rather than 400.
@@ -1532,7 +1894,8 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
     ? String(req.query.fabricatedEvidence)
     : null;
   const fabricatedEvidenceFilter =
-    rawFabricatedEvidence && FABRICATED_EVIDENCE_VALUES.has(rawFabricatedEvidence)
+    rawFabricatedEvidence &&
+    FABRICATED_EVIDENCE_VALUES.has(rawFabricatedEvidence)
       ? rawFabricatedEvidence
       : null;
 
@@ -1558,7 +1921,10 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   // columns so the planner can use the partial indexes instead of
   // jsonb_path_exists. Two eq() predicates let the planner BitmapOr the
   // two indexes for the `either` case.
-  let fabricatedEvidenceCondition: ReturnType<typeof or> | ReturnType<typeof eq> | null = null;
+  let fabricatedEvidenceCondition:
+    | ReturnType<typeof or>
+    | ReturnType<typeof eq>
+    | null = null;
   if (fabricatedEvidenceFilter === "fake_raw_http") {
     fabricatedEvidenceCondition = eq(reportsTable.fakeRawHttp, true);
   } else if (fabricatedEvidenceFilter === "stripped_trace") {
@@ -1681,7 +2047,8 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
     // blob so chips stay correct on legacy rows during the backfill window.
     const derived = deriveFabricatedEvidenceFlags(r.vulnrapEngineResults);
     const fakeRawHttp = r.fakeRawHttp || derived.fakeRawHttp;
-    const strippedCrashTrace = r.strippedCrashTrace || derived.strippedCrashTrace;
+    const strippedCrashTrace =
+      r.strippedCrashTrace || derived.strippedCrashTrace;
     // Task #423 — surface the soft-citation inferred CWE on the row so
     // reviewers can scan / batch by inferred CWE without opening each
     // report. Sourced from the same JSONB blob the triage panel reads;
@@ -1731,7 +2098,12 @@ router.get("/reports/lookup/:hash", async (req, res): Promise<void> => {
   const [report] = await db
     .select()
     .from(reportsTable)
-    .where(and(eq(reportsTable.contentHash, params.data.hash), eq(reportsTable.showInFeed, true)));
+    .where(
+      and(
+        eq(reportsTable.contentHash, params.data.hash),
+        eq(reportsTable.showInFeed, true),
+      ),
+    );
 
   if (!report) {
     const response = LookupByHashResponse.parse({
@@ -1746,7 +2118,11 @@ router.get("/reports/lookup/:hash", async (req, res): Promise<void> => {
     return;
   }
 
-  const matches = (report.similarityMatches as Array<{ reportId: number; similarity: number; matchType: string }>);
+  const matches = report.similarityMatches as Array<{
+    reportId: number;
+    similarity: number;
+    matchType: string;
+  }>;
 
   const response = LookupByHashResponse.parse({
     found: true,
@@ -1768,27 +2144,33 @@ router.get("/reports/:id/compare/:matchId", async (req, res): Promise<void> => {
   }
 
   const [sourceReport, matchedReport] = await Promise.all([
-    db.select({
-      id: reportsTable.id,
-      showInFeed: reportsTable.showInFeed,
-      redactedText: reportsTable.redactedText,
-      contentMode: reportsTable.contentMode,
-      slopScore: reportsTable.slopScore,
-      slopTier: reportsTable.slopTier,
-      similarityMatches: reportsTable.similarityMatches,
-      sectionHashes: reportsTable.sectionHashes,
-      createdAt: reportsTable.createdAt,
-    }).from(reportsTable).where(eq(reportsTable.id, params.data.id)),
-    db.select({
-      id: reportsTable.id,
-      showInFeed: reportsTable.showInFeed,
-      redactedText: reportsTable.redactedText,
-      contentMode: reportsTable.contentMode,
-      slopScore: reportsTable.slopScore,
-      slopTier: reportsTable.slopTier,
-      sectionHashes: reportsTable.sectionHashes,
-      createdAt: reportsTable.createdAt,
-    }).from(reportsTable).where(eq(reportsTable.id, params.data.matchId)),
+    db
+      .select({
+        id: reportsTable.id,
+        showInFeed: reportsTable.showInFeed,
+        redactedText: reportsTable.redactedText,
+        contentMode: reportsTable.contentMode,
+        slopScore: reportsTable.slopScore,
+        slopTier: reportsTable.slopTier,
+        similarityMatches: reportsTable.similarityMatches,
+        sectionHashes: reportsTable.sectionHashes,
+        createdAt: reportsTable.createdAt,
+      })
+      .from(reportsTable)
+      .where(eq(reportsTable.id, params.data.id)),
+    db
+      .select({
+        id: reportsTable.id,
+        showInFeed: reportsTable.showInFeed,
+        redactedText: reportsTable.redactedText,
+        contentMode: reportsTable.contentMode,
+        slopScore: reportsTable.slopScore,
+        slopTier: reportsTable.slopTier,
+        sectionHashes: reportsTable.sectionHashes,
+        createdAt: reportsTable.createdAt,
+      })
+      .from(reportsTable)
+      .where(eq(reportsTable.id, params.data.matchId)),
   ]);
 
   if (!sourceReport[0] || !sourceReport[0].showInFeed) {
@@ -1803,11 +2185,18 @@ router.get("/reports/:id/compare/:matchId", async (req, res): Promise<void> => {
   const src = sourceReport[0];
   const mtch = matchedReport[0];
 
-  const matches = (src.similarityMatches as Array<{ reportId: number; similarity: number; matchType: string }>) || [];
-  const matchInfo = matches.find(m => m.reportId === params.data.matchId);
+  const matches =
+    (src.similarityMatches as Array<{
+      reportId: number;
+      similarity: number;
+      matchType: string;
+    }>) || [];
+  const matchInfo = matches.find((m) => m.reportId === params.data.matchId);
 
   if (!matchInfo) {
-    res.status(404).json({ error: "No similarity relationship found between these reports." });
+    res.status(404).json({
+      error: "No similarity relationship found between these reports.",
+    });
     return;
   }
 
@@ -1816,11 +2205,16 @@ router.get("/reports/:id/compare/:matchId", async (req, res): Promise<void> => {
   const srcSections = (src.sectionHashes as Record<string, string>) || {};
   const mtchSections = (mtch.sectionHashes as Record<string, string>) || {};
   const allSectionTitles = new Set([
-    ...Object.keys(srcSections).filter(k => k !== "__full_document"),
-    ...Object.keys(mtchSections).filter(k => k !== "__full_document"),
+    ...Object.keys(srcSections).filter((k) => k !== "__full_document"),
+    ...Object.keys(mtchSections).filter((k) => k !== "__full_document"),
   ]);
 
-  const sectionComparison: Array<{ sectionTitle: string; status: string; sourceHash: string | null; matchedHash: string | null }> = [];
+  const sectionComparison: Array<{
+    sectionTitle: string;
+    status: string;
+    sourceHash: string | null;
+    matchedHash: string | null;
+  }> = [];
   let identicalCount = 0;
 
   for (const title of allSectionTitles) {
@@ -1839,14 +2233,21 @@ router.get("/reports/:id/compare/:matchId", async (req, res): Promise<void> => {
       status = "unique";
     }
 
-    sectionComparison.push({ sectionTitle: title, status, sourceHash: srcHash, matchedHash: mtchHash });
+    sectionComparison.push({
+      sectionTitle: title,
+      status,
+      sourceHash: srcHash,
+      matchedHash: mtchHash,
+    });
   }
 
   const response = CompareReportsResponse.parse({
     sourceReport: {
       id: src.id,
       reportCode: anonymizeId(src.id),
-      snippet: src.redactedText ? src.redactedText.slice(0, snippetLength) : null,
+      snippet: src.redactedText
+        ? src.redactedText.slice(0, snippetLength)
+        : null,
       slopScore: src.slopScore,
       slopTier: src.slopTier,
       contentMode: src.contentMode,
@@ -1856,7 +2257,10 @@ router.get("/reports/:id/compare/:matchId", async (req, res): Promise<void> => {
     matchedReport: {
       id: mtch.id,
       reportCode: anonymizeId(mtch.id),
-      snippet: mtch.contentMode === "full" && mtch.redactedText ? mtch.redactedText.slice(0, snippetLength) : null,
+      snippet:
+        mtch.contentMode === "full" && mtch.redactedText
+          ? mtch.redactedText.slice(0, snippetLength)
+          : null,
       slopScore: mtch.slopScore,
       slopTier: mtch.slopTier,
       contentMode: mtch.contentMode,
@@ -1895,8 +2299,10 @@ router.get("/reports/:id/verify", async (req, res): Promise<void> => {
     return;
   }
 
-  const matches = (report.similarityMatches as Array<{ reportId: number }>) || [];
-  const secMatches = (report.sectionMatches as Array<{ sectionTitle: string }>) || [];
+  const matches =
+    (report.similarityMatches as Array<{ reportId: number }>) || [];
+  const secMatches =
+    (report.sectionMatches as Array<{ sectionTitle: string }>) || [];
 
   const verifyUrl = buildPublicUrl({ req, path: `/verify/${report.id}` });
 
@@ -1941,7 +2347,10 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
   if (report.redactedText) {
     try {
       const strategy = deriveVerificationStrategy(report.redactedText);
-      verification = await performActiveVerification(report.redactedText, strategy);
+      verification = await performActiveVerification(
+        report.redactedText,
+        strategy,
+      );
     } catch {
       verification = null;
     }
@@ -1956,7 +2365,10 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
       (report.evidence as EvidenceItem[]) ?? [],
       buildV36TriageContext(report, verification),
     );
-    const temporalSignals = computeTemporalSignals(verification, report.createdAt);
+    const temporalSignals = computeTemporalSignals(
+      verification,
+      report.createdAt,
+    );
 
     let templateMatch: TriageRecommendation["templateMatch"] = null;
     if (report.templateHash) {
@@ -1965,11 +2377,11 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
         .from(reportsTable)
         .where(eq(reportsTable.templateHash, report.templateHash as string))
         .limit(10);
-      const others = templateDuplicates.filter(r => r.id !== report.id);
+      const others = templateDuplicates.filter((r) => r.id !== report.id);
       if (others.length > 0) {
         templateMatch = {
           templateHash: report.templateHash as string,
-          matchedReportIds: others.map(r => r.id),
+          matchedReportIds: others.map((r) => r.id),
           weight: 25,
         };
       }
@@ -1977,12 +2389,22 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
 
     let revisionResult: TriageRecommendation["revision"] = null;
     try {
-      const simMatches = (report.similarityMatches ?? []) as Array<{ reportId: number; similarity: number; matchType: string }>;
-      const highSimMatch = simMatches.find(m => m.similarity >= 70);
+      const simMatches = (report.similarityMatches ?? []) as Array<{
+        reportId: number;
+        similarity: number;
+        matchType: string;
+      }>;
+      const highSimMatch = simMatches.find((m) => m.similarity >= 70);
       if (highSimMatch) {
-        const cutoff48h = new Date(report.createdAt.getTime() - 48 * 60 * 60 * 1000);
+        const cutoff48h = new Date(
+          report.createdAt.getTime() - 48 * 60 * 60 * 1000,
+        );
         const [matchedRow] = await db
-          .select({ id: reportsTable.id, slopScore: reportsTable.slopScore, createdAt: reportsTable.createdAt })
+          .select({
+            id: reportsTable.id,
+            slopScore: reportsTable.slopScore,
+            createdAt: reportsTable.createdAt,
+          })
           .from(reportsTable)
           .where(eq(reportsTable.id, highSimMatch.reportId));
         if (matchedRow && matchedRow.createdAt >= cutoff48h) {
@@ -2036,23 +2458,41 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     sectionHashes: report.sectionHashes ?? {},
     sectionMatches: report.sectionMatches ?? [],
     redactedText: report.redactedText,
-    redactionSummary: report.redactionSummary ?? { totalRedactions: 0, categories: {} },
+    redactionSummary: report.redactionSummary ?? {
+      totalRedactions: 0,
+      categories: {},
+    },
     feedback: report.feedback,
     llmSlopScore: report.llmSlopScore ?? null,
     llmFeedback: report.llmFeedback ?? null,
     llmBreakdown: report.llmBreakdown ?? null,
     llmEnhanced: report.llmSlopScore != null,
-    llmFailed: (report.breakdown as import("@workspace/db").ScoreBreakdown | null)?.llmUsed === true && report.llmSlopScore == null,
-    llmUsed: (report.breakdown as import("@workspace/db").ScoreBreakdown | null)?.llmUsed === true,
-    redactionApplied: (report.breakdown as import("@workspace/db").ScoreBreakdown | null)?.redactionApplied !== false,
+    llmFailed:
+      (report.breakdown as import("@workspace/db").ScoreBreakdown | null)
+        ?.llmUsed === true && report.llmSlopScore == null,
+    llmUsed:
+      (report.breakdown as import("@workspace/db").ScoreBreakdown | null)
+        ?.llmUsed === true,
+    redactionApplied:
+      (report.breakdown as import("@workspace/db").ScoreBreakdown | null)
+        ?.redactionApplied !== false,
     verification,
     triageRecommendation,
     triageAssistant,
     vulnrap: (() => {
-      if (report.vulnrapCompositeScore == null || report.vulnrapCompositeLabel == null) return null;
+      if (
+        report.vulnrapCompositeScore == null ||
+        report.vulnrapCompositeLabel == null
+      )
+        return null;
       const stored = (report.vulnrapEngineResults ?? {}) as {
         engines?: unknown[];
-        compositeBreakdown?: { weightedSum: number; totalWeight: number; beforeOverride: number; afterOverride: number };
+        compositeBreakdown?: {
+          weightedSum: number;
+          totalWeight: number;
+          beforeOverride: number;
+          afterOverride: number;
+        };
         warnings?: string[];
         engineCount?: number;
         reconstructed?: boolean;
@@ -2081,17 +2521,24 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
       return {
         compositeScore: report.vulnrapCompositeScore,
         label: report.vulnrapCompositeLabel,
-        engines: (stored.engines ?? []) as Array<{ engine: string; score: number; verdict: string; confidence: string }>,
+        engines: (stored.engines ?? []) as Array<{
+          engine: string;
+          score: number;
+          verdict: string;
+          confidence: string;
+        }>,
         compositeBreakdown: stored.compositeBreakdown,
         overridesApplied: (report.vulnrapOverridesApplied ?? []) as string[],
         warnings: stored.warnings ?? [],
-        engineCount: stored.engineCount ?? (stored.engines?.length ?? 0),
+        engineCount: stored.engineCount ?? stored.engines?.length ?? 0,
         reconstructed,
         // Surface the audit trail so the report detail UI can show
         // reviewers "this composite was rescored from X to Y on date Z by
         // the backfill". Empty array (rather than undefined) when no
         // rescores have happened keeps the client-side check trivial.
-        rescoreHistory: Array.isArray(stored.rescoreHistory) ? stored.rescoreHistory : [],
+        rescoreHistory: Array.isArray(stored.rescoreHistory)
+          ? stored.rescoreHistory
+          : [],
       };
     })(),
     avriFamily: report.avriFamily ?? null,
@@ -2114,7 +2561,10 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
     return;
   }
 
-  const [report] = await db.select().from(reportsTable).where(eq(reportsTable.id, params.data.id));
+  const [report] = await db
+    .select()
+    .from(reportsTable)
+    .where(eq(reportsTable.id, params.data.id));
   if (!report) {
     res.status(404).json({ error: "Report not found." });
     return;
@@ -2165,11 +2615,14 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
     reportId: report.id,
     correlationId: report.vulnrapCorrelationId,
     durationMs: report.vulnrapDurationMs,
-    composite: report.vulnrapCompositeScore == null ? null : {
-      score: report.vulnrapCompositeScore,
-      label: report.vulnrapCompositeLabel,
-      overridesApplied: report.vulnrapOverridesApplied ?? [],
-    },
+    composite:
+      report.vulnrapCompositeScore == null
+        ? null
+        : {
+            score: report.vulnrapCompositeScore,
+            label: report.vulnrapCompositeLabel,
+            overridesApplied: report.vulnrapOverridesApplied ?? [],
+          },
     avri: avriBlock,
     // Sprint 12 — Cached AVRI rubric family from the reports row. Surfaced here
     // so the diagnostics panel can show the family even when the engines blob
@@ -2177,12 +2630,18 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
     // the backfill script). Falls back to the family inside `avriBlock` when
     // both are present and identical.
     cachedAvriFamily: report.avriFamily ?? null,
-    legacyMapping: report.vulnrapCompositeScore == null ? null : {
-      slopScore: compositeToLegacySlopScore(report.vulnrapCompositeScore),
-      displayMode: isNewCompositeEnabled() ? "vulnrap-composite" : "legacy-slop",
-      note: "slopScore = 100 - vulnrap.compositeScore (higher slopScore = worse). " +
-            "Toggle VULNRAP_USE_NEW_COMPOSITE=false to fall back to legacy scoring.",
-    },
+    legacyMapping:
+      report.vulnrapCompositeScore == null
+        ? null
+        : {
+            slopScore: compositeToLegacySlopScore(report.vulnrapCompositeScore),
+            displayMode: isNewCompositeEnabled()
+              ? "vulnrap-composite"
+              : "legacy-slop",
+            note:
+              "slopScore = 100 - vulnrap.compositeScore (higher slopScore = worse). " +
+              "Toggle VULNRAP_USE_NEW_COMPOSITE=false to fall back to legacy scoring.",
+          },
     featureFlags: {
       VULNRAP_USE_NEW_COMPOSITE: isNewCompositeEnabled(),
     },
@@ -2256,7 +2715,12 @@ router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
   };
 
   const stored = (report.vulnrapEngineResults ?? {}) as {
-    engines?: Array<{ engine: string; score: number; verdict?: string; confidence?: string }>;
+    engines?: Array<{
+      engine: string;
+      score: number;
+      verdict?: string;
+      confidence?: string;
+    }>;
     rescoreHistory?: RescoreEntry[];
   };
 
@@ -2320,7 +2784,12 @@ router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
 
   const entries = raw.map((e, idx) => {
     const isCurrent = idx === raw.length - 1;
-    let engines: Array<{ engine: string; score: number; verdict: string | null; confidence: string | null }> | null = null;
+    let engines: Array<{
+      engine: string;
+      score: number;
+      verdict: string | null;
+      confidence: string | null;
+    }> | null = null;
 
     // Only the current entry has authentic per-engine numeric sub-scores
     // (read from vulnrap_engine_results.engines on the row). Historical
@@ -2389,7 +2858,10 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
   if (report.redactedText) {
     try {
       const strategy = deriveVerificationStrategy(report.redactedText);
-      verification = await performActiveVerification(report.redactedText, strategy);
+      verification = await performActiveVerification(
+        report.redactedText,
+        strategy,
+      );
     } catch {
       verification = null;
     }
@@ -2404,7 +2876,10 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       (report.evidence as EvidenceItem[]) ?? [],
       buildV36TriageContext(report, verification),
     );
-    const temporalSignals = computeTemporalSignals(verification, report.createdAt);
+    const temporalSignals = computeTemporalSignals(
+      verification,
+      report.createdAt,
+    );
 
     let mdTemplateMatch: TriageRecommendation["templateMatch"] = null;
     if (report.templateHash) {
@@ -2413,11 +2888,11 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
         .from(reportsTable)
         .where(eq(reportsTable.templateHash, report.templateHash as string))
         .limit(10);
-      const others = templateDuplicates.filter(r => r.id !== report.id);
+      const others = templateDuplicates.filter((r) => r.id !== report.id);
       if (others.length > 0) {
         mdTemplateMatch = {
           templateHash: report.templateHash as string,
-          matchedReportIds: others.map(r => r.id),
+          matchedReportIds: others.map((r) => r.id),
           weight: 25,
         };
       }
@@ -2425,12 +2900,22 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
 
     let mdRevision: TriageRecommendation["revision"] = null;
     try {
-      const simMatches = (report.similarityMatches ?? []) as Array<{ reportId: number; similarity: number; matchType: string }>;
-      const highSimMatch = simMatches.find(m => m.similarity >= 70);
+      const simMatches = (report.similarityMatches ?? []) as Array<{
+        reportId: number;
+        similarity: number;
+        matchType: string;
+      }>;
+      const highSimMatch = simMatches.find((m) => m.similarity >= 70);
       if (highSimMatch) {
-        const cutoff48h = new Date(report.createdAt.getTime() - 48 * 60 * 60 * 1000);
+        const cutoff48h = new Date(
+          report.createdAt.getTime() - 48 * 60 * 60 * 1000,
+        );
         const [matchedRow] = await db
-          .select({ id: reportsTable.id, slopScore: reportsTable.slopScore, createdAt: reportsTable.createdAt })
+          .select({
+            id: reportsTable.id,
+            slopScore: reportsTable.slopScore,
+            createdAt: reportsTable.createdAt,
+          })
           .from(reportsTable)
           .where(eq(reportsTable.id, highSimMatch.reportId));
         if (matchedRow && matchedRow.createdAt >= cutoff48h) {
@@ -2443,7 +2928,12 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       }
     } catch {}
 
-    triageRecommendation = { ...base, temporalSignals, templateMatch: mdTemplateMatch, revision: mdRevision };
+    triageRecommendation = {
+      ...base,
+      temporalSignals,
+      templateMatch: mdTemplateMatch,
+      revision: mdRevision,
+    };
   } catch {}
 
   let mdTriageAssistant: TriageAssistantResult | null = null;
@@ -2461,12 +2951,16 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
   } catch {}
 
   const lines: string[] = [];
-  lines.push(`# VulnRap Triage Report — VR-${report.id.toString(16).padStart(4, "0").toUpperCase()}`);
+  lines.push(
+    `# VulnRap Triage Report — VR-${report.id.toString(16).padStart(4, "0").toUpperCase()}`,
+  );
   lines.push("");
   lines.push(`**Date**: ${new Date().toISOString()}`);
   lines.push(`**Content Hash**: \`${report.contentHash}\``);
   lines.push(`**Slop Score**: ${report.slopScore} (${report.slopTier})`);
-  lines.push(`**Confidence**: ${((report.confidence as number ?? 0.5) * 100).toFixed(0)}%`);
+  lines.push(
+    `**Confidence**: ${(((report.confidence as number) ?? 0.5) * 100).toFixed(0)}%`,
+  );
   lines.push("");
 
   // Surface backfill-vulnrap reconstructions in the markdown export so the
@@ -2511,7 +3005,9 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     vulnrapBlob.reconstructed === true ||
     (report.vulnrapCorrelationId?.startsWith("recon-") ?? false);
   if (vulnrapReconstructed) {
-    lines.push("> ⚠️ **Reconstructed composite (approximate).** This report's VulnRap composite was rebuilt from cached v3.5.0 signals (slop / validity / quality / evidence list) because the original report text was not retained. CWE coherence is neutralized at 50, no perplexity is available, and per-engine confidence is LOW. Treat the matrix triage decision below as approximate.");
+    lines.push(
+      "> ⚠️ **Reconstructed composite (approximate).** This report's VulnRap composite was rebuilt from cached v3.5.0 signals (slop / validity / quality / evidence list) because the original report text was not retained. CWE coherence is neutralized at 50, no perplexity is available, and per-engine confidence is LOW. Treat the matrix triage decision below as approximate.",
+    );
     lines.push("");
   }
 
@@ -2540,7 +3036,9 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       lines.push("");
       lines.push(`- **Composite Score**: ${mi.compositeScore.toFixed(1)}`);
       lines.push(`- **Engine 2 Score**: ${mi.engine2Score.toFixed(1)}`);
-      lines.push(`- **Verification Ratio**: ${(mi.verificationRatio * 100).toFixed(0)}%`);
+      lines.push(
+        `- **Verification Ratio**: ${(mi.verificationRatio * 100).toFixed(0)}%`,
+      );
       lines.push(`- **Strong Evidence Count**: ${mi.strongEvidenceCount}`);
       lines.push("");
     }
@@ -2560,7 +3058,9 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       lines.push("## Temporal Signals");
       lines.push("");
       for (const s of triageRecommendation.temporalSignals) {
-        lines.push(`- **${s.cveId}**: ${s.signal} (${s.hoursSincePublication.toFixed(1)}h since publication, weight ${s.weight})`);
+        lines.push(
+          `- **${s.cveId}**: ${s.signal} (${s.hoursSincePublication.toFixed(1)}h since publication, weight ${s.weight})`,
+        );
       }
       lines.push("");
     }
@@ -2570,7 +3070,9 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       lines.push("## Template Reuse");
       lines.push("");
       lines.push(`- **Template Hash**: \`${tm.templateHash}\``);
-      lines.push(`- **Matched Reports**: ${tm.matchedReportIds.length} previous submission(s)`);
+      lines.push(
+        `- **Matched Reports**: ${tm.matchedReportIds.length} previous submission(s)`,
+      );
       lines.push(`- **Weight**: +${tm.weight}`);
       lines.push("");
     }
@@ -2581,7 +3083,9 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       lines.push("");
       lines.push(`- **Original Report**: #${rev.originalReportId}`);
       lines.push(`- **Similarity**: ${rev.similarity.toFixed(0)}%`);
-      lines.push(`- **Direction**: ${rev.direction} (${rev.originalScore} → ${report.slopScore ?? 50}, change: ${rev.scoreChange})`);
+      lines.push(
+        `- **Direction**: ${rev.direction} (${rev.originalScore} → ${report.slopScore ?? 50}, change: ${rev.scoreChange})`,
+      );
       if (rev.changeSummary) {
         lines.push(`- **Summary**: ${rev.changeSummary}`);
       }
@@ -2599,14 +3103,18 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     // are persisted on the cached VerificationResult, so this header line
     // appears whether the verification ran fresh or was served from cache.
     if (verification.mode) {
-      const familySuffix = verification.familyName ? ` — ${verification.familyName}` : "";
+      const familySuffix = verification.familyName
+        ? ` — ${verification.familyName}`
+        : "";
       lines.push(`- Mode: **${verification.mode}**${familySuffix}`);
       if (verification.mode === "MANUAL_ONLY") {
         // performActiveVerification pushes the "Active verification skipped —
         // <family> requires manual reproduction." hint as the first triageNote
         // for MANUAL_ONLY families. Reproduce it verbatim so the printable
         // report matches the diagnostics panel.
-        const skipNote = verification.triageNotes.find(n => n.startsWith("Active verification skipped"));
+        const skipNote = verification.triageNotes.find((n) =>
+          n.startsWith("Active verification skipped"),
+        );
         if (skipNote) {
           lines.push(`- ${skipNote}`);
         }
@@ -2615,12 +3123,25 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     }
     // v3.6.0 §2: Mirror the diagnostics-panel breakdown so report exports show
     // submitters which checks were against repos they cited vs. ones we guessed.
-    const checksWithSource = verification.checks as Array<{ source?: string; result: string; type: string; detail: string }>;
-    const referencedChecks = checksWithSource.filter(c => c.source === "referenced_in_report");
-    const fallbackChecks = checksWithSource.filter(c => c.source === "search_fallback");
+    const checksWithSource = verification.checks as Array<{
+      source?: string;
+      result: string;
+      type: string;
+      detail: string;
+    }>;
+    const referencedChecks = checksWithSource.filter(
+      (c) => c.source === "referenced_in_report",
+    );
+    const fallbackChecks = checksWithSource.filter(
+      (c) => c.source === "search_fallback",
+    );
     if (referencedChecks.length + fallbackChecks.length > 0) {
-      const verifiedReferenced = referencedChecks.filter(c => c.result === "verified").length;
-      lines.push(`- verified ${verifiedReferenced}/${referencedChecks.length} · referenced: ${referencedChecks.length} · search-fallback: ${fallbackChecks.length}`);
+      const verifiedReferenced = referencedChecks.filter(
+        (c) => c.result === "verified",
+      ).length;
+      lines.push(
+        `- verified ${verifiedReferenced}/${referencedChecks.length} · referenced: ${referencedChecks.length} · search-fallback: ${fallbackChecks.length}`,
+      );
       // Task 188: mirror the in-app "Learn more →" link from the submitter
       // results page (results.tsx ~L240) so a downloaded/exported markdown
       // report still points readers at the docs that explain referenced vs.
@@ -2636,9 +3157,21 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     lines.push(`| Check | Status | Source | Detail |`);
     lines.push(`|-------|--------|--------|--------|`);
     for (const check of checksWithSource) {
-      const icon = check.result === "verified" ? "✅" : check.result === "not_found" ? "❌" : "⚠️";
-      const source = check.source === "referenced_in_report" ? "referenced" : check.source === "search_fallback" ? "search-fallback" : "—";
-      lines.push(`| ${check.type} | ${icon} ${check.result} | ${source} | ${check.detail} |`);
+      const icon =
+        check.result === "verified"
+          ? "✅"
+          : check.result === "not_found"
+            ? "❌"
+            : "⚠️";
+      const source =
+        check.source === "referenced_in_report"
+          ? "referenced"
+          : check.source === "search_fallback"
+            ? "search-fallback"
+            : "—";
+      lines.push(
+        `| ${check.type} | ${icon} ${check.result} | ${source} | ${check.detail} |`,
+      );
     }
     lines.push("");
   }
@@ -2668,11 +3201,15 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       const rg = mdTriageAssistant.reproGuidance;
       lines.push("## Reproduction Guidance");
       lines.push("");
-      lines.push(`**Detected Vulnerability Class**: ${rg.vulnClass} (confidence: ${(rg.confidence * 100).toFixed(0)}%)`);
+      lines.push(
+        `**Detected Vulnerability Class**: ${rg.vulnClass} (confidence: ${(rg.confidence * 100).toFixed(0)}%)`,
+      );
       lines.push("");
       lines.push("### Steps to Reproduce");
       for (const step of rg.steps) {
-        lines.push(`${step.order}. ${step.instruction}${step.note ? ` *(${step.note})*` : ""}`);
+        lines.push(
+          `${step.order}. ${step.instruction}${step.note ? ` *(${step.note})*` : ""}`,
+        );
       }
       lines.push("");
       lines.push("### Environment Needed");
@@ -2691,8 +3228,15 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       lines.push("## Gap Analysis");
       lines.push("");
       for (const gap of mdTriageAssistant.gaps) {
-        const icon = gap.severity === "critical" ? "🔴" : gap.severity === "important" ? "🟡" : "🔵";
-        lines.push(`- ${icon} **${gap.category.replace(/_/g, " ")}** (${gap.severity}): ${gap.description}`);
+        const icon =
+          gap.severity === "critical"
+            ? "🔴"
+            : gap.severity === "important"
+              ? "🟡"
+              : "🔵";
+        lines.push(
+          `- ${icon} **${gap.category.replace(/_/g, " ")}** (${gap.severity}): ${gap.description}`,
+        );
         lines.push(`  - *Suggestion*: ${gap.suggestion}`);
       }
       lines.push("");
@@ -2713,7 +3257,8 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       lines.push("## Reporter Feedback");
       lines.push("");
       for (const fb of mdTriageAssistant.reporterFeedback) {
-        const icon = fb.tone === "positive" ? "✅" : fb.tone === "concern" ? "⚠️" : "ℹ️";
+        const icon =
+          fb.tone === "positive" ? "✅" : fb.tone === "concern" ? "⚠️" : "ℹ️";
         lines.push(`- ${icon} ${fb.message}`);
       }
       lines.push("");
@@ -2724,13 +3269,15 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       lines.push(`## Reproduction Recipe: ${rr.title}`);
       lines.push("");
       if (rr.target) {
-        lines.push(`**Target**: ${rr.target.name}${rr.target.version ? ` v${rr.target.version}` : ""}${rr.target.source ? ` (${rr.target.source})` : ""}`);
+        lines.push(
+          `**Target**: ${rr.target.name}${rr.target.version ? ` v${rr.target.version}` : ""}${rr.target.source ? ` (${rr.target.source})` : ""}`,
+        );
         lines.push("");
       }
       if (rr.setupCommands.length > 0) {
         lines.push("### Setup");
         lines.push("```bash");
-        rr.setupCommands.forEach(cmd => lines.push(cmd));
+        rr.setupCommands.forEach((cmd) => lines.push(cmd));
         lines.push("```");
         lines.push("");
       }
@@ -2756,15 +3303,18 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       if (rr.hardware && rr.hardware.length > 0) {
         lines.push("### Hardware Components");
         for (const hw of rr.hardware) {
-          lines.push(`- **${hw.vendor}${hw.model ? ` ${hw.model}` : ""}** (${hw.type})`);
+          lines.push(
+            `- **${hw.vendor}${hw.model ? ` ${hw.model}` : ""}** (${hw.type})`,
+          );
           if (hw.productUrl) lines.push(`  Product: ${hw.productUrl}`);
-          if (hw.emulationOptions.length > 0) lines.push(`  Emulation: ${hw.emulationOptions[0]}`);
+          if (hw.emulationOptions.length > 0)
+            lines.push(`  Emulation: ${hw.emulationOptions[0]}`);
         }
         lines.push("");
       }
       if (rr.notes.length > 0) {
         lines.push("### Notes");
-        rr.notes.forEach(n => lines.push(`- ⚠️ ${n}`));
+        rr.notes.forEach((n) => lines.push(`- ⚠️ ${n}`));
         lines.push("");
       }
     }
@@ -2780,12 +3330,12 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
       }
       if (ltg.missingInfo.length > 0) {
         lines.push("### Missing Information");
-        ltg.missingInfo.forEach(s => lines.push(`- ${s}`));
+        ltg.missingInfo.forEach((s) => lines.push(`- ${s}`));
         lines.push("");
       }
       if (ltg.dontMiss.length > 0) {
         lines.push("### Don't Overlook");
-        ltg.dontMiss.forEach(s => lines.push(`- ${s}`));
+        ltg.dontMiss.forEach((s) => lines.push(`- ${s}`));
         lines.push("");
       }
       if (ltg.reporterFeedback) {
@@ -2838,9 +3388,7 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
     } else {
       lines.push(`- **Raw sum**: +${rawSum} (under cap +${cap})`);
     }
-    lines.push(
-      `- **Categories fired**: ${gsbSignals.length}`,
-    );
+    lines.push(`- **Categories fired**: ${gsbSignals.length}`);
     lines.push("");
     lines.push("| Category | Weight |");
     lines.push("|----------|--------|");
@@ -2855,7 +3403,9 @@ router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
   }
 
   lines.push("---");
-  lines.push("*Generated by VulnRap v3.0 — Free & Anonymous Vulnerability Report Validation*");
+  lines.push(
+    "*Generated by VulnRap v3.0 — Free & Anonymous Vulnerability Report Validation*",
+  );
 
   res.set("Content-Type", "text/markdown; charset=utf-8");
   res.send(lines.join("\n"));
@@ -2885,19 +3435,29 @@ router.delete("/reports/:id", async (req, res): Promise<void> => {
   }
 
   if (!report.deleteToken || report.deleteToken.length === 0) {
-    res.status(403).json({ error: "This report cannot be deleted (no delete token was issued)." });
+    res.status(403).json({
+      error: "This report cannot be deleted (no delete token was issued).",
+    });
     return;
   }
 
   const storedToken = report.deleteToken;
   const providedToken = body.data.deleteToken;
 
-  if (typeof providedToken !== "string" || providedToken.length !== storedToken.length) {
+  if (
+    typeof providedToken !== "string" ||
+    providedToken.length !== storedToken.length
+  ) {
     res.status(403).json({ error: "Invalid delete token." });
     return;
   }
 
-  if (!crypto.timingSafeEqual(Buffer.from(storedToken, "utf-8"), Buffer.from(providedToken, "utf-8"))) {
+  if (
+    !crypto.timingSafeEqual(
+      Buffer.from(storedToken, "utf-8"),
+      Buffer.from(providedToken, "utf-8"),
+    )
+  ) {
     res.status(403).json({ error: "Invalid delete token." });
     return;
   }

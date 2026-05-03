@@ -1,4 +1,12 @@
-import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import express, {
+  type Express,
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
@@ -6,9 +14,6 @@ import pinoHttp from "pino-http";
 import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import YAML from "yamljs";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import router from "./routes";
 import blogRouter from "./routes/blog";
 import sitemapRouter from "./routes/sitemap";
@@ -91,30 +96,32 @@ app.use(
 );
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
   : [];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) {
-      callback(null, true);
-      return;
-    }
-    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, false);
-    }
-  },
-  // PUT is allowed for the calibration-tunable admin endpoints
-  // (e.g. /api/test/archetype-history/config) so reviewer-driven config
-  // updates also work in cross-origin setups, not only same-origin
-  // proxied ones. The custom x-calibration-token header is the gating
-  // credential read by requireCalibrationAuth.
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Calibration-Token"],
-  maxAge: 86400,
-}));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
+    // PUT is allowed for the calibration-tunable admin endpoints
+    // (e.g. /api/test/archetype-history/config) so reviewer-driven config
+    // updates also work in cross-origin setups, not only same-origin
+    // proxied ones. The custom x-calibration-token header is the gating
+    // credential read by requireCalibrationAuth.
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Calibration-Token"],
+    maxAge: 86400,
+  }),
+);
 
 const submitLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -161,14 +168,20 @@ for (const candidate of specCandidates) {
   }
 }
 if (!swaggerDocument) {
-  logger.warn("Could not load OpenAPI spec for Swagger UI from any candidate path");
+  logger.warn(
+    "Could not load OpenAPI spec for Swagger UI from any candidate path",
+  );
 }
 
 if (swaggerDocument) {
-  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
-    customCss: ".swagger-ui .topbar { display: none }",
-    customSiteTitle: "VulnRap API Documentation",
-  }));
+  app.use(
+    "/api/docs",
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerDocument, {
+      customCss: ".swagger-ui .topbar { display: none }",
+      customSiteTitle: "VulnRap API Documentation",
+    }),
+  );
 }
 
 // Task #517 — Compute the Expires line dynamically so the file never lapses
@@ -245,7 +258,14 @@ app.use(changelogFeedRouter);
 app.use("/api", router);
 
 if (process.env.NODE_ENV === "production") {
-  const frontendDir = path.resolve(__dirname, "..", "..", "vulnrap", "dist", "public");
+  const frontendDir = path.resolve(
+    __dirname,
+    "..",
+    "..",
+    "vulnrap",
+    "dist",
+    "public",
+  );
   app.use(express.static(frontendDir, { maxAge: "1d" }));
   app.use((_req, res) => {
     res.sendFile(path.join(frontendDir, "index.html"));
@@ -258,4 +278,3 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 export default app;
-

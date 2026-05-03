@@ -1,20 +1,26 @@
 import { Link } from "react-router-dom";
 import { Clock, Search, ExternalLink } from "lucide-react";
-import { useGetReportFeed, getGetReportFeedQueryKey } from "@workspace/api-client-react";
+import {
+  useGetReportFeed,
+  getGetReportFeedQueryKey,
+} from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { getSlopColor, getSlopProgressColor, timeAgo } from "./utils";
 
 export function RecentReportsFeed() {
-  const { data, isLoading } = useGetReportFeed({ limit: 10 }, {
-    query: {
-      queryKey: getGetReportFeedQueryKey({ limit: 10 }),
-      staleTime: 15_000,
-      refetchOnMount: "always",
-      refetchOnWindowFocus: true,
+  const { data, isLoading } = useGetReportFeed(
+    { limit: 10 },
+    {
+      query: {
+        queryKey: getGetReportFeedQueryKey({ limit: 10 }),
+        staleTime: 15_000,
+        refetchOnMount: "always",
+        refetchOnWindowFocus: true,
+      },
     },
-  });
+  );
   const reports = data?.reports;
   const total = data?.total ?? 0;
 
@@ -73,7 +79,10 @@ export function RecentReportsFeed() {
   }
 
   return (
-    <div className="glass-card rounded-xl p-4 sm:p-6 space-y-3 sm:space-y-4" data-scroll-fade>
+    <div
+      className="glass-card rounded-xl p-4 sm:p-6 space-y-3 sm:space-y-4"
+      data-scroll-fade
+    >
       <div className="flex items-start sm:items-center justify-between gap-3">
         <div className="space-y-1">
           <span className="eyebrow-label">Section 06 · Live Activity</span>
@@ -82,7 +91,9 @@ export function RecentReportsFeed() {
             Recent Reports
           </h2>
         </div>
-        <span className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap mt-1">{total} public report{total !== 1 ? "s" : ""}</span>
+        <span className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap mt-1">
+          {total} public report{total !== 1 ? "s" : ""}
+        </span>
       </div>
       <div className="space-y-2">
         {reports.map((report) => (
@@ -92,22 +103,44 @@ export function RecentReportsFeed() {
             className="flex items-center justify-between gap-2 p-2.5 sm:p-3 rounded-lg glass-card hover:border-primary/20 transition-all group"
           >
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <span className="font-mono text-xs sm:text-sm text-primary font-medium glow-text-sm truncate">{report.reportCode}</span>
-              <Badge variant="secondary" className="text-[10px] hidden md:inline-flex">
+              <span className="font-mono text-xs sm:text-sm text-primary font-medium glow-text-sm truncate">
+                {report.reportCode}
+              </span>
+              <Badge
+                variant="secondary"
+                className="text-[10px] hidden md:inline-flex"
+              >
                 {report.contentMode === "full" ? "Shared" : "Private"}
               </Badge>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <div className="flex items-center gap-1.5 sm:gap-2">
-                <Progress value={report.slopScore} className="w-12 sm:w-16 h-1.5 hidden sm:block" indicatorClassName={getSlopProgressColor(report.slopScore)} />
-                <span className={cn("font-mono text-xs font-medium w-6 text-right", getSlopColor(report.slopScore))}>{report.slopScore}</span>
+                <Progress
+                  value={report.slopScore}
+                  className="w-12 sm:w-16 h-1.5 hidden sm:block"
+                  indicatorClassName={getSlopProgressColor(report.slopScore)}
+                />
+                <span
+                  className={cn(
+                    "font-mono text-xs font-medium w-6 text-right",
+                    getSlopColor(report.slopScore),
+                  )}
+                >
+                  {report.slopScore}
+                </span>
               </div>
               {report.matchCount > 0 && (
-                <Badge variant="outline" className="text-[10px] gap-1 hidden sm:inline-flex">
-                  <Search className="w-2.5 h-2.5" />{report.matchCount}
+                <Badge
+                  variant="outline"
+                  className="text-[10px] gap-1 hidden sm:inline-flex"
+                >
+                  <Search className="w-2.5 h-2.5" />
+                  {report.matchCount}
                 </Badge>
               )}
-              <span className="text-[10px] text-muted-foreground w-10 sm:w-14 text-right">{timeAgo(report.createdAt)}</span>
+              <span className="text-[10px] text-muted-foreground w-10 sm:w-14 text-right">
+                {timeAgo(report.createdAt)}
+              </span>
               <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/0 group-hover:text-primary transition-colors hidden sm:block" />
             </div>
           </Link>

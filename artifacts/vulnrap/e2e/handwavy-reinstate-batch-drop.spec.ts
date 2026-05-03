@@ -57,7 +57,9 @@ test.describe("FLAT hand-wavy phrase panel — batch reinstate confirm 'drop one
       const group = await openHistoryAndFindBatch(page, removedAt);
       const batchBtn = group.getByTestId("handwavy-reinstate-batch");
       await expect(batchBtn).toBeVisible();
-      await expect(batchBtn).toHaveText(new RegExp(`Reinstate all ${phrases.length}\\b`));
+      await expect(batchBtn).toHaveText(
+        new RegExp(`Reinstate all ${phrases.length}\\b`),
+      );
 
       await batchBtn.click();
       const dialog = page.getByTestId("handwavy-reinstate-batch-confirm");
@@ -65,12 +67,16 @@ test.describe("FLAT hand-wavy phrase panel — batch reinstate confirm 'drop one
 
       // The summary lists every phrase from the batch and exposes a
       // per-row drop button keyed by data-phrase.
-      const summary = dialog.getByTestId("handwavy-reinstate-batch-confirm-summary");
+      const summary = dialog.getByTestId(
+        "handwavy-reinstate-batch-confirm-summary",
+      );
       await expect(summary).toBeVisible();
       for (const p of phrases) {
         await expect(summary).toContainText(p);
       }
-      const dropButtons = dialog.getByTestId("handwavy-reinstate-batch-confirm-drop");
+      const dropButtons = dialog.getByTestId(
+        "handwavy-reinstate-batch-confirm-drop",
+      );
       await expect(dropButtons).toHaveCount(phrases.length);
 
       // Drop the middle phrase. The dialog title + count update, the row
@@ -126,7 +132,9 @@ test.describe("FLAT hand-wavy phrase panel — batch reinstate confirm 'drop one
         ).toHaveCount(1, { timeout: 15_000 });
       }
       await expect(
-        page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: droppedPhrase }),
+        page
+          .locator(`[data-testid="handwavy-row"]`)
+          .filter({ hasText: droppedPhrase }),
       ).toHaveCount(0);
 
       // Inside the history group the partial-counter header should reflect
@@ -226,7 +234,9 @@ test.describe("FLAT hand-wavy phrase panel — batch reinstate confirm 'drop one
         { timeout: 10_000 },
       );
 
-      await dialog.getByTestId("handwavy-reinstate-batch-confirm-confirm").click();
+      await dialog
+        .getByTestId("handwavy-reinstate-batch-confirm-confirm")
+        .click();
       await batchRequest;
       await expect(dialog).toHaveCount(0, { timeout: 5_000 });
 

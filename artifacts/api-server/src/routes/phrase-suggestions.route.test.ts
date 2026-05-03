@@ -9,9 +9,17 @@ process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
 
 import http from "node:http";
-import type { AddressInfo } from "node:net";
 import express from "express";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import type { AddressInfo } from "node:net";
 
 const TEST_TOKEN = "phrase-suggestions-test-token";
 
@@ -30,14 +38,23 @@ function makeChain(rows: unknown[]): Record<string, unknown> {
   chain.orderBy = passthrough;
   chain.limit = passthrough;
   chain.groupBy = passthrough;
-  chain.then = (resolve: (v: unknown[]) => void, reject: (e: unknown) => void): void => {
-    try { resolve(rows); } catch (e) { reject(e); }
+  chain.then = (
+    resolve: (v: unknown[]) => void,
+    reject: (e: unknown) => void,
+  ): void => {
+    try {
+      resolve(rows);
+    } catch (e) {
+      reject(e);
+    }
   };
   return chain;
 }
 
 vi.mock("@workspace/db", async () => {
-  const schema = await vi.importActual<Record<string, unknown>>("@workspace/db/schema");
+  const schema = await vi.importActual<Record<string, unknown>>(
+    "@workspace/db/schema",
+  );
   return {
     db: {
       select: () => {
@@ -50,7 +67,9 @@ vi.mock("@workspace/db", async () => {
           return {
             returning: () =>
               Promise.resolve(
-                insertReturningQueue.length > 0 ? insertReturningQueue.shift()! : [{ id: 1 }],
+                insertReturningQueue.length > 0
+                  ? insertReturningQueue.shift()!
+                  : [{ id: 1 }],
               ),
           };
         },
@@ -62,7 +81,9 @@ vi.mock("@workspace/db", async () => {
             where: () => ({
               returning: () =>
                 Promise.resolve(
-                  updateReturningQueue.length > 0 ? updateReturningQueue.shift()! : [],
+                  updateReturningQueue.length > 0
+                    ? updateReturningQueue.shift()!
+                    : [],
                 ),
             }),
           };
@@ -119,7 +140,8 @@ function request<T>(
   headers: Record<string, string> = {},
 ): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const req = http.request(
       {
@@ -128,7 +150,12 @@ function request<T>(
         port: url.port,
         path: `${url.pathname}${url.search}`,
         headers: {
-          ...(data ? { "Content-Type": "application/json", "Content-Length": String(data.length) } : {}),
+          ...(data
+            ? {
+                "Content-Type": "application/json",
+                "Content-Length": String(data.length),
+              }
+            : {}),
           ...headers,
         },
       },
@@ -154,28 +181,40 @@ function request<T>(
 
 describe("POST /public/phrase-suggestions — input validation", () => {
   it("rejects too-short text with 400", async () => {
-    const res = await request<{ error: string }>("POST", "/public/phrase-suggestions", {
-      text: "ok",
-      category: "handwavy",
-    });
+    const res = await request<{ error: string }>(
+      "POST",
+      "/public/phrase-suggestions",
+      {
+        text: "ok",
+        category: "handwavy",
+      },
+    );
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/at least/i);
   });
 
   it("rejects too-long text with 400", async () => {
-    const res = await request<{ error: string }>("POST", "/public/phrase-suggestions", {
-      text: "x".repeat(241),
-      category: "handwavy",
-    });
+    const res = await request<{ error: string }>(
+      "POST",
+      "/public/phrase-suggestions",
+      {
+        text: "x".repeat(241),
+        category: "handwavy",
+      },
+    );
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/at most/i);
   });
 
   it("rejects an invalid category with 400", async () => {
-    const res = await request<{ error: string }>("POST", "/public/phrase-suggestions", {
-      text: "this is a vague hand-wavy phrase",
-      category: "nonsense",
-    });
+    const res = await request<{ error: string }>(
+      "POST",
+      "/public/phrase-suggestions",
+      {
+        text: "this is a vague hand-wavy phrase",
+        category: "nonsense",
+      },
+    );
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/category/i);
   });
@@ -232,11 +271,14 @@ describe("POST /public/phrase-suggestions — happy path + dedupe + daily cap", 
   it("returns 429 with the dailyLimit + retryAfterHours payload when the per-IP cap is reached", async () => {
     selectQueue.push([{ count: 5 }]); // already at the cap
 
-    const res = await request<{ error: string; dailyLimit: number; retryAfterHours: number }>(
-      "POST",
-      "/public/phrase-suggestions",
-      { text: "another distinct hand-wavy phrase", category: "handwavy" },
-    );
+    const res = await request<{
+      error: string;
+      dailyLimit: number;
+      retryAfterHours: number;
+    }>("POST", "/public/phrase-suggestions", {
+      text: "another distinct hand-wavy phrase",
+      category: "handwavy",
+    });
 
     expect(res.status).toBe(429);
     expect(res.body.dailyLimit).toBe(5);
@@ -247,27 +289,48 @@ describe("POST /public/phrase-suggestions — happy path + dedupe + daily cap", 
 
 describe("GET /feedback/calibration/phrase-suggestions — reviewer auth", () => {
   it("requires the calibration token", async () => {
-    const res = await request("GET", "/feedback/calibration/phrase-suggestions");
+    const res = await request(
+      "GET",
+      "/feedback/calibration/phrase-suggestions",
+    );
     expect(res.status).toBe(401);
   });
 
   it("returns the queue with createdAt serialized to ISO when the token is correct", async () => {
     const created = new Date("2026-04-22T10:00:00.000Z");
     selectQueue.push([
-      { id: 1, text: "first", category: "handwavy", context: null, status: "pending", createdAt: created },
-      { id: 2, text: "second", category: "ai-self-disclosure", context: "where I saw it", status: "pending", createdAt: created },
+      {
+        id: 1,
+        text: "first",
+        category: "handwavy",
+        context: null,
+        status: "pending",
+        createdAt: created,
+      },
+      {
+        id: 2,
+        text: "second",
+        category: "ai-self-disclosure",
+        context: "where I saw it",
+        status: "pending",
+        createdAt: created,
+      },
     ]);
 
     const res = await request<{
-      suggestions: Array<{ id: number; text: string; category: string; context: string | null; status: string; createdAt: string }>;
+      suggestions: Array<{
+        id: number;
+        text: string;
+        category: string;
+        context: string | null;
+        status: string;
+        createdAt: string;
+      }>;
       total: number;
       status: string;
-    }>(
-      "GET",
-      "/feedback/calibration/phrase-suggestions",
-      undefined,
-      { "X-Calibration-Token": TEST_TOKEN },
-    );
+    }>("GET", "/feedback/calibration/phrase-suggestions", undefined, {
+      "X-Calibration-Token": TEST_TOKEN,
+    });
 
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(2);
@@ -296,15 +359,24 @@ describe("GET /feedback/calibration/phrase-suggestions — reviewer auth", () =>
 
 describe("PATCH /feedback/calibration/phrase-suggestions/:id", () => {
   it("requires the calibration token", async () => {
-    const res = await request("PATCH", "/feedback/calibration/phrase-suggestions/1", {
-      status: "approved",
-    });
+    const res = await request(
+      "PATCH",
+      "/feedback/calibration/phrase-suggestions/1",
+      {
+        status: "approved",
+      },
+    );
     expect(res.status).toBe(401);
   });
 
   it("flips a queued suggestion to approved and echoes the new status", async () => {
     updateReturningQueue.push([
-      { id: 5, text: "phrase to approve", category: "handwavy", status: "approved" },
+      {
+        id: 5,
+        text: "phrase to approve",
+        category: "handwavy",
+        status: "approved",
+      },
     ]);
 
     const res = await request<{ ok: boolean; id: number; status: string }>(
@@ -323,7 +395,12 @@ describe("PATCH /feedback/calibration/phrase-suggestions/:id", () => {
 
   it("flips a queued suggestion to rejected", async () => {
     updateReturningQueue.push([
-      { id: 9, text: "phrase to reject", category: "handwavy", status: "rejected" },
+      {
+        id: 9,
+        text: "phrase to reject",
+        category: "handwavy",
+        status: "rejected",
+      },
     ]);
     const res = await request<{ status: string }>(
       "PATCH",

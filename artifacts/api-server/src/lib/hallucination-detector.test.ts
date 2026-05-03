@@ -212,7 +212,8 @@ describe("Task #304: impossible_http_response signal", () => {
     const sig = r.signals.find((s) => s.type === "impossible_http_response");
     expect(sig, "impossible_http_response signal should fire").toBeDefined();
     // Description format: "... — marker_a, marker_b, ..."
-    const markersInDesc = sig!.description.split("—")[1]?.split(",").length ?? 0;
+    const markersInDesc =
+      sig!.description.split("—")[1]?.split(",").length ?? 0;
     expect(markersInDesc).toBeGreaterThanOrEqual(minMarkers);
     expect(sig!.weight).toBeGreaterThanOrEqual(minMarkers * 8);
     // The structured `markers` field must round-trip the same IDs the
@@ -221,7 +222,10 @@ describe("Task #304: impossible_http_response signal", () => {
     expect(sig!.markers, "markers field should be populated").toBeDefined();
     expect(sig!.markers!.length).toBeGreaterThanOrEqual(minMarkers);
     const tail = sig!.description.split("—")[1] ?? "";
-    const idsFromDesc = tail.split(",").map((s) => s.trim()).filter(Boolean);
+    const idsFromDesc = tail
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     expect(sig!.markers).toEqual(idsFromDesc);
     return sig!;
   };
@@ -263,7 +267,9 @@ describe("Task #304: impossible_http_response signal", () => {
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_http_response",
+      );
     });
 
     it("accepts both 'Found' and 'Moved Temporarily' for 302", () => {
@@ -276,7 +282,9 @@ describe("Task #304: impossible_http_response signal", () => {
           "```",
         ].join("\n");
         const r = detectHallucinationSignals(text);
-        expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+        expect(r.signals.map((s) => s.type)).not.toContain(
+          "impossible_http_response",
+        );
       }
     });
   });
@@ -298,7 +306,7 @@ describe("Task #304: impossible_http_response signal", () => {
       const text = [
         "```http",
         "HTTP/1.1 304 Not Modified",
-        "ETag: \"abc\"",
+        'ETag: "abc"',
         "",
         "<html>cached payload returned anyway</html>",
         "```",
@@ -311,7 +319,7 @@ describe("Task #304: impossible_http_response signal", () => {
         "```http",
         "HTTP/1.1 100 Continue",
         "",
-        "{\"premature_payload\":\"yes\"}",
+        '{"premature_payload":"yes"}',
         "```",
       ].join("\n");
       expectFires(text);
@@ -326,7 +334,9 @@ describe("Task #304: impossible_http_response signal", () => {
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_http_response",
+      );
     });
   });
 
@@ -369,7 +379,9 @@ describe("Task #304: impossible_http_response signal", () => {
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_http_response",
+      );
     });
   });
 
@@ -426,7 +438,9 @@ describe("Task #304: impossible_http_response signal", () => {
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_http_response",
+      );
     });
   });
 
@@ -475,7 +489,9 @@ describe("Task #304: impossible_http_response signal", () => {
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_http_response",
+      );
     });
   });
 
@@ -489,7 +505,9 @@ describe("Task #304: impossible_http_response signal", () => {
         "with a Set-Cookie request header. We confirmed via curl.",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      expect(r.signals.map((s) => s.type)).not.toContain("impossible_http_response");
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_http_response",
+      );
     });
 
     it("composes when a single fence carries multiple impossibilities", () => {
@@ -538,23 +556,20 @@ describe("Task #430: impossible_graphql_response signal", () => {
     const r = detectHallucinationSignals(text);
     const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
     expect(sig, "impossible_graphql_response signal should fire").toBeDefined();
-    const markersInDesc = sig!.description.split("—")[1]?.split(",").length ?? 0;
+    const markersInDesc =
+      sig!.description.split("—")[1]?.split(",").length ?? 0;
     expect(markersInDesc).toBeGreaterThanOrEqual(minMarkers);
     expect(sig!.weight).toBeGreaterThanOrEqual(minMarkers * 8);
     return sig!;
   };
 
   describe("predicate 1: data:null with no errors key", () => {
-    it("flags `{\"data\": null}` in a graphql-tagged fence", () => {
-      const text = [
-        "```graphql",
-        '{"data": null}',
-        "```",
-      ].join("\n");
+    it('flags `{"data": null}` in a graphql-tagged fence', () => {
+      const text = ["```graphql", '{"data": null}', "```"].join("\n");
       expectFires(text);
     });
 
-    it("flags `{\"data\": null}` in a json fence when prose mentions GraphQL", () => {
+    it('flags `{"data": null}` in a json fence when prose mentions GraphQL', () => {
       const text = [
         "The GraphQL mutation returned this response:",
         "```json",
@@ -564,7 +579,7 @@ describe("Task #430: impossible_graphql_response signal", () => {
       expectFires(text);
     });
 
-    it("does NOT flag `{\"data\": null}` in a json fence with no GraphQL context", () => {
+    it('does NOT flag `{"data": null}` in a json fence with no GraphQL context', () => {
       // Many REST APIs return {"data": null} legitimately. Without any
       // GraphQL identification signal we must stay quiet.
       const text = [
@@ -574,17 +589,21 @@ describe("Task #430: impossible_graphql_response signal", () => {
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      expect(r.signals.map((s) => s.type)).not.toContain("impossible_graphql_response");
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_graphql_response",
+      );
     });
 
-    it("does NOT flag `{\"data\": null, \"errors\": [{...}]}` (the legit shape)", () => {
+    it('does NOT flag `{"data": null, "errors": [{...}]}` (the legit shape)', () => {
       const text = [
         "```graphql",
         '{"data": null, "errors": [{"message": "boom", "locations": [{"line": 1, "column": 1}]}]}',
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+      const sig = r.signals.find(
+        (s) => s.type === "impossible_graphql_response",
+      );
       // Either the signal doesn't fire at all, or it fires for some
       // other marker — but never `data_null_with_no_errors` because the
       // errors field is present and non-empty.
@@ -612,7 +631,9 @@ describe("Task #430: impossible_graphql_response signal", () => {
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+      const sig = r.signals.find(
+        (s) => s.type === "impossible_graphql_response",
+      );
       if (sig) {
         expect(sig.description).not.toContain("empty_errors_array");
       }
@@ -636,7 +657,9 @@ describe("Task #430: impossible_graphql_response signal", () => {
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+      const sig = r.signals.find(
+        (s) => s.type === "impossible_graphql_response",
+      );
       if (sig) {
         expect(sig.description).not.toContain("errored_field_not_null");
       }
@@ -660,9 +683,13 @@ describe("Task #430: impossible_graphql_response signal", () => {
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+      const sig = r.signals.find(
+        (s) => s.type === "impossible_graphql_response",
+      );
       if (sig) {
-        expect(sig.description).not.toContain("error_path_references_unknown_field");
+        expect(sig.description).not.toContain(
+          "error_path_references_unknown_field",
+        );
       }
     });
   });
@@ -678,14 +705,21 @@ describe("Task #430: impossible_graphql_response signal", () => {
     });
 
     it("flags RCE_ACHIEVED, BYPASS_TRIGGERED, PWNED variants", () => {
-      for (const code of ["RCE_ACHIEVED", "BYPASS_TRIGGERED", "ACCOUNT_PWNED", "VULNERABILITY_CONFIRMED"]) {
+      for (const code of [
+        "RCE_ACHIEVED",
+        "BYPASS_TRIGGERED",
+        "ACCOUNT_PWNED",
+        "VULNERABILITY_CONFIRMED",
+      ]) {
         const text = [
           "```graphql",
           `{"data": null, "errors": [{"message": "x", "path": ["x"], "extensions": {"code": "${code}"}}]}`,
           "```",
         ].join("\n");
         const r = detectHallucinationSignals(text);
-        const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+        const sig = r.signals.find(
+          (s) => s.type === "impossible_graphql_response",
+        );
         expect(sig, `signal should fire for ${code}`).toBeDefined();
         expect(sig!.description).toContain("fabricated_extensions_code");
       }
@@ -710,7 +744,9 @@ describe("Task #430: impossible_graphql_response signal", () => {
           "```",
         ].join("\n");
         const r = detectHallucinationSignals(text);
-        const sig = r.signals.find((s) => s.type === "impossible_graphql_response");
+        const sig = r.signals.find(
+          (s) => s.type === "impossible_graphql_response",
+        );
         if (sig) {
           expect(sig.description).not.toContain("fabricated_extensions_code");
         }
@@ -722,7 +758,9 @@ describe("Task #430: impossible_graphql_response signal", () => {
     it("ignores GraphQL-shaped JSON outside any fence", () => {
       const text = `The server replied with {"data": null} and no errors. We confirmed via curl.`;
       const r = detectHallucinationSignals(text);
-      expect(r.signals.map((s) => s.type)).not.toContain("impossible_graphql_response");
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_graphql_response",
+      );
     });
 
     it("ignores REST-style JSON whose `errors` entries lack GraphQL shape", () => {
@@ -736,7 +774,9 @@ describe("Task #430: impossible_graphql_response signal", () => {
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      expect(r.signals.map((s) => s.type)).not.toContain("impossible_graphql_response");
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_graphql_response",
+      );
     });
 
     it("ignores fenced blocks that are not valid JSON", () => {
@@ -748,7 +788,9 @@ describe("Task #430: impossible_graphql_response signal", () => {
         "```",
       ].join("\n");
       const r = detectHallucinationSignals(text);
-      expect(r.signals.map((s) => s.type)).not.toContain("impossible_graphql_response");
+      expect(r.signals.map((s) => s.type)).not.toContain(
+        "impossible_graphql_response",
+      );
     });
 
     it("composes when a single response carries multiple impossibilities", () => {
@@ -802,12 +844,12 @@ describe("Task #430: impossible_graphql_response signal", () => {
         "{",
         '  "data": {"viewer": {"id": "u1", "name": "alice"}, "post": null},',
         '  "errors": [',
-        '    {',
+        "    {",
         '      "message": "Post not found",',
         '      "path": ["post"],',
         '      "locations": [{"line": 5, "column": 3}],',
         '      "extensions": {"code": "BAD_USER_INPUT"}',
-        '    }',
+        "    }",
         "  ]",
         "}",
         "```",
@@ -824,10 +866,10 @@ describe("Task #430: impossible_graphql_response signal", () => {
         "```json",
         "{",
         '  "errors": [',
-        '    {',
+        "    {",
         '      "message": "field \\"users\\" not found",',
         '      "extensions": {"code": "validation-failed", "path": "$.selectionSet.users"}',
-        '    }',
+        "    }",
         "  ]",
         "}",
         "```",
@@ -846,8 +888,8 @@ describe("Task #430: impossible_graphql_response signal", () => {
         '  "data": {',
         '    "repository": {',
         '      "issue": {"title": "bug", "number": 42}',
-        '    }',
-        '  }',
+        "    }",
+        "  }",
         "}",
         "```",
       ].join("\n");
@@ -1000,7 +1042,9 @@ describe("Task #435: structural_fabrication signal carries marker context", () =
       // prefers context-array reads over parsing `description`.
       for (let i = 0; i < expected.length; i++) {
         expect(sig!.context!.markers[i].id).toBe(expected[i].id);
-        expect(sig!.context!.markers[i].description).toBe(expected[i].description);
+        expect(sig!.context!.markers[i].description).toBe(
+          expected[i].description,
+        );
       }
 
       // Weight remains marker-count * 8, matching the legacy aggregation.
@@ -1052,7 +1096,10 @@ RSI: 0x4141414141414141  RDI: 0x4141414141414141`;
 
     const r = detectHallucinationSignals(text);
     const sig = r.signals.find((s) => s.type === "structural_fabrication");
-    expect(sig, "structural_fabrication signal should fire on a single marker").toBeDefined();
+    expect(
+      sig,
+      "structural_fabrication signal should fire on a single marker",
+    ).toBeDefined();
     expect(sig!.weight).toBe(4);
     // Context still populated so the Evidence Signals card can render
     // the marker without parsing `description`.

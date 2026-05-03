@@ -18,12 +18,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "healthz"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["healthz"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -42,12 +38,8 @@
               "name": "Healthy",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "healthz"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["healthz"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -99,12 +91,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "reports"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["reports"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -173,12 +161,8 @@
               "name": "Report submitted and analyzed",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -274,12 +258,8 @@
               "name": "Invalid request",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -375,12 +355,8 @@
               "name": "File too large",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -476,12 +452,8 @@
               "name": "Rate limit exceeded",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -588,13 +560,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "reports",
-                ":id"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["reports", ":id"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": [
                 {
@@ -621,13 +588,8 @@
               "name": "Report analysis",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -665,13 +627,8 @@
               "name": "Report not found",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -720,13 +677,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "reports",
-                ":id"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["reports", ":id"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": [
                 {
@@ -766,13 +718,8 @@
               "name": "Report deleted",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -818,13 +765,8 @@
               "name": "Invalid delete token",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -870,13 +812,8 @@
               "name": "Report not found",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -933,14 +870,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "reports",
-                ":id",
-                "verify"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["reports", ":id", "verify"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": [
                 {
@@ -967,14 +898,8 @@
               "name": "Verification data",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id",
-                    "verify"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id", "verify"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -1012,14 +937,8 @@
               "name": "Report not found",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id",
-                    "verify"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id", "verify"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -1068,15 +987,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "reports",
-                ":id",
-                "compare",
-                ":matchId"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["reports", ":id", "compare", ":matchId"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": [
                 {
@@ -1110,15 +1022,8 @@
               "name": "Comparison data",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id",
-                    "compare",
-                    ":matchId"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id", "compare", ":matchId"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -1163,15 +1068,8 @@
               "name": "Report not found",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id",
-                    "compare",
-                    ":matchId"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id", "compare", ":matchId"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -1227,14 +1125,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "reports",
-                ":id",
-                "score-history"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["reports", ":id", "score-history"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": [
                 {
@@ -1261,14 +1153,8 @@
               "name": "Score history timeline",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id",
-                    "score-history"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id", "score-history"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -1306,14 +1192,8 @@
               "name": "Report not found",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id",
-                    "score-history"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id", "score-history"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -1362,14 +1242,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "reports",
-                ":id",
-                "triage-report"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["reports", ":id", "triage-report"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": [
                 {
@@ -1396,14 +1270,8 @@
               "name": "Triage report markdown",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id",
-                    "triage-report"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id", "triage-report"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -1441,14 +1309,8 @@
               "name": "Report not found",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    ":id",
-                    "triage-report"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", ":id", "triage-report"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -1497,13 +1359,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "reports",
-                "check"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["reports", "check"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -1560,13 +1417,8 @@
               "name": "Check results (not stored)",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    "check"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", "check"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -1644,13 +1496,8 @@
               "name": "Invalid request",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    "check"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", "check"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -1739,14 +1586,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "reports",
-                "lookup",
-                ":hash"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["reports", "lookup", ":hash"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": [
                 {
@@ -1773,14 +1614,8 @@
               "name": "Hash lookup result",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    "lookup",
-                    ":hash"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", "lookup", ":hash"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -1829,13 +1664,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "reports",
-                "feed"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["reports", "feed"],
+              "host": ["{{baseUrl}}"],
               "query": [
                 {
                   "disabled": false,
@@ -1888,13 +1718,8 @@
               "name": "Recent public reports",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "reports",
-                    "feed"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["reports", "feed"],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "limit",
@@ -1971,13 +1796,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "challenge"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "challenge"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -1996,13 +1816,8 @@
               "name": "Challenge issued",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "challenge"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "challenge"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2043,12 +1858,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -2080,12 +1891,8 @@
               "name": "Feedback submitted successfully",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2123,12 +1930,8 @@
               "name": "Invalid request",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2166,12 +1969,8 @@
               "name": "Challenge verification failed",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2220,13 +2019,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "analytics"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "analytics"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -2245,13 +2039,8 @@
               "name": "Feedback analytics data",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "analytics"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "analytics"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2292,13 +2081,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "holdout-eval"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "holdout-eval"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -2317,13 +2101,8 @@
               "name": "Holdout evaluation",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "holdout-eval"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "holdout-eval"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2364,13 +2143,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -2389,13 +2163,8 @@
               "name": "Calibration report",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2436,14 +2205,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "avri-drift"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "avri-drift"],
+              "host": ["{{baseUrl}}"],
               "query": [
                 {
                   "disabled": false,
@@ -2469,14 +2232,8 @@
               "name": "AVRI drift report",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "avri-drift"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "avri-drift"],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "weeks",
@@ -2528,9 +2285,7 @@
                 "avri-drift",
                 "notifications"
               ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -2555,9 +2310,7 @@
                     "avri-drift",
                     "notifications"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2593,9 +2346,7 @@
                     "avri-drift",
                     "notifications"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2643,9 +2394,7 @@
                 "notifications",
                 "rearm"
               ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -2684,9 +2433,7 @@
                     "notifications",
                     "rearm"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2731,9 +2478,7 @@
                     "notifications",
                     "rearm"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2778,9 +2523,7 @@
                     "notifications",
                     "rearm"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2825,9 +2568,7 @@
                     "notifications",
                     "rearm"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2882,9 +2623,7 @@
                 "avri-drift",
                 "scheduler-status"
               ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -2909,9 +2648,7 @@
                     "avri-drift",
                     "scheduler-status"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -2952,14 +2689,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "score-stability"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "score-stability"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -2978,14 +2709,8 @@
               "name": "Score stability summary",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "score-stability"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "score-stability"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3015,14 +2740,8 @@
               "name": "Reviewer token missing or invalid",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "score-stability"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "score-stability"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3069,9 +2788,7 @@
                 "score-stability",
                 "scheduler-status"
               ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -3096,9 +2813,7 @@
                     "score-stability",
                     "scheduler-status"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3146,9 +2861,7 @@
                 "notifications",
                 "rearm-history"
               ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -3174,9 +2887,7 @@
                     "notifications",
                     "rearm-history"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3213,9 +2924,7 @@
                     "notifications",
                     "rearm-history"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3256,14 +2965,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "auth-brute-force-alerts"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "auth-brute-force-alerts"],
+              "host": ["{{baseUrl}}"],
               "query": [
                 {
                   "disabled": false,
@@ -3294,9 +2997,7 @@
                     "calibration",
                     "auth-brute-force-alerts"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "limit",
@@ -3336,9 +3037,7 @@
                     "calibration",
                     "auth-brute-force-alerts"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "limit",
@@ -3378,9 +3077,7 @@
                     "calibration",
                     "auth-brute-force-alerts"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "limit",
@@ -3426,14 +3123,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "config"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "config"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -3452,14 +3143,8 @@
               "name": "Scoring config",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "config"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "config"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3500,14 +3185,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "auth-status"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "auth-status"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -3526,14 +3205,8 @@
               "name": "Auth status snapshot",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "auth-status"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "auth-status"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3574,14 +3247,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "apply"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "apply"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -3613,14 +3280,8 @@
               "name": "Config updated",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "apply"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "apply"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3658,14 +3319,8 @@
               "name": "Invalid changes",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "apply"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "apply"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3714,14 +3369,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "handwavy-phrases"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "handwavy-phrases"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -3740,14 +3389,8 @@
               "name": "Active hand-wavy phrase list",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "handwavy-phrases"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "handwavy-phrases"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3788,14 +3431,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "handwavy-phrases"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "handwavy-phrases"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -3827,14 +3464,8 @@
               "name": "Phrase already present (no change)",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "handwavy-phrases"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "handwavy-phrases"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3872,14 +3503,8 @@
               "name": "Phrase appended",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "handwavy-phrases"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "handwavy-phrases"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3917,14 +3542,8 @@
               "name": "Invalid phrase",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "handwavy-phrases"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "handwavy-phrases"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -3973,14 +3592,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "handwavy-phrases"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "handwavy-phrases"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -4012,14 +3625,8 @@
               "name": "Edit applied (or no-op if updates matched the existing values)",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "handwavy-phrases"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "handwavy-phrases"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -4057,14 +3664,8 @@
               "name": "Invalid request body or update values",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "handwavy-phrases"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "handwavy-phrases"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -4102,14 +3703,8 @@
               "name": "Phrase not in the list",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "handwavy-phrases"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "handwavy-phrases"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -4158,14 +3753,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "handwavy-phrases"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "handwavy-phrases"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -4197,14 +3786,8 @@
               "name": "Phrase removed (single path), batch processed and at least one\nphrase was removed (batch path; see `batch: true` and `results`),\nsingle-phrase dry-run preview (`dryRun: true`, `batch: false`),\nOR batch dry-run preview (`dryRun: true`, `batch: true`).\n",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "handwavy-phrases"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "handwavy-phrases"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -4242,14 +3825,8 @@
               "name": "Invalid phrase / batch body",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "handwavy-phrases"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "handwavy-phrases"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -4287,14 +3864,8 @@
               "name": "Phrase not in the list (single path) OR batch matched zero phrases\n(batch path returns the same `results` shape as 200).\n",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "handwavy-phrases"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "handwavy-phrases"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -4349,9 +3920,7 @@
                 "handwavy-phrases",
                 "removal-batches"
               ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "query": [
                 {
                   "disabled": false,
@@ -4383,9 +3952,7 @@
                     "handwavy-phrases",
                     "removal-batches"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "limit",
@@ -4426,9 +3993,7 @@
                     "handwavy-phrases",
                     "removal-batches"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "limit",
@@ -4481,9 +4046,7 @@
                 "removal-batches",
                 ":removedAt"
               ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": [
                 {
@@ -4517,9 +4080,7 @@
                     "removal-batches",
                     ":removedAt"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -4564,9 +4125,7 @@
                     "removal-batches",
                     ":removedAt"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -4611,9 +4170,7 @@
                     "removal-batches",
                     ":removedAt"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -4662,15 +4219,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "handwavy-phrases",
-                "undo"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "handwavy-phrases", "undo"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -4708,9 +4258,7 @@
                     "handwavy-phrases",
                     "undo"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -4754,9 +4302,7 @@
                     "handwavy-phrases",
                     "undo"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -4800,9 +4346,7 @@
                     "handwavy-phrases",
                     "undo"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -4846,9 +4390,7 @@
                     "handwavy-phrases",
                     "undo"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -4903,9 +4445,7 @@
                 "handwavy-phrases",
                 "undo-batch"
               ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -4943,9 +4483,7 @@
                     "handwavy-phrases",
                     "undo-batch"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -4989,9 +4527,7 @@
                     "handwavy-phrases",
                     "undo-batch"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5046,9 +4582,7 @@
                 "handwavy-phrases",
                 "reinstate-batch"
               ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -5086,9 +4620,7 @@
                     "handwavy-phrases",
                     "reinstate-batch"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5132,9 +4664,7 @@
                     "handwavy-phrases",
                     "reinstate-batch"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5178,9 +4708,7 @@
                     "handwavy-phrases",
                     "reinstate-batch"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5224,9 +4752,7 @@
                     "handwavy-phrases",
                     "reinstate-batch"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5281,9 +4807,7 @@
                 "handwavy-phrases",
                 "reinstate"
               ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -5321,9 +4845,7 @@
                     "handwavy-phrases",
                     "reinstate"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5367,9 +4889,7 @@
                     "handwavy-phrases",
                     "reinstate"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5413,9 +4933,7 @@
                     "handwavy-phrases",
                     "reinstate"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5459,9 +4977,7 @@
                     "handwavy-phrases",
                     "reinstate"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5516,9 +5032,7 @@
                 "handwavy-phrases",
                 "revert-edit"
               ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -5556,9 +5070,7 @@
                     "handwavy-phrases",
                     "revert-edit"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5602,9 +5114,7 @@
                     "handwavy-phrases",
                     "revert-edit"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5648,9 +5158,7 @@
                     "handwavy-phrases",
                     "revert-edit"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5710,12 +5218,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "stats"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["stats"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -5734,12 +5238,8 @@
               "name": "Platform statistics",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "stats"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["stats"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5780,13 +5280,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "stats",
-                "recent"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["stats", "recent"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -5805,13 +5300,8 @@
               "name": "Recent activity",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "stats",
-                    "recent"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["stats", "recent"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5852,13 +5342,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "stats",
-                "distribution"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["stats", "distribution"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -5877,13 +5362,8 @@
               "name": "Score distribution",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "stats",
-                    "distribution"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["stats", "distribution"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5924,13 +5404,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "stats",
-                "visit"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["stats", "visit"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -5949,13 +5424,8 @@
               "name": "Visit recorded",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "stats",
-                    "visit"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["stats", "visit"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -5996,13 +5466,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "stats",
-                "visitors"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["stats", "visitors"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -6021,13 +5486,8 @@
               "name": "Visitor statistics",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "stats",
-                    "visitors"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["stats", "visitors"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6068,13 +5528,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "public",
-                "corpus-stats"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["public", "corpus-stats"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -6093,13 +5548,8 @@
               "name": "Corpus statistics",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "public",
-                    "corpus-stats"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["public", "corpus-stats"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6140,13 +5590,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "public",
-                "latency-snapshot"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["public", "latency-snapshot"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -6165,13 +5610,8 @@
               "name": "Latency snapshot",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "public",
-                    "latency-snapshot"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["public", "latency-snapshot"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6212,13 +5652,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "stats",
-                "trends"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["stats", "trends"],
+              "host": ["{{baseUrl}}"],
               "query": [
                 {
                   "disabled": false,
@@ -6244,13 +5679,8 @@
               "name": "Trend data",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "stats",
-                    "trends"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["stats", "trends"],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "days",
@@ -6307,13 +5737,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "newsletter",
-                "subscribe"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["newsletter", "subscribe"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -6345,13 +5770,8 @@
               "name": "Subscription accepted (or already on the list)",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "newsletter",
-                    "subscribe"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["newsletter", "subscribe"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6389,13 +5809,8 @@
               "name": "Invalid email address",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "newsletter",
-                    "subscribe"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["newsletter", "subscribe"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6433,13 +5848,8 @@
               "name": "Too many signups from this IP",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "newsletter",
-                    "subscribe"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["newsletter", "subscribe"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6499,13 +5909,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "cohort",
-                "baseline"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["cohort", "baseline"],
+              "host": ["{{baseUrl}}"],
               "query": [
                 {
                   "disabled": false,
@@ -6531,13 +5936,8 @@
               "name": "Cohort baseline distribution",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "cohort",
-                    "baseline"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["cohort", "baseline"],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "cwe",
@@ -6594,13 +5994,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "public",
-                "drift-summary"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["public", "drift-summary"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -6619,13 +6014,8 @@
               "name": "Public drift summary",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "public",
-                    "drift-summary"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["public", "drift-summary"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6677,12 +6067,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "presets"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["presets"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -6701,12 +6087,8 @@
               "name": "Curated preset library",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "presets"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["presets"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6758,13 +6140,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "public",
-                "phrase-suggestions"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["public", "phrase-suggestions"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -6796,13 +6173,8 @@
               "name": "Duplicate submission (already queued in the last 24h)",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "public",
-                    "phrase-suggestions"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["public", "phrase-suggestions"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6840,13 +6212,8 @@
               "name": "Suggestion accepted",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "public",
-                    "phrase-suggestions"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["public", "phrase-suggestions"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6884,13 +6251,8 @@
               "name": "Invalid submission",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "public",
-                    "phrase-suggestions"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["public", "phrase-suggestions"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6928,13 +6290,8 @@
               "name": "Daily limit reached",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "public",
-                    "phrase-suggestions"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["public", "phrase-suggestions"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },
@@ -6983,14 +6340,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "phrase-suggestions"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "phrase-suggestions"],
+              "host": ["{{baseUrl}}"],
               "query": [
                 {
                   "disabled": false,
@@ -7020,14 +6371,8 @@
               "name": "Suggestions list",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "phrase-suggestions"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "phrase-suggestions"],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "status",
@@ -7066,14 +6411,8 @@
               "name": "Missing or invalid calibration token",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "feedback",
-                    "calibration",
-                    "phrase-suggestions"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["feedback", "calibration", "phrase-suggestions"],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "status",
@@ -7123,15 +6462,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "feedback",
-                "calibration",
-                "phrase-suggestions",
-                ":id"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["feedback", "calibration", "phrase-suggestions", ":id"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": [
                 {
@@ -7177,9 +6509,7 @@
                     "phrase-suggestions",
                     ":id"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -7231,9 +6561,7 @@
                     "phrase-suggestions",
                     ":id"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -7285,9 +6613,7 @@
                     "phrase-suggestions",
                     ":id"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -7339,9 +6665,7 @@
                     "phrase-suggestions",
                     ":id"
                   ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": [
                     {
@@ -7409,13 +6733,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "internal",
-                "shadow-drift"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["internal", "shadow-drift"],
+              "host": ["{{baseUrl}}"],
               "query": [
                 {
                   "disabled": false,
@@ -7445,13 +6764,8 @@
               "name": "Shadow drift report",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "internal",
-                    "shadow-drift"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["internal", "shadow-drift"],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "lookbackDays",
@@ -7490,13 +6804,8 @@
               "name": "Reviewer token missing or invalid",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "internal",
-                    "shadow-drift"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["internal", "shadow-drift"],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "lookbackDays",
@@ -7557,12 +6866,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "audit-log"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["audit-log"],
+              "host": ["{{baseUrl}}"],
               "query": [
                 {
                   "disabled": false,
@@ -7622,12 +6927,8 @@
               "name": "Audit log page",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "audit-log"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["audit-log"],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "limit",
@@ -7686,12 +6987,8 @@
               "name": "Reviewer auth required",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "audit-log"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["audit-log"],
+                  "host": ["{{baseUrl}}"],
                   "query": [
                     {
                       "key": "limit",
@@ -7772,12 +7069,8 @@
               "type": "text/plain"
             },
             "url": {
-              "path": [
-                "gallery"
-              ],
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "path": ["gallery"],
+              "host": ["{{baseUrl}}"],
               "query": [],
               "variable": []
             },
@@ -7796,12 +7089,8 @@
               "name": "Curated sample-report gallery",
               "originalRequest": {
                 "url": {
-                  "path": [
-                    "gallery"
-                  ],
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
+                  "path": ["gallery"],
+                  "host": ["{{baseUrl}}"],
                   "query": [],
                   "variable": []
                 },

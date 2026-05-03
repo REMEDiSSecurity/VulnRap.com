@@ -14,7 +14,15 @@
 // supported in v1) so adding new event types in the future does not
 // require an ALTER.
 
-import { pgTable, serial, varchar, text, timestamp, integer, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  serial,
+  varchar,
+  text,
+  timestamp,
+  integer,
+  index,
+} from "drizzle-orm/pg-core";
 
 export const webhooksTable = pgTable(
   "webhooks",
@@ -23,13 +31,13 @@ export const webhooksTable = pgTable(
     url: varchar("url", { length: 1000 }).notNull(),
     secretHash: varchar("secret_hash", { length: 64 }).notNull(),
     eventTypes: text("event_types").array().notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     lastDeliveredAt: timestamp("last_delivered_at", { withTimezone: true }),
     failureCount: integer("failure_count").notNull().default(0),
   },
-  (table) => [
-    index("idx_webhooks_created_at").on(table.createdAt),
-  ],
+  (table) => [index("idx_webhooks_created_at").on(table.createdAt)],
 );
 
 export type Webhook = typeof webhooksTable.$inferSelect;

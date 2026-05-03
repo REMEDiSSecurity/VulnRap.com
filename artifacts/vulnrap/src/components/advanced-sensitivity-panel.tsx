@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ChevronDown, ChevronUp, RefreshCw, Copy, SlidersHorizontal } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
+  Copy,
+  SlidersHorizontal,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -23,7 +29,11 @@ export const BALANCED_CONFIG: SensitivityConfig = {
   weights: { engine1: 1, engine2: 1, engine3: 1, avri: 1 },
 };
 
-const ENGINES: Array<{ key: keyof SensitivityConfig["weights"]; label: string; subKey: keyof EngineSubScores }> = [
+const ENGINES: Array<{
+  key: keyof SensitivityConfig["weights"];
+  label: string;
+  subKey: keyof EngineSubScores;
+}> = [
   { key: "engine1", label: "Engine 1", subKey: "engine1" },
   { key: "engine2", label: "Engine 2", subKey: "engine2" },
   { key: "engine3", label: "Engine 3", subKey: "engine3" },
@@ -38,14 +48,18 @@ const QUERY_KEYS = {
   avri: "wAVRI",
 } as const;
 
-const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+const clamp = (n: number, lo: number, hi: number) =>
+  Math.max(lo, Math.min(hi, n));
 
 function roundTo(n: number, places: number) {
   const f = 10 ** places;
   return Math.round(n * f) / f;
 }
 
-export function computeAdjustedScore(config: SensitivityConfig, subScores: EngineSubScores): number {
+export function computeAdjustedScore(
+  config: SensitivityConfig,
+  subScores: EngineSubScores,
+): number {
   const sens = clamp(config.sensitivity, 0, 1);
   let weightedSum = 0;
   let weightSum = 0;
@@ -61,7 +75,9 @@ export function computeAdjustedScore(config: SensitivityConfig, subScores: Engin
   return clamp(Math.round(2 * sens * avg), 0, 100);
 }
 
-export function parseConfigFromParams(params: URLSearchParams): SensitivityConfig {
+export function parseConfigFromParams(
+  params: URLSearchParams,
+): SensitivityConfig {
   const readNum = (key: string, fallback: number, lo: number, hi: number) => {
     const raw = params.get(key);
     if (raw == null || raw === "") return fallback;
@@ -70,7 +86,12 @@ export function parseConfigFromParams(params: URLSearchParams): SensitivityConfi
     return clamp(n, lo, hi);
   };
   return {
-    sensitivity: readNum(QUERY_KEYS.sensitivity, BALANCED_CONFIG.sensitivity, 0, 1),
+    sensitivity: readNum(
+      QUERY_KEYS.sensitivity,
+      BALANCED_CONFIG.sensitivity,
+      0,
+      1,
+    ),
     weights: {
       engine1: readNum(QUERY_KEYS.engine1, 1, 0, 2),
       engine2: readNum(QUERY_KEYS.engine2, 1, 0, 2),
@@ -143,7 +164,11 @@ interface AdvancedSensitivityPanelProps {
   className?: string;
 }
 
-export function AdvancedSensitivityPanel({ subScores, canonicalScore, className }: AdvancedSensitivityPanelProps) {
+export function AdvancedSensitivityPanel({
+  subScores,
+  canonicalScore,
+  className,
+}: AdvancedSensitivityPanelProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialConfig = useMemo(() => parseConfigFromParams(searchParams), []);
   const [open, setOpen] = useState(() => !isBalanced(initialConfig));
@@ -151,37 +176,55 @@ export function AdvancedSensitivityPanel({ subScores, canonicalScore, className 
   const { toast } = useToast();
 
   useEffect(() => {
-    setSearchParams((prev) => applyConfigToParams(prev, config), { replace: true });
+    setSearchParams((prev) => applyConfigToParams(prev, config), {
+      replace: true,
+    });
   }, [config, setSearchParams]);
 
   const adjusted = computeAdjustedScore(config, subScores);
   const delta = adjusted - canonicalScore;
   const balanced = isBalanced(config);
 
-  const updateWeight = (key: keyof SensitivityConfig["weights"], value: number) => {
-    setConfig((prev) => ({ ...prev, weights: { ...prev.weights, [key]: clamp(value, 0, 2) } }));
+  const updateWeight = (
+    key: keyof SensitivityConfig["weights"],
+    value: number,
+  ) => {
+    setConfig((prev) => ({
+      ...prev,
+      weights: { ...prev.weights, [key]: clamp(value, 0, 2) },
+    }));
   };
 
   const handleReset = () => {
-    setConfig({ sensitivity: BALANCED_CONFIG.sensitivity, weights: { ...BALANCED_CONFIG.weights } });
+    setConfig({
+      sensitivity: BALANCED_CONFIG.sensitivity,
+      weights: { ...BALANCED_CONFIG.weights },
+    });
   };
 
   const handleShare = async () => {
     const url = typeof window !== "undefined" ? window.location.href : "";
     const ok = await copyTextToClipboard(url);
     if (ok) {
-      toast({ title: "Link copied", description: "Share this URL to reproduce the config." });
+      toast({
+        title: "Link copied",
+        description: "Share this URL to reproduce the config.",
+      });
     } else {
       toast({
         title: "Copy failed",
-        description: "Clipboard unavailable. Copy the URL from the address bar instead.",
+        description:
+          "Clipboard unavailable. Copy the URL from the address bar instead.",
         variant: "destructive",
       });
     }
   };
 
   return (
-    <Card className={cn("glass-card rounded-xl", className)} data-testid="advanced-sensitivity-panel">
+    <Card
+      className={cn("glass-card rounded-xl", className)}
+      data-testid="advanced-sensitivity-panel"
+    >
       <CardHeader
         className="pb-2 cursor-pointer select-none"
         onClick={() => setOpen((v) => !v)}
@@ -199,7 +242,11 @@ export function AdvancedSensitivityPanel({ subScores, canonicalScore, className 
             </span>
           )}
           <span className="ml-auto">
-            {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+            {open ? (
+              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            )}
           </span>
         </CardTitle>
       </CardHeader>
@@ -207,10 +254,16 @@ export function AdvancedSensitivityPanel({ subScores, canonicalScore, className 
         <CardContent className="space-y-4 pt-0">
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <label htmlFor="sensitivity-slider" className="text-muted-foreground">
+              <label
+                htmlFor="sensitivity-slider"
+                className="text-muted-foreground"
+              >
                 Sensitivity
               </label>
-              <span className="font-mono font-bold text-primary" data-testid="sensitivity-value">
+              <span
+                className="font-mono font-bold text-primary"
+                data-testid="sensitivity-value"
+              >
                 {roundTo(config.sensitivity, 2).toFixed(2)}
               </span>
             </div>
@@ -223,7 +276,10 @@ export function AdvancedSensitivityPanel({ subScores, canonicalScore, className 
               step={0.01}
               value={config.sensitivity}
               onChange={(e) =>
-                setConfig((prev) => ({ ...prev, sensitivity: clamp(Number(e.target.value), 0, 1) }))
+                setConfig((prev) => ({
+                  ...prev,
+                  sensitivity: clamp(Number(e.target.value), 0, 1),
+                }))
               }
               className="w-full accent-primary"
               aria-label="Sensitivity"
@@ -239,7 +295,10 @@ export function AdvancedSensitivityPanel({ subScores, canonicalScore, className 
             {ENGINES.map((e) => (
               <div key={e.key} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <label htmlFor={`weight-${e.key}`} className="text-muted-foreground">
+                  <label
+                    htmlFor={`weight-${e.key}`}
+                    className="text-muted-foreground"
+                  >
                     {e.label} weight
                   </label>
                   <span
@@ -257,7 +316,9 @@ export function AdvancedSensitivityPanel({ subScores, canonicalScore, className 
                   max={2}
                   step={0.05}
                   value={config.weights[e.key]}
-                  onChange={(ev) => updateWeight(e.key, Number(ev.target.value))}
+                  onChange={(ev) =>
+                    updateWeight(e.key, Number(ev.target.value))
+                  }
                   className="w-full accent-primary"
                   aria-label={`${e.label} weight`}
                 />
@@ -268,7 +329,9 @@ export function AdvancedSensitivityPanel({ subScores, canonicalScore, className 
           <div className="flex items-center justify-between rounded-lg bg-muted/20 px-3 py-2">
             <div className="text-xs text-muted-foreground">
               Adjusted score
-              <span className="ml-2 text-[10px] font-mono">(canonical {canonicalScore})</span>
+              <span className="ml-2 text-[10px] font-mono">
+                (canonical {canonicalScore})
+              </span>
             </div>
             <div className="flex items-baseline gap-2">
               <span
@@ -280,7 +343,11 @@ export function AdvancedSensitivityPanel({ subScores, canonicalScore, className 
               <span
                 className={cn(
                   "text-[10px] font-mono",
-                  delta > 0 ? "text-destructive" : delta < 0 ? "text-green-400" : "text-muted-foreground",
+                  delta > 0
+                    ? "text-destructive"
+                    : delta < 0
+                      ? "text-green-400"
+                      : "text-muted-foreground",
                 )}
                 data-testid="adjusted-score-delta"
               >

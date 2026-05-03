@@ -10,9 +10,9 @@ import http from "node:http";
 import path from "node:path";
 import os from "node:os";
 import { promises as fs } from "node:fs";
-import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { AddressInfo } from "node:net";
 
 const TEST_TOKEN = "rename-route-test-token";
 
@@ -57,7 +57,11 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   delete process.env.CALIBRATION_TOKEN;
   delete process.env.HANDWAVY_PHRASES_PATH;
-  try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  try {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
 });
 
 beforeEach(async () => {
@@ -71,9 +75,14 @@ interface HttpResponse<T> {
   body: T;
 }
 
-function request<T>(method: string, urlPath: string, body?: unknown): Promise<HttpResponse<T>> {
+function request<T>(
+  method: string,
+  urlPath: string,
+  body?: unknown,
+): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const req = http.request(
       {
@@ -82,7 +91,12 @@ function request<T>(method: string, urlPath: string, body?: unknown): Promise<Ht
         port: url.port,
         path: `${url.pathname}${url.search}`,
         headers: {
-          ...(data ? { "Content-Type": "application/json", "Content-Length": String(data.length) } : {}),
+          ...(data
+            ? {
+                "Content-Type": "application/json",
+                "Content-Length": String(data.length),
+              }
+            : {}),
           "X-Calibration-Token": TEST_TOKEN,
         },
       },
@@ -153,11 +167,15 @@ describe("PATCH /feedback/calibration/handwavy-phrases — Task #247 newPhrase r
     );
     expect(add.status).toBe(201);
 
-    const r = await request<EditResponse>("PATCH", "/feedback/calibration/handwavy-phrases", {
-      phrase: "rename source phrase",
-      newPhrase: "  Rename   TARGET   Phrase  ",
-      reviewer: "bob@team.com",
-    });
+    const r = await request<EditResponse>(
+      "PATCH",
+      "/feedback/calibration/handwavy-phrases",
+      {
+        phrase: "rename source phrase",
+        newPhrase: "  Rename   TARGET   Phrase  ",
+        reviewer: "bob@team.com",
+      },
+    );
     expect(r.status).toBe(200);
     expect(r.body.edited).toBe(true);
     // Response identity flips to the normalized new phrase so the UI can
@@ -184,7 +202,9 @@ describe("PATCH /feedback/calibration/handwavy-phrases — Task #247 newPhrase r
       "GET",
       "/feedback/calibration/handwavy-phrases",
     );
-    const found = list.body.phrases.find((m) => m.phrase === "rename target phrase");
+    const found = list.body.phrases.find(
+      (m) => m.phrase === "rename target phrase",
+    );
     expect(found?.addedBy).toBe("alice@team.com");
     expect(found?.edits?.[0].phrase).toEqual({
       from: "rename source phrase",
@@ -197,10 +217,14 @@ describe("PATCH /feedback/calibration/handwavy-phrases — Task #247 newPhrase r
       phrase: "noop rename marker",
       category: "absence",
     });
-    const r = await request<EditResponse>("PATCH", "/feedback/calibration/handwavy-phrases", {
-      phrase: "noop rename marker",
-      newPhrase: "  Noop   Rename   MARKER  ",
-    });
+    const r = await request<EditResponse>(
+      "PATCH",
+      "/feedback/calibration/handwavy-phrases",
+      {
+        phrase: "noop rename marker",
+        newPhrase: "  Noop   Rename   MARKER  ",
+      },
+    );
     expect(r.status).toBe(200);
     expect(r.body.edited).toBe(false);
     // Identity is still the original normalized form, no audit entry was
@@ -220,10 +244,14 @@ describe("PATCH /feedback/calibration/handwavy-phrases — Task #247 newPhrase r
       phrase: "collision target",
       category: "hedging",
     });
-    const r = await request<{ error: string }>("PATCH", "/feedback/calibration/handwavy-phrases", {
-      phrase: "collision source",
-      newPhrase: "Collision   TARGET",
-    });
+    const r = await request<{ error: string }>(
+      "PATCH",
+      "/feedback/calibration/handwavy-phrases",
+      {
+        phrase: "collision source",
+        newPhrase: "Collision   TARGET",
+      },
+    );
     expect(r.status).toBe(409);
     expect(r.body.error).toMatch(/already uses that normalized form/i);
 
@@ -242,10 +270,14 @@ describe("PATCH /feedback/calibration/handwavy-phrases — Task #247 newPhrase r
       phrase: "short rename target",
       category: "absence",
     });
-    const r = await request<{ error: string }>("PATCH", "/feedback/calibration/handwavy-phrases", {
-      phrase: "short rename target",
-      newPhrase: "ab",
-    });
+    const r = await request<{ error: string }>(
+      "PATCH",
+      "/feedback/calibration/handwavy-phrases",
+      {
+        phrase: "short rename target",
+        newPhrase: "ab",
+      },
+    );
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/at least 3 characters/i);
   });
@@ -255,36 +287,52 @@ describe("PATCH /feedback/calibration/handwavy-phrases — Task #247 newPhrase r
       phrase: "long rename target",
       category: "absence",
     });
-    const r = await request<{ error: string }>("PATCH", "/feedback/calibration/handwavy-phrases", {
-      phrase: "long rename target",
-      newPhrase: "x".repeat(201),
-    });
+    const r = await request<{ error: string }>(
+      "PATCH",
+      "/feedback/calibration/handwavy-phrases",
+      {
+        phrase: "long rename target",
+        newPhrase: "x".repeat(201),
+      },
+    );
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/at most 200 characters/i);
   });
 
   it("rejects an empty-string newPhrase with 400 (route-level guard before the engine)", async () => {
-    const r = await request<{ error: string }>("PATCH", "/feedback/calibration/handwavy-phrases", {
-      phrase: "seed phrase one",
-      newPhrase: "   ",
-    });
+    const r = await request<{ error: string }>(
+      "PATCH",
+      "/feedback/calibration/handwavy-phrases",
+      {
+        phrase: "seed phrase one",
+        newPhrase: "   ",
+      },
+    );
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/newPhrase/);
   });
 
   it("rejects a non-string newPhrase with 400", async () => {
-    const r = await request<{ error: string }>("PATCH", "/feedback/calibration/handwavy-phrases", {
-      phrase: "seed phrase one",
-      newPhrase: 123,
-    });
+    const r = await request<{ error: string }>(
+      "PATCH",
+      "/feedback/calibration/handwavy-phrases",
+      {
+        phrase: "seed phrase one",
+        newPhrase: 123,
+      },
+    );
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/newPhrase/);
   });
 
   it("rejects a body with no category, rationale, OR newPhrase with 400", async () => {
-    const r = await request<{ error: string }>("PATCH", "/feedback/calibration/handwavy-phrases", {
-      phrase: "seed phrase one",
-    });
+    const r = await request<{ error: string }>(
+      "PATCH",
+      "/feedback/calibration/handwavy-phrases",
+      {
+        phrase: "seed phrase one",
+      },
+    );
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/category.*rationale.*newPhrase/i);
   });
@@ -300,21 +348,29 @@ describe("PATCH /feedback/calibration/handwavy-phrases — Task #247 newPhrase r
   // from/to pairs, or apply them across multiple entries without any CI
   // signal. The two cases below lock the wire shape down.
   it("applies a combined rename + category + rationale change in a single PATCH and records all three from/to pairs in one audit entry", async () => {
-    const add = await request<{ added: boolean }>("POST", "/feedback/calibration/handwavy-phrases", {
-      phrase: "combined edit source",
-      category: "hedging",
-      reviewer: "alice@team.com",
-      rationale: "original reason for combined edit",
-    });
+    const add = await request<{ added: boolean }>(
+      "POST",
+      "/feedback/calibration/handwavy-phrases",
+      {
+        phrase: "combined edit source",
+        category: "hedging",
+        reviewer: "alice@team.com",
+        rationale: "original reason for combined edit",
+      },
+    );
     expect(add.status).toBe(201);
 
-    const r = await request<EditResponse>("PATCH", "/feedback/calibration/handwavy-phrases", {
-      phrase: "combined edit source",
-      newPhrase: "  Combined   EDIT   Target  ",
-      category: "buzzword",
-      rationale: "updated reason after combined edit",
-      reviewer: "bob@team.com",
-    });
+    const r = await request<EditResponse>(
+      "PATCH",
+      "/feedback/calibration/handwavy-phrases",
+      {
+        phrase: "combined edit source",
+        newPhrase: "  Combined   EDIT   Target  ",
+        category: "buzzword",
+        rationale: "updated reason after combined edit",
+        reviewer: "bob@team.com",
+      },
+    );
     expect(r.status).toBe(200);
     expect(r.body.edited).toBe(true);
     // New identity, new category, new rationale all reflected in the
@@ -343,7 +399,9 @@ describe("PATCH /feedback/calibration/handwavy-phrases — Task #247 newPhrase r
     // The marker's own edits log mirrors the response and contains
     // exactly one entry — proving the three changes were collapsed
     // into a single audit row.
-    const target = r.body.phrases.find((m) => m.phrase === "combined edit target");
+    const target = r.body.phrases.find(
+      (m) => m.phrase === "combined edit target",
+    );
     expect(target?.edits ?? []).toHaveLength(1);
     expect(target?.edits?.[0].phrase).toEqual({
       from: "combined edit source",
@@ -369,13 +427,17 @@ describe("PATCH /feedback/calibration/handwavy-phrases — Task #247 newPhrase r
       rationale: "starting rationale",
     });
 
-    const r = await request<EditResponse>("PATCH", "/feedback/calibration/handwavy-phrases", {
-      phrase: "noop combined marker",
-      newPhrase: "  Noop   Combined   MARKER  ",
-      category: "buzzword",
-      rationale: "rationale after no-op rename",
-      reviewer: "carol@team.com",
-    });
+    const r = await request<EditResponse>(
+      "PATCH",
+      "/feedback/calibration/handwavy-phrases",
+      {
+        phrase: "noop combined marker",
+        newPhrase: "  Noop   Combined   MARKER  ",
+        category: "buzzword",
+        rationale: "rationale after no-op rename",
+        reviewer: "carol@team.com",
+      },
+    );
     expect(r.status).toBe(200);
     expect(r.body.edited).toBe(true);
     // Identity is unchanged because the rename normalized to the same
@@ -399,7 +461,9 @@ describe("PATCH /feedback/calibration/handwavy-phrases — Task #247 newPhrase r
     });
     // Exactly one new audit row was appended — the no-op rename did
     // not produce a second empty entry.
-    const marker = r.body.phrases.find((m) => m.phrase === "noop combined marker");
+    const marker = r.body.phrases.find(
+      (m) => m.phrase === "noop combined marker",
+    );
     expect(marker?.edits ?? []).toHaveLength(1);
   });
 });

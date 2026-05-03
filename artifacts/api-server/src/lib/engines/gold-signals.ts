@@ -124,7 +124,8 @@ function detectSqlInjectionPayload(
   return {
     id: "sql_injection_payload",
     strength: "HIGH",
-    explanation: "SQL injection payload bytes present (UNION SELECT / OR 1=1 / SLEEP / BENCHMARK / xp_cmdshell / etc.).",
+    explanation:
+      "SQL injection payload bytes present (UNION SELECT / OR 1=1 / SLEEP / BENCHMARK / xp_cmdshell / etc.).",
   };
 }
 
@@ -145,7 +146,8 @@ function detectCommandInjectionPayload(
   return {
     id: "command_injection_payload",
     strength: "HIGH",
-    explanation: "Command/JNDI injection payload bytes present (e.g. ;cat /etc/passwd, $(...), ${jndi:ldap://...}).",
+    explanation:
+      "Command/JNDI injection payload bytes present (e.g. ;cat /etc/passwd, $(...), ${jndi:ldap://...}).",
   };
 }
 
@@ -166,7 +168,8 @@ function detectXssPayload(
   return {
     id: "xss_payload",
     strength: "HIGH",
-    explanation: "Concrete XSS payload with active sink (alert/cookie/fetch/onerror/etc.).",
+    explanation:
+      "Concrete XSS payload with active sink (alert/cookie/fetch/onerror/etc.).",
   };
 }
 
@@ -185,7 +188,8 @@ function detectSsrfMetadataTarget(text: string): AdditionalGoldSignal | null {
   return {
     id: "ssrf_metadata_target",
     strength: "HIGH",
-    explanation: "SSRF target: cloud-metadata URL with concrete path (e.g. /latest/meta-data/iam/...).",
+    explanation:
+      "SSRF target: cloud-metadata URL with concrete path (e.g. /latest/meta-data/iam/...).",
   };
 }
 
@@ -208,7 +212,8 @@ function detectPathTraversalPayload(
   return {
     id: "path_traversal_payload",
     strength: "HIGH",
-    explanation: "Path traversal payload reaching a sensitive file (e.g. ../../etc/passwd).",
+    explanation:
+      "Path traversal payload reaching a sensitive file (e.g. ../../etc/passwd).",
   };
 }
 
@@ -250,12 +255,15 @@ function detectXxeExternalEntity(text: string): AdditionalGoldSignal | null {
 const DESERIALIZATION_GADGET_RE =
   /\bysoserial\b[^\n]*\bCommonsCollections\d+|\bmarshalsec\b[^\n]*\b(?:JSON|YAML|XML)\b|\bpickle\.loads?\s*\(\s*b['"]\\x|\byaml\.unsafe_load\s*\(|\bnew\s+ObjectInputStream\s*\([\s\S]{0,80}?\.readObject\s*\(|\bnode-serialize\b[\s\S]{0,80}?unserialize\s*\(|\bfastjson\b[\s\S]{0,80}?@type/i;
 
-function detectDeserializationGadget(text: string): AdditionalGoldSignal | null {
+function detectDeserializationGadget(
+  text: string,
+): AdditionalGoldSignal | null {
   if (!DESERIALIZATION_GADGET_RE.test(text)) return null;
   return {
     id: "deserialization_gadget",
     strength: "HIGH",
-    explanation: "Concrete deserialization gadget chain or unsafe-load sink invocation present.",
+    explanation:
+      "Concrete deserialization gadget chain or unsafe-load sink invocation present.",
   };
 }
 
@@ -290,7 +298,8 @@ function detectCryptoMisuse(text: string): AdditionalGoldSignal | null {
   return {
     id: "crypto_misuse",
     strength: "MEDIUM",
-    explanation: "Concrete crypto misuse pattern (static IV/nonce, hardcoded key, ECB mode, MD5/SHA1, DES/3DES/RC4).",
+    explanation:
+      "Concrete crypto misuse pattern (static IV/nonce, hardcoded key, ECB mode, MD5/SHA1, DES/3DES/RC4).",
   };
 }
 
@@ -305,9 +314,11 @@ function detectCryptoMisuse(text: string): AdditionalGoldSignal | null {
 //   - paren-form:   access(path), stat(path)
 //   - command-form: stat /path, openat AT_FDCWD /path
 const TOCTOU_CHECK_RE =
-  /\b(?:access|stat|lstat|fstatat)\s*(?:\([^)\n]+\)|\s+(?:[\/\$\w][^\n;()]{0,80}))/.source;
+  /\b(?:access|stat|lstat|fstatat)\s*(?:\([^)\n]+\)|\s+(?:[\/\$\w][^\n;()]{0,80}))/
+    .source;
 const TOCTOU_USE_RE =
-  /\b(?:open|fopen|openat|symlink|creat)\s*(?:\(|\s+(?:[\/\$\w]|AT_FDCWD\b))/.source;
+  /\b(?:open|fopen|openat|symlink|creat)\s*(?:\(|\s+(?:[\/\$\w]|AT_FDCWD\b))/
+    .source;
 const FILESYSTEM_TOCTOU_RE = new RegExp(
   `${TOCTOU_CHECK_RE}[\\s\\S]{0,200}${TOCTOU_USE_RE}`,
   "i",
@@ -325,7 +336,8 @@ function detectFilesystemToctou(text: string): AdditionalGoldSignal | null {
   return {
     id: "filesystem_toctou",
     strength: "MEDIUM",
-    explanation: "Filesystem TOCTOU pattern: stat()/access() followed by open()/symlink() on related paths.",
+    explanation:
+      "Filesystem TOCTOU pattern: stat()/access() followed by open()/symlink() on related paths.",
   };
 }
 
@@ -466,7 +478,9 @@ export const GOLD_SIGNAL_BONUS_CAP = 12;
  * return the indicators that fired (after their per-category fabrication
  * validators). Caller emits these as TriggeredIndicator entries with
  * `signal: "GOLD_SIGNAL"`. */
-export function detectAdditionalGoldSignals(text: string): AdditionalGoldSignal[] {
+export function detectAdditionalGoldSignals(
+  text: string,
+): AdditionalGoldSignal[] {
   const stripped = strippedText(text);
   const results: AdditionalGoldSignal[] = [];
 

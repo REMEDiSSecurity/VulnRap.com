@@ -127,7 +127,10 @@ export interface BackfillStats {
 // Throwing instead of process.exit keeps parseArgs unit-testable; the
 // script entry catches CliExit and translates it to a real exit code.
 export class CliExit extends Error {
-  constructor(public readonly code: number, message: string) {
+  constructor(
+    public readonly code: number,
+    message: string,
+  ) {
     super(message);
     this.name = "CliExit";
   }
@@ -192,7 +195,9 @@ export function appendRescoreHistory(
   entry: BackfillRescoreAuditEntry,
 ): BackfillRescoreAuditEntry[] {
   const prior = (priorBlob ?? {}) as { rescoreHistory?: unknown };
-  const existing = Array.isArray(prior.rescoreHistory) ? prior.rescoreHistory : [];
+  const existing = Array.isArray(prior.rescoreHistory)
+    ? prior.rescoreHistory
+    : [];
   const cleaned = existing.filter((e): e is BackfillRescoreAuditEntry => {
     if (!e || typeof e !== "object") return false;
     const r = e as Record<string, unknown>;
@@ -232,7 +237,10 @@ export function chooseConcurrencyGuard(
   if (priorCorrelationId !== null) {
     return { kind: "matchCorrelationId", correlationId: priorCorrelationId };
   }
-  return { kind: "isNullCorrelationAndScore", compositeScore: priorCompositeScore };
+  return {
+    kind: "isNullCorrelationAndScore",
+    compositeScore: priorCompositeScore,
+  };
 }
 
 // SQL predicates that scope the rescore-mode SELECT in `backfill()` to the
@@ -261,7 +269,9 @@ export function buildRescoreCandidateFilters(opts: {
     WHERE e->>'type' LIKE 'hallucination_%'
   )`;
   return [
-    opts.rescore ? sql`true` : (isNull(reportsTable.vulnrapCompositeScore) as SQL),
+    opts.rescore
+      ? sql`true`
+      : (isNull(reportsTable.vulnrapCompositeScore) as SQL),
     opts.onlyWithCachedHallucination ? hallucinationFilter : sql`true`,
   ];
 }
@@ -269,7 +279,10 @@ export function buildRescoreCandidateFilters(opts: {
 function parsePositiveInt(raw: string, flag: string): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n <= 0) {
-    throw new CliExit(2, `[backfill] ${flag} must be a positive integer, got: ${raw}`);
+    throw new CliExit(
+      2,
+      `[backfill] ${flag} must be a positive integer, got: ${raw}`,
+    );
   }
   return n;
 }
@@ -286,10 +299,16 @@ export function parseArgs(argv: string[]): CliOpts {
   for (const arg of argv.slice(2)) {
     if (arg === "--" || arg === "") continue;
     if (arg === "--dry-run") opts.dryRun = true;
-    else if (arg.startsWith("--limit=")) opts.limit = parsePositiveInt(arg.slice("--limit=".length), "--limit");
-    else if (arg.startsWith("--batch-size=")) opts.batchSize = parsePositiveInt(arg.slice("--batch-size=".length), "--batch-size");
+    else if (arg.startsWith("--limit="))
+      opts.limit = parsePositiveInt(arg.slice("--limit=".length), "--limit");
+    else if (arg.startsWith("--batch-size="))
+      opts.batchSize = parsePositiveInt(
+        arg.slice("--batch-size=".length),
+        "--batch-size",
+      );
     else if (arg === "--rescore") opts.rescore = true;
-    else if (arg === "--only-with-cached-hallucination") opts.onlyWithCachedHallucination = true;
+    else if (arg === "--only-with-cached-hallucination")
+      opts.onlyWithCachedHallucination = true;
     else if (arg.startsWith("--max-runtime-ms=")) {
       opts.maxRuntimeMs = parsePositiveInt(
         arg.slice("--max-runtime-ms=".length),

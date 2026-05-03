@@ -8,9 +8,16 @@
 process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
 
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import http from "node:http";
-import type { AddressInfo } from "node:net";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  beforeAll,
+  afterAll,
+} from "vitest";
 import {
   createInMemoryDb,
   drizzleOrmOverrides,
@@ -23,6 +30,7 @@ import {
   type BaseDbState,
   type FakeRow,
 } from "./__test-fixtures__/in-memory-db";
+import type { AddressInfo } from "node:net";
 
 // Diagnostics-specific state extends the shared base with `analysisTraces`
 // rows + an auto-incrementing trace id, plus two test-side toggles:
@@ -215,7 +223,7 @@ describe("GET /api/reports/:id/diagnostics", () => {
   it("returns 404 when the report does not exist", async () => {
     const res = await fetch(`${baseUrl}/api/reports/9999/diagnostics`);
     expect(res.status).toBe(404);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.error).toMatch(/not found/i);
   });
 
@@ -226,18 +234,26 @@ describe("GET /api/reports/:id/diagnostics", () => {
       vulnrapOverridesApplied: ["TEST_OVERRIDE"],
       vulnrapCorrelationId: "abc-123",
       vulnrapDurationMs: 42,
-      vulnrapEngineResults: { engines: [], compositeBreakdown: {}, warnings: [], engineCount: 3 },
+      vulnrapEngineResults: {
+        engines: [],
+        compositeBreakdown: {},
+        warnings: [],
+        engineCount: 3,
+      },
     });
     seedTrace({
       correlationId: "abc-123",
       reportId: report.id as number,
       totalDurationMs: 42,
-      trace: { correlationId: "abc-123", stages: [{ stage: "extract_signals", durationMs: 5 }] },
+      trace: {
+        correlationId: "abc-123",
+        stages: [{ stage: "extract_signals", durationMs: 5 }],
+      },
     });
 
     const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.reportId).toBe(report.id);
     expect(body.correlationId).toBe("abc-123");
     expect(body.composite).toEqual({
@@ -273,7 +289,7 @@ describe("GET /api/reports/:id/diagnostics", () => {
 
     const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.correlationId).toBeNull();
     expect(body.trace).toEqual({ tag: "newer" });
   });
@@ -308,7 +324,7 @@ describe("GET /api/reports/:id/diagnostics", () => {
 
     const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     const e2 = body.engines.engines.find(
       (e: { engine: string }) => e.engine === "Technical Substance Analyzer",
     );
@@ -345,7 +361,7 @@ describe("GET /api/reports/:id/diagnostics", () => {
 
     const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`);
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.correlationId).toBe("match-me");
     expect(body.trace).toEqual({ tag: "matching-older" });
   });
@@ -357,7 +373,7 @@ describe("POST /api/reports — VULNRAP_USE_NEW_COMPOSITE flag and trace persist
 
     const res = await postReport({ rawText: SAMPLE_REPORT_TEXT });
     expect(res.status).toBe(201);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
 
     expect(body.id).toBeTypeOf("number");
     expect(body.vulnrap).toBeNull();
@@ -394,7 +410,7 @@ describe("POST /api/reports — VULNRAP_USE_NEW_COMPOSITE flag and trace persist
 
     const res = await postReport({ rawText: SAMPLE_REPORT_TEXT });
     expect(res.status).toBe(201);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.id).toBeTypeOf("number");
 
     // Report persisted with composite + correlation id, but trace row absent.

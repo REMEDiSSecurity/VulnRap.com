@@ -120,8 +120,6 @@ describe("ReportSubmitCooldownBanner", () => {
         })}
       />,
     );
-    expect(
-      screen.getByText(/per-IP/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/per-IP/i)).toBeInTheDocument();
   });
 });

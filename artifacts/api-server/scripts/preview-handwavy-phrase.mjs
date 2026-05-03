@@ -44,7 +44,13 @@ function color(name, str) {
 }
 
 function parseArgs(argv) {
-  const args = { phrase: null, category: "absence", apiUrl: null, token: null, yes: false };
+  const args = {
+    phrase: null,
+    category: "absence",
+    apiUrl: null,
+    token: null,
+    yes: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--phrase" || a === "-p") args.phrase = argv[++i];
@@ -95,7 +101,11 @@ async function postJson(url, body, token) {
   let payload = null;
   const text = await res.text();
   if (text) {
-    try { payload = JSON.parse(text); } catch { payload = text; }
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = text;
+    }
   }
   return { status: res.status, ok: res.ok, payload };
 }
@@ -116,7 +126,11 @@ async function getJson(url, token) {
   let payload = null;
   const text = await res.text();
   if (text) {
-    try { payload = JSON.parse(text); } catch { payload = text; }
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = text;
+    }
   }
   return { status: res.status, ok: res.ok, payload };
 }
@@ -138,10 +152,16 @@ function detectLocalCuratedOverlaps(rawCandidate, curated) {
     if (!existing) continue;
     let relation = null;
     if (existing === normalized) relation = "equal";
-    else if (existing.includes(normalized)) relation = "existing-contains-candidate";
-    else if (normalized.includes(existing)) relation = "candidate-contains-existing";
+    else if (existing.includes(normalized))
+      relation = "existing-contains-candidate";
+    else if (normalized.includes(existing))
+      relation = "candidate-contains-existing";
     if (relation) {
-      matches.push({ phrase: existing, category: m.category ?? "absence", relation });
+      matches.push({
+        phrase: existing,
+        category: m.category ?? "absence",
+        relation,
+      });
     }
   }
   return { total: matches.length, matches };
@@ -168,10 +188,12 @@ function detectLocalHistoryOverlaps(rawCandidate, history) {
   if (normalized.length < 3) return { total: 0, matches };
   const all = [];
   for (const h of history || []) {
-    if (!h || typeof h !== "object" || typeof h.removedAt !== "string") continue;
+    if (!h || typeof h !== "object" || typeof h.removedAt !== "string")
+      continue;
     if (Array.isArray(h.phrases) && h.phrases.length > 0) {
       for (const p of h.phrases) {
-        if (!p || typeof p.phrase !== "string" || p.reinstated === true) continue;
+        if (!p || typeof p.phrase !== "string" || p.reinstated === true)
+          continue;
         const relation = tryHistoryOverlap(normalized, p.phrase);
         if (!relation) continue;
         all.push({
@@ -187,7 +209,10 @@ function detectLocalHistoryOverlaps(rawCandidate, history) {
       continue;
     }
     if (h.reinstated === true) continue;
-    const relation = tryHistoryOverlap(normalized, typeof h.phrase === "string" ? h.phrase : "");
+    const relation = tryHistoryOverlap(
+      normalized,
+      typeof h.phrase === "string" ? h.phrase : "",
+    );
     if (!relation) continue;
     all.push({
       phrase: h.phrase,
@@ -221,39 +246,67 @@ function renderPreview(phrase, category, m) {
   const lines = [];
   lines.push("");
   lines.push(color("bold", `Corpus impact for "${phrase}" (${category})`));
-  lines.push(color("dim", `Evaluated against ${m.corpusSize} curated benchmark fixtures.`));
+  lines.push(
+    color(
+      "dim",
+      `Evaluated against ${m.corpusSize} curated benchmark fixtures.`,
+    ),
+  );
   lines.push("");
   // Per-tier table — GREEN/YELLOW are false positives, RED tiers are the
   // intended catches. Match the UI's color semantics.
   const rows = [
-    { label: "GREEN  (T1 legit)",       count: m.byTier.t1Legit,       negative: true },
-    { label: "YELLOW (T2 borderline)",  count: m.byTier.t2Borderline,  negative: true },
-    { label: "RED    (T3 slop)",        count: m.byTier.t3Slop,        negative: false },
-    { label: "RED    (T4 hallucinated)",count: m.byTier.t4Hallucinated,negative: false },
+    { label: "GREEN  (T1 legit)", count: m.byTier.t1Legit, negative: true },
+    {
+      label: "YELLOW (T2 borderline)",
+      count: m.byTier.t2Borderline,
+      negative: true,
+    },
+    { label: "RED    (T3 slop)", count: m.byTier.t3Slop, negative: false },
+    {
+      label: "RED    (T4 hallucinated)",
+      count: m.byTier.t4Hallucinated,
+      negative: false,
+    },
   ];
   for (const r of rows) {
     const c = r.negative
-      ? (r.count > 0 ? "red" : "dim")
-      : (r.count > 0 ? "green" : "dim");
-    lines.push(`  ${color(c, r.label.padEnd(28))} ${color(c, String(r.count).padStart(3))}`);
+      ? r.count > 0
+        ? "red"
+        : "dim"
+      : r.count > 0
+        ? "green"
+        : "dim";
+    lines.push(
+      `  ${color(c, r.label.padEnd(28))} ${color(c, String(r.count).padStart(3))}`,
+    );
   }
   lines.push("");
   lines.push(`  Total matches: ${color("bold", String(m.total))}`);
-  lines.push(`  False positives (GREEN+YELLOW): ${
-    m.falsePositives > 0
-      ? color("red", String(m.falsePositives))
-      : color("green", "0")
-  }`);
+  lines.push(
+    `  False positives (GREEN+YELLOW): ${
+      m.falsePositives > 0
+        ? color("red", String(m.falsePositives))
+        : color("green", "0")
+    }`,
+  );
   if (m.warning) {
     lines.push("");
     lines.push(color("red", `  ⚠  ${m.warning}`));
   } else if (m.total === 0) {
     lines.push("");
-    lines.push(color("yellow", "  Note: this phrase did not match any fixture in the curated corpus."));
+    lines.push(
+      color(
+        "yellow",
+        "  Note: this phrase did not match any fixture in the curated corpus.",
+      ),
+    );
   }
   if (m.sampleMatches && m.sampleMatches.length > 0) {
     lines.push("");
-    lines.push(color("bold", `  Sample matched fixtures (${m.sampleMatches.length}):`));
+    lines.push(
+      color("bold", `  Sample matched fixtures (${m.sampleMatches.length}):`),
+    );
     for (const s of m.sampleMatches) {
       lines.push(`    - ${s.id}  ${color("dim", `[${s.tier}]`)}`);
     }
@@ -285,7 +338,12 @@ function renderOverlaps(overlaps) {
   }
   const lines = [];
   const noun = overlaps.total === 1 ? "entry" : "entries";
-  lines.push(color("red", `  ⚠  Overlaps with ${overlaps.total} existing curated ${noun} — adding may be redundant:`));
+  lines.push(
+    color(
+      "red",
+      `  ⚠  Overlaps with ${overlaps.total} existing curated ${noun} — adding may be redundant:`,
+    ),
+  );
   for (const o of overlaps.matches) {
     const rel = describeOverlapRelation(o.relation);
     lines.push(
@@ -308,17 +366,30 @@ async function confirm(question) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args.help) { printHelp(); process.exit(0); }
-  if (!args.phrase || typeof args.phrase !== "string" || args.phrase.trim().length === 0) {
+  if (args.help) {
+    printHelp();
+    process.exit(0);
+  }
+  if (
+    !args.phrase ||
+    typeof args.phrase !== "string" ||
+    args.phrase.trim().length === 0
+  ) {
     console.error("Error: --phrase is required.");
     printHelp();
     process.exit(2);
   }
   if (!["absence", "hedging", "buzzword"].includes(args.category)) {
-    console.error(`Error: --category must be one of 'absence', 'hedging', 'buzzword' (got '${args.category}').`);
+    console.error(
+      `Error: --category must be one of 'absence', 'hedging', 'buzzword' (got '${args.category}').`,
+    );
     process.exit(2);
   }
-  const baseUrl = (args.apiUrl ?? process.env.API_URL ?? "http://localhost:3001").replace(/\/+$/, "");
+  const baseUrl = (
+    args.apiUrl ??
+    process.env.API_URL ??
+    "http://localhost:3001"
+  ).replace(/\/+$/, "");
   const endpoint = `${baseUrl}/api/feedback/calibration/handwavy-phrases`;
   // Calibration mutation endpoints are gated by requireCalibrationAuth in the
   // API server. When the server has CALIBRATION_TOKEN set, both the dry-run
@@ -339,21 +410,44 @@ async function main() {
   try {
     const list = await getJson(endpoint, token);
     if (list.status === 401 || list.status === 403) {
-      console.log(color("dim", "→ Skipping pre-preview overlap check (active list endpoint is auth-gated and no/invalid token was supplied; the dry-run will still flag overlaps)."));
+      console.log(
+        color(
+          "dim",
+          "→ Skipping pre-preview overlap check (active list endpoint is auth-gated and no/invalid token was supplied; the dry-run will still flag overlaps).",
+        ),
+      );
     } else if (!list.ok) {
-      const msg = list.payload && typeof list.payload === "object" && "error" in list.payload
-        ? list.payload.error
-        : `HTTP ${list.status}`;
-      console.log(color("dim", `→ Skipping pre-preview overlap check (active list fetch failed: ${msg}; the dry-run will still flag overlaps).`));
+      const msg =
+        list.payload &&
+        typeof list.payload === "object" &&
+        "error" in list.payload
+          ? list.payload.error
+          : `HTTP ${list.status}`;
+      console.log(
+        color(
+          "dim",
+          `→ Skipping pre-preview overlap check (active list fetch failed: ${msg}; the dry-run will still flag overlaps).`,
+        ),
+      );
     } else {
-      const curated = list.payload && Array.isArray(list.payload.phrases) ? list.payload.phrases : [];
+      const curated =
+        list.payload && Array.isArray(list.payload.phrases)
+          ? list.payload.phrases
+          : [];
       const earlyOverlaps = detectLocalCuratedOverlaps(args.phrase, curated);
       if (earlyOverlaps.total > 0) {
         console.log("");
-        console.log(color("yellow", `Heads up: this candidate already overlaps with ${earlyOverlaps.total} curated ${earlyOverlaps.total === 1 ? "entry" : "entries"} (checked locally before the dry-run):`));
+        console.log(
+          color(
+            "yellow",
+            `Heads up: this candidate already overlaps with ${earlyOverlaps.total} curated ${earlyOverlaps.total === 1 ? "entry" : "entries"} (checked locally before the dry-run):`,
+          ),
+        );
         for (const o of earlyOverlaps.matches) {
           const rel = describeOverlapRelation(o.relation);
-          console.log(`    - ${color("yellow", rel)} "${o.phrase}" ${color("dim", `[${o.category}]`)}`);
+          console.log(
+            `    - ${color("yellow", rel)} "${o.phrase}" ${color("dim", `[${o.category}]`)}`,
+          );
         }
         console.log("");
       }
@@ -363,48 +457,85 @@ async function main() {
       // accidental re-add doesn't slip through silently. Rendered in
       // addition to (not in place of) the active-list "Heads up" line so
       // a candidate that overlaps both surfaces both warnings.
-      const history = list.payload && Array.isArray(list.payload.history) ? list.payload.history : [];
-      const earlyHistoryOverlaps = detectLocalHistoryOverlaps(args.phrase, history);
+      const history =
+        list.payload && Array.isArray(list.payload.history)
+          ? list.payload.history
+          : [];
+      const earlyHistoryOverlaps = detectLocalHistoryOverlaps(
+        args.phrase,
+        history,
+      );
       if (earlyHistoryOverlaps.total > 0) {
         console.log("");
         const noun = earlyHistoryOverlaps.total === 1 ? "entry" : "entries";
-        console.log(color("yellow", `Heads up: this candidate matches ${earlyHistoryOverlaps.total} previously-removed ${noun} in the history log:`));
+        console.log(
+          color(
+            "yellow",
+            `Heads up: this candidate matches ${earlyHistoryOverlaps.total} previously-removed ${noun} in the history log:`,
+          ),
+        );
         for (const o of earlyHistoryOverlaps.matches) {
           const rel = describeOverlapRelation(o.relation);
           const verb = o.undone ? "undone" : "removed";
           const who = o.removedBy ?? "unknown reviewer";
           const when = formatHistoryRemovedAt(o.removedAt);
           const rationale = o.rationale ? ` — rationale: "${o.rationale}"` : "";
-          console.log(`    - ${color("yellow", rel)} "${o.phrase}" ${color("dim", `[${o.category}]`)} — ${verb} by ${who} on ${when}${rationale}`);
+          console.log(
+            `    - ${color("yellow", rel)} "${o.phrase}" ${color("dim", `[${o.category}]`)} — ${verb} by ${who} on ${when}${rationale}`,
+          );
         }
         console.log("");
       }
     }
   } catch (err) {
-    console.log(color("dim", `→ Skipping pre-preview overlap check (${err && err.message ? err.message : err}; the dry-run will still flag overlaps).`));
+    console.log(
+      color(
+        "dim",
+        `→ Skipping pre-preview overlap check (${err && err.message ? err.message : err}; the dry-run will still flag overlaps).`,
+      ),
+    );
   }
 
   console.log(color("dim", `→ Previewing against ${endpoint} ...`));
-  const dry = await postJson(endpoint, {
-    phrase: args.phrase,
-    category: args.category,
-    dryRun: true,
-  }, token);
+  const dry = await postJson(
+    endpoint,
+    {
+      phrase: args.phrase,
+      category: args.category,
+      dryRun: true,
+    },
+    token,
+  );
   if (dry.status === 401 || dry.status === 403) {
-    console.error(color("red", "Preview failed: the calibration endpoint rejected the request as unauthorized. Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment."));
+    console.error(
+      color(
+        "red",
+        "Preview failed: the calibration endpoint rejected the request as unauthorized. Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.",
+      ),
+    );
     process.exit(1);
   }
   if (!dry.ok) {
-    const msg = dry.payload && typeof dry.payload === "object" && "error" in dry.payload
-      ? dry.payload.error
-      : `HTTP ${dry.status}`;
+    const msg =
+      dry.payload && typeof dry.payload === "object" && "error" in dry.payload
+        ? dry.payload.error
+        : `HTTP ${dry.status}`;
     console.error(color("red", `Preview failed: ${msg}`));
     process.exit(1);
   }
-  if (!dry.payload || typeof dry.payload !== "object" || !dry.payload.dryRunMatches) {
+  if (
+    !dry.payload ||
+    typeof dry.payload !== "object" ||
+    !dry.payload.dryRunMatches
+  ) {
     // Match the UI's fail-closed behavior: never fall through to a real add
     // if the server didn't return the preview block.
-    console.error(color("red", "Preview unavailable: server response did not include a corpus impact preview. Aborting without adding the phrase."));
+    console.error(
+      color(
+        "red",
+        "Preview unavailable: server response did not include a corpus impact preview. Aborting without adding the phrase.",
+      ),
+    );
     process.exit(1);
   }
   const matches = dry.payload.dryRunMatches;
@@ -425,11 +556,20 @@ async function main() {
     const overlapCount = overlaps?.total ?? 0;
     let prompt;
     if (matches.falsePositives > 0 && overlapCount > 0) {
-      prompt = color("red", `Add this phrase anyway despite the false positives AND ${overlapCount} curated overlap(s)? [y/N] `);
+      prompt = color(
+        "red",
+        `Add this phrase anyway despite the false positives AND ${overlapCount} curated overlap(s)? [y/N] `,
+      );
     } else if (matches.falsePositives > 0) {
-      prompt = color("red", "Add this phrase anyway despite the false positives? [y/N] ");
+      prompt = color(
+        "red",
+        "Add this phrase anyway despite the false positives? [y/N] ",
+      );
     } else if (overlapCount > 0) {
-      prompt = color("red", `Add this phrase anyway despite ${overlapCount} curated overlap(s)? [y/N] `);
+      prompt = color(
+        "red",
+        `Add this phrase anyway despite ${overlapCount} curated overlap(s)? [y/N] `,
+      );
     } else {
       prompt = "Add this phrase to the active list? [y/N] ";
     }
@@ -441,31 +581,55 @@ async function main() {
   }
 
   console.log(color("dim", "→ Adding phrase ..."));
-  const real = await postJson(endpoint, {
-    phrase: args.phrase,
-    category: args.category,
-  }, token);
+  const real = await postJson(
+    endpoint,
+    {
+      phrase: args.phrase,
+      category: args.category,
+    },
+    token,
+  );
   if (real.status === 401 || real.status === 403) {
-    console.error(color("red", "Add failed: the calibration endpoint rejected the request as unauthorized. Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment."));
+    console.error(
+      color(
+        "red",
+        "Add failed: the calibration endpoint rejected the request as unauthorized. Pass --token <reviewer-token> or set CALIBRATION_TOKEN in the environment.",
+      ),
+    );
     process.exit(1);
   }
   if (!real.ok) {
-    const msg = real.payload && typeof real.payload === "object" && "error" in real.payload
-      ? real.payload.error
-      : `HTTP ${real.status}`;
+    const msg =
+      real.payload &&
+      typeof real.payload === "object" &&
+      "error" in real.payload
+        ? real.payload.error
+        : `HTTP ${real.status}`;
     console.error(color("red", `Add failed: ${msg}`));
     process.exit(1);
   }
   const result = real.payload ?? {};
   if (result.added === false) {
-    console.log(color("yellow", `Phrase "${result.phrase ?? normalizedPhrase}" was already in the active list (total: ${result.total ?? "?"}).`));
+    console.log(
+      color(
+        "yellow",
+        `Phrase "${result.phrase ?? normalizedPhrase}" was already in the active list (total: ${result.total ?? "?"}).`,
+      ),
+    );
   } else {
-    console.log(color("green", `✓ Added "${result.phrase ?? normalizedPhrase}" (${result.category ?? effectiveCategory}). Active list size: ${result.total ?? "?"}.`));
+    console.log(
+      color(
+        "green",
+        `✓ Added "${result.phrase ?? normalizedPhrase}" (${result.category ?? effectiveCategory}). Active list size: ${result.total ?? "?"}.`,
+      ),
+    );
   }
   process.exit(0);
 }
 
 main().catch((err) => {
-  console.error(color("red", `Unexpected error: ${err && err.message ? err.message : err}`));
+  console.error(
+    color("red", `Unexpected error: ${err && err.message ? err.message : err}`),
+  );
   process.exit(1);
 });

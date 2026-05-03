@@ -47,7 +47,7 @@ function runbookUrl(runbookPath: string): string {
 // week is a genuinely new alert.
 function fingerprintFlags(flags: AvriDriftFlag[]): string {
   return flags
-    .map(f => `${f.weekStart}|${f.kind}|${f.detail}`)
+    .map((f) => `${f.weekStart}|${f.kind}|${f.detail}`)
     .sort()
     .join("\n");
 }
@@ -70,7 +70,10 @@ function latestWeekStartFrom(flags: AvriDriftFlag[]): string | null {
   return latest;
 }
 
-function relativeWeekStart(weekStart: string, now: number = Date.now()): string {
+function relativeWeekStart(
+  weekStart: string,
+  now: number = Date.now(),
+): string {
   const then = new Date(weekStart).getTime();
   if (Number.isNaN(then)) return "";
   const days = Math.floor((now - then) / (24 * 60 * 60 * 1000));
@@ -97,9 +100,9 @@ function writeDismissedFingerprint(fp: string): void {
 
 export function DriftFlagsBanner() {
   const isReviewer = Boolean(getCalibrationToken());
-  const [dismissedFingerprint, setDismissedFingerprint] = useState<string | null>(
-    () => readDismissedFingerprint(),
-  );
+  const [dismissedFingerprint, setDismissedFingerprint] = useState<
+    string | null
+  >(() => readDismissedFingerprint());
 
   // `enabled` keeps the public site from making an authenticated GET it has
   // no use for. The endpoint itself is public-readable (no auth required)
@@ -121,8 +124,10 @@ export function DriftFlagsBanner() {
   if (flags.length === 0) return null;
   if (dismissedFingerprint && dismissedFingerprint === fingerprint) return null;
 
-  const gapFlags = flags.filter(f => f.kind === "GAP_BELOW_45").length;
-  const familyFlags = flags.filter(f => f.kind === "FAMILY_MEAN_SHIFT").length;
+  const gapFlags = flags.filter((f) => f.kind === "GAP_BELOW_45").length;
+  const familyFlags = flags.filter(
+    (f) => f.kind === "FAMILY_MEAN_SHIFT",
+  ).length;
   const summary: string[] = [];
   if (gapFlags > 0) summary.push(`${gapFlags} rubric-collapse`);
   if (familyFlags > 0) summary.push(`${familyFlags} per-family weight drift`);
@@ -140,7 +145,9 @@ export function DriftFlagsBanner() {
       <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
       <div className="flex-1 text-muted-foreground leading-relaxed text-xs sm:text-sm space-y-1">
         <div>
-          <span className="text-amber-300 font-semibold">AVRI calibration drift:</span>{" "}
+          <span className="text-amber-300 font-semibold">
+            AVRI calibration drift:
+          </span>{" "}
           {flags.length} flag{flags.length === 1 ? "" : "s"} firing
           {summary.length > 0 ? ` (${summary.join(", ")})` : ""}. The rubric may
           be collapsing or a family weight may have shifted — check the
@@ -148,7 +155,8 @@ export function DriftFlagsBanner() {
         </div>
         {latestWeekStart && (
           <div data-testid="drift-banner-latest" className="text-amber-300/80">
-            Latest week: {latestWeekStart} ({relativeWeekStart(latestWeekStart)})
+            Latest week: {latestWeekStart} ({relativeWeekStart(latestWeekStart)}
+            )
           </div>
         )}
         <div className="flex flex-wrap gap-x-3 gap-y-1">

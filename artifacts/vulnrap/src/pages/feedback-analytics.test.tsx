@@ -124,7 +124,9 @@ describe("revertWouldBeNoop (Task #148 — disable Revert when it would be a no-
     });
 
     it("is NOT a no-op when only the rationale matches but the category does not", () => {
-      expect(revertWouldBeNoop(entry, "hedging", "original reason")).toBe(false);
+      expect(revertWouldBeNoop(entry, "hedging", "original reason")).toBe(
+        false,
+      );
     });
 
     it("is NOT a no-op when neither field matches", () => {
@@ -154,25 +156,40 @@ describe("productionScanStalenessDays / isProductionScanStale (Task #219 — war
   });
 
   it("floors to whole days so the rendered string is stable across same-day re-renders", () => {
-    const oneDayAndAHalfAgo = new Date(NOW.getTime() - (1 * 24 + 12) * 60 * 60 * 1000).toISOString();
+    const oneDayAndAHalfAgo = new Date(
+      NOW.getTime() - (1 * 24 + 12) * 60 * 60 * 1000,
+    ).toISOString();
     expect(productionScanStalenessDays(oneDayAndAHalfAgo, NOW)).toBe(1);
-    const justUnderOneDay = new Date(NOW.getTime() - (24 * 60 * 60 * 1000 - 1)).toISOString();
+    const justUnderOneDay = new Date(
+      NOW.getTime() - (24 * 60 * 60 * 1000 - 1),
+    ).toISOString();
     expect(productionScanStalenessDays(justUnderOneDay, NOW)).toBe(0);
   });
 
   it("treats a sample exactly at the threshold as fresh and one day past as stale", () => {
     // The default threshold is "older than N days" so equality should be fresh.
-    const exactlyAtThreshold = new Date(NOW.getTime() - PRODUCTION_SCAN_FRESHNESS_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    expect(productionScanStalenessDays(exactlyAtThreshold, NOW)).toBe(PRODUCTION_SCAN_FRESHNESS_DAYS);
+    const exactlyAtThreshold = new Date(
+      NOW.getTime() - PRODUCTION_SCAN_FRESHNESS_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    expect(productionScanStalenessDays(exactlyAtThreshold, NOW)).toBe(
+      PRODUCTION_SCAN_FRESHNESS_DAYS,
+    );
     expect(isProductionScanStale(exactlyAtThreshold, NOW)).toBe(false);
 
-    const onePastThreshold = new Date(NOW.getTime() - (PRODUCTION_SCAN_FRESHNESS_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString();
-    expect(productionScanStalenessDays(onePastThreshold, NOW)).toBe(PRODUCTION_SCAN_FRESHNESS_DAYS + 1);
+    const onePastThreshold = new Date(
+      NOW.getTime() -
+        (PRODUCTION_SCAN_FRESHNESS_DAYS + 1) * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    expect(productionScanStalenessDays(onePastThreshold, NOW)).toBe(
+      PRODUCTION_SCAN_FRESHNESS_DAYS + 1,
+    );
     expect(isProductionScanStale(onePastThreshold, NOW)).toBe(true);
   });
 
   it("respects an overridden threshold so callers can probe arbitrary windows", () => {
-    const fiveDaysAgo = new Date(NOW.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    const fiveDaysAgo = new Date(
+      NOW.getTime() - 5 * 24 * 60 * 60 * 1000,
+    ).toISOString();
     expect(isProductionScanStale(fiveDaysAgo, NOW, 7)).toBe(false);
     expect(isProductionScanStale(fiveDaysAgo, NOW, 3)).toBe(true);
   });
@@ -224,7 +241,10 @@ describe("BulkRemovalImpactBlock — production-sample staleness notice (Task #4
         title="Production reports"
         subtitle="recent N"
         emptyHint="No flagged reports impacted"
-        impact={makeImpact({ oldestCreatedAt: oldest, newestCreatedAt: newest })}
+        impact={makeImpact({
+          oldestCreatedAt: oldest,
+          newestCreatedAt: newest,
+        })}
       />,
     );
 
@@ -248,7 +268,10 @@ describe("BulkRemovalImpactBlock — production-sample staleness notice (Task #4
         title="Production reports"
         subtitle="recent N"
         emptyHint="No flagged reports impacted"
-        impact={makeImpact({ oldestCreatedAt: oldest, newestCreatedAt: newest })}
+        impact={makeImpact({
+          oldestCreatedAt: oldest,
+          newestCreatedAt: newest,
+        })}
       />,
     );
 
@@ -273,7 +296,10 @@ describe("BulkRemovalImpactBlock — production-sample staleness notice (Task #4
         title="Curated fixtures"
         subtitle="benchmark"
         emptyHint="No fixture impact"
-        impact={makeImpact({ oldestCreatedAt: oldNewest, newestCreatedAt: oldNewest })}
+        impact={makeImpact({
+          oldestCreatedAt: oldNewest,
+          newestCreatedAt: oldNewest,
+        })}
       />,
     );
 
@@ -296,7 +322,9 @@ describe("renderHandwavyEditEntries — visible no-op hint (Task #241)", () => {
   // both the visible wording AND the aria-describedby wiring so a future
   // refactor can't silently delete one without the other.
 
-  function renderEntries(args: Parameters<typeof renderHandwavyEditEntries>[0]) {
+  function renderEntries(
+    args: Parameters<typeof renderHandwavyEditEntries>[0],
+  ) {
     return render(<ul>{renderHandwavyEditEntries(args)}</ul>);
   }
 
@@ -356,7 +384,9 @@ describe("renderHandwavyEditEntries — visible no-op hint (Task #241)", () => {
     const button = screen.getByTestId("handwavy-revert-edit");
     const hint = screen.getByTestId("handwavy-revert-noop-hint");
     const describedBy = button.getAttribute("aria-describedby");
-    expect(describedBy, "disabled button must reference the hint by id").toBe(hint.id);
+    expect(describedBy, "disabled button must reference the hint by id").toBe(
+      hint.id,
+    );
     expect(hint.id).toBeTruthy();
     // The hint id MUST NOT contain whitespace or other characters that would
     // turn aria-describedby into a multi-token IDREF list and silently drop
@@ -422,7 +452,9 @@ describe("renderHandwavyEditEntries — visible no-op hint (Task #241)", () => {
     // The single hint must be inside the same <li> as the disabled button.
     const noopRow = buttons[1].closest("li");
     expect(noopRow, "disabled button must live in an <li> row").not.toBeNull();
-    expect(within(noopRow!).getByTestId("handwavy-revert-noop-hint")).toBe(hints[0]);
+    expect(within(noopRow!).getByTestId("handwavy-revert-noop-hint")).toBe(
+      hints[0],
+    );
   });
 });
 
@@ -433,7 +465,9 @@ describe("renderHandwavyEditEntries — rename block (Task #357)", () => {
   // hooks the E2E spec latches onto, and the "no tracked changes" fallback
   // so future refactors can't silently drop the rename block.
 
-  function renderEntries(args: Parameters<typeof renderHandwavyEditEntries>[0]) {
+  function renderEntries(
+    args: Parameters<typeof renderHandwavyEditEntries>[0],
+  ) {
     return render(<ul>{renderHandwavyEditEntries(args)}</ul>);
   }
 
@@ -573,7 +607,9 @@ describe("renderHandwavyEditEntries — rename-only Revert hint (Task #506)", ()
   // is misleading: there IS something to undo (the rename) — just not
   // through this button. The new wording must point reviewers at the
   // inline phrase edit field for renaming back instead.
-  function renderEntries(args: Parameters<typeof renderHandwavyEditEntries>[0]) {
+  function renderEntries(
+    args: Parameters<typeof renderHandwavyEditEntries>[0],
+  ) {
     return render(<ul>{renderHandwavyEditEntries(args)}</ul>);
   }
 
@@ -666,20 +702,32 @@ describe("computeHandwavyActiveListVersion (Task #246 — invalidation key for t
     // dry-run can be served. A reorder (e.g. the sort-by-thrash toggle)
     // doesn't change what removing any given phrase would un-flag, so it
     // MUST NOT bust the cache.
-    const a = computeHandwavyActiveListVersion([{ phrase: "alpha" }, { phrase: "bravo" }]);
-    const b = computeHandwavyActiveListVersion([{ phrase: "bravo" }, { phrase: "alpha" }]);
+    const a = computeHandwavyActiveListVersion([
+      { phrase: "alpha" },
+      { phrase: "bravo" },
+    ]);
+    const b = computeHandwavyActiveListVersion([
+      { phrase: "bravo" },
+      { phrase: "alpha" },
+    ]);
     expect(a).toBe(b);
   });
 
   it("returns a different version when a phrase is added, removed, or replaced", () => {
-    const base = computeHandwavyActiveListVersion([{ phrase: "alpha" }, { phrase: "bravo" }]);
+    const base = computeHandwavyActiveListVersion([
+      { phrase: "alpha" },
+      { phrase: "bravo" },
+    ]);
     const added = computeHandwavyActiveListVersion([
       { phrase: "alpha" },
       { phrase: "bravo" },
       { phrase: "charlie" },
     ]);
     const removed = computeHandwavyActiveListVersion([{ phrase: "alpha" }]);
-    const replaced = computeHandwavyActiveListVersion([{ phrase: "alpha" }, { phrase: "delta" }]);
+    const replaced = computeHandwavyActiveListVersion([
+      { phrase: "alpha" },
+      { phrase: "delta" },
+    ]);
     expect(added).not.toBe(base);
     expect(removed).not.toBe(base);
     expect(replaced).not.toBe(base);
@@ -694,7 +742,10 @@ describe("computeHandwavyActiveListVersion (Task #246 — invalidation key for t
     // phrase like "2:foo" can't accidentally match a 2-element list whose
     // joined form happens to equal "foo".
     const single = computeHandwavyActiveListVersion([{ phrase: "2:foo" }]);
-    const pair = computeHandwavyActiveListVersion([{ phrase: "" }, { phrase: "foo" }]);
+    const pair = computeHandwavyActiveListVersion([
+      { phrase: "" },
+      { phrase: "foo" },
+    ]);
     expect(single).not.toBe(pair);
   });
 });
@@ -838,13 +889,13 @@ describe("describeRemovePreviewSource (Task #349 — fresh vs. cached badge bran
     expect(
       describeRemovePreviewSource("cached", FAKE_NOW - 100, FAKE_NOW).label,
     ).toBe("Reused scan · just now");
-    expect(
-      formatRemovePreviewScannedAgo(FAKE_NOW - 4_000, FAKE_NOW),
-    ).toBe("just now");
+    expect(formatRemovePreviewScannedAgo(FAKE_NOW - 4_000, FAKE_NOW)).toBe(
+      "just now",
+    );
     // Boundary: 5s crosses over to integer-seconds.
-    expect(
-      formatRemovePreviewScannedAgo(FAKE_NOW - 5_000, FAKE_NOW),
-    ).toBe("5s ago");
+    expect(formatRemovePreviewScannedAgo(FAKE_NOW - 5_000, FAKE_NOW)).toBe(
+      "5s ago",
+    );
   });
 
   it("collapses negative diffs (clock skew) to 'just now' instead of '-3s ago'", () => {
@@ -861,7 +912,9 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
   it("flags an empty response so the dashboard can render the 'dataset not mounted' placeholder", () => {
     expect(summarizeDatasetHistory(null).isEmpty).toBe(true);
     expect(summarizeDatasetHistory(undefined).isEmpty).toBe(true);
-    expect(summarizeDatasetHistory({ totalSnapshots: 0, cohorts: [] }).isEmpty).toBe(true);
+    expect(
+      summarizeDatasetHistory({ totalSnapshots: 0, cohorts: [] }).isEmpty,
+    ).toBe(true);
     // totalSnapshots could be stale/missing — fall back to per-cohort length.
     expect(
       summarizeDatasetHistory({
@@ -906,7 +959,11 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
       ],
     });
     expect(summary.isEmpty).toBe(false);
-    expect(summary.tiers.map(t => t.tier)).toEqual(["T1_LEGIT", "T2_BORDERLINE", "T3_SLOP"]);
+    expect(summary.tiers.map((t) => t.tier)).toEqual([
+      "T1_LEGIT",
+      "T2_BORDERLINE",
+      "T3_SLOP",
+    ]);
     expect(summary.tiers[0]!.latest).toBe(15.9);
     expect(summary.tiers[1]!.latest).toBeNull();
     expect(summary.tiers[1]!.points).toEqual([]);
@@ -948,11 +1005,11 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         },
       ],
     });
-    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    const t1 = summary.tiers.find((t) => t.tier === "T1_LEGIT")!;
     // Snapshot count keeps all rows (so the chip says "3 pts") but only
     // the one row with a finite mean is plotted.
     expect(t1.snapshotCount).toBe(3);
-    expect(t1.points.map(p => p.value)).toEqual([16.2]);
+    expect(t1.points.map((p) => p.value)).toEqual([16.2]);
     expect(t1.latest).toBe(16.2);
   });
 
@@ -966,27 +1023,69 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         {
           tier: "T1_LEGIT",
           snapshots: [
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 16, gap: 10 },
-            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 17, gap: 11 },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 16,
+              gap: 10,
+            },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 17,
+              gap: 11,
+            },
           ],
         },
         {
           tier: "T2_BORDERLINE",
           snapshots: [
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 22, gap: 10 },
-            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 21, gap: 11 },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T2_BORDERLINE",
+              label: "borderline",
+              count: 25,
+              compositeMean: 22,
+              gap: 10,
+            },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T2_BORDERLINE",
+              label: "borderline",
+              count: 25,
+              compositeMean: 21,
+              gap: 11,
+            },
           ],
         },
         {
           tier: "T3_SLOP",
           snapshots: [
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 26, gap: 10 },
-            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 28, gap: 11 },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T3_SLOP",
+              label: "ai_slop",
+              count: 25,
+              compositeMean: 26,
+              gap: 10,
+            },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T3_SLOP",
+              label: "ai_slop",
+              count: 25,
+              compositeMean: 28,
+              gap: 11,
+            },
           ],
         },
       ],
     });
-    expect(summary.gapPoints.map(p => `${p.timestamp}:${p.value}`)).toEqual([
+    expect(summary.gapPoints.map((p) => `${p.timestamp}:${p.value}`)).toEqual([
       "2026-04-22T00:00:00.000Z:10",
       "2026-04-23T00:00:00.000Z:11",
     ]);
@@ -1003,16 +1102,32 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
           tier: "T1_LEGIT",
           snapshots: [
             // Run 1: dataset 78.3, fixtures 82.1 → Δ −3.8 (rounded to 1dp)
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 78.3, fixtureMean: 82.1, gap: 24 },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 78.3,
+              fixtureMean: 82.1,
+              gap: 24,
+            },
             // Run 2: dataset 80.0, fixtures 79.5 → Δ +0.5
-            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 80.0, fixtureMean: 79.5, gap: 25 },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 80.0,
+              fixtureMean: 79.5,
+              gap: 25,
+            },
           ],
         },
       ],
     });
-    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
-    expect(t1.deltaPoints.map(p => p.value)).toEqual([-3.8, 0.5]);
-    expect(t1.deltaPoints.map(p => p.timestamp)).toEqual([
+    const t1 = summary.tiers.find((t) => t.tier === "T1_LEGIT")!;
+    expect(t1.deltaPoints.map((p) => p.value)).toEqual([-3.8, 0.5]);
+    expect(t1.deltaPoints.map((p) => p.timestamp)).toEqual([
       "2026-04-22T00:00:00.000Z",
       "2026-04-23T00:00:00.000Z",
     ]);
@@ -1027,22 +1142,61 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
           tier: "T1_LEGIT",
           snapshots: [
             // Legacy row predating fixtureMean — fixtureMean undefined.
-            { timestamp: "2026-04-20T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 75, gap: 22 },
+            {
+              timestamp: "2026-04-20T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 75,
+              gap: 22,
+            },
             // Run with explicit null fixtureMean (e.g. T4 absent in summary).
-            { timestamp: "2026-04-21T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 76, fixtureMean: null, gap: 22 },
+            {
+              timestamp: "2026-04-21T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 76,
+              fixtureMean: null,
+              gap: 22,
+            },
             // Empty cohort that run — compositeMean null filters it out
             // before fixtureMean is even consulted.
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 0, compositeMean: null, fixtureMean: 80, gap: null },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 0,
+              compositeMean: null,
+              fixtureMean: 80,
+              gap: null,
+            },
             // NaN fixture mean is treated as missing.
-            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 77, fixtureMean: Number.NaN, gap: 22 },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 77,
+              fixtureMean: Number.NaN,
+              gap: 22,
+            },
             // Valid pair — only this row produces a delta point.
-            { timestamp: "2026-04-24T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 78, fixtureMean: 80, gap: 22 },
+            {
+              timestamp: "2026-04-24T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 78,
+              fixtureMean: 80,
+              gap: 22,
+            },
           ],
         },
       ],
     });
-    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
-    expect(t1.deltaPoints.map(p => p.value)).toEqual([-2]);
+    const t1 = summary.tiers.find((t) => t.tier === "T1_LEGIT")!;
+    expect(t1.deltaPoints.map((p) => p.value)).toEqual([-2]);
     expect(t1.latestDelta).toBe(-2);
     // Mean snapshot count still reflects every row so the "N pts" chip
     // doesn't lie about the underlying history size.
@@ -1056,17 +1210,24 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         {
           tier: "T2_BORDERLINE",
           snapshots: [
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T2_BORDERLINE", label: "borderline", count: 25, compositeMean: 60, gap: 18 },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T2_BORDERLINE",
+              label: "borderline",
+              count: 25,
+              compositeMean: 60,
+              gap: 18,
+            },
           ],
         },
       ],
     });
-    const t2 = summary.tiers.find(t => t.tier === "T2_BORDERLINE")!;
+    const t2 = summary.tiers.find((t) => t.tier === "T2_BORDERLINE")!;
     expect(t2.deltaPoints).toEqual([]);
     expect(t2.latestDelta).toBeNull();
     // A tier we have no rows for at all also reports no delta points
     // rather than blowing up.
-    const t3 = summary.tiers.find(t => t.tier === "T3_SLOP")!;
+    const t3 = summary.tiers.find((t) => t.tier === "T3_SLOP")!;
     expect(t3.deltaPoints).toEqual([]);
     expect(t3.latestDelta).toBeNull();
   });
@@ -1081,13 +1242,27 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         {
           tier: "T3_SLOP",
           snapshots: [
-            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 28, gap: 11 },
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T3_SLOP", label: "ai_slop", count: 25, compositeMean: 26, gap: 10 },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T3_SLOP",
+              label: "ai_slop",
+              count: 25,
+              compositeMean: 28,
+              gap: 11,
+            },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T3_SLOP",
+              label: "ai_slop",
+              count: 25,
+              compositeMean: 26,
+              gap: 10,
+            },
           ],
         },
       ],
     });
-    expect(summary.gapPoints.map(p => p.value)).toEqual([10, 11]);
+    expect(summary.gapPoints.map((p) => p.value)).toEqual([10, 11]);
     expect(summary.latestGap).toBe(11);
   });
 
@@ -1100,19 +1275,51 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         {
           tier: "T1_LEGIT",
           snapshots: [
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18, sampleDateKey: "2026-04-22" },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 70,
+              gap: 18,
+              sampleDateKey: "2026-04-22",
+            },
             // Same slice → no rotation between #1 and #2.
-            { timestamp: "2026-04-22T12:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 18, sampleDateKey: "2026-04-22" },
+            {
+              timestamp: "2026-04-22T12:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 71,
+              gap: 18,
+              sampleDateKey: "2026-04-22",
+            },
             // Slice flipped → rotation between #2 and #3.
-            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 19, sampleDateKey: "2026-04-23" },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 72,
+              gap: 19,
+              sampleDateKey: "2026-04-23",
+            },
             // Slice flipped again → rotation between #3 and #4.
-            { timestamp: "2026-04-24T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 73, gap: 20, sampleDateKey: "2026-04-24" },
+            {
+              timestamp: "2026-04-24T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 73,
+              gap: 20,
+              sampleDateKey: "2026-04-24",
+            },
           ],
         },
       ],
     });
-    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
-    expect(t1.points.map(p => p.sampleDateKey)).toEqual([
+    const t1 = summary.tiers.find((t) => t.tier === "T1_LEGIT")!;
+    expect(t1.points.map((p) => p.sampleDateKey)).toEqual([
       "2026-04-22",
       "2026-04-22",
       "2026-04-23",
@@ -1122,7 +1329,7 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
     expect(t1.latestSampleDateKey).toBe("2026-04-24");
     expect(summary.latestSampleDateKey).toBe("2026-04-24");
     // Threaded onto the gap series too, so the gap sparkline can mark rotations.
-    expect(summary.gapPoints.map(p => p.sampleDateKey)).toEqual([
+    expect(summary.gapPoints.map((p) => p.sampleDateKey)).toEqual([
       "2026-04-22",
       "2026-04-22",
       "2026-04-23",
@@ -1141,14 +1348,37 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         {
           tier: "T1_LEGIT",
           snapshots: [
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
-            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 18, sampleDateKey: "2026-04-23" },
-            { timestamp: "2026-04-23T12:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 18, sampleDateKey: "2026-04-23" },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 70,
+              gap: 18,
+            },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 71,
+              gap: 18,
+              sampleDateKey: "2026-04-23",
+            },
+            {
+              timestamp: "2026-04-23T12:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 72,
+              gap: 18,
+              sampleDateKey: "2026-04-23",
+            },
           ],
         },
       ],
     });
-    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    const t1 = summary.tiers.find((t) => t.tier === "T1_LEGIT")!;
     expect(t1.rotationCount).toBe(0);
     expect(t1.latestSampleDateKey).toBe("2026-04-23");
     expect(summary.latestSampleDateKey).toBe("2026-04-23");
@@ -1163,12 +1393,19 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         {
           tier: "T1_LEGIT",
           snapshots: [
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 70,
+              gap: 18,
+            },
           ],
         },
       ],
     });
-    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    const t1 = summary.tiers.find((t) => t.tier === "T1_LEGIT")!;
     expect(t1.latestSampleDateKey).toBeNull();
     expect(t1.rotationCount).toBe(0);
     expect(summary.latestSampleDateKey).toBeNull();
@@ -1216,16 +1453,20 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         },
       ],
     });
-    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    const t1 = summary.tiers.find((t) => t.tier === "T1_LEGIT")!;
     // Per-point flag survives so the sparkline can split coords on it.
-    expect(t1.points.map(p => p.aggregated)).toEqual([true, true, undefined]);
+    expect(t1.points.map((p) => p.aggregated)).toEqual([true, true, undefined]);
     // The summary chip's counts come straight from the series so the UI
     // doesn't have to re-walk the points array on every render.
     expect(t1.aggregatedCount).toBe(2);
     expect(t1.rawCount).toBe(1);
     // Gap dedupe path threads the same flag onto the deduped points so
     // the T1−T3 gap sparkline can split-stroke the same way.
-    expect(summary.gapPoints.map(p => p.aggregated)).toEqual([true, true, undefined]);
+    expect(summary.gapPoints.map((p) => p.aggregated)).toEqual([
+      true,
+      true,
+      undefined,
+    ]);
     expect(summary.gapAggregatedCount).toBe(2);
     expect(summary.gapRawCount).toBe(1);
   });
@@ -1239,13 +1480,27 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         {
           tier: "T1_LEGIT",
           snapshots: [
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
-            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70.5, gap: 17.8 },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 70,
+              gap: 18,
+            },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 70.5,
+              gap: 17.8,
+            },
           ],
         },
       ],
     });
-    const t1 = summary.tiers.find(t => t.tier === "T1_LEGIT")!;
+    const t1 = summary.tiers.find((t) => t.tier === "T1_LEGIT")!;
     expect(t1.aggregatedCount).toBe(0);
     expect(t1.rawCount).toBe(2);
     expect(summary.gapAggregatedCount).toBe(0);
@@ -1267,11 +1522,51 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         {
           tier: "T1_LEGIT",
           snapshots: [
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18, sampleDateKey: "2026-04-22" },
-            { timestamp: "2026-04-22T12:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 18, sampleDateKey: "2026-04-22" },
-            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 19, sampleDateKey: "2026-04-23" },
-            { timestamp: "2026-04-24T06:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72.5, gap: 19.2, sampleDateKey: "2026-04-23" },
-            { timestamp: "2026-04-25T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 73, gap: 20, sampleDateKey: "2026-04-25" },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 70,
+              gap: 18,
+              sampleDateKey: "2026-04-22",
+            },
+            {
+              timestamp: "2026-04-22T12:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 71,
+              gap: 18,
+              sampleDateKey: "2026-04-22",
+            },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 72,
+              gap: 19,
+              sampleDateKey: "2026-04-23",
+            },
+            {
+              timestamp: "2026-04-24T06:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 72.5,
+              gap: 19.2,
+              sampleDateKey: "2026-04-23",
+            },
+            {
+              timestamp: "2026-04-25T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 73,
+              gap: 20,
+              sampleDateKey: "2026-04-25",
+            },
           ],
         },
       ],
@@ -1295,16 +1590,38 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         {
           tier: "T1_LEGIT",
           snapshots: [
-            { timestamp: "2026-04-22T01:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18, sampleDateKey: "2026-04-22" },
-            { timestamp: "2026-04-22T05:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 18, sampleDateKey: "2026-04-23" },
-            { timestamp: "2026-04-22T11:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 72, gap: 18, sampleDateKey: "2026-04-22" },
+            {
+              timestamp: "2026-04-22T01:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 70,
+              gap: 18,
+              sampleDateKey: "2026-04-22",
+            },
+            {
+              timestamp: "2026-04-22T05:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 71,
+              gap: 18,
+              sampleDateKey: "2026-04-23",
+            },
+            {
+              timestamp: "2026-04-22T11:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 72,
+              gap: 18,
+              sampleDateKey: "2026-04-22",
+            },
           ],
         },
       ],
     });
-    expect(summary.rotationsByDay).toEqual([
-      { date: "2026-04-22", count: 2 },
-    ]);
+    expect(summary.rotationsByDay).toEqual([{ date: "2026-04-22", count: 2 }]);
   });
 
   it("returns an empty rotation-density series when no slice keys are present (legacy history) (Task #510)", () => {
@@ -1317,8 +1634,22 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         {
           tier: "T1_LEGIT",
           snapshots: [
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18 },
-            { timestamp: "2026-04-23T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 71, gap: 18 },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 70,
+              gap: 18,
+            },
+            {
+              timestamp: "2026-04-23T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 71,
+              gap: 18,
+            },
           ],
         },
       ],
@@ -1335,7 +1666,15 @@ describe("summarizeDatasetHistory (Task #263 — render dataset cohort drift spa
         {
           tier: "T1_LEGIT",
           snapshots: [
-            { timestamp: "2026-04-22T00:00:00.000Z", tier: "T1_LEGIT", label: "human_authentic", count: 25, compositeMean: 70, gap: 18, sampleDateKey: "2026-04-22" },
+            {
+              timestamp: "2026-04-22T00:00:00.000Z",
+              tier: "T1_LEGIT",
+              label: "human_authentic",
+              count: 25,
+              compositeMean: 70,
+              gap: 18,
+              sampleDateKey: "2026-04-22",
+            },
           ],
         },
       ],
@@ -1359,7 +1698,9 @@ describe("DatasetRotationDensityBar (Task #510 — per-UTC-day rotation density 
     const { container } = render(<DatasetRotationDensityBar buckets={[]} />);
     expect(container.querySelector("svg")).toBeNull();
     expect(
-      container.querySelector("[data-testid='dataset-cohort-drift-rotation-density']"),
+      container.querySelector(
+        "[data-testid='dataset-cohort-drift-rotation-density']",
+      ),
     ).toBeNull();
   });
 
@@ -1387,14 +1728,18 @@ describe("DatasetRotationDensityBar (Task #510 — per-UTC-day rotation density 
     for (const bar of Array.from(filledBars)) {
       filledByDate.set(bar.getAttribute("data-date")!, bar);
     }
-    expect(filledByDate.get("2026-04-23")?.getAttribute("data-count")).toBe("2");
-    expect(filledByDate.get("2026-04-24")?.getAttribute("data-count")).toBe("1");
-    expect(filledByDate.get("2026-04-23")?.querySelector("title")?.textContent).toBe(
-      "2026-04-23 UTC: 2 slice rotations",
+    expect(filledByDate.get("2026-04-23")?.getAttribute("data-count")).toBe(
+      "2",
     );
-    expect(filledByDate.get("2026-04-24")?.querySelector("title")?.textContent).toBe(
-      "2026-04-24 UTC: 1 slice rotation",
+    expect(filledByDate.get("2026-04-24")?.getAttribute("data-count")).toBe(
+      "1",
     );
+    expect(
+      filledByDate.get("2026-04-23")?.querySelector("title")?.textContent,
+    ).toBe("2026-04-23 UTC: 2 slice rotations");
+    expect(
+      filledByDate.get("2026-04-24")?.querySelector("title")?.textContent,
+    ).toBe("2026-04-24 UTC: 1 slice rotation");
     // Days with zero rotations get the empty-day marker so the time
     // axis stays continuous but the bar reads as background.
     const emptyDays = svg.querySelectorAll(
@@ -1424,9 +1769,13 @@ describe("DatasetRotationDensityBar (Task #510 — per-UTC-day rotation density 
     );
     const svg = screen.getByTestId("dataset-cohort-drift-rotation-density");
     const bars = Array.from(
-      svg.querySelectorAll("[data-testid='dataset-cohort-drift-rotation-density-bar']"),
+      svg.querySelectorAll(
+        "[data-testid='dataset-cohort-drift-rotation-density-bar']",
+      ),
     );
-    const byDate = new Map(bars.map(b => [b.getAttribute("data-date")!, b] as const));
+    const byDate = new Map(
+      bars.map((b) => [b.getAttribute("data-date")!, b] as const),
+    );
     const shortH = Number(byDate.get("2026-04-22")!.getAttribute("height"));
     const tallH = Number(byDate.get("2026-04-23")!.getAttribute("height"));
     expect(Number.isFinite(shortH)).toBe(true);
@@ -1437,10 +1786,12 @@ describe("DatasetRotationDensityBar (Task #510 — per-UTC-day rotation density 
 
 describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-fixture drift sparkline)", () => {
   it("renders the empty-history hint when no points are supplied", () => {
-    render(<DatasetCohortFixtureDeltaSparkline points={[]} isDivergent={false} />);
-    expect(screen.getByTestId("dataset-cohort-fixture-delta-sparkline-empty")).toHaveTextContent(
-      /no delta history/i,
+    render(
+      <DatasetCohortFixtureDeltaSparkline points={[]} isDivergent={false} />,
     );
+    expect(
+      screen.getByTestId("dataset-cohort-fixture-delta-sparkline-empty"),
+    ).toHaveTextContent(/no delta history/i);
   });
 
   it("renders the single-snapshot hint with a signed delta when only one point is supplied", () => {
@@ -1450,9 +1801,9 @@ describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-
         isDivergent={false}
       />,
     );
-    expect(screen.getByTestId("dataset-cohort-fixture-delta-sparkline-single")).toHaveTextContent(
-      /1 snapshot · Δ-3\.8/,
-    );
+    expect(
+      screen.getByTestId("dataset-cohort-fixture-delta-sparkline-single"),
+    ).toHaveTextContent(/1 snapshot · Δ-3\.8/);
   });
 
   it("draws the sparkline svg with the warn band, polyline, and current point when 2+ points are supplied", () => {
@@ -1473,7 +1824,10 @@ describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-
       "aria-label",
       expect.stringContaining("3 snapshots: Δ-3.8 → Δ+0.5"),
     );
-    expect(svg).toHaveAttribute("aria-label", expect.stringContaining("warn band ±5"));
+    expect(svg).toHaveAttribute(
+      "aria-label",
+      expect.stringContaining("warn band ±5"),
+    );
     // Warn band rect + zero baseline + polyline + current-point circle
     // all need to be present so the visual contract from the task spec
     // ("shades the band around 0 and highlights the current point") is
@@ -1483,7 +1837,9 @@ describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-
     const polyline = svg.querySelector("polyline");
     expect(polyline).not.toBeNull();
     // Polyline should have one coordinate pair per supplied point.
-    expect(polyline!.getAttribute("points")!.trim().split(/\s+/).length).toBe(3);
+    expect(polyline!.getAttribute("points")!.trim().split(/\s+/).length).toBe(
+      3,
+    );
     expect(svg.querySelector("circle")).not.toBeNull();
   });
 
@@ -1497,8 +1853,12 @@ describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-
         isDivergent={true}
       />,
     );
-    const divergentSvg = screen.getByTestId("dataset-cohort-fixture-delta-sparkline");
-    const divergentFill = divergentSvg.querySelector("circle")!.getAttribute("fill");
+    const divergentSvg = screen.getByTestId(
+      "dataset-cohort-fixture-delta-sparkline",
+    );
+    const divergentFill = divergentSvg
+      .querySelector("circle")!
+      .getAttribute("fill");
     rerender(
       <DatasetCohortFixtureDeltaSparkline
         points={[
@@ -1527,8 +1887,16 @@ describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-
     render(
       <DatasetCohortFixtureDeltaSparkline
         points={[
-          { timestamp: "2026-04-20T00:00:00.000Z", value: -3.0, aggregated: true },
-          { timestamp: "2026-04-21T00:00:00.000Z", value: -2.5, aggregated: true },
+          {
+            timestamp: "2026-04-20T00:00:00.000Z",
+            value: -3.0,
+            aggregated: true,
+          },
+          {
+            timestamp: "2026-04-21T00:00:00.000Z",
+            value: -2.5,
+            aggregated: true,
+          },
           { timestamp: "2026-04-22T00:00:00.000Z", value: -1.0 },
           { timestamp: "2026-04-23T00:00:00.000Z", value: 0.5 },
         ]}
@@ -1557,7 +1925,9 @@ describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-
     expect(aggCoords[2]).toBe(rawCoords[0]);
     // Tooltip surfaces the same X agg + Y raw breakdown the per-tier
     // chip uses so screen-reader and hover users get the same context.
-    expect(svg.getAttribute("aria-label")).toContain("2 daily aggregates + 2 raw");
+    expect(svg.getAttribute("aria-label")).toContain(
+      "2 daily aggregates + 2 raw",
+    );
   });
 
   it("renders only the solid suffix (no dashed prefix) on a pure-raw history (Task #380)", () => {
@@ -1572,10 +1942,14 @@ describe("DatasetCohortFixtureDeltaSparkline (Task #362 — per-tier dataset-vs-
     );
     const svg = screen.getByTestId("dataset-cohort-fixture-delta-sparkline");
     expect(
-      svg.querySelector("[data-testid='dataset-cohort-fixture-delta-aggregated-segment']"),
+      svg.querySelector(
+        "[data-testid='dataset-cohort-fixture-delta-aggregated-segment']",
+      ),
     ).toBeNull();
     expect(
-      svg.querySelector("[data-testid='dataset-cohort-fixture-delta-raw-segment']"),
+      svg.querySelector(
+        "[data-testid='dataset-cohort-fixture-delta-raw-segment']",
+      ),
     ).not.toBeNull();
     // Aria-label should not promise a roll-up split when there isn't one.
     expect(svg.getAttribute("aria-label")).not.toContain("daily aggregate");
@@ -1701,12 +2075,16 @@ describe("DatasetCohortDriftSection (Task #515 — surface the dataset-vs-fixtur
         `dataset-cohort-drift-fixture-delta-trend-${tier}`,
       );
       expect(
-        trend.querySelector("[data-testid='dataset-cohort-fixture-delta-sparkline']"),
+        trend.querySelector(
+          "[data-testid='dataset-cohort-fixture-delta-sparkline']",
+        ),
       ).not.toBeNull();
       // The signed-Δ caption beside the sparkline mirrors the means
       // panel's `Δ+x.x` format so the two cards read consistently.
       expect(
-        within(tile).getByTestId(`dataset-cohort-drift-fixture-delta-latest-${tier}`),
+        within(tile).getByTestId(
+          `dataset-cohort-drift-fixture-delta-latest-${tier}`,
+        ),
       ).toBeInTheDocument();
     }
 
@@ -1716,7 +2094,9 @@ describe("DatasetCohortDriftSection (Task #515 — surface the dataset-vs-fixtur
     ).toHaveTextContent("Δ+1.0");
     // T2's is 49−51 = -2.0 (still inside the ±5 warn band).
     expect(
-      screen.getByTestId("dataset-cohort-drift-fixture-delta-latest-T2_BORDERLINE"),
+      screen.getByTestId(
+        "dataset-cohort-drift-fixture-delta-latest-T2_BORDERLINE",
+      ),
     ).toHaveTextContent("Δ-2.0");
     // T3's is 28−20 = +8.0 — past the warn threshold so the caption
     // flips to the divergent treatment that matches the means tile.
@@ -1738,9 +2118,21 @@ describe("DatasetHistoryMeanSparkline (Task #380 — split-stroke for daily roll
     const { container } = render(
       <DatasetHistoryMeanSparkline
         points={[
-          { timestamp: "2026-04-18T00:00:00.000Z", value: 70.1, aggregated: true },
-          { timestamp: "2026-04-19T00:00:00.000Z", value: 71.0, aggregated: true },
-          { timestamp: "2026-04-20T00:00:00.000Z", value: 71.4, aggregated: true },
+          {
+            timestamp: "2026-04-18T00:00:00.000Z",
+            value: 70.1,
+            aggregated: true,
+          },
+          {
+            timestamp: "2026-04-19T00:00:00.000Z",
+            value: 71.0,
+            aggregated: true,
+          },
+          {
+            timestamp: "2026-04-20T00:00:00.000Z",
+            value: 71.4,
+            aggregated: true,
+          },
           { timestamp: "2026-04-21T00:00:00.000Z", value: 72.0 },
           { timestamp: "2026-04-22T00:00:00.000Z", value: 72.3 },
         ]}
@@ -1766,7 +2158,9 @@ describe("DatasetHistoryMeanSparkline (Task #380 — split-stroke for daily roll
     expect(aggCoords[3]).toBe(rawCoords[0]);
     // Tooltip / aria-label exposes the breakdown so screen-reader users
     // get the same context as hover users.
-    expect(svg.getAttribute("aria-label")).toContain("3 daily aggregates + 2 raw");
+    expect(svg.getAttribute("aria-label")).toContain(
+      "3 daily aggregates + 2 raw",
+    );
   });
 
   it("renders only the solid suffix on a pure-raw history (no dashed prefix)", () => {
@@ -1781,7 +2175,9 @@ describe("DatasetHistoryMeanSparkline (Task #380 — split-stroke for daily roll
     );
     const svg = container.querySelector("svg")!;
     expect(
-      svg.querySelector("[data-testid='dataset-cohort-drift-aggregated-segment']"),
+      svg.querySelector(
+        "[data-testid='dataset-cohort-drift-aggregated-segment']",
+      ),
     ).toBeNull();
     expect(
       svg.querySelector("[data-testid='dataset-cohort-drift-raw-segment']"),
@@ -1797,9 +2193,21 @@ describe("DatasetHistoryMeanSparkline (Task #380 — split-stroke for daily roll
     const { container } = render(
       <DatasetHistoryMeanSparkline
         points={[
-          { timestamp: "2026-04-18T00:00:00.000Z", value: 69.8, aggregated: true },
-          { timestamp: "2026-04-19T00:00:00.000Z", value: 70.4, aggregated: true },
-          { timestamp: "2026-04-20T00:00:00.000Z", value: 70.9, aggregated: true },
+          {
+            timestamp: "2026-04-18T00:00:00.000Z",
+            value: 69.8,
+            aggregated: true,
+          },
+          {
+            timestamp: "2026-04-19T00:00:00.000Z",
+            value: 70.4,
+            aggregated: true,
+          },
+          {
+            timestamp: "2026-04-20T00:00:00.000Z",
+            value: 70.9,
+            aggregated: true,
+          },
         ]}
       />,
     );
@@ -1812,7 +2220,9 @@ describe("DatasetHistoryMeanSparkline (Task #380 — split-stroke for daily roll
     expect(
       svg.querySelector("[data-testid='dataset-cohort-drift-raw-segment']"),
     ).toBeNull();
-    expect(svg.getAttribute("aria-label")).toContain("3 daily aggregates + 0 raw");
+    expect(svg.getAttribute("aria-label")).toContain(
+      "3 daily aggregates + 0 raw",
+    );
   });
 
   it("annotates the single-snapshot fallback as '1 daily aggregate' when the only point is rolled up", () => {
@@ -1821,7 +2231,11 @@ describe("DatasetHistoryMeanSparkline (Task #380 — split-stroke for daily roll
     const { container } = render(
       <DatasetHistoryMeanSparkline
         points={[
-          { timestamp: "2026-04-22T00:00:00.000Z", value: 70.0, aggregated: true },
+          {
+            timestamp: "2026-04-22T00:00:00.000Z",
+            value: 70.0,
+            aggregated: true,
+          },
         ]}
       />,
     );
@@ -1856,11 +2270,20 @@ describe("computeCohortFixtureDelta (Task #256 — surface synthetic-vs-dataset 
 
   it("returns null delta and no divergence flag when either mean is missing", () => {
     // Cohort had no samples — can't compute a delta, so we don't warn.
-    expect(computeCohortFixtureDelta(null, 70)).toEqual({ delta: null, isDivergent: false });
+    expect(computeCohortFixtureDelta(null, 70)).toEqual({
+      delta: null,
+      isDivergent: false,
+    });
     // Synthetic summary didn't include this tier (e.g. T2 missing).
-    expect(computeCohortFixtureDelta(70, null)).toEqual({ delta: null, isDivergent: false });
+    expect(computeCohortFixtureDelta(70, null)).toEqual({
+      delta: null,
+      isDivergent: false,
+    });
     // Both missing — same: silent.
-    expect(computeCohortFixtureDelta(null, null)).toEqual({ delta: null, isDivergent: false });
+    expect(computeCohortFixtureDelta(null, null)).toEqual({
+      delta: null,
+      isDivergent: false,
+    });
   });
 
   it("supports an explicit warn threshold override for callers that need a tighter band", () => {
@@ -1878,10 +2301,18 @@ describe("computeCohortFixtureDelta (Task #256 — surface synthetic-vs-dataset 
     // the use case the in-card chooser exists for.
     const dataset = 76;
     const fixture = 70;
-    expect(computeCohortFixtureDelta(dataset, fixture, 3).isDivergent).toBe(true);
-    expect(computeCohortFixtureDelta(dataset, fixture, 5).isDivergent).toBe(true);
-    expect(computeCohortFixtureDelta(dataset, fixture, 8).isDivergent).toBe(false);
-    expect(computeCohortFixtureDelta(dataset, fixture, 10).isDivergent).toBe(false);
+    expect(computeCohortFixtureDelta(dataset, fixture, 3).isDivergent).toBe(
+      true,
+    );
+    expect(computeCohortFixtureDelta(dataset, fixture, 5).isDivergent).toBe(
+      true,
+    );
+    expect(computeCohortFixtureDelta(dataset, fixture, 8).isDivergent).toBe(
+      false,
+    );
+    expect(computeCohortFixtureDelta(dataset, fixture, 10).isDivergent).toBe(
+      false,
+    );
     // The signed delta itself never depends on the threshold.
     for (const t of [3, 5, 8, 10]) {
       expect(computeCohortFixtureDelta(dataset, fixture, t).delta).toBe(6);
@@ -1986,10 +2417,16 @@ describe("Cohort delta warn threshold persistence helpers (Task #363 — reviewe
       // stored "abc"). The reader must go through parseCohortDeltaWarnThreshold
       // so a stale entry can't crash or skew the panel.
       clearStorage();
-      window.localStorage.setItem(COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY, "abc");
+      window.localStorage.setItem(
+        COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY,
+        "abc",
+      );
       expect(readStoredCohortDeltaWarnThreshold()).toBeNull();
 
-      window.localStorage.setItem(COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY, "99");
+      window.localStorage.setItem(
+        COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY,
+        "99",
+      );
       expect(readStoredCohortDeltaWarnThreshold()).toBeNull();
 
       window.localStorage.setItem(COHORT_DELTA_WARN_THRESHOLD_STORAGE_KEY, "");
@@ -2002,29 +2439,35 @@ describe("Cohort delta warn threshold persistence helpers (Task #363 — reviewe
 
 describe("sortDatasetSamplesByDistanceFromMean (Task #255 — surface cohort outliers first)", () => {
   const make = (id: string, composite: number): DatasetSampleRow => ({
-    id, label: "human_authentic", tier: "T1_LEGIT",
-    composite, e1: null, e2: null, e3: null, triage: "MANUAL_REVIEW",
+    id,
+    label: "human_authentic",
+    tier: "T1_LEGIT",
+    composite,
+    e1: null,
+    e2: null,
+    e3: null,
+    triage: "MANUAL_REVIEW",
   });
 
   it("sorts rows by absolute distance from the cohort mean, descending", () => {
     const rows = [make("a", 80), make("b", 50), make("c", 90), make("d", 75)];
     const sorted = sortDatasetSamplesByDistanceFromMean(rows, 75);
     // |50-75|=25, |90-75|=15, |80-75|=5, |75-75|=0 → b, c, a, d
-    expect(sorted.map(r => r.id)).toEqual(["b", "c", "a", "d"]);
+    expect(sorted.map((r) => r.id)).toEqual(["b", "c", "a", "d"]);
   });
 
   it("breaks ties on equal distances by report id so the order is stable", () => {
     // Both 70 and 80 are 5 away from 75; tie-break should put "x" before "y".
     const rows = [make("y", 70), make("x", 80), make("z", 75)];
     const sorted = sortDatasetSamplesByDistanceFromMean(rows, 75);
-    expect(sorted.map(r => r.id)).toEqual(["x", "y", "z"]);
+    expect(sorted.map((r) => r.id)).toEqual(["x", "y", "z"]);
   });
 
   it("does not mutate the input array", () => {
     const rows = [make("a", 80), make("b", 50)];
-    const snapshot = rows.map(r => r.id);
+    const snapshot = rows.map((r) => r.id);
     sortDatasetSamplesByDistanceFromMean(rows, 75);
-    expect(rows.map(r => r.id)).toEqual(snapshot);
+    expect(rows.map((r) => r.id)).toEqual(snapshot);
   });
 
   it("returns rows in upstream order when the cohort mean is null (empty cohort)", () => {
@@ -2032,7 +2475,7 @@ describe("sortDatasetSamplesByDistanceFromMean (Task #255 — surface cohort out
     // order is preferable to picking an arbitrary one.
     const rows = [make("c", 90), make("a", 80), make("b", 50)];
     const sorted = sortDatasetSamplesByDistanceFromMean(rows, null);
-    expect(sorted.map(r => r.id)).toEqual(["c", "a", "b"]);
+    expect(sorted.map((r) => r.id)).toEqual(["c", "a", "b"]);
   });
 
   it("handles an empty input without throwing", () => {
@@ -2042,10 +2485,16 @@ describe("sortDatasetSamplesByDistanceFromMean (Task #255 — surface cohort out
 });
 
 describe("buildSampleReportLinkResolver (Task #371 — link sample ids to /verify/<id> when they're in the live feed)", () => {
-  const make = (id: number, reportCode: string): SampleReportLinkCandidate => ({ id, reportCode });
+  const make = (id: number, reportCode: string): SampleReportLinkCandidate => ({
+    id,
+    reportCode,
+  });
 
   it("resolves a sample id matching a live report's stringified numeric id to /verify/<id>", () => {
-    const resolve = buildSampleReportLinkResolver([make(42, "VR-002A"), make(7, "VR-0007")]);
+    const resolve = buildSampleReportLinkResolver([
+      make(42, "VR-002A"),
+      make(7, "VR-0007"),
+    ]);
     expect(resolve("42")).toBe("/verify/42");
     expect(resolve("7")).toBe("/verify/7");
   });
@@ -2873,8 +3322,9 @@ describe("HandwavyPhrasesAdmin — Re-scan from cached preview (Task #494)", () 
       { timeout: 5_000 },
     );
     await waitFor(() => {
-      expect(within(panel).getByTestId("handwavy-remove-preview-source"))
-        .toHaveAttribute("data-source", "fresh");
+      expect(
+        within(panel).getByTestId("handwavy-remove-preview-source"),
+      ).toHaveAttribute("data-source", "fresh");
     });
     await waitFor(() => {
       expect(countRemoveDryRunRequests()).toBe(1);
@@ -2889,7 +3339,9 @@ describe("HandwavyPhrasesAdmin — Re-scan from cached preview (Task #494)", () 
     // Step 2 — back out and re-click Trash. The active list is
     // unchanged so the cached entry is reused and the panel re-opens
     // with `source: "cached"`. No second DELETE dry-run on the wire.
-    fireEvent.click(within(panel).getByTestId("handwavy-remove-preview-cancel"));
+    fireEvent.click(
+      within(panel).getByTestId("handwavy-remove-preview-cancel"),
+    );
     await waitFor(() => {
       expect(
         screen.queryByTestId("handwavy-remove-preview"),
@@ -2902,8 +3354,9 @@ describe("HandwavyPhrasesAdmin — Re-scan from cached preview (Task #494)", () 
       { timeout: 5_000 },
     );
     await waitFor(() => {
-      expect(within(cachedPanel).getByTestId("handwavy-remove-preview-source"))
-        .toHaveAttribute("data-source", "cached");
+      expect(
+        within(cachedPanel).getByTestId("handwavy-remove-preview-source"),
+      ).toHaveAttribute("data-source", "cached");
     });
     expect(countRemoveDryRunRequests()).toBe(1);
 
@@ -3588,17 +4041,13 @@ describe("HandwavyPhrasesAdmin — per-row Undo stack (Task #237 / #332 / #474)"
       }
 
       if (
-        url.includes(
-          "/api/feedback/calibration/handwavy-phrases/reinstate",
-        )
+        url.includes("/api/feedback/calibration/handwavy-phrases/reinstate")
       ) {
         const phrase = String(body?.phrase ?? "");
         const removedAt = String(body?.removedAt ?? "");
         const histIdx = controller.history.findIndex(
           (h) =>
-            h.phrase === phrase &&
-            h.removedAt === removedAt &&
-            !h.reinstated,
+            h.phrase === phrase && h.removedAt === removedAt && !h.reinstated,
         );
         if (histIdx === -1) {
           return jsonResponse({ error: "Not found" }, 404);
@@ -3732,9 +4181,7 @@ describe("HandwavyPhrasesAdmin — per-row Undo stack (Task #237 / #332 / #474)"
     if (expected === 0) {
       await waitFor(
         () => {
-          expect(
-            screen.queryByTestId("handwavy-single-undo-stack"),
-          ).toBeNull();
+          expect(screen.queryByTestId("handwavy-single-undo-stack")).toBeNull();
         },
         { timeout },
       );
@@ -3877,12 +4324,8 @@ describe("HandwavyPhrasesAdmin — per-row Undo stack (Task #237 / #332 / #474)"
     // And the OTHER two phrases must still be removed (their Undo
     // buttons were never clicked) — the active list must NOT have
     // brought them back.
-    expect(
-      screen.queryByLabelText(`Remove phrase ${phrases[0]}`),
-    ).toBeNull();
-    expect(
-      screen.queryByLabelText(`Remove phrase ${phrases[2]}`),
-    ).toBeNull();
+    expect(screen.queryByLabelText(`Remove phrase ${phrases[0]}`)).toBeNull();
+    expect(screen.queryByLabelText(`Remove phrase ${phrases[2]}`)).toBeNull();
   });
 
   it("auto-clears ONLY the entry whose phrase reappears on the active list (external reinstate); other entries stay", async () => {

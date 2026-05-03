@@ -66,7 +66,8 @@ function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
 
 function isOptional(s: z.ZodTypeAny): boolean {
   if (s instanceof z.ZodOptional || s instanceof z.ZodDefault) return true;
-  if (s instanceof z.ZodEffects) return isOptional(s._def.schema as z.ZodTypeAny);
+  if (s instanceof z.ZodEffects)
+    return isOptional(s._def.schema as z.ZodTypeAny);
   return false;
 }
 
@@ -156,7 +157,10 @@ export function buildServer(): Server {
         content: [
           {
             type: "text" as const,
-            text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+            text:
+              typeof result === "string"
+                ? result
+                : JSON.stringify(result, null, 2),
           },
         ],
       };
@@ -191,7 +195,7 @@ export async function main(): Promise<void> {
   const server = buildServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  // eslint-disable-next-line no-console
+
   console.error(
     `[vulnrap-mcp] connected. base=${getBaseUrl()} tools=${TOOLS.length}`,
   );
@@ -210,7 +214,6 @@ const isMain = (() => {
 
 if (isMain) {
   main().catch((err) => {
-    // eslint-disable-next-line no-console
     console.error("[vulnrap-mcp] fatal:", err);
     process.exit(1);
   });

@@ -1,5 +1,10 @@
-import { test, expect, request, type APIRequestContext } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import {
+  test,
+  expect,
+  request,
+  type APIRequestContext,
+} from "@playwright/test";
 
 // Task #420 — End-to-end coverage for the Task #297 token-rejected banner.
 //
@@ -87,9 +92,9 @@ test.describe("Calibration token-rejected banner (Task #420)", () => {
       await expect(
         page.getByTestId("calibration-token-rejected-banner"),
       ).toHaveCount(0);
-      await expect(
-        page.getByTestId("calibration-cooldown-banner"),
-      ).toHaveCount(0);
+      await expect(page.getByTestId("calibration-cooldown-banner")).toHaveCount(
+        0,
+      );
 
       // Phase 1: first add → 401 → rejection banner appears in both
       // render locations (calibration card + FLAT admin card).
@@ -114,11 +119,14 @@ test.describe("Calibration token-rejected banner (Task #420)", () => {
       // headline (which only mentions the env var by name today; this
       // spec shouldn't depend on that).
       await expect(
-        rejectionBanners.first().locator("p").filter({ hasText: /Confirm the reviewer token/i }),
+        rejectionBanners
+          .first()
+          .locator("p")
+          .filter({ hasText: /Confirm the reviewer token/i }),
       ).toContainText("VITE_CALIBRATION_TOKEN");
-      await expect(
-        page.getByTestId("calibration-cooldown-banner"),
-      ).toHaveCount(0);
+      await expect(page.getByTestId("calibration-cooldown-banner")).toHaveCount(
+        0,
+      );
 
       // Phase 2: second add → 429 → cooldown banner takes over,
       // rejection banner is suppressed by the cooldownActive guard.

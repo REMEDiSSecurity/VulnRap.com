@@ -13,12 +13,13 @@ export interface SpectralResult {
 export function computeSpectralScore(text: string): SpectralResult {
   const markers: SpectralMarker[] = [];
 
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  const lengths = sentences.map(s => s.trim().split(/\s+/).length);
+  const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 0);
+  const lengths = sentences.map((s) => s.trim().split(/\s+/).length);
 
   if (lengths.length >= 5) {
     const mean = lengths.reduce((a, b) => a + b, 0) / lengths.length;
-    const variance = lengths.reduce((a, b) => a + (b - mean) ** 2, 0) / lengths.length;
+    const variance =
+      lengths.reduce((a, b) => a + (b - mean) ** 2, 0) / lengths.length;
     const cv = mean > 0 ? Math.sqrt(variance) / mean : 0;
 
     if (cv < 0.25) {
@@ -33,13 +34,18 @@ export function computeSpectralScore(text: string): SpectralResult {
 
   const words = text.toLowerCase().match(/\b[a-z]+\b/g) || [];
 
-  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 20);
+  const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim().length > 20);
   if (paragraphs.length >= 3) {
-    const paraLengths = paragraphs.map(p => p.length);
-    const paraMean = paraLengths.reduce((a, b) => a + b, 0) / paraLengths.length;
-    const paraCV = paraMean > 0
-      ? Math.sqrt(paraLengths.reduce((a, b) => a + (b - paraMean) ** 2, 0) / paraLengths.length) / paraMean
-      : 0;
+    const paraLengths = paragraphs.map((p) => p.length);
+    const paraMean =
+      paraLengths.reduce((a, b) => a + b, 0) / paraLengths.length;
+    const paraCV =
+      paraMean > 0
+        ? Math.sqrt(
+            paraLengths.reduce((a, b) => a + (b - paraMean) ** 2, 0) /
+              paraLengths.length,
+          ) / paraMean
+        : 0;
 
     if (paraCV < 0.3) {
       markers.push({
@@ -51,7 +57,11 @@ export function computeSpectralScore(text: string): SpectralResult {
     }
   }
 
-  const hedges = (text.match(/\b(?:potentially|possibly|might|could|may|appears?\s+to|seems?\s+to|likely|approximately)\b/gi) || []).length;
+  const hedges = (
+    text.match(
+      /\b(?:potentially|possibly|might|could|may|appears?\s+to|seems?\s+to|likely|approximately)\b/gi,
+    ) || []
+  ).length;
   const hedgeDensity = words.length > 0 ? (hedges / words.length) * 100 : 0;
 
   if (hedgeDensity > 2.0) {
@@ -65,11 +75,16 @@ export function computeSpectralScore(text: string): SpectralResult {
 
   const listItems = text.match(/^[\s]*[-*•]\s+.+$/gm) || [];
   if (listItems.length >= 4) {
-    const itemLengths = listItems.map(i => i.trim().length);
-    const itemMean = itemLengths.reduce((a, b) => a + b, 0) / itemLengths.length;
-    const itemCV = itemMean > 0
-      ? Math.sqrt(itemLengths.reduce((a, b) => a + (b - itemMean) ** 2, 0) / itemLengths.length) / itemMean
-      : 0;
+    const itemLengths = listItems.map((i) => i.trim().length);
+    const itemMean =
+      itemLengths.reduce((a, b) => a + b, 0) / itemLengths.length;
+    const itemCV =
+      itemMean > 0
+        ? Math.sqrt(
+            itemLengths.reduce((a, b) => a + (b - itemMean) ** 2, 0) /
+              itemLengths.length,
+          ) / itemMean
+        : 0;
 
     if (itemCV < 0.2) {
       markers.push({
@@ -81,8 +96,13 @@ export function computeSpectralScore(text: string): SpectralResult {
     }
   }
 
-  const connectors = (text.match(/\b(?:Furthermore|Moreover|Additionally|In\s+addition|Consequently|Therefore|However|Nevertheless)\b/gi) || []).length;
-  const connectorDensity = sentences.length > 0 ? connectors / sentences.length : 0;
+  const connectors = (
+    text.match(
+      /\b(?:Furthermore|Moreover|Additionally|In\s+addition|Consequently|Therefore|However|Nevertheless)\b/gi,
+    ) || []
+  ).length;
+  const connectorDensity =
+    sentences.length > 0 ? connectors / sentences.length : 0;
 
   if (connectorDensity > 0.3) {
     markers.push({

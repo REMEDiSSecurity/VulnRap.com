@@ -198,10 +198,7 @@ export function createRateLimitCooldown(
     const next: RateLimitCooldownState = {
       active: true,
       resetAt,
-      secondsRemaining: Math.max(
-        1,
-        Math.ceil((resetAt - Date.now()) / 1000),
-      ),
+      secondsRemaining: Math.max(1, Math.ceil((resetAt - Date.now()) / 1000)),
       serverMessage,
       limit,
       noticeId: state.noticeId + 1,

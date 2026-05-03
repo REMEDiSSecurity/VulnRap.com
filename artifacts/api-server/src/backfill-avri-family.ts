@@ -28,7 +28,9 @@ interface CliOpts {
 function parsePositiveInt(raw: string, flag: string): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n <= 0) {
-    console.error(`[backfill-avri-family] ${flag} must be a positive integer, got: ${raw}`);
+    console.error(
+      `[backfill-avri-family] ${flag} must be a positive integer, got: ${raw}`,
+    );
     process.exit(2);
   }
   return n;
@@ -39,10 +41,17 @@ function parseArgs(argv: string[]): CliOpts {
   for (const arg of argv.slice(2)) {
     if (arg === "--" || arg === "") continue;
     if (arg === "--dry-run") opts.dryRun = true;
-    else if (arg.startsWith("--limit=")) opts.limit = parsePositiveInt(arg.slice("--limit=".length), "--limit");
-    else if (arg.startsWith("--batch-size=")) opts.batchSize = parsePositiveInt(arg.slice("--batch-size=".length), "--batch-size");
+    else if (arg.startsWith("--limit="))
+      opts.limit = parsePositiveInt(arg.slice("--limit=".length), "--limit");
+    else if (arg.startsWith("--batch-size="))
+      opts.batchSize = parsePositiveInt(
+        arg.slice("--batch-size=".length),
+        "--batch-size",
+      );
     else if (arg === "--help" || arg === "-h") {
-      console.log("Usage: backfill-avri-family [--dry-run] [--limit=N] [--batch-size=N]");
+      console.log(
+        "Usage: backfill-avri-family [--dry-run] [--limit=N] [--batch-size=N]",
+      );
       process.exit(0);
     } else {
       console.error(`[backfill-avri-family] unknown argument: ${arg}`);
@@ -69,8 +78,13 @@ async function backfill(opts: CliOpts): Promise<void> {
     .from(reportsTable)
     .where(isNull(reportsTable.avriFamily));
   const totalLegacy = totalRow[0]?.n ?? 0;
-  console.log(`[backfill-avri-family] rows with NULL avri_family: ${totalLegacy}`);
-  if (opts.dryRun) console.log("[backfill-avri-family] dry-run mode: no writes will be performed");
+  console.log(
+    `[backfill-avri-family] rows with NULL avri_family: ${totalLegacy}`,
+  );
+  if (opts.dryRun)
+    console.log(
+      "[backfill-avri-family] dry-run mode: no writes will be performed",
+    );
 
   let processed = 0;
   let copiedFromBlob = 0;
@@ -81,7 +95,8 @@ async function backfill(opts: CliOpts): Promise<void> {
 
   while (true) {
     if (opts.limit !== null && processed >= opts.limit) break;
-    const remaining = opts.limit !== null ? opts.limit - processed : opts.batchSize;
+    const remaining =
+      opts.limit !== null ? opts.limit - processed : opts.batchSize;
     const pageSize = Math.min(opts.batchSize, remaining);
 
     const rows = await db
@@ -115,7 +130,10 @@ async function backfill(opts: CliOpts): Promise<void> {
           source = "classify";
         } catch (err) {
           failed++;
-          console.error(`[backfill-avri-family] #${row.id}: classify failed`, err);
+          console.error(
+            `[backfill-avri-family] #${row.id}: classify failed`,
+            err,
+          );
           continue;
         }
       }
@@ -128,14 +146,18 @@ async function backfill(opts: CliOpts): Promise<void> {
       if (opts.dryRun) {
         if (source === "blob") copiedFromBlob++;
         else classifiedFromText++;
-        console.log(`[backfill-avri-family] #${row.id}: would set avri_family=${family} (source=${source})`);
+        console.log(
+          `[backfill-avri-family] #${row.id}: would set avri_family=${family} (source=${source})`,
+        );
         continue;
       }
 
       const wrote = await db
         .update(reportsTable)
         .set({ avriFamily: family })
-        .where(and(eq(reportsTable.id, row.id), isNull(reportsTable.avriFamily)))
+        .where(
+          and(eq(reportsTable.id, row.id), isNull(reportsTable.avriFamily)),
+        )
         .returning({ id: reportsTable.id });
 
       if (wrote.length > 0) {

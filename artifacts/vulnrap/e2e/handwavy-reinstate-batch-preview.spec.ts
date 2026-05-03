@@ -1,5 +1,12 @@
-import { test, expect, request, type APIRequestContext, type Page, type Locator } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import {
+  test,
+  expect,
+  request,
+  type APIRequestContext,
+  type Page,
+  type Locator,
+} from "@playwright/test";
 
 // Task #177 — End-to-end coverage for the per-batch "Preview reinstate"
 // affordance on the FLAT hand-wavy phrase audit panel. The button calls
@@ -34,10 +41,16 @@ interface BatchRemovalResponse {
 
 function uniquePhrases(count: number): string[] {
   const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  return Array.from({ length: count }, (_, i) => `task177 preview ${id} phrase ${i + 1}`);
+  return Array.from(
+    { length: count },
+    (_, i) => `task177 preview ${id} phrase ${i + 1}`,
+  );
 }
 
-async function addPhrase(api: APIRequestContext, phrase: string): Promise<void> {
+async function addPhrase(
+  api: APIRequestContext,
+  phrase: string,
+): Promise<void> {
   const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
     data: { phrase, category: "hedging", reviewer: "e2e-task177" },
   });
@@ -61,11 +74,17 @@ async function batchRemove(
   const body = (await res.json()) as BatchRemovalResponse;
   expect(body.batch).toBe(true);
   expect(body.removed).toBe(phrases.length);
-  expect(body.historyEntry?.removedAt, "batch removal should produce a history entry").toBeTruthy();
+  expect(
+    body.historyEntry?.removedAt,
+    "batch removal should produce a history entry",
+  ).toBeTruthy();
   return body;
 }
 
-async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void> {
+async function cleanup(
+  api: APIRequestContext,
+  phrases: string[],
+): Promise<void> {
   await api
     .delete("/api/feedback/calibration/handwavy-phrases", {
       data: { phrases, reviewer: "e2e-task177-cleanup" },
@@ -119,7 +138,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Preview reinstate' batch button"
       await expect(previewBtn).toBeVisible();
       await expect(previewBtn).toHaveText(/Preview reinstate/);
       await expect(batchBtn).toBeVisible();
-      await expect(batchBtn).toHaveText(new RegExp(`Reinstate all ${phrases.length}\\b`));
+      await expect(batchBtn).toHaveText(
+        new RegExp(`Reinstate all ${phrases.length}\\b`),
+      );
 
       // None of the phrases are on the active list before the click.
       for (const p of phrases) {
@@ -150,7 +171,9 @@ test.describe("FLAT hand-wavy phrase panel — 'Preview reinstate' batch button"
       // Critically: nothing has been mutated by the dry-run. The batch
       // header must NOT have flipped to "All reinstated" and the active
       // list must still be empty for these phrases.
-      await expect(group.getByTestId("handwavy-history-batch-reinstated")).toHaveCount(0);
+      await expect(
+        group.getByTestId("handwavy-history-batch-reinstated"),
+      ).toHaveCount(0);
       await expect(batchBtn).toBeVisible();
       for (const p of phrases) {
         await expect(
@@ -159,20 +182,32 @@ test.describe("FLAT hand-wavy phrase panel — 'Preview reinstate' batch button"
       }
 
       // Press the panel's "Confirm reinstate" button to fire the real call.
-      const confirmBtn = panel.getByTestId("handwavy-reinstate-batch-preview-confirm");
+      const confirmBtn = panel.getByTestId(
+        "handwavy-reinstate-batch-preview-confirm",
+      );
       await expect(confirmBtn).toBeEnabled();
-      await expect(confirmBtn).toContainText(`Confirm reinstate (${phrases.length})`);
+      await expect(confirmBtn).toContainText(
+        `Confirm reinstate (${phrases.length})`,
+      );
       await confirmBtn.click();
 
       // After the round-trip the header swaps to "All reinstated", the
       // preview panel goes away (cleared by the success path), and every
       // phrase reappears on the active list.
-      await expect(group.getByTestId("handwavy-history-batch-reinstated")).toBeVisible({
+      await expect(
+        group.getByTestId("handwavy-history-batch-reinstated"),
+      ).toBeVisible({
         timeout: 15_000,
       });
-      await expect(group.getByTestId("handwavy-reinstate-batch-preview-panel")).toHaveCount(0);
-      await expect(group.getByTestId("handwavy-reinstate-batch")).toHaveCount(0);
-      await expect(group.getByTestId("handwavy-reinstate-batch-preview")).toHaveCount(0);
+      await expect(
+        group.getByTestId("handwavy-reinstate-batch-preview-panel"),
+      ).toHaveCount(0);
+      await expect(group.getByTestId("handwavy-reinstate-batch")).toHaveCount(
+        0,
+      );
+      await expect(
+        group.getByTestId("handwavy-reinstate-batch-preview"),
+      ).toHaveCount(0);
 
       for (const p of phrases) {
         await expect(
@@ -202,13 +237,19 @@ test.describe("FLAT hand-wavy phrase panel — 'Preview reinstate' batch button"
       const panel = group.getByTestId("handwavy-reinstate-batch-preview-panel");
       await expect(panel).toBeVisible({ timeout: 15_000 });
 
-      await panel.getByTestId("handwavy-reinstate-batch-preview-cancel").click();
-      await expect(group.getByTestId("handwavy-reinstate-batch-preview-panel")).toHaveCount(0);
+      await panel
+        .getByTestId("handwavy-reinstate-batch-preview-cancel")
+        .click();
+      await expect(
+        group.getByTestId("handwavy-reinstate-batch-preview-panel"),
+      ).toHaveCount(0);
 
       // Nothing should have been mutated — the batch button is still there
       // and none of the phrases are on the active list.
       await expect(group.getByTestId("handwavy-reinstate-batch")).toBeVisible();
-      await expect(group.getByTestId("handwavy-history-batch-reinstated")).toHaveCount(0);
+      await expect(
+        group.getByTestId("handwavy-history-batch-reinstated"),
+      ).toHaveCount(0);
       for (const p of phrases) {
         await expect(
           page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: p }),

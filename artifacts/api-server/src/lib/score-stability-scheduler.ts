@@ -22,10 +22,7 @@ const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h (nightly)
 const DEFAULT_RETRY_INTERVAL_MS = 60 * 60 * 1000; // 1h on failure
 const DEFAULT_INITIAL_DELAY_MS = 5 * 60 * 1000; // 5 min after boot
 
-function parseIntegerEnv(
-  raw: string | undefined,
-  fallback: number,
-): number {
+function parseIntegerEnv(raw: string | undefined, fallback: number): number {
   if (typeof raw !== "string") return fallback;
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -239,8 +236,7 @@ export function startScoreStabilityScheduler(
         lastTickFlips: rescore?.flips ?? null,
         lastTickFailed: rescore?.failed ?? null,
         lastAlertDate: alert?.date ?? schedulerStatus.lastAlertDate,
-        lastAlertFlipRate:
-          alert?.flipRate ?? schedulerStatus.lastAlertFlipRate,
+        lastAlertFlipRate: alert?.flipRate ?? schedulerStatus.lastAlertFlipRate,
         lastAlertDispatched:
           alert?.dispatched ?? schedulerStatus.lastAlertDispatched,
         nextTickAt: stopped

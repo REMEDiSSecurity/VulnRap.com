@@ -1,0 +1,63 @@
+# Build output / generated
+**/dist/
+**/build/
+**/out/
+**/out-tsc/
+**/.next/
+**/.expo/
+**/.expo-shared/
+**/coverage/
+**/*.tsbuildinfo
+
+# Dependencies
+**/node_modules/
+
+# Lockfiles & package metadata
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Generated client code
+lib/api-client-react/src/generated/
+lib/api-zod/src/generated/
+
+# Helm / Kubernetes templates (Prettier cannot parse Go templates)
+deploy/helm/**/templates/
+deploy/helm/**/charts/
+
+# Go SDK
+sdks/go/
+
+# Postman collections (huge generated JSON)
+sdks/postman/
+
+# Bookmarklet generated bundle
+sdks/bookmarklet/vulnrap.bookmarklet.js
+
+# Replit / agent internals
+.local/
+.replit
+replit.md
+artifact.toml
+.cache/
+.config/
+
+# Attached assets, logs, scratch files
+attached_assets/
+*.log
+all_imports_raw.txt
+imports.txt
+mockup_ui.txt
+vulnrap_ui.txt
+source_files.txt
+unique_potential_dead.txt
+conflict_test.txt
+replit-support-report.md
+
+# Playwright artifacts
+artifacts/*/test-results/
+artifacts/*/playwright-report/
+artifacts/*/playwright/.cache/
+
+# Runtime data files
+artifacts/*/data/

@@ -4,10 +4,10 @@
 // exercises GET /blog/feed.xml end-to-end. Uses node:http directly to
 // match the pattern used by other route tests in this folder.
 import http from "node:http";
-import type { AddressInfo } from "node:net";
 import express, { type Express } from "express";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import blogRouter, { buildBlogAtomFeed } from "./blog";
+import type { AddressInfo } from "node:net";
 
 let server: http.Server;
 let baseUrl: string;
@@ -27,7 +27,11 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-async function fetchText(path: string): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
+async function fetchText(path: string): Promise<{
+  status: number;
+  headers: http.IncomingHttpHeaders;
+  body: string;
+}> {
   const res = await fetch(`${baseUrl}${path}`);
   const body = await res.text();
   const headers: http.IncomingHttpHeaders = {};
@@ -59,7 +63,9 @@ describe("GET /blog/feed.xml", () => {
 
   it("links each entry to /blog#<id> on the public site", async () => {
     const res = await fetchText("/blog/feed.xml");
-    expect(res.body).toMatch(/href="https:\/\/vulnrap\.com\/blog#update13-mcp-launch"/);
+    expect(res.body).toMatch(
+      /href="https:\/\/vulnrap\.com\/blog#update13-mcp-launch"/,
+    );
     expect(res.body).toMatch(/href="https:\/\/vulnrap\.com\/blog#first-post"/);
   });
 
@@ -81,9 +87,13 @@ describe("GET /blog/feed.xml", () => {
 
   it("orders entries newest first by date", async () => {
     const res = await fetchText("/blog/feed.xml");
-    const updatedMatches = [...res.body.matchAll(/<entry>[\s\S]*?<updated>([^<]+)<\/updated>/g)].map((m) => m[1]);
+    const updatedMatches = [
+      ...res.body.matchAll(/<entry>[\s\S]*?<updated>([^<]+)<\/updated>/g),
+    ].map((m) => m[1]);
     expect(updatedMatches.length).toBeGreaterThan(0);
-    const sorted = [...updatedMatches].sort((a, b) => Date.parse(b) - Date.parse(a));
+    const sorted = [...updatedMatches].sort(
+      (a, b) => Date.parse(b) - Date.parse(a),
+    );
     expect(updatedMatches).toEqual(sorted);
   });
 });

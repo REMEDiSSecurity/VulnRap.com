@@ -8,7 +8,7 @@ pick a path with eyes open.
 as a category of report we couldn't explain or a calibration disagreement that
 wouldn't go away. The 74-fixture test battery is hand-curated, with slop
 carefully constructed to look like the slop we've actually seen — but it's
-still slop *we wrote*. The next data-science loop needs reports we didn't
+still slop _we wrote_. The next data-science loop needs reports we didn't
 write, submitted by people we don't know, with whatever surface area the actual
 world generates.
 
@@ -69,6 +69,7 @@ For a report to be useful in the calibration battery it needs:
 ambiguity for non-commercial calibration use.
 
 **Cons:**
+
 - Survivorship bias on the slop side: HackerOne closes a lot of slop privately;
   the public hacktivity feed is filtered to interesting outcomes.
 - Selection bias on the legit side: Project Zero reports look nothing like an
@@ -80,8 +81,8 @@ ambiguity for non-commercial calibration use.
   any future model trained on our codebase will train on the report text,
   which is unwanted.
 
-**Recommended posture:** use public datasets for the *labels and structural
-shape* (what a real INJECTION T1_LEGIT looks like, what a real T3_SLOP rejection
+**Recommended posture:** use public datasets for the _labels and structural
+shape_ (what a real INJECTION T1_LEGIT looks like, what a real T3_SLOP rejection
 reason reads like) and rewrite the fixture text ourselves from primary
 documentation (the original advisory, the upstream commit, the test case that
 landed). This gives us calibration-relevant fixtures without redistributing
@@ -95,13 +96,15 @@ an opt-in "include this report in our calibration battery" checkbox on the
 Check page, alongside an explicit consent block:
 
 > ☐ Allow VulnRap to retain the redacted text of this report for use in our
->   public calibration battery. We will:
->   - Keep only the redacted version (PII, secrets, hostnames stripped).
->   - Tag it with the triage outcome you select below.
->   - Cite no identifying information about you or your program.
->   - Remove it on request at any time.
+> public calibration battery. We will:
+>
+> - Keep only the redacted version (PII, secrets, hostnames stripped).
+> - Tag it with the triage outcome you select below.
+> - Cite no identifying information about you or your program.
+> - Remove it on request at any time.
 
 **Pros:**
+
 - Reports come from the actual user base of VulnRap, which is exactly the
   population we want to calibrate against.
 - Consent is explicit and the audit trail is clean.
@@ -109,6 +112,7 @@ Check page, alongside an explicit consent block:
   rejected/approved the report), which is the strongest possible label.
 
 **Cons:**
+
 - Adoption rate will be low — most submitters won't opt in.
 - Reviewer time: every opt-in submission needs a human reviewer to confirm
   the redaction was clean, the label is defensible, and the report doesn't
@@ -129,12 +133,14 @@ labeled sample to fold into the calibration battery (with their attribution
 preferences honored).
 
 **Pros:**
+
 - Highest signal source: a curated 50–100 reports from a real VDP intake will
   surface more new detector categories than 5,000 public hacktivity reports.
 - Long-term relationship: a VDP that contributes to the battery has standing
   to ask for detector tweaks against their specific failure modes.
 
 **Cons:**
+
 - Slow: outreach, NDAs, redaction review per partner. First useful fixture
   could be 2–3 sprints out.
 - Fragile: a single partner pulling out can compromise a meaningful slice of
@@ -152,16 +158,18 @@ Use an LLM to generate slop reports under a controlled prompt that varies
 specific signals (e.g. "generate a SQL injection report that names a real CWE
 but provides no payload" or "generate an XSS report with a fabricated HTTP
 response containing a literal payload"). Each generated report comes with a
-ground-truth label and a manifest of which detectors *should* fire.
+ground-truth label and a manifest of which detectors _should_ fire.
 
 **Pros:**
+
 - Fast: hundreds of fixtures per hour.
 - Labeled by construction.
 - Surfaces specific failure modes by design (we know what we're looking for
   before we generate).
 
 **Cons:**
-- Doesn't surface failure modes we *aren't* looking for — by definition, the
+
+- Doesn't surface failure modes we _aren't_ looking for — by definition, the
   prompt only generates what we asked for.
 - Risks training a detector against the generator: if we use gpt-5-nano to
   generate slop and gpt-5-nano to score slop, we may be measuring the
@@ -170,8 +178,8 @@ ground-truth label and a manifest of which detectors *should* fire.
   the substance-prompt audit (Task #446) was triggered by exactly this
   problem on the legit side.
 
-**Recommended posture:** keep using synthetic fixtures for *targeted regression
-tests* (slop-13, slop-14, slop-15 are all of this shape and they earned their
+**Recommended posture:** keep using synthetic fixtures for _targeted regression
+tests_ (slop-13, slop-14, slop-15 are all of this shape and they earned their
 keep) but never as the primary calibration source. A new synthetic fixture
 should always answer the question "what specific detector behavior am I
 locking in?" — never "is the system improving overall?"

@@ -10,6 +10,8 @@
     "prerender": "node scripts/prerender.mjs",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "pnpm -w run typecheck:libs && tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test": "vitest run && pnpm run test:e2e",
     "test:watch": "vitest",
     "test:unit": "vitest run",

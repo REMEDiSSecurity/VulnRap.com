@@ -54,7 +54,9 @@ function serializeWebhook(row: Webhook): {
     url: row.url,
     eventTypes: row.eventTypes ?? [],
     createdAt: row.createdAt.toISOString(),
-    lastDeliveredAt: row.lastDeliveredAt ? row.lastDeliveredAt.toISOString() : null,
+    lastDeliveredAt: row.lastDeliveredAt
+      ? row.lastDeliveredAt.toISOString()
+      : null,
     failureCount: row.failureCount,
   };
 }
@@ -63,10 +65,14 @@ router.post("/webhooks", requireCalibrationAuth, async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const url = body.url;
   if (!isValidUrl(url)) {
-    res.status(400).json({ error: "url must be an http(s) URL up to 1000 characters." });
+    res
+      .status(400)
+      .json({ error: "url must be an http(s) URL up to 1000 characters." });
     return;
   }
-  const eventTypesRaw = Array.isArray(body.eventTypes) ? body.eventTypes : [REPORT_SCORED_EVENT];
+  const eventTypesRaw = Array.isArray(body.eventTypes)
+    ? body.eventTypes
+    : [REPORT_SCORED_EVENT];
   const eventTypes: string[] = [];
   for (const evt of eventTypesRaw) {
     if (typeof evt !== "string" || !SUPPORTED_EVENTS.has(evt)) {
@@ -78,7 +84,9 @@ router.post("/webhooks", requireCalibrationAuth, async (req, res) => {
     if (!eventTypes.includes(evt)) eventTypes.push(evt);
   }
   if (eventTypes.length === 0) {
-    res.status(400).json({ error: "eventTypes must contain at least one event." });
+    res
+      .status(400)
+      .json({ error: "eventTypes must contain at least one event." });
     return;
   }
 

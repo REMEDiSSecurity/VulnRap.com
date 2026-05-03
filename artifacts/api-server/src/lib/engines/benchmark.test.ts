@@ -602,7 +602,12 @@ Verified POC Code creates a local buffer of 8192 bytes, fills it without null te
 // on as the corresponding Sprint 13B detector work lands and become real
 // regression assertions. Each entry references the fixture by name so the
 // fixture body and these expectations stay in sync.
-const CURL_SLOP_TIGHTENING_TARGETS: Array<{ name: string; expectMaxScore: number; reason: string; enabled?: boolean }> = [
+const CURL_SLOP_TIGHTENING_TARGETS: Array<{
+  name: string;
+  expectMaxScore: number;
+  reason: string;
+  enabled?: boolean;
+}> = [
   {
     // Task #300 — enabled (no longer `it.skip`) now that the AI self-
     // disclosure detector lands the bounded penalty that drags this
@@ -615,7 +620,8 @@ const CURL_SLOP_TIGHTENING_TARGETS: Array<{ name: string; expectMaxScore: number
   {
     name: "curl-slop-h1-3116935-des-ntlm-broken-crypto",
     expectMaxScore: 30,
-    reason: "Sprint 13B context-aware DES-in-NTLM tightening (AVRI regression recovery)",
+    reason:
+      "Sprint 13B context-aware DES-in-NTLM tightening (AVRI regression recovery)",
   },
   {
     name: "curl-slop-h1-3340109-fabricated-asan",
@@ -625,7 +631,8 @@ const CURL_SLOP_TIGHTENING_TARGETS: Array<{ name: string; expectMaxScore: number
   {
     name: "curl-slop-h1-3340109-fabricated-asan",
     expectMaxScore: 20,
-    reason: "post Sprint 13B-2 fabricated-ASan structural detection (deeper pass)",
+    reason:
+      "post Sprint 13B-2 fabricated-ASan structural detection (deeper pass)",
   },
 ];
 
@@ -1568,22 +1575,37 @@ a Pathname to a Restricted Directory).`,
 describe("VulnRap engines benchmark", () => {
   for (const f of SLOP_FIXTURES) {
     it(`slop fixture ${f.name} should score <= ${f.expectMaxScore}`, () => {
-      const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes, forceAvri: f.forceAvri });
-      expect(r.overallScore, `${f.name} composite=${r.overallScore} label=${r.label}`).toBeLessThanOrEqual(f.expectMaxScore!);
+      const r = analyzeWithEngines(f.text, {
+        claimedCwes: f.claimedCwes,
+        forceAvri: f.forceAvri,
+      });
+      expect(
+        r.overallScore,
+        `${f.name} composite=${r.overallScore} label=${r.label}`,
+      ).toBeLessThanOrEqual(f.expectMaxScore!);
     });
   }
 
   for (const f of LEGIT_FIXTURES) {
     it(`legit fixture ${f.name} should score >= ${f.expectMinScore}`, () => {
-      const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes, forceAvri: f.forceAvri });
-      expect(r.overallScore, `${f.name} composite=${r.overallScore} label=${r.label}`).toBeGreaterThanOrEqual(f.expectMinScore!);
+      const r = analyzeWithEngines(f.text, {
+        claimedCwes: f.claimedCwes,
+        forceAvri: f.forceAvri,
+      });
+      expect(
+        r.overallScore,
+        `${f.name} composite=${r.overallScore} label=${r.label}`,
+      ).toBeGreaterThanOrEqual(f.expectMinScore!);
     });
   }
 
   for (const f of CURL_SLOP_FIXTURES) {
     it(`curl HackerOne slop fixture ${f.name} should score <= ${f.expectMaxScore}`, () => {
       const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes });
-      expect(r.overallScore, `${f.name} composite=${r.overallScore} label=${r.label}`).toBeLessThanOrEqual(f.expectMaxScore!);
+      expect(
+        r.overallScore,
+        `${f.name} composite=${r.overallScore} label=${r.label}`,
+      ).toBeLessThanOrEqual(f.expectMaxScore!);
     });
   }
 
@@ -1594,31 +1616,55 @@ describe("VulnRap engines benchmark", () => {
   // assertion. Task #300 enabled the first (3295650) target.
   for (const t of CURL_SLOP_TIGHTENING_TARGETS) {
     const runner = t.enabled ? it : it.skip;
-    runner(`tightening target (${t.reason}): ${t.name} should score <= ${t.expectMaxScore}`, () => {
-      const f = CURL_SLOP_FIXTURES.find(x => x.name === t.name);
-      expect(f, `tightening target references unknown fixture ${t.name}`).toBeTruthy();
-      const r = analyzeWithEngines(f!.text, { claimedCwes: f!.claimedCwes });
-      expect(r.overallScore, `${t.name} composite=${r.overallScore} label=${r.label}`).toBeLessThanOrEqual(t.expectMaxScore);
-    });
+    runner(
+      `tightening target (${t.reason}): ${t.name} should score <= ${t.expectMaxScore}`,
+      () => {
+        const f = CURL_SLOP_FIXTURES.find((x) => x.name === t.name);
+        expect(
+          f,
+          `tightening target references unknown fixture ${t.name}`,
+        ).toBeTruthy();
+        const r = analyzeWithEngines(f!.text, { claimedCwes: f!.claimedCwes });
+        expect(
+          r.overallScore,
+          `${t.name} composite=${r.overallScore} label=${r.label}`,
+        ).toBeLessThanOrEqual(t.expectMaxScore);
+      },
+    );
   }
 
   it("benchmark summary report (always passes, prints scores)", () => {
     const all = [
-      ...SLOP_FIXTURES.map(f => ({ ...f, kind: "slop" as const })),
-      ...CURL_SLOP_FIXTURES.map(f => ({ ...f, kind: "curl-slop" as const })),
-      ...LEGIT_FIXTURES.map(f => ({ ...f, kind: "legit" as const })),
+      ...SLOP_FIXTURES.map((f) => ({ ...f, kind: "slop" as const })),
+      ...CURL_SLOP_FIXTURES.map((f) => ({ ...f, kind: "curl-slop" as const })),
+      ...LEGIT_FIXTURES.map((f) => ({ ...f, kind: "legit" as const })),
     ];
-    const rows = all.map(f => {
-      const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes, forceAvri: f.forceAvri });
-      return { name: f.name, kind: f.kind, score: r.overallScore, label: r.label, engines: r.engineResults.map(e => `${e.engine}:${e.score}/${e.verdict}`).join(" "), overrides: r.overridesApplied.join(",") };
+    const rows = all.map((f) => {
+      const r = analyzeWithEngines(f.text, {
+        claimedCwes: f.claimedCwes,
+        forceAvri: f.forceAvri,
+      });
+      return {
+        name: f.name,
+        kind: f.kind,
+        score: r.overallScore,
+        label: r.label,
+        engines: r.engineResults
+          .map((e) => `${e.engine}:${e.score}/${e.verdict}`)
+          .join(" "),
+        overrides: r.overridesApplied.join(","),
+      };
     });
-    // eslint-disable-next-line no-console
+
     console.log("\n=== VulnRap Engines Benchmark ===");
     for (const row of rows) {
-      // eslint-disable-next-line no-console
-      console.log(`[${row.kind.padEnd(9)}] ${row.name.padEnd(40)} score=${String(row.score).padStart(3)} label=${row.label.padEnd(15)} ${row.engines}${row.overrides ? " | " + row.overrides : ""}`);
+      console.log(
+        `[${row.kind.padEnd(9)}] ${row.name.padEnd(40)} score=${String(row.score).padStart(3)} label=${row.label.padEnd(15)} ${row.engines}${row.overrides ? " | " + row.overrides : ""}`,
+      );
     }
-    expect(rows.length).toBe(SLOP_FIXTURES.length + CURL_SLOP_FIXTURES.length + LEGIT_FIXTURES.length);
+    expect(rows.length).toBe(
+      SLOP_FIXTURES.length + CURL_SLOP_FIXTURES.length + LEGIT_FIXTURES.length,
+    );
   });
 });
 
@@ -1648,8 +1694,14 @@ describe("VulnRap engines borderline fixtures", () => {
   for (const f of BORDERLINE_FIXTURES) {
     it(`borderline fixture ${f.name} should land between ${f.expectMinScore} and ${f.expectMaxScore}`, () => {
       const r = analyzeWithEngines(f.text, { claimedCwes: f.claimedCwes });
-      expect(r.overallScore, `${f.name} composite=${r.overallScore} label=${r.label}`).toBeGreaterThanOrEqual(f.expectMinScore!);
-      expect(r.overallScore, `${f.name} composite=${r.overallScore} label=${r.label}`).toBeLessThanOrEqual(f.expectMaxScore!);
+      expect(
+        r.overallScore,
+        `${f.name} composite=${r.overallScore} label=${r.label}`,
+      ).toBeGreaterThanOrEqual(f.expectMinScore!);
+      expect(
+        r.overallScore,
+        `${f.name} composite=${r.overallScore} label=${r.label}`,
+      ).toBeLessThanOrEqual(f.expectMaxScore!);
     });
   }
 });

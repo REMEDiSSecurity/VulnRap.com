@@ -26,14 +26,18 @@ export const MAX_TRIAGE_ENGINE_INDICATORS = 4;
 
 // AVRI takes precedence over the legacy `softCitation` slot when both
 // are present so the newer rubric drives the displayed citation.
-function resolveSoftCitation(signalBreakdown: Record<string, unknown> | undefined): {
+function resolveSoftCitation(
+  signalBreakdown: Record<string, unknown> | undefined,
+): {
   name: string;
   inferredCwe: string;
   source: "avri" | "legacy";
 } | null {
   const sb = (signalBreakdown ?? {}) as {
     softCitation?: { name?: string; inferredCwe?: string } | null;
-    avri?: { softCitation?: { name?: string; inferredCwe?: string } | null } | null;
+    avri?: {
+      softCitation?: { name?: string; inferredCwe?: string } | null;
+    } | null;
   };
   const avriSoft = sb.avri?.softCitation ?? null;
   const legacySoft = sb.softCitation ?? null;
@@ -53,7 +57,10 @@ export interface TriageEngineCardProps {
 export function TriageEngineCard({ engine: eng }: TriageEngineCardProps) {
   const softCitation = resolveSoftCitation(eng.signalBreakdown);
   return (
-    <div className="glass-card rounded-lg p-3 space-y-2" data-testid={`triage-engine-card-${eng.engine}`}>
+    <div
+      className="glass-card rounded-lg p-3 space-y-2"
+      data-testid={`triage-engine-card-${eng.engine}`}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-semibold truncate">{eng.engine}</span>
@@ -84,7 +91,10 @@ export function TriageEngineCard({ engine: eng }: TriageEngineCardProps) {
         indicatorClassName={VULNRAP_VERDICT_COLOR[eng.verdict] || "bg-muted"}
       />
       {eng.note && (
-        <p className="text-[11px] text-muted-foreground leading-relaxed" data-testid="triage-engine-note">
+        <p
+          className="text-[11px] text-muted-foreground leading-relaxed"
+          data-testid="triage-engine-note"
+        >
           {eng.note}
         </p>
       )}
@@ -100,30 +110,35 @@ export function TriageEngineCard({ engine: eng }: TriageEngineCardProps) {
             INFERRED CWE
           </Badge>
           <span className="text-cyan-200/90 leading-snug">
-            Soft citation: <span className="font-semibold">{softCitation.name}</span> →{" "}
+            Soft citation:{" "}
+            <span className="font-semibold">{softCitation.name}</span> →{" "}
             <span className="font-mono">{softCitation.inferredCwe}</span>
           </span>
         </div>
       )}
       {eng.triggeredIndicators && eng.triggeredIndicators.length > 0 && (
         <div className="space-y-1 pt-1" data-testid="triage-engine-indicators">
-          {eng.triggeredIndicators.slice(0, MAX_TRIAGE_ENGINE_INDICATORS).map((ind, i) => (
-            <div key={i} className="flex items-start gap-2 text-[11px]">
-              <Badge
-                variant="outline"
-                className={`text-[9px] px-1 py-0 h-3.5 font-mono shrink-0 ${
-                  ind.strength === "HIGH"
-                    ? "text-red-400 border-red-500/40"
-                    : ind.strength === "MEDIUM"
-                      ? "text-yellow-400 border-yellow-500/40"
-                      : "text-muted-foreground"
-                }`}
-              >
-                {ind.signal}
-              </Badge>
-              <span className="text-muted-foreground leading-snug">{ind.explanation}</span>
-            </div>
-          ))}
+          {eng.triggeredIndicators
+            .slice(0, MAX_TRIAGE_ENGINE_INDICATORS)
+            .map((ind, i) => (
+              <div key={i} className="flex items-start gap-2 text-[11px]">
+                <Badge
+                  variant="outline"
+                  className={`text-[9px] px-1 py-0 h-3.5 font-mono shrink-0 ${
+                    ind.strength === "HIGH"
+                      ? "text-red-400 border-red-500/40"
+                      : ind.strength === "MEDIUM"
+                        ? "text-yellow-400 border-yellow-500/40"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {ind.signal}
+                </Badge>
+                <span className="text-muted-foreground leading-snug">
+                  {ind.explanation}
+                </span>
+              </div>
+            ))}
         </div>
       )}
     </div>

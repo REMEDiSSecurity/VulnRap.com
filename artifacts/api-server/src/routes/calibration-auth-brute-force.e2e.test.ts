@@ -10,8 +10,8 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import type { AddressInfo } from "node:net";
 
 const __filename = fileURLToPath(import.meta.url);
 const ARTIFACT_DIR = path.resolve(path.dirname(__filename), "..", "..");
@@ -74,7 +74,9 @@ async function startWebhookListener(): Promise<WebhookListener> {
       res.end("{}");
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  await new Promise<void>((resolve) =>
+    server.listen(0, "127.0.0.1", () => resolve()),
+  );
   const port = (server.address() as AddressInfo).port;
   return {
     url: `http://127.0.0.1:${port}/hook`,
@@ -115,7 +117,9 @@ function createScratchStatePath(): string {
   return path.join(dir, "state.json");
 }
 
-async function startApiServer(env: Record<string, string>): Promise<ApiHarness> {
+async function startApiServer(
+  env: Record<string, string>,
+): Promise<ApiHarness> {
   const port = await pickFreePort();
   // Hermeticity: strip any inherited CALIBRATION_AUTH_BRUTE_FORCE_* / rate-limit
   // env vars from the parent so the caller's explicit values are the only
@@ -131,9 +135,10 @@ async function startApiServer(env: Record<string, string>): Promise<ApiHarness> 
   }
   // Default the persisted-cooldown JSON to a per-test scratch file so the
   // spawned server never touches the shipped data file. Caller can override.
-  const stateEnv: Record<string, string> = env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH
-    ? {}
-    : { CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH: createScratchStatePath() };
+  const stateEnv: Record<string, string> =
+    env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH
+      ? {}
+      : { CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH: createScratchStatePath() };
   const proc = spawn("node", ["--enable-source-maps", SERVER_WRAPPER], {
     // NODE_ENV cleared to skip productionOnly migrations against the dev DB.
     env: {
@@ -201,7 +206,9 @@ async function startApiServer(env: Record<string, string>): Promise<ApiHarness> 
     output: () => chunks.join(""),
     stop: async () => {
       if (proc.exitCode !== null || proc.killed) return;
-      const exited = new Promise<void>((resolve) => proc.once("exit", () => resolve()));
+      const exited = new Promise<void>((resolve) =>
+        proc.once("exit", () => resolve()),
+      );
       // The api-server has no SIGTERM handler today, so SIGTERM is enough
       // for Node to exit. SIGKILL after a short grace just covers regressions.
       proc.kill("SIGTERM");
@@ -227,10 +234,14 @@ function request<T>(
   body?: unknown,
 ): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const baseHeaders: Record<string, string> = data
-      ? { "Content-Type": "application/json", "Content-Length": String(data.length) }
+      ? {
+          "Content-Type": "application/json",
+          "Content-Length": String(data.length),
+        }
       : {};
     const req = http.request(
       {
@@ -260,14 +271,19 @@ function request<T>(
   });
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs: number,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (predicate()) return;
     await new Promise((r) => setTimeout(r, 25));
   }
   if (!predicate()) {
-    throw new Error(`waitFor: predicate did not become true within ${timeoutMs}ms`);
+    throw new Error(
+      `waitFor: predicate did not become true within ${timeoutMs}ms`,
+    );
   }
 }
 
@@ -276,9 +292,14 @@ let activeListener: WebhookListener | null = null;
 
 beforeAll(() => {
   // Rebuild so the test always exercises the current source.
-  const r = spawnSync("node", [BUILD_SCRIPT], { cwd: ARTIFACT_DIR, encoding: "utf8" });
+  const r = spawnSync("node", [BUILD_SCRIPT], {
+    cwd: ARTIFACT_DIR,
+    encoding: "utf8",
+  });
   if (r.status !== 0) {
-    throw new Error(`api-server build failed (exit ${r.status}):\n${r.stderr || r.stdout}`);
+    throw new Error(
+      `api-server build failed (exit ${r.status}):\n${r.stderr || r.stdout}`,
+    );
   }
   // Write the wrapper AFTER building (the build wipes dist/ first).
   writeFileSync(
@@ -310,128 +331,126 @@ afterAll(() => {
 });
 
 describe("calibration brute-force webhook (e2e against the real built server)", () => {
-  it(
-    "POSTs the dispatched payload to CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL once the per-IP threshold is crossed",
-    async () => {
-      activeListener = await startWebhookListener();
-      activeApi = await startApiServer({
-        CALIBRATION_TOKEN: TOKEN,
-        CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL: activeListener.url,
-        CALIBRATION_AUTH_BRUTE_FORCE_ALERT_THRESHOLD: String(ALERT_THRESHOLD),
-        CALIBRATION_AUTH_BRUTE_FORCE_ALERT_WINDOW_MS: String(ALERT_WINDOW_MS),
-        CALIBRATION_AUTH_BRUTE_FORCE_RUNBOOK_URL: "https://e2e.example.test/runbook",
-        CALIBRATION_AUTH_RATE_LIMIT_MAX_FAILURES: String(LIMITER_MAX),
-        CALIBRATION_AUTH_RATE_LIMIT_WINDOW_MS: String(ALERT_WINDOW_MS),
-      });
+  it("POSTs the dispatched payload to CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL once the per-IP threshold is crossed", async () => {
+    activeListener = await startWebhookListener();
+    activeApi = await startApiServer({
+      CALIBRATION_TOKEN: TOKEN,
+      CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL: activeListener.url,
+      CALIBRATION_AUTH_BRUTE_FORCE_ALERT_THRESHOLD: String(ALERT_THRESHOLD),
+      CALIBRATION_AUTH_BRUTE_FORCE_ALERT_WINDOW_MS: String(ALERT_WINDOW_MS),
+      CALIBRATION_AUTH_BRUTE_FORCE_RUNBOOK_URL:
+        "https://e2e.example.test/runbook",
+      CALIBRATION_AUTH_RATE_LIMIT_MAX_FAILURES: String(LIMITER_MAX),
+      CALIBRATION_AUTH_RATE_LIMIT_WINDOW_MS: String(ALERT_WINDOW_MS),
+    });
 
-      // X-Forwarded-For exercises the real `trust proxy` chain.
-      const FORWARDED_IP = "203.0.113.7";
-      for (let i = 0; i < ALERT_THRESHOLD; i++) {
-        const r = await request<{ error: string }>(
-          activeApi.baseUrl,
-          "POST",
-          "/api/feedback/calibration/handwavy-phrases",
-          {
-            "X-Calibration-Token": WRONG_TOKEN,
-            "X-Forwarded-For": FORWARDED_IP,
-          },
-          { phrase: `e2e brute force probe ${i}` },
-        );
-        expect(r.status).toBe(401);
-      }
+    // X-Forwarded-For exercises the real `trust proxy` chain.
+    const FORWARDED_IP = "203.0.113.7";
+    for (let i = 0; i < ALERT_THRESHOLD; i++) {
+      const r = await request<{ error: string }>(
+        activeApi.baseUrl,
+        "POST",
+        "/api/feedback/calibration/handwavy-phrases",
+        {
+          "X-Calibration-Token": WRONG_TOKEN,
+          "X-Forwarded-For": FORWARDED_IP,
+        },
+        { phrase: `e2e brute force probe ${i}` },
+      );
+      expect(r.status).toBe(401);
+    }
 
-      // Dispatch is fire-and-forget; give it a moment to land.
-      await waitFor(() => activeListener!.received.length >= 1, 5_000);
-      expect(activeListener.received).toHaveLength(1);
+    // Dispatch is fire-and-forget; give it a moment to land.
+    await waitFor(() => activeListener!.received.length >= 1, 5_000);
+    expect(activeListener.received).toHaveLength(1);
 
-      const hook = activeListener.received[0]!;
-      expect(hook.method).toBe("POST");
-      expect(hook.url).toBe("/hook");
-      expect(hook.headers["content-type"]).toMatch(/application\/json/);
-      expect(hook.headers["user-agent"]).toMatch(/vulnrap-calibration-brute-force-alerter/);
+    const hook = activeListener.received[0]!;
+    expect(hook.method).toBe("POST");
+    expect(hook.url).toBe("/hook");
+    expect(hook.headers["content-type"]).toMatch(/application\/json/);
+    expect(hook.headers["user-agent"]).toMatch(
+      /vulnrap-calibration-brute-force-alerter/,
+    );
 
-      const payload = hook.body as {
-        event: string;
-        ip: string;
-        threshold: number;
-        windowMs: number;
-        wrongTokenCount: number;
-        rejectionsByStatus: { "401": number; "429": number };
-        rejectionsByGate: { mutation: number; "strict-read": number };
-        lastRoute: string;
-        lastMethod: string;
-        runbookUrl: string;
-        recommendedActions: string[];
-      };
-      expect(payload.event).toBe("calibration_auth_brute_force");
-      expect(payload.threshold).toBe(ALERT_THRESHOLD);
-      expect(payload.windowMs).toBe(ALERT_WINDOW_MS);
-      expect(payload.wrongTokenCount).toBe(ALERT_THRESHOLD);
-      expect(payload.rejectionsByStatus).toEqual({
-        "401": ALERT_THRESHOLD,
-        "429": 0,
-      });
-      expect(payload.rejectionsByGate.mutation).toBe(ALERT_THRESHOLD);
-      expect(payload.lastRoute).toBe("/api/feedback/calibration/handwavy-phrases");
-      expect(payload.lastMethod).toBe("POST");
-      expect(payload.runbookUrl).toBe("https://e2e.example.test/runbook");
-      expect(payload.ip).toBe(FORWARDED_IP);
-      // Tokens must never leak into the dispatched payload.
-      const serialized = JSON.stringify(payload);
-      expect(serialized).not.toContain(WRONG_TOKEN);
-      expect(serialized).not.toContain(TOKEN);
-    },
-    60_000,
-  );
+    const payload = hook.body as {
+      event: string;
+      ip: string;
+      threshold: number;
+      windowMs: number;
+      wrongTokenCount: number;
+      rejectionsByStatus: { "401": number; "429": number };
+      rejectionsByGate: { mutation: number; "strict-read": number };
+      lastRoute: string;
+      lastMethod: string;
+      runbookUrl: string;
+      recommendedActions: string[];
+    };
+    expect(payload.event).toBe("calibration_auth_brute_force");
+    expect(payload.threshold).toBe(ALERT_THRESHOLD);
+    expect(payload.windowMs).toBe(ALERT_WINDOW_MS);
+    expect(payload.wrongTokenCount).toBe(ALERT_THRESHOLD);
+    expect(payload.rejectionsByStatus).toEqual({
+      "401": ALERT_THRESHOLD,
+      "429": 0,
+    });
+    expect(payload.rejectionsByGate.mutation).toBe(ALERT_THRESHOLD);
+    expect(payload.lastRoute).toBe(
+      "/api/feedback/calibration/handwavy-phrases",
+    );
+    expect(payload.lastMethod).toBe("POST");
+    expect(payload.runbookUrl).toBe("https://e2e.example.test/runbook");
+    expect(payload.ip).toBe(FORWARDED_IP);
+    // Tokens must never leak into the dispatched payload.
+    const serialized = JSON.stringify(payload);
+    expect(serialized).not.toContain(WRONG_TOKEN);
+    expect(serialized).not.toContain(TOKEN);
+  }, 60_000);
 
-  it(
-    "dedup cooldown holds — a second wrong-token burst from the same IP within the window does not re-fire",
-    async () => {
-      activeListener = await startWebhookListener();
-      activeApi = await startApiServer({
-        CALIBRATION_TOKEN: TOKEN,
-        CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL: activeListener.url,
-        CALIBRATION_AUTH_BRUTE_FORCE_ALERT_THRESHOLD: String(ALERT_THRESHOLD),
-        CALIBRATION_AUTH_BRUTE_FORCE_ALERT_WINDOW_MS: String(ALERT_WINDOW_MS),
-        CALIBRATION_AUTH_BRUTE_FORCE_RUNBOOK_URL: "https://e2e.example.test/runbook",
-        CALIBRATION_AUTH_RATE_LIMIT_MAX_FAILURES: String(LIMITER_MAX),
-        CALIBRATION_AUTH_RATE_LIMIT_WINDOW_MS: String(ALERT_WINDOW_MS),
-      });
+  it("dedup cooldown holds — a second wrong-token burst from the same IP within the window does not re-fire", async () => {
+    activeListener = await startWebhookListener();
+    activeApi = await startApiServer({
+      CALIBRATION_TOKEN: TOKEN,
+      CALIBRATION_AUTH_BRUTE_FORCE_WEBHOOK_URL: activeListener.url,
+      CALIBRATION_AUTH_BRUTE_FORCE_ALERT_THRESHOLD: String(ALERT_THRESHOLD),
+      CALIBRATION_AUTH_BRUTE_FORCE_ALERT_WINDOW_MS: String(ALERT_WINDOW_MS),
+      CALIBRATION_AUTH_BRUTE_FORCE_RUNBOOK_URL:
+        "https://e2e.example.test/runbook",
+      CALIBRATION_AUTH_RATE_LIMIT_MAX_FAILURES: String(LIMITER_MAX),
+      CALIBRATION_AUTH_RATE_LIMIT_WINDOW_MS: String(ALERT_WINDOW_MS),
+    });
 
-      // First burst — crosses the threshold and fires exactly one alert.
-      for (let i = 0; i < ALERT_THRESHOLD; i++) {
-        const r = await request<{ error: string }>(
-          activeApi.baseUrl,
-          "POST",
-          "/api/feedback/calibration/handwavy-phrases",
-          { "X-Calibration-Token": WRONG_TOKEN },
-          { phrase: `dedup first ${i}` },
-        );
-        expect(r.status).toBe(401);
-      }
-      await waitFor(() => activeListener!.received.length >= 1, 5_000);
-      expect(activeListener.received).toHaveLength(1);
+    // First burst — crosses the threshold and fires exactly one alert.
+    for (let i = 0; i < ALERT_THRESHOLD; i++) {
+      const r = await request<{ error: string }>(
+        activeApi.baseUrl,
+        "POST",
+        "/api/feedback/calibration/handwavy-phrases",
+        { "X-Calibration-Token": WRONG_TOKEN },
+        { phrase: `dedup first ${i}` },
+      );
+      expect(r.status).toBe(401);
+    }
+    await waitFor(() => activeListener!.received.length >= 1, 5_000);
+    expect(activeListener.received).toHaveLength(1);
 
-      // Second burst — same IP/window. Cooldown must suppress the alert.
-      for (let i = 0; i < ALERT_THRESHOLD * 3; i++) {
-        const r = await request<{ error: string }>(
-          activeApi.baseUrl,
-          "POST",
-          "/api/feedback/calibration/handwavy-phrases",
-          { "X-Calibration-Token": WRONG_TOKEN },
-          { phrase: `dedup second ${i}` },
-        );
-        expect(r.status).toBe(401);
-      }
+    // Second burst — same IP/window. Cooldown must suppress the alert.
+    for (let i = 0; i < ALERT_THRESHOLD * 3; i++) {
+      const r = await request<{ error: string }>(
+        activeApi.baseUrl,
+        "POST",
+        "/api/feedback/calibration/handwavy-phrases",
+        { "X-Calibration-Token": WRONG_TOKEN },
+        { phrase: `dedup second ${i}` },
+      );
+      expect(r.status).toBe(401);
+    }
 
-      // Poll across a 1s grace period — fail fast if a 2nd dispatch arrives.
-      const deadline = Date.now() + 1_000;
-      while (Date.now() < deadline) {
-        if (activeListener.received.length > 1) break;
-        await new Promise((r) => setTimeout(r, 25));
-      }
-      expect(activeListener.received).toHaveLength(1);
-    },
-    60_000,
-  );
+    // Poll across a 1s grace period — fail fast if a 2nd dispatch arrives.
+    const deadline = Date.now() + 1_000;
+    while (Date.now() < deadline) {
+      if (activeListener.received.length > 1) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(activeListener.received).toHaveLength(1);
+  }, 60_000);
 });

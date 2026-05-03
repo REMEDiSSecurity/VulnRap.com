@@ -11,9 +11,9 @@
 // Mutation buttons on each page still gate on `cooldown.active` separately
 // so a stale render can't slip a click past the throttle.
 
-import type { ReactNode } from "react";
 import { Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import type { ReactNode } from "react";
 import type { RateLimitCooldownState } from "@/lib/rate-limit-cooldown";
 
 export interface RateLimitCooldownBannerProps {

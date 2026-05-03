@@ -8,8 +8,17 @@
 // illustrative — not a contractual commitment.
 import { useMemo } from "react";
 import {
-  Map as MapIcon, Loader2, AlertCircle, Info, Rocket, Hourglass, Telescope,
-  CircleDot, Sparkles, ListChecks, FlaskConical,
+  Map as MapIcon,
+  Loader2,
+  AlertCircle,
+  Info,
+  Rocket,
+  Hourglass,
+  Telescope,
+  CircleDot,
+  Sparkles,
+  ListChecks,
+  FlaskConical,
 } from "lucide-react";
 import {
   useListRoadmap,
@@ -17,7 +26,13 @@ import {
   type RoadmapItemColumn,
   type RoadmapItemStatus,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -193,8 +208,8 @@ export default function Roadmap() {
           Roadmap
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground max-w-2xl leading-relaxed">
-          What we're building now, what's queued up next, and what's on
-          the longer-term radar.
+          What we're building now, what's queued up next, and what's on the
+          longer-term radar.
         </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-4" />
       </div>
@@ -209,10 +224,10 @@ export default function Roadmap() {
             <span className="font-semibold text-foreground/90">
               This roadmap is illustrative, not a commitment.
             </span>{" "}
-            Priorities shift as we learn from new reports and user
-            feedback. Items can move between columns, get reshaped, or
-            be retired entirely. Use it to get a sense of direction —
-            not as a delivery schedule.
+            Priorities shift as we learn from new reports and user feedback.
+            Items can move between columns, get reshaped, or be retired
+            entirely. Use it to get a sense of direction — not as a delivery
+            schedule.
           </div>
         </CardContent>
       </Card>

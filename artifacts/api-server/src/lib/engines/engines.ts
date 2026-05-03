@@ -1,7 +1,6 @@
 // Sprint 9: Engines 1, 2, 3 + composite scoring with override rules.
 // Each engine is fully independent (no shared state) per spec §Architecture.
 
-import type { ExtractedSignals } from "./extractors";
 import { detectSoftCitation, detectVulnerabilityType } from "./extractors";
 import { CWE_FINGERPRINTS, HIGH_REJECTION_CWES } from "./cwe-fingerprints";
 import { evaluateCrashTrace } from "./avri/crash-trace";
@@ -11,7 +10,11 @@ import {
   GOLD_SIGNAL_WEIGHTS,
   GOLD_SIGNAL_BONUS_CAP,
 } from "./gold-signals";
-import { detectHallucinationSignals, type HallucinationResult } from "../hallucination-detector";
+import {
+  detectHallucinationSignals,
+  type HallucinationResult,
+} from "../hallucination-detector";
+import type { ExtractedSignals } from "./extractors";
 
 export type Verdict = "GREEN" | "YELLOW" | "RED" | "GREY";
 export type Confidence = "HIGH" | "MEDIUM" | "LOW";
@@ -49,7 +52,8 @@ export interface CompositeResult {
   warnings: string[];
 }
 
-const clamp = (n: number, min = 0, max = 100) => Math.max(min, Math.min(max, n));
+const clamp = (n: number, min = 0, max = 100) =>
+  Math.max(min, Math.min(max, n));
 const norm = (n: number) => clamp(n * 100, 0, 100);
 
 // =============================================================================
@@ -57,16 +61,27 @@ const norm = (n: number) => clamp(n * 100, 0, 100);
 // =============================================================================
 
 function computeStructural(s: ExtractedSignals): number {
-  const summaryComponent = (s.hasExecutiveSummary ? 100 : 0) * 0.40;
+  const summaryComponent = (s.hasExecutiveSummary ? 100 : 0) * 0.4;
   const completenessComponent =
-    (s.completenessScore >= 5 && !s.hasDepthIndicators ? 80 : s.completenessScore >= 5 ? 30 : 15) * 0.25;
+    (s.completenessScore >= 5 && !s.hasDepthIndicators
+      ? 80
+      : s.completenessScore >= 5
+        ? 30
+        : 15) * 0.25;
   // Use H1 10K normalization: 1.51 headers/report
   const headerComponent = norm(s.sectionHeaderCount / 6) * 0.15;
   // AI mean=26.8 wpm; normalize so 26.8 => 1.0
   const sentenceComponent = norm(s.avgSentenceLength / 26.8) * 0.12;
   const placeholderComponent = norm(s.placeholderUrlCount / 4) * 0.05;
   const salutationComponent = (s.hasFormalSalutation ? 60 : 0) * 0.03;
-  return clamp(summaryComponent + completenessComponent + headerComponent + sentenceComponent + placeholderComponent + salutationComponent);
+  return clamp(
+    summaryComponent +
+      completenessComponent +
+      headerComponent +
+      sentenceComponent +
+      placeholderComponent +
+      salutationComponent,
+  );
 }
 
 function computeLexical(s: ExtractedSignals): number {
@@ -78,10 +93,10 @@ function computeLexical(s: ExtractedSignals): number {
 
   return clamp(
     norm(hedgeRate / 8) * 0.15 +
-    norm(fillerRate / 5) * 0.15 +
-    norm(remediationRate / 3) * 0.35 +
-    norm(overClaimRate / 3) * 0.25 +
-    (1 - norm(s.vocabularyRichness / 0.756) / 100) * 100 * 0.10
+      norm(fillerRate / 5) * 0.15 +
+      norm(remediationRate / 3) * 0.35 +
+      norm(overClaimRate / 3) * 0.25 +
+      (1 - norm(s.vocabularyRichness / 0.756) / 100) * 100 * 0.1,
   );
 }
 
@@ -89,13 +104,16 @@ function computeUniformity(s: ExtractedSignals): number {
   // Calibrated against expert reports. AI CV ~ 0.711, expert ~ 0.895
   const cv = s.sentenceLengthCV;
   const cvScore =
-    cv < 0.711 ? 100 * (1 - cv / 0.711) :
-    cv > 0.895 ? 0 :
-    100 * (0.895 - cv) / (0.895 - 0.711);
+    cv < 0.711
+      ? 100 * (1 - cv / 0.711)
+      : cv > 0.895
+        ? 0
+        : (100 * (0.895 - cv)) / (0.895 - 0.711);
 
-  const paraScore = s.paragraphLengthCV < 0.30 ? 60 : s.paragraphLengthCV < 0.50 ? 30 : 0;
+  const paraScore =
+    s.paragraphLengthCV < 0.3 ? 60 : s.paragraphLengthCV < 0.5 ? 30 : 0;
   const burstinessScore = s.burstinessScore;
-  return clamp(cvScore * 0.60 + paraScore * 0.25 + burstinessScore * 0.15);
+  return clamp(cvScore * 0.6 + paraScore * 0.25 + burstinessScore * 0.15);
 }
 
 function computeBehavioral(s: ExtractedSignals): number {
@@ -105,9 +123,9 @@ function computeBehavioral(s: ExtractedSignals): number {
     s.claimsPoCPresent && s.codeBlockCount === 0 && s.realUrlCount < 1 ? 80 : 0;
   return clamp(
     Math.max(pocMismatch, hallucination) * 0.35 +
-    (100 - norm(s.realUrlCount / 8.54)) * 0.30 +
-    (100 - norm(s.codeBlockCount / 2.81)) * 0.20 +
-    (100 - norm(s.filePathCount / 13.91)) * 0.15
+      (100 - norm(s.realUrlCount / 8.54)) * 0.3 +
+      (100 - norm(s.codeBlockCount / 2.81)) * 0.2 +
+      (100 - norm(s.filePathCount / 13.91)) * 0.15,
   );
 }
 
@@ -118,52 +136,74 @@ export function runEngine1(s: ExtractedSignals): EngineResult {
   const behavioral = computeBehavioral(s);
 
   const score = Math.round(
-    structural * 0.25 + lexical * 0.30 + uniformity * 0.25 + behavioral * 0.20
+    structural * 0.25 + lexical * 0.3 + uniformity * 0.25 + behavioral * 0.2,
   );
 
-  const verdict: Verdict = score <= 25 ? "GREEN" : score <= 74 ? "YELLOW" : "RED";
+  const verdict: Verdict =
+    score <= 25 ? "GREEN" : score <= 74 ? "YELLOW" : "RED";
 
   const indicators: TriggeredIndicator[] = [];
   if (s.hasExecutiveSummary) {
     indicators.push({
-      signal: "EXECUTIVE_SUMMARY", value: true, strength: "HIGH",
-      explanation: "Report includes executive summary; rare in human reports (15.2% AI vs 0% expert).",
+      signal: "EXECUTIVE_SUMMARY",
+      value: true,
+      strength: "HIGH",
+      explanation:
+        "Report includes executive summary; rare in human reports (15.2% AI vs 0% expert).",
     });
   }
   if (s.completenessScore >= 5 && !s.hasDepthIndicators) {
     indicators.push({
-      signal: "OVER_COMPLETE_NO_DEPTH", value: s.completenessScore, threshold: 5, strength: "MEDIUM",
+      signal: "OVER_COMPLETE_NO_DEPTH",
+      value: s.completenessScore,
+      threshold: 5,
+      strength: "MEDIUM",
       explanation: `Hit ${s.completenessScore}/6 sections without depth indicators (debugger output, asm, syscalls).`,
     });
   }
   if (s.sentenceLengthCV < 0.711) {
     indicators.push({
-      signal: "SENTENCE_LENGTH_CV", value: Number(s.sentenceLengthCV.toFixed(2)), threshold: 0.84, strength: "MEDIUM",
+      signal: "SENTENCE_LENGTH_CV",
+      value: Number(s.sentenceLengthCV.toFixed(2)),
+      threshold: 0.84,
+      strength: "MEDIUM",
       explanation: `Sentence length CV ${s.sentenceLengthCV.toFixed(2)} (AI ~0.71 vs expert ~0.90); suggests uniform pacing.`,
     });
   }
   if (s.genericRemediationCount >= 2) {
     indicators.push({
-      signal: "GENERIC_REMEDIATION", value: s.genericRemediationCount, threshold: 1, strength: "HIGH",
+      signal: "GENERIC_REMEDIATION",
+      value: s.genericRemediationCount,
+      threshold: 1,
+      strength: "HIGH",
       explanation: `${s.genericRemediationCount} generic remediation phrases detected (AI ~22%, expert ~1%).`,
     });
   }
   if (s.claimsPoCPresent && s.codeBlockCount === 0) {
     indicators.push({
-      signal: "POC_MISMATCH", value: "Claims PoC; 0 code blocks", strength: "HIGH",
-      explanation: "Report claims proof-of-concept but contains zero code blocks; strong AI slop indicator.",
+      signal: "POC_MISMATCH",
+      value: "Claims PoC; 0 code blocks",
+      strength: "HIGH",
+      explanation:
+        "Report claims proof-of-concept but contains zero code blocks; strong AI slop indicator.",
     });
   }
   if (s.functionCallReferences > 20 && s.filePathCount < 2) {
     indicators.push({
-      signal: "HALLUCINATION_DENSITY", value: s.functionCallReferences, threshold: 20, strength: "HIGH",
+      signal: "HALLUCINATION_DENSITY",
+      value: s.functionCallReferences,
+      threshold: 20,
+      strength: "HIGH",
       explanation: `${s.functionCallReferences} function references but only ${s.filePathCount} file paths — likely fabricated.`,
     });
   }
 
   const confidence: Confidence =
-    indicators.filter(i => i.strength === "HIGH").length >= 2 ? "HIGH" :
-    indicators.length >= 2 ? "MEDIUM" : "LOW";
+    indicators.filter((i) => i.strength === "HIGH").length >= 2
+      ? "HIGH"
+      : indicators.length >= 2
+        ? "MEDIUM"
+        : "LOW";
 
   return {
     engine: "AI Authorship Detector",
@@ -173,9 +213,9 @@ export function runEngine1(s: ExtractedSignals): EngineResult {
     triggeredIndicators: indicators,
     signalBreakdown: {
       structural: { score: Math.round(structural), weight: 0.25 },
-      lexical: { score: Math.round(lexical), weight: 0.30 },
+      lexical: { score: Math.round(lexical), weight: 0.3 },
       uniformity: { score: Math.round(uniformity), weight: 0.25 },
-      behavioral: { score: Math.round(behavioral), weight: 0.20 },
+      behavioral: { score: Math.round(behavioral), weight: 0.2 },
     },
     note: "AI authorship is informational, not disqualifying. Cross-reference with Substance and CWE Coherence.",
   };
@@ -208,7 +248,10 @@ function computeReferenceScore(s: ExtractedSignals): number {
   score += Math.min(8, Math.min(3, s.versionMentionCount) * 2.7);
   score += Math.min(10, s.externalCveReferences * 1.43);
   // Hallucination penalty: many functions, few file paths
-  const ratio = s.filePathCount > 0 ? s.functionCallReferences / s.filePathCount : s.functionCallReferences;
+  const ratio =
+    s.filePathCount > 0
+      ? s.functionCallReferences / s.filePathCount
+      : s.functionCallReferences;
   if (ratio > 10) {
     score -= Math.min(15, (ratio - 10) * 1.5);
   }
@@ -229,10 +272,20 @@ function computeReproducibilityScore(s: ExtractedSignals): number {
 
 function computePocIntegrity(s: ExtractedSignals): number {
   // Returns -20..+20 → mapped to 0..100 by caller
-  if (s.claimsPoCPresent && s.codeBlockCount === 0 && s.placeholderUrlCount > 0) return -20;
-  if (s.claimsPoCPresent && s.codeBlockCount === 0 && s.realUrlCount < 1) return -15;
-  if (s.claimsPoCPresent && s.codeBlockCount > 0 && s.placeholderUrlCount === 0) {
-    if (s.codeBlockLanguageSpecificRatio > 0.5 && s.specificVulnerableCodeContext) return 20;
+  if (s.claimsPoCPresent && s.codeBlockCount === 0 && s.placeholderUrlCount > 0)
+    return -20;
+  if (s.claimsPoCPresent && s.codeBlockCount === 0 && s.realUrlCount < 1)
+    return -15;
+  if (
+    s.claimsPoCPresent &&
+    s.codeBlockCount > 0 &&
+    s.placeholderUrlCount === 0
+  ) {
+    if (
+      s.codeBlockLanguageSpecificRatio > 0.5 &&
+      s.specificVulnerableCodeContext
+    )
+      return 20;
     if (s.codeBlockLanguageSpecificRatio > 0.5) return 12;
     return 8;
   }
@@ -240,7 +293,10 @@ function computePocIntegrity(s: ExtractedSignals): number {
   return 5;
 }
 
-function analyzeClaimEvidenceRatio(s: ExtractedSignals): { ratio: number; ratioScore: number } {
+function analyzeClaimEvidenceRatio(s: ExtractedSignals): {
+  ratio: number;
+  ratioScore: number;
+} {
   const ratio = s.claimEvidenceRatio;
   // Reports with low or zero claim density and substantive evidence are healthy.
   // Penalize only when claims dominate evidence (ratio above expert ~0.27).
@@ -255,7 +311,10 @@ function analyzeClaimEvidenceRatio(s: ExtractedSignals): { ratio: number; ratioS
   return { ratio, ratioScore };
 }
 
-export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult {
+export function runEngine2(
+  s: ExtractedSignals,
+  fullText?: string,
+): EngineResult {
   const codeScore = computeCodeEvidenceScore(s);
   const refScore = computeReferenceScore(s);
   const reproScore = computeReproducibilityScore(s);
@@ -270,11 +329,11 @@ export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult
   // to [0, 100]. This gives well-evidenced reports a fair chance to reach
   // GREEN without requiring every conceivable signal.
   const baseScore = clamp(
-    (codeScore / 50 * 100) * 0.35 +
-    (refScore / 40 * 100) * 0.30 +
-    (reproScore / 35 * 100) * 0.20 +
-    pocScore * 0.10 +
-    ce.ratioScore * 0.05
+    (codeScore / 50) * 100 * 0.35 +
+      (refScore / 40) * 100 * 0.3 +
+      (reproScore / 35) * 100 * 0.2 +
+      pocScore * 0.1 +
+      ce.ratioScore * 0.05,
   );
 
   let finalScore = baseScore;
@@ -299,7 +358,8 @@ export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult
     for (const sig of s.evidenceSignals) {
       const v = sig.baseWeight * sig.strengthMultiplier;
       weightedSum += v;
-      if (sig.strengthMultiplier >= 1.5 && sig.baseWeight > 0) strongEvidenceCount++;
+      if (sig.strengthMultiplier >= 1.5 && sig.baseWeight > 0)
+        strongEvidenceCount++;
     }
     // Calibration: 30 weighted points = ~7.5pt bonus, 60+ = full 15pt cap.
     strengthBonus = Math.max(-8, Math.min(15, weightedSum / 4));
@@ -310,45 +370,68 @@ export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult
   const indicators: TriggeredIndicator[] = [];
   if (s.claimsPoCPresent && s.codeBlockCount === 0) {
     indicators.push({
-      signal: "POC_MISMATCH", value: "Claims PoC; 0 code blocks", strength: "HIGH",
-      explanation: "Report claims proof-of-concept but contains zero code blocks.",
+      signal: "POC_MISMATCH",
+      value: "Claims PoC; 0 code blocks",
+      strength: "HIGH",
+      explanation:
+        "Report claims proof-of-concept but contains zero code blocks.",
     });
   }
   if (s.placeholderUrlCount > 0 && s.realUrlCount === 0) {
     indicators.push({
-      signal: "PLACEHOLDER_URLS", value: s.placeholderUrlCount, threshold: 0, strength: "HIGH",
+      signal: "PLACEHOLDER_URLS",
+      value: s.placeholderUrlCount,
+      threshold: 0,
+      strength: "HIGH",
       explanation: `Contains ${s.placeholderUrlCount} placeholder URL(s) and 0 real working URLs.`,
     });
   }
   if (s.filePathCount === 0) {
     indicators.push({
-      signal: "FILE_PATHS", value: 0, threshold: 13.91, strength: "MEDIUM",
-      explanation: "No specific file paths found; expert reports average 13.91 (4.1x slop ratio).",
+      signal: "FILE_PATHS",
+      value: 0,
+      threshold: 13.91,
+      strength: "MEDIUM",
+      explanation:
+        "No specific file paths found; expert reports average 13.91 (4.1x slop ratio).",
     });
   }
   if (s.lineNumberCount === 0) {
     indicators.push({
-      signal: "LINE_NUMBERS", value: 0, threshold: 8.5, strength: "MEDIUM",
-      explanation: "No line number references; expert reports average 8.5 (6.0x slop ratio).",
+      signal: "LINE_NUMBERS",
+      value: 0,
+      threshold: 8.5,
+      strength: "MEDIUM",
+      explanation:
+        "No line number references; expert reports average 8.5 (6.0x slop ratio).",
     });
   }
   if (extremeFlag || ce.ratio > 1.0 || (ce.ratio < 0.01 && s.claimCount > 5)) {
     indicators.push({
-      signal: "CLAIM_EVIDENCE_EXTREME", value: Number(ce.ratio.toFixed(2)),
-      threshold: 0.27, strength: "HIGH",
+      signal: "CLAIM_EVIDENCE_EXTREME",
+      value: Number(ce.ratio.toFixed(2)),
+      threshold: 0.27,
+      strength: "HIGH",
       explanation: `Claim:evidence ratio ${ce.ratio.toFixed(2)} vs expert 0.27; many claims with minimal evidence.`,
     });
   } else {
     indicators.push({
-      signal: "CLAIM_EVIDENCE_RATIO", value: Number(ce.ratio.toFixed(2)),
-      threshold: 0.27, strength: ce.ratioScore < 30 ? "HIGH" : ce.ratioScore < 60 ? "MEDIUM" : "LOW",
+      signal: "CLAIM_EVIDENCE_RATIO",
+      value: Number(ce.ratio.toFixed(2)),
+      threshold: 0.27,
+      strength:
+        ce.ratioScore < 30 ? "HIGH" : ce.ratioScore < 60 ? "MEDIUM" : "LOW",
       explanation: `Claim:evidence ratio ${ce.ratio.toFixed(2)} (expert=0.27, slop=0.03).`,
     });
   }
   if (s.specificEndpointCount === 0) {
     indicators.push({
-      signal: "SPECIFIC_ENDPOINTS", value: 0, threshold: 4.08, strength: "MEDIUM",
-      explanation: "No specific endpoints referenced; expert reports average 4.08 (8.9x slop ratio).",
+      signal: "SPECIFIC_ENDPOINTS",
+      value: 0,
+      threshold: 4.08,
+      strength: "MEDIUM",
+      explanation:
+        "No specific endpoints referenced; expert reports average 4.08 (8.9x slop ratio).",
     });
   }
 
@@ -375,17 +458,25 @@ export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult
         signal: "GOLD_SIGNAL",
         value: "code_diff",
         strength: "MEDIUM",
-        explanation: "Unified code diff present (multi-pattern hunk + file header).",
+        explanation:
+          "Unified code diff present (multi-pattern hunk + file header).",
       });
     }
 
-    if (fullText && (evTypes.has("CRASH_OUTPUT") || evTypes.has("STACK_TRACE"))) {
+    if (
+      fullText &&
+      (evTypes.has("CRASH_OUTPUT") || evTypes.has("STACK_TRACE"))
+    ) {
       const traceEval = evaluateCrashTrace(fullText);
       // Require at least 3 frames AND validator says not stripped.
       // (framesAnalyzed=0 means the AVRI frame regex didn't match even
       // though the legacy crash-pattern regex did — be conservative
       // and don't fire in that case.)
-      if (traceEval.framesAnalyzed >= 3 && !traceEval.isStripped && traceEval.goodFrames > 0) {
+      if (
+        traceEval.framesAnalyzed >= 3 &&
+        !traceEval.isStripped &&
+        traceEval.goodFrames > 0
+      ) {
         indicators.push({
           signal: "GOLD_SIGNAL",
           value: "real_crash_trace",
@@ -452,15 +543,19 @@ export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult
     goldBreakdown.push({ id, weight: w });
     goldCategoryBonusRaw += w;
   }
-  const goldCategoryBonus = Math.min(GOLD_SIGNAL_BONUS_CAP, goldCategoryBonusRaw);
+  const goldCategoryBonus = Math.min(
+    GOLD_SIGNAL_BONUS_CAP,
+    goldCategoryBonusRaw,
+  );
   if (goldCategoryBonus > 0) {
-    finalScore = Math.min(95, clamp(Math.round(finalScore + goldCategoryBonus)));
+    finalScore = Math.min(
+      95,
+      clamp(Math.round(finalScore + goldCategoryBonus)),
+    );
   }
 
   const verdict: Verdict =
-    finalScore >= 61 ? "GREEN" :
-    finalScore >= 41 ? "YELLOW" :
-    "RED";
+    finalScore >= 61 ? "GREEN" : finalScore >= 41 ? "YELLOW" : "RED";
 
   return {
     engine: "Technical Substance Analyzer",
@@ -469,16 +564,19 @@ export function runEngine2(s: ExtractedSignals, fullText?: string): EngineResult
     confidence: "HIGH",
     triggeredIndicators: indicators,
     signalBreakdown: {
-      codeEvidence: { score: Math.round(codeScore / 75 * 100), weight: 0.35 },
-      references: { score: Math.round(refScore / 60 * 100), weight: 0.30 },
-      reproducibility: { score: Math.round(reproScore / 60 * 100), weight: 0.20 },
-      pocIntegrity: { score: Math.round(pocScore), weight: 0.10 },
+      codeEvidence: { score: Math.round((codeScore / 75) * 100), weight: 0.35 },
+      references: { score: Math.round((refScore / 60) * 100), weight: 0.3 },
+      reproducibility: {
+        score: Math.round((reproScore / 60) * 100),
+        weight: 0.2,
+      },
+      pocIntegrity: { score: Math.round(pocScore), weight: 0.1 },
       claimEvidence: { score: Math.round(ce.ratioScore), weight: 0.05 },
       evidenceStrength: {
         bonus: Number(strengthBonus.toFixed(1)),
         strongCount: strongEvidenceCount,
         signalCount: s.evidenceSignals?.length ?? 0,
-        signals: (s.evidenceSignals ?? []).map(sig => ({
+        signals: (s.evidenceSignals ?? []).map((sig) => ({
           type: sig.type,
           weight: Number((sig.baseWeight * sig.strengthMultiplier).toFixed(1)),
           multiplier: sig.strengthMultiplier,
@@ -503,7 +601,10 @@ function intersectionCount(haystack: Set<string>, needles: string[]): number {
   let c = 0;
   for (const n of needles) {
     const lower = n.toLowerCase();
-    if (haystack.has(lower)) { c++; continue; }
+    if (haystack.has(lower)) {
+      c++;
+      continue;
+    }
     // Also check substring for multi-word terms
     if (lower.includes(" ") || lower.includes("-")) {
       // do nothing; handled by phrase match below
@@ -521,7 +622,10 @@ function phraseMatchCount(text: string, phrases: string[]): number {
   return c;
 }
 
-export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult {
+export function runEngine3(
+  s: ExtractedSignals,
+  fullText: string,
+): EngineResult {
   const claimedCwes = s.claimedCwes;
   // Sprint 13C (Task #205) — soft citation tier. When the report names a
   // recognised vulnerability class (e.g. "found a stored XSS") but omits the
@@ -543,12 +647,14 @@ export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult 
         score,
         verdict: "YELLOW",
         confidence: "LOW",
-        triggeredIndicators: [{
-          signal: "SOFT_CITATION",
-          value: `${softCite.name} → ${inferred}`,
-          strength: "MEDIUM",
-          explanation: `Report names "${softCite.name}" but does not cite a CWE; treating as soft citation of ${inferred} (floor ${score}).`,
-        }],
+        triggeredIndicators: [
+          {
+            signal: "SOFT_CITATION",
+            value: `${softCite.name} → ${inferred}`,
+            strength: "MEDIUM",
+            explanation: `Report names "${softCite.name}" but does not cite a CWE; treating as soft citation of ${inferred} (floor ${score}).`,
+          },
+        ],
         signalBreakdown: {
           claimedCWEs: [],
           softCitation: { name: softCite.name, inferredCwe: inferred },
@@ -563,14 +669,16 @@ export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult 
       score: defaultScore,
       verdict: defaultScore >= 41 ? "YELLOW" : "RED",
       confidence: "LOW",
-      triggeredIndicators: [{
-        signal: vulnType ? "VULN_TYPE_NO_CWE" : "NO_CWE_CLAIMED",
-        value: vulnType ?? false,
-        strength: vulnType ? "MEDIUM" : "LOW",
-        explanation: vulnType
-          ? `Report describes a ${vulnType} pattern but no CWE label was claimed; rate as underspecified (${defaultScore}).`
-          : `No CWE claimed and no specific vulnerability pattern detected; default ${defaultScore}.`,
-      }],
+      triggeredIndicators: [
+        {
+          signal: vulnType ? "VULN_TYPE_NO_CWE" : "NO_CWE_CLAIMED",
+          value: vulnType ?? false,
+          strength: vulnType ? "MEDIUM" : "LOW",
+          explanation: vulnType
+            ? `Report describes a ${vulnType} pattern but no CWE label was claimed; rate as underspecified (${defaultScore}).`
+            : `No CWE claimed and no specific vulnerability pattern detected; default ${defaultScore}.`,
+        },
+      ],
       signalBreakdown: { claimedCWEs: [], detectedVulnType: vulnType },
       note: vulnType
         ? `No CWE label, but ${vulnType} pattern present — partial credit (${defaultScore}).`
@@ -587,49 +695,75 @@ export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult 
     if (!fp) {
       perCWEScores[cwe] = 50;
       indicators.push({
-        signal: "UNKNOWN_CWE", value: cwe, strength: "LOW",
+        signal: "UNKNOWN_CWE",
+        value: cwe,
+        strength: "LOW",
         explanation: `${cwe} is not in the Phase 1 fingerprint library; using neutral score.`,
       });
       continue;
     }
 
     // Required-term check (single-word OR phrase, OR aliases)
-    const reqHits = phraseMatchCount(fullText, [...fp.requiredTerms, ...fp.knownAliases]);
-    const requiredOverlap = fp.requiredTerms.length === 0 ? 100 : (reqHits > 0 ? 100 : 0);
+    const reqHits = phraseMatchCount(fullText, [
+      ...fp.requiredTerms,
+      ...fp.knownAliases,
+    ]);
+    const requiredOverlap =
+      fp.requiredTerms.length === 0 ? 100 : reqHits > 0 ? 100 : 0;
 
     // Expected-term overlap
     const expHits = phraseMatchCount(fullText, fp.expectedTerms);
-    const expectedScore = fp.expectedTerms.length > 0 ? (expHits / fp.expectedTerms.length) * 100 : 50;
+    const expectedScore =
+      fp.expectedTerms.length > 0
+        ? (expHits / fp.expectedTerms.length) * 100
+        : 50;
 
     // Negative term penalty
     const negHits = phraseMatchCount(fullText, fp.negativeTerms);
     const negativePenalty = Math.min(80, negHits * 15);
 
     // Density: relevant tokens out of all tokens
-    const allRelevant = [...fp.requiredTerms, ...fp.expectedTerms, ...fp.knownAliases];
+    const allRelevant = [
+      ...fp.requiredTerms,
+      ...fp.expectedTerms,
+      ...fp.knownAliases,
+    ];
     const relHits = phraseMatchCount(fullText, allRelevant);
-    const density = (s.wordCount > 0 ? (relHits / s.wordCount) : 0);
+    const density = s.wordCount > 0 ? relHits / s.wordCount : 0;
     const minDensity = fp.minTermDensity / 10; // calibrate to per-word fraction
-    const densityScore = density >= minDensity ? 100 : (density / Math.max(0.0001, minDensity)) * 100;
+    const densityScore =
+      density >= minDensity
+        ? 100
+        : (density / Math.max(0.0001, minDensity)) * 100;
 
     // Rejection-rate adjustment
-    const rejectionAdjustment = fp.rejectionRate > 1.5 ? (1 / fp.rejectionRate) * 100 : 100;
+    const rejectionAdjustment =
+      fp.rejectionRate > 1.5 ? (1 / fp.rejectionRate) * 100 : 100;
 
     let cweScore = clamp(
       requiredOverlap * 0.15 +
-      expectedScore * 0.40 -
-      negativePenalty * 0.20 +
-      densityScore * 0.20 +
-      rejectionAdjustment * 0.05
+        expectedScore * 0.4 -
+        negativePenalty * 0.2 +
+        densityScore * 0.2 +
+        rejectionAdjustment * 0.05,
     );
     // v3.6.0 §3: Calibrated coherence bands.
     //   Strong fit  → floor 68 (was 60-ish via +10 bonus).
     //   Perfect fit → floor 78 (required+expected≥80%+no contradictions).
     //   Wrong CWE   → ceil 25 when negativePenalty dominates and required miss.
-    if (requiredOverlap === 100 && negativePenalty === 0 && expectedScore >= 50) {
+    if (
+      requiredOverlap === 100 &&
+      negativePenalty === 0 &&
+      expectedScore >= 50
+    ) {
       cweScore = Math.max(cweScore, 68);
     }
-    if (requiredOverlap === 100 && negativePenalty === 0 && expectedScore >= 80 && densityScore >= 80) {
+    if (
+      requiredOverlap === 100 &&
+      negativePenalty === 0 &&
+      expectedScore >= 80 &&
+      densityScore >= 80
+    ) {
       cweScore = Math.max(cweScore, 78);
     }
     if (requiredOverlap === 0 && negativePenalty >= 30) {
@@ -639,25 +773,34 @@ export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult 
 
     if (cweScore < 30) {
       indicators.push({
-        signal: "TYPE_SWAP", value: cwe, threshold: 30, strength: "HIGH",
+        signal: "TYPE_SWAP",
+        value: cwe,
+        threshold: 30,
+        strength: "HIGH",
         explanation: `Claimed ${cwe} (${fp.name}) but report terms don't match the expected fingerprint; possible mis-classification.`,
       });
     } else if (cweScore < 50) {
       indicators.push({
-        signal: "UNDERSPECIFIED", value: cwe, threshold: 50, strength: "MEDIUM",
+        signal: "UNDERSPECIFIED",
+        value: cwe,
+        threshold: 50,
+        strength: "MEDIUM",
         explanation: `Report content for ${cwe} is underspecified; insufficient evidence to confirm coherence.`,
       });
     }
 
     if (HIGH_REJECTION_CWES[cwe]) {
       indicators.push({
-        signal: "HIGH_REJECTION_PRIOR", value: cwe, strength: "MEDIUM",
+        signal: "HIGH_REJECTION_PRIOR",
+        value: cwe,
+        strength: "MEDIUM",
         explanation: `${cwe} has historically high rejection rate (${HIGH_REJECTION_CWES[cwe]}x); elevated scrutiny.`,
       });
     }
   }
 
-  const avg = Object.values(perCWEScores).reduce((a, b) => a + b, 0) / claimedCwes.length;
+  const avg =
+    Object.values(perCWEScores).reduce((a, b) => a + b, 0) / claimedCwes.length;
   const score = Math.round(avg);
   const verdict: Verdict =
     score >= 71 ? "GREEN" : score >= 41 ? "YELLOW" : "RED";
@@ -666,13 +809,19 @@ export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult 
     engine: "CWE Coherence Checker",
     score,
     verdict,
-    confidence: indicators.some(i => i.strength === "HIGH") ? "HIGH" : "MEDIUM",
+    confidence: indicators.some((i) => i.strength === "HIGH")
+      ? "HIGH"
+      : "MEDIUM",
     triggeredIndicators: indicators,
     signalBreakdown: {
       claimedCWEs: claimedCwes,
       perCWEScores,
     },
-    note: `CWE coherence analysis for ${claimedCwes.join(", ")}. Per-CWE scores: ${Object.entries(perCWEScores).map(([c, v]) => `${c}=${v}`).join(", ")}.`,
+    note: `CWE coherence analysis for ${claimedCwes.join(", ")}. Per-CWE scores: ${Object.entries(
+      perCWEScores,
+    )
+      .map(([c, v]) => `${c}=${v}`)
+      .join(", ")}.`,
   };
 }
 
@@ -682,7 +831,7 @@ export function runEngine3(s: ExtractedSignals, fullText: string): EngineResult 
 
 const ENGINE_WEIGHTS_PHASE1: Record<string, number> = {
   "AI Authorship Detector": 0.05,
-  "Technical Substance Analyzer": 0.60,
+  "Technical Substance Analyzer": 0.6,
   "CWE Coherence Checker": 0.35,
 };
 
@@ -734,9 +883,10 @@ const CORROBORATING_HALLUCINATION_TYPES = new Set([
 
 // The chosen tier is recorded in `applied` so the triage UI can surface
 // the override note alongside CONVERGENT_NEGATIVE etc.
-function hallucinationOverridePoints(
-  result: HallucinationResult,
-): { points: number; note: string | null } {
+function hallucinationOverridePoints(result: HallucinationResult): {
+  points: number;
+  note: string | null;
+} {
   const hasPrimary = result.signals.some(
     (s) => !CORROBORATING_HALLUCINATION_TYPES.has(s.type),
   );
@@ -770,25 +920,31 @@ function applyOverrideRules(
   hallucination?: HallucinationResult,
 ): number {
   let adjustment = 0;
-  const ai = results.find(r => r.engine === "AI Authorship Detector");
-  const sub = results.find(r => r.engine === "Technical Substance Analyzer");
-  const cwe = results.find(r => r.engine === "CWE Coherence Checker");
+  const ai = results.find((r) => r.engine === "AI Authorship Detector");
+  const sub = results.find((r) => r.engine === "Technical Substance Analyzer");
+  const cwe = results.find((r) => r.engine === "CWE Coherence Checker");
 
   if (ai?.verdict === "RED" && sub?.verdict === "RED") {
     adjustment -= 20;
     applied.push("CONVERGENT_NEGATIVE: AI Authorship RED + Substance RED");
   }
-  if (cwe?.triggeredIndicators?.some(i => i.signal === "TYPE_SWAP")) {
+  if (cwe?.triggeredIndicators?.some((i) => i.signal === "TYPE_SWAP")) {
     adjustment -= 15;
     applied.push("CWE_TYPE_SWAP: Claimed CWE mismatch with content");
   }
-  if (sub?.triggeredIndicators?.some(i => i.signal === "CLAIM_EVIDENCE_EXTREME")) {
+  if (
+    sub?.triggeredIndicators?.some((i) => i.signal === "CLAIM_EVIDENCE_EXTREME")
+  ) {
     adjustment -= 25;
     applied.push("CLAIM_EVIDENCE_EXTREME: Many claims, minimal evidence");
   }
-  if (cwe?.triggeredIndicators?.some(i => i.signal === "HIGH_REJECTION_PRIOR")) {
+  if (
+    cwe?.triggeredIndicators?.some((i) => i.signal === "HIGH_REJECTION_PRIOR")
+  ) {
     adjustment -= 5;
-    applied.push("HIGH_REJECTION_CWE_PRIOR: This CWE category has high rejection history");
+    applied.push(
+      "HIGH_REJECTION_CWE_PRIOR: This CWE category has high rejection history",
+    );
   }
   if (sub && sub.score < 20 && ai && ai.score < 40) {
     adjustment -= 5;
@@ -811,7 +967,8 @@ function applyOverrideRules(
   // The reward (+6) is calibrated to push a borderline 60-point report from
   // MANUAL_REVIEW into PRIORITIZE territory only when both signals align.
   // It cannot fire alongside CONVERGENT_NEGATIVE (those require ai.RED).
-  const goldSignal = sub?.triggeredIndicators?.some((i) => i.signal === "GOLD_SIGNAL") ?? false;
+  const goldSignal =
+    sub?.triggeredIndicators?.some((i) => i.signal === "GOLD_SIGNAL") ?? false;
   const cweNegativeSignals = new Set([
     "TYPE_SWAP",
     "UNKNOWN_CWE",
@@ -823,12 +980,17 @@ function applyOverrideRules(
     // because the report didn't actually cite a CWE.
     "SOFT_CITATION",
   ]);
-  const cweClean = !(cwe?.triggeredIndicators?.some((i) => cweNegativeSignals.has(i.signal)) ?? false);
+  const cweClean = !(
+    cwe?.triggeredIndicators?.some((i) => cweNegativeSignals.has(i.signal)) ??
+    false
+  );
   const cweStrong = (cwe?.score ?? 0) >= 60;
   const aiNotRed = ai?.verdict !== "RED";
   if (goldSignal && cweStrong && cweClean && aiNotRed) {
     adjustment += 6;
-    applied.push("BEHAVIORAL_MATCH_REWARD: Engine 2 gold evidence + Engine 3 coherent CWE match");
+    applied.push(
+      "BEHAVIORAL_MATCH_REWARD: Engine 2 gold evidence + Engine 3 coherent CWE match",
+    );
   }
 
   // Task #48 — fabricated-evidence composite penalty. See
@@ -869,7 +1031,8 @@ function adjustE3ForSubstance(
   e2Score: number,
   e3Score: number,
 ): { adjusted: number; applied: string | null } {
-  const enabled = (process.env.VULNRAP_E3_SUBSTANCE_CAP ?? "true").toLowerCase() !== "false";
+  const enabled =
+    (process.env.VULNRAP_E3_SUBSTANCE_CAP ?? "true").toLowerCase() !== "false";
   if (!enabled) return { adjusted: e3Score, applied: null };
 
   if (e2Score < 30 && e3Score > 42) {
@@ -901,13 +1064,18 @@ export function computeComposite(
   // into the weighted sum, so consumers that read engineResults still see
   // the raw per-engine score. The cap (if any) is recorded in
   // overridesApplied so it's auditable.
-  const e2 = engineResults.find((r) => r.engine === "Technical Substance Analyzer");
+  const e2 = engineResults.find(
+    (r) => r.engine === "Technical Substance Analyzer",
+  );
   const e3 = engineResults.find((r) => r.engine === "CWE Coherence Checker");
   // Always sanitize the fallback against NaN/undefined so the loop below
   // never sees a non-finite E3 score even when E2 is missing (prevents
   // regression of the v3.6.0 §5 NaN hardening for Report 59-style inputs).
   const e3SafeFallback = e3 && Number.isFinite(e3.score) ? e3.score : 50;
-  let e3Adjustment: { adjusted: number; applied: string | null } = { adjusted: e3SafeFallback, applied: null };
+  let e3Adjustment: { adjusted: number; applied: string | null } = {
+    adjusted: e3SafeFallback,
+    applied: null,
+  };
   if (e2 && e3) {
     const e2Safe = Number.isFinite(e2.score) ? e2.score : 50;
     e3Adjustment = adjustE3ForSubstance(e2Safe, e3SafeFallback);
@@ -925,16 +1093,20 @@ export function computeComposite(
     const rawScore = Number.isFinite(r.score) ? r.score : 50;
     // Sprint 12 A1: substitute the substance-gated E3 score into the
     // weighted sum (only — the original EngineResult is untouched).
-    const safeScore = r.engine === "CWE Coherence Checker" ? e3Adjustment.adjusted : rawScore;
+    const safeScore =
+      r.engine === "CWE Coherence Checker" ? e3Adjustment.adjusted : rawScore;
     // Engine 1 is "AI authorship likelihood" (high = bad); other engines are
     // already validity-positive (high = good). Convert engine 1 to a quality
     // contribution by inverting it: quality = 100 - aiScore.
-    const contribution = r.engine === "AI Authorship Detector" ? (100 - safeScore) : safeScore;
+    const contribution =
+      r.engine === "AI Authorship Detector" ? 100 - safeScore : safeScore;
     weightedSum += contribution * w;
     totalWeight += w;
   }
   const beforeOverride =
-    totalWeight > 0 && Number.isFinite(weightedSum) ? weightedSum / totalWeight : 50;
+    totalWeight > 0 && Number.isFinite(weightedSum)
+      ? weightedSum / totalWeight
+      : 50;
   const applied: string[] = [];
   if (e3Adjustment.applied) applied.push(e3Adjustment.applied);
   // Task #48 — only run hallucination detection when caller passed the

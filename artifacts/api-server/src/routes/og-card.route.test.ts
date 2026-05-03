@@ -11,9 +11,16 @@
 process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
 
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import http from "node:http";
-import type { AddressInfo } from "node:net";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  beforeAll,
+  afterAll,
+} from "vitest";
 import {
   createInMemoryDb,
   drizzleOrmOverrides,
@@ -26,6 +33,7 @@ import {
   type BaseDbState,
   type FakeRow,
 } from "./__test-fixtures__/in-memory-db";
+import type { AddressInfo } from "node:net";
 // NOTE: og-card transitively imports `@workspace/db`. ESM evaluates all
 // `import` statements before any top-level code runs, so importing it
 // statically at the top would trigger the `vi.mock("@workspace/db")`
@@ -199,8 +207,16 @@ describe("GET /api/og/result/:id.png", () => {
       slopScore: 62,
       slopTier: "Likely Slop",
       evidence: [
-        { type: "ai_phrase", description: "AI phrase: 'as a language model'", weight: 25 },
-        { type: "placeholder_url", description: "Placeholder URL example.com", weight: 5 },
+        {
+          type: "ai_phrase",
+          description: "AI phrase: 'as a language model'",
+          weight: 25,
+        },
+        {
+          type: "placeholder_url",
+          description: "Placeholder URL example.com",
+          weight: 5,
+        },
       ],
     });
     const res = await fetch(`${baseUrl}/api/og/result/${report.id}.png`);
@@ -211,7 +227,11 @@ describe("GET /api/og/result/:id.png", () => {
     const buf = Buffer.from(await res.arrayBuffer());
     // PNG signature (89 50 4E 47 0D 0A 1A 0A) — fail loudly if resvg
     // returned a non-PNG payload.
-    expect(buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe(true);
+    expect(
+      buf
+        .subarray(0, 8)
+        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+    ).toBe(true);
     const { width, height } = pngDimensions(buf);
     expect(width).toBe(1200);
     expect(height).toBe(630);
@@ -229,14 +249,18 @@ describe("GET /api/og/result/:id.png", () => {
   });
 
   it("redirects to the static OG image when the report does not exist", async () => {
-    const res = await fetch(`${baseUrl}/api/og/result/9999.png`, { redirect: "manual" });
+    const res = await fetch(`${baseUrl}/api/og/result/9999.png`, {
+      redirect: "manual",
+    });
     expect(res.status).toBe(302);
     expect(res.headers.get("location") ?? "").toContain("/opengraph.jpg");
   });
 
   it("redirects to the static OG image for hidden (showInFeed=false) reports", async () => {
     const report = seedReport({ showInFeed: false });
-    const res = await fetch(`${baseUrl}/api/og/result/${report.id}.png`, { redirect: "manual" });
+    const res = await fetch(`${baseUrl}/api/og/result/${report.id}.png`, {
+      redirect: "manual",
+    });
     expect(res.status).toBe(302);
     expect(res.headers.get("location") ?? "").toContain("/opengraph.jpg");
   });
@@ -246,7 +270,9 @@ describe("GET /api/og/result/:id.png", () => {
     // even hits the handler — Express returns its default 404 instead. We
     // assert on that here so future routing changes that accidentally widen
     // the match (and let `abc.png` reach the handler) get caught.
-    const res = await fetch(`${baseUrl}/api/og/result/abc.png`, { redirect: "manual" });
+    const res = await fetch(`${baseUrl}/api/og/result/abc.png`, {
+      redirect: "manual",
+    });
     expect(res.status).toBe(404);
   });
 });

@@ -18,15 +18,6 @@ import {
   type CweCatalogFamily,
 } from "@workspace/api-client-react";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
   BookOpen,
   ExternalLink,
   Search,
@@ -37,6 +28,15 @@ import {
   ArrowRight,
   ChevronDown,
 } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 const FAMILY_TONE: Record<string, string> = {
@@ -118,17 +118,26 @@ function CweEntryRow({ entry }: { entry: CweCatalogEntry }) {
 
       <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] font-mono text-muted-foreground">
         <span title="Historical rejection-rate multiplier from the fingerprint library">
-          rejection&times; <span className="text-foreground/85 tabular-nums">{entry.rejectionRate.toFixed(2)}</span>
+          rejection&times;{" "}
+          <span className="text-foreground/85 tabular-nums">
+            {entry.rejectionRate.toFixed(2)}
+          </span>
         </span>
         <span className="text-border">·</span>
         <span title="Reports in the public corpus where the engine inferred this CWE via soft-citation">
-          reports <span className="text-foreground/85 tabular-nums">{entry.reportCount.toLocaleString()}</span>
+          reports{" "}
+          <span className="text-foreground/85 tabular-nums">
+            {entry.reportCount.toLocaleString()}
+          </span>
         </span>
         {avg !== null && (
           <>
             <span className="text-border">·</span>
             <span title="Average vulnrap_composite_score across reports where this CWE was inferred">
-              avg score <span className="text-foreground/85 tabular-nums">{avg.toFixed(1)}</span>
+              avg score{" "}
+              <span className="text-foreground/85 tabular-nums">
+                {avg.toFixed(1)}
+              </span>
             </span>
           </>
         )}
@@ -187,7 +196,8 @@ function FamilyAccordion({
           {family.entries.length} CWE{family.entries.length === 1 ? "" : "s"}
           {totalReports > 0 && (
             <span className="ml-2">
-              · {totalReports.toLocaleString()} report{totalReports === 1 ? "" : "s"}
+              · {totalReports.toLocaleString()} report
+              {totalReports === 1 ? "" : "s"}
             </span>
           )}
         </span>
@@ -256,9 +266,9 @@ export default function CwePage() {
         </h1>
         <p className="text-muted-foreground mt-2 max-w-3xl">
           Every CWE family the VulnRap scoring engine has a fingerprint for,
-          grouped by AVRI rubric class. Each entry shows what the engine
-          expects in a high-quality report for that CWE, plus how often it
-          has fired across the public corpus. Click any family to expand.
+          grouped by AVRI rubric class. Each entry shows what the engine expects
+          in a high-quality report for that CWE, plus how often it has fired
+          across the public corpus. Click any family to expand.
         </p>
         <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent mt-6" />
       </div>
@@ -272,7 +282,11 @@ export default function CwePage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold font-mono tabular-nums">
-              {isLoading ? <Skeleton className="h-8 w-16" /> : data?.totalCwes ?? 0}
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                (data?.totalCwes ?? 0)
+              )}
             </div>
           </CardContent>
         </Card>
@@ -284,7 +298,11 @@ export default function CwePage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold font-mono tabular-nums">
-              {isLoading ? <Skeleton className="h-8 w-16" /> : data?.families.length ?? 0}
+              {isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                (data?.families.length ?? 0)
+              )}
             </div>
           </CardContent>
         </Card>
@@ -296,9 +314,11 @@ export default function CwePage() {
           </CardHeader>
           <CardContent>
             <div className="text-xs font-mono text-muted-foreground">
-              {isLoading || !data
-                ? <Skeleton className="h-4 w-32" />
-                : new Date(data.generatedAt).toLocaleString()}
+              {isLoading || !data ? (
+                <Skeleton className="h-4 w-32" />
+              ) : (
+                new Date(data.generatedAt).toLocaleString()
+              )}
             </div>
           </CardContent>
         </Card>

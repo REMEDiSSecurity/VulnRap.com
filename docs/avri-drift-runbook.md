@@ -18,11 +18,11 @@ The endpoint returns a rolling weekly view of the AVRI composite for
 production reports, bucketed by the persisted composite label as a
 proxy for the matrix triage outcome:
 
-| Composite label              | Bucket   | Triage equivalent     |
-| ---------------------------- | -------- | --------------------- |
-| `STRONG`, `PROMISING`        | T1       | PRIORITIZE            |
-| `LIKELY INVALID`, `HIGH RISK`| T3       | AUTO_CLOSE            |
-| `NEEDS REVIEW`, `REASONABLE` | NEUTRAL  | (excluded from gap)   |
+| Composite label               | Bucket  | Triage equivalent   |
+| ----------------------------- | ------- | ------------------- |
+| `STRONG`, `PROMISING`         | T1      | PRIORITIZE          |
+| `LIKELY INVALID`, `HIGH RISK` | T3      | AUTO_CLOSE          |
+| `NEEDS REVIEW`, `REASONABLE`  | NEUTRAL | (excluded from gap) |
 
 For each week the response reports `t1.mean`, `t3.mean`, the `gap`
 between them, and per-family means within each bucket.
@@ -256,7 +256,7 @@ polls the in-memory scheduler status every
   drift dedup state, so the watchdog fires at most once per stall
   window even across process restarts. A failed dispatch is NOT
   persisted, so a flaky webhook auto-recovers on the next poll. If
-  the scheduler resumes and later wedges on a *different* expected
+  the scheduler resumes and later wedges on a _different_ expected
   tick, the dedup key changes and the watchdog re-pages.
 - **Calibration banner.** The calibration page header renders a
   red "Scheduler appears stalled" banner driven by the same

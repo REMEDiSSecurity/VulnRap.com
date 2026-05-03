@@ -48,13 +48,13 @@ calibration.
 The composite score returned by VulnRap maps to one of five triage
 actions. The mapping is the same one used by the public report view:
 
-| Composite | Recommended action  | Suggested H1 move                 |
-| --------: | ------------------- | --------------------------------- |
-|     ≥ 65  | `PRIORITIZE`        | Assign to senior triager + tag    |
-|     ≥ 55  | `MANUAL_REVIEW`     | Standard human review             |
-|     ≥ 40  | `STANDARD_TRIAGE`   | Normal queue                      |
-|     ≥ 25  | `CHALLENGE_REPORTER`| Post the generated questions      |
-|     <  25 | `AUTO_CLOSE`        | Close as `not-applicable`         |
+| Composite | Recommended action   | Suggested H1 move              |
+| --------: | -------------------- | ------------------------------ |
+|      ≥ 65 | `PRIORITIZE`         | Assign to senior triager + tag |
+|      ≥ 55 | `MANUAL_REVIEW`      | Standard human review          |
+|      ≥ 40 | `STANDARD_TRIAGE`    | Normal queue                   |
+|      ≥ 25 | `CHALLENGE_REPORTER` | Post the generated questions   |
+|      < 25 | `AUTO_CLOSE`         | Close as `not-applicable`      |
 
 Override: if AVRI gold-signal hits ≥ 2 and composite ≥ 40, the action
 is upgraded to `PRIORITIZE` regardless of band. Use this as a hard stop
@@ -131,16 +131,16 @@ echo "report=$REPORT_ID composite=$COMPOSITE action=$ACTION label=\"$LABEL\""
 minus the persisted fields (`id`, `deleteToken`). The fields you'll
 typically pluck out:
 
-| Path                              | What it is                                |
-| --------------------------------- | ----------------------------------------- |
-| `vulnrap.compositeScore`          | 0–100, higher = better quality            |
-| `vulnrap.compositeLabel`          | Human label (e.g. "Likely Human")         |
-| `vulnrap.engines[]`               | Per-engine score + verdict + reasoning    |
-| `recommendation.action`           | One of the five triage enum values        |
-| `recommendation.reason`           | One-liner the matrix used                 |
-| `recommendation.challengeQuestions` | Pre-generated challenge prompts         |
-| `similarityMatches[]`             | Existing reports with overlapping content |
-| `slopScore` / `slopTier`          | Legacy single-axis projection             |
+| Path                                | What it is                                |
+| ----------------------------------- | ----------------------------------------- |
+| `vulnrap.compositeScore`            | 0–100, higher = better quality            |
+| `vulnrap.compositeLabel`            | Human label (e.g. "Likely Human")         |
+| `vulnrap.engines[]`                 | Per-engine score + verdict + reasoning    |
+| `recommendation.action`             | One of the five triage enum values        |
+| `recommendation.reason`             | One-liner the matrix used                 |
+| `recommendation.challengeQuestions` | Pre-generated challenge prompts           |
+| `similarityMatches[]`               | Existing reports with overlapping content |
+| `slopScore` / `slopTier`            | Legacy single-axis projection             |
 
 ## Step 3 — Post the score back as an internal comment
 
@@ -273,7 +273,7 @@ def auto_close(report_id: int, scored: dict) -> bool:
 ```
 
 We strongly recommend running the close script in **dry-run mode for at
-least a week** before flipping it on — log what you *would* have closed
+least a week** before flipping it on — log what you _would_ have closed
 and have a senior triager spot-check the list. The composite is
 calibrated against a public corpus, but every program's inbound mix is
 different.

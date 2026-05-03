@@ -31,8 +31,7 @@ export interface HandwavyRemovalBatchConflictChipBaseProps {
   titleSuffix: string;
 }
 
-export interface HandwavyRemovalBatchConflictChipToggleProps
-  extends HandwavyRemovalBatchConflictChipBaseProps {
+export interface HandwavyRemovalBatchConflictChipToggleProps extends HandwavyRemovalBatchConflictChipBaseProps {
   // Render as a toggle button (picker row) instead of a static Badge.
   // Required when `onToggle` is supplied so reviewers get aria-expanded /
   // aria-controls / keyboard activation for the inline conflict detail panel
@@ -56,8 +55,10 @@ export type HandwavyRemovalBatchConflictChipProps =
 function isToggle(
   props: HandwavyRemovalBatchConflictChipProps,
 ): props is HandwavyRemovalBatchConflictChipToggleProps {
-  return typeof (props as HandwavyRemovalBatchConflictChipToggleProps)
-    .onToggle === "function";
+  return (
+    typeof (props as HandwavyRemovalBatchConflictChipToggleProps).onToggle ===
+    "function"
+  );
 }
 
 export function HandwavyRemovalBatchConflictChip(

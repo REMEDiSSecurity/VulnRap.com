@@ -3,14 +3,26 @@
 
 import { logger } from "../logger";
 import { extractSignals } from "./extractors";
-import { runEngine1, runEngine2, runEngine3, computeComposite, type CompositeResult } from "./engines";
+import {
+  runEngine1,
+  runEngine2,
+  runEngine3,
+  computeComposite,
+  type CompositeResult,
+} from "./engines";
 export { computeComposite } from "./engines";
 import { computePerplexity, type PerplexityResult } from "./perplexity";
+import { runAvriComposite, type AvriCompositeResult } from "./avri";
 import type { PipelineTrace, PipelineStageTiming } from "@workspace/db";
 import crypto from "crypto";
-import { runAvriComposite, type AvriCompositeResult } from "./avri";
 
-export type { EngineResult, CompositeResult, Verdict, Confidence, TriggeredIndicator } from "./engines";
+export type {
+  EngineResult,
+  CompositeResult,
+  Verdict,
+  Confidence,
+  TriggeredIndicator,
+} from "./engines";
 export type { ExtractedSignals, CodeBlock } from "./extractors";
 export type { PipelineTrace, PipelineStageTiming } from "@workspace/db";
 export type { PerplexityResult } from "./perplexity";
@@ -93,8 +105,12 @@ export function analyzeWithEnginesTraced(
   // field on the traced result.
   const avriEnabled = opts.forceAvri ?? FEATURE_USE_AVRI();
   if (avriEnabled) {
-    const signals = stage("extract_signals", () => extractSignals(text, opts.claimedCwes));
-    const perplexity = stage("perplexity", () => computePerplexity(text, signals.codeBlocks));
+    const signals = stage("extract_signals", () =>
+      extractSignals(text, opts.claimedCwes),
+    );
+    const perplexity = stage("perplexity", () =>
+      computePerplexity(text, signals.codeBlocks),
+    );
     const avriComposite = stage("avri_composite", () =>
       runAvriComposite(text, {
         claimedCwes: opts.claimedCwes,
@@ -114,7 +130,12 @@ export function analyzeWithEnginesTraced(
       (r) => r.engine === "Technical Substance Analyzer",
     );
     const avriBlock = substanceEngine?.signalBreakdown?.avri as
-      | { family?: string; rawAvriScore?: number; legacyScore?: number; blendedScore?: number }
+      | {
+          family?: string;
+          rawAvriScore?: number;
+          legacyScore?: number;
+          blendedScore?: number;
+        }
       | undefined;
     const avriBreakdown =
       avriBlock &&
@@ -174,18 +195,29 @@ export function analyzeWithEnginesTraced(
       },
       "vulnrap.engines.avri_composite",
     );
-    return { composite: avriComposite, trace, perplexity, avri: avriComposite.avri };
+    return {
+      composite: avriComposite,
+      trace,
+      perplexity,
+      avri: avriComposite.avri,
+    };
   }
 
-  const signals = stage("extract_signals", () => extractSignals(text, opts.claimedCwes));
-  const perplexity = stage("perplexity", () => computePerplexity(text, signals.codeBlocks));
+  const signals = stage("extract_signals", () =>
+    extractSignals(text, opts.claimedCwes),
+  );
+  const perplexity = stage("perplexity", () =>
+    computePerplexity(text, signals.codeBlocks),
+  );
   const e1Raw = stage("engine1_ai_authorship", () => runEngine1(signals));
   // Blend perplexity into Engine 1 score (60% original, 40% perplexity-derived)
   // since the original engine relies on coarse uniformity heuristics. The verdict
   // MUST be re-derived from the blended score so composite override rules
   // (CONVERGENT_NEGATIVE / DIVERGENT_HIGH_VARIANCE etc.) operate on the same
   // signal that diagnostics surfaces. Engine 1 verdict thresholds: ≤25 GREEN, ≤74 YELLOW, else RED.
-  const blendedScore = Math.round(e1Raw.score * 0.6 + perplexity.combinedScore * 0.4);
+  const blendedScore = Math.round(
+    e1Raw.score * 0.6 + perplexity.combinedScore * 0.4,
+  );
   const blendedVerdict: typeof e1Raw.verdict =
     blendedScore <= 25 ? "GREEN" : blendedScore <= 74 ? "YELLOW" : "RED";
   const e1 = {
@@ -206,7 +238,9 @@ export function analyzeWithEnginesTraced(
   };
   const e2 = stage("engine2_substance", () => runEngine2(signals, text));
   const e3 = stage("engine3_cwe_coherence", () => runEngine3(signals, text));
-  const composite = stage("composite", () => computeComposite([e1, e2, e3], text));
+  const composite = stage("composite", () =>
+    computeComposite([e1, e2, e3], text),
+  );
 
   const totalDurationMs = Date.now() - startedAt;
 
@@ -215,7 +249,7 @@ export function analyzeWithEnginesTraced(
     reportId: opts.reportId ?? null,
     totalDurationMs,
     stages,
-    enginesUsed: composite.engineResults.map(r => r.engine),
+    enginesUsed: composite.engineResults.map((r) => r.engine),
     composite: {
       overallScore: composite.overallScore,
       label: composite.label,
@@ -242,10 +276,10 @@ export function analyzeWithEnginesTraced(
       reportId: opts.reportId,
       reportTitle: opts.reportTitle,
       durationMs: totalDurationMs,
-      stages: stages.map(s => `${s.stage}:${s.durationMs}ms`).join("|"),
+      stages: stages.map((s) => `${s.stage}:${s.durationMs}ms`).join("|"),
       composite: composite.overallScore,
       label: composite.label,
-      engines: composite.engineResults.map(r => ({
+      engines: composite.engineResults.map((r) => ({
         engine: r.engine,
         score: r.score,
         verdict: r.verdict,

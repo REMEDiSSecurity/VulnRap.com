@@ -1,5 +1,8 @@
 import { createHash } from "crypto";
-import type { VerificationResult, VerificationCheck } from "./active-verification";
+import type {
+  VerificationResult,
+  VerificationCheck,
+} from "./active-verification";
 import type { EvidenceItem } from "./score-fusion";
 import type { CompositeResult } from "./engines";
 
@@ -66,12 +69,12 @@ export interface RevisionResult {
 // ratio × strong-evidence count) instead of the legacy slop-only thresholds.
 // Callers without v3.6.0 context still get the v3.5.0 behavior.
 export interface TriageDecisionContext {
-  compositeScore?: number;       // 0..100, higher=better
-  engine2Score?: number;          // 0..100, technical substance
-  strongEvidenceCount?: number;   // # of CRASH_OUTPUT/STACK_TRACE/CODE_DIFF/etc.
+  compositeScore?: number; // 0..100, higher=better
+  engine2Score?: number; // 0..100, technical substance
+  strongEvidenceCount?: number; // # of CRASH_OUTPUT/STACK_TRACE/CODE_DIFF/etc.
   suspiciousAddressCount?: number;
   // Verification ratio: verified / (verified + notFound) over `referenced_in_report` checks only.
-  verificationRatio?: number;     // 0..1
+  verificationRatio?: number; // 0..1
   // Sprint 11 AVRI: number of family-specific gold signals (sanitizer trace,
   // injection payload, etc.) that matched. When ≥1, the triage matrix
   // applies a more permissive PRIORITIZE/MANUAL_REVIEW band because gold
@@ -86,14 +89,28 @@ export function generateTriageRecommendation(
   verification: VerificationResult | null,
   evidence: EvidenceItem[],
   context?: TriageDecisionContext,
-): Omit<TriageRecommendation, "temporalSignals" | "templateMatch" | "revision"> {
+): Omit<
+  TriageRecommendation,
+  "temporalSignals" | "templateMatch" | "revision"
+> {
   const matrixInputs: TriageMatrixInputs | null = context
     ? {
         compositeScore: context.compositeScore ?? 50,
         engine2Score: context.engine2Score ?? 50,
-        verificationRatio: context.verificationRatio
-          ?? (((verification?.checks ?? []).filter(c => c.source === "referenced_in_report" && c.result === "verified").length)
-            / Math.max(1, (verification?.checks ?? []).filter(c => c.source === "referenced_in_report" && (c.result === "verified" || c.result === "not_found")).length)),
+        verificationRatio:
+          context.verificationRatio ??
+          (verification?.checks ?? []).filter(
+            (c) =>
+              c.source === "referenced_in_report" && c.result === "verified",
+          ).length /
+            Math.max(
+              1,
+              (verification?.checks ?? []).filter(
+                (c) =>
+                  c.source === "referenced_in_report" &&
+                  (c.result === "verified" || c.result === "not_found"),
+              ).length,
+            ),
         strongEvidenceCount: context.strongEvidenceCount ?? 0,
       }
     : null;
@@ -105,12 +122,16 @@ export function generateTriageRecommendation(
   const referencedChecks = (verification?.checks ?? []).filter(
     (c) => c.source === "referenced_in_report",
   );
-  const notFoundCount = referencedChecks.filter(c => c.result === "not_found").length;
-  const verifiedCount = referencedChecks.filter(c => c.result === "verified").length;
+  const notFoundCount = referencedChecks.filter(
+    (c) => c.result === "not_found",
+  ).length;
+  const verifiedCount = referencedChecks.filter(
+    (c) => c.result === "verified",
+  ).length;
   const warningCount = verification?.summary.warnings ?? 0;
   const refTotal = notFoundCount + verifiedCount;
-  const verificationRatio = context?.verificationRatio
-    ?? (refTotal > 0 ? verifiedCount / refTotal : 0);
+  const verificationRatio =
+    context?.verificationRatio ?? (refTotal > 0 ? verifiedCount / refTotal : 0);
   const strongEvidence = context?.strongEvidenceCount ?? 0;
 
   let action: TriageAction;
@@ -139,7 +160,8 @@ export function generateTriageRecommendation(
     if (goldHits >= 2 && comp >= 40) {
       action = "PRIORITIZE";
       reason = `Composite ${comp} with ${goldHits} AVRI gold signal(s) for ${familyLabel} — high-quality report.`;
-      note = "Strong family-specific evidence (sanitizer trace, payload, KAT, etc.). Prioritize for senior reviewer.";
+      note =
+        "Strong family-specific evidence (sanitizer trace, payload, KAT, etc.). Prioritize for senior reviewer.";
     } else if (comp >= 65) {
       action = "PRIORITIZE";
       reason = `Composite ${comp} (≥65) with substance ${e2}${strongEvidence ? ` and ${strongEvidence} strong evidence signal(s)` : ""} — high-quality report.`;
@@ -155,11 +177,13 @@ export function generateTriageRecommendation(
     } else if (comp >= 25) {
       action = "CHALLENGE_REPORTER";
       reason = `Composite ${comp} (≥25) with substance ${e2}${notFoundCount ? `, ${notFoundCount} unverifiable reference(s)` : ""} — challenge for specifics.`;
-      note = "Send the generated challenge questions below. A legitimate researcher can substantiate specifics within 48 hours.";
+      note =
+        "Send the generated challenge questions below. A legitimate researcher can substantiate specifics within 48 hours.";
     } else {
       action = "AUTO_CLOSE";
       reason = `Very low composite (${comp}) with substance ${e2} — strong AI-generation / low-effort signals.`;
-      note = "Consider auto-closing with a template response requesting original research.";
+      note =
+        "Consider auto-closing with a template response requesting original research.";
     }
 
     // Safety override (kept from v3.6.0): never CHALLENGE_REPORTER if the report
@@ -191,7 +215,7 @@ function generateChallengeQuestions(
       (c) => c.source !== "search_fallback",
     );
     const missingFiles = trustedChecks.filter(
-      (c) => c.type === "github_file_missing"
+      (c) => c.type === "github_file_missing",
     );
     for (const check of missingFiles.slice(0, 2)) {
       const target = check.target.split(":")[1] || check.target;
@@ -203,7 +227,7 @@ function generateChallengeQuestions(
     }
 
     const missingFunctions = trustedChecks.filter(
-      (c) => c.type === "github_function_missing"
+      (c) => c.type === "github_function_missing",
     );
     for (const check of missingFunctions.slice(0, 2)) {
       const target = check.target.split(":")[1] || check.target;
@@ -214,19 +238,18 @@ function generateChallengeQuestions(
       });
     }
 
-    const plagiarism = trustedChecks.filter(
-      (c) => c.type === "nvd_plagiarism"
-    );
+    const plagiarism = trustedChecks.filter((c) => c.type === "nvd_plagiarism");
     if (plagiarism.length > 0) {
       questions.push({
         category: "nvd_plagiarism",
-        question: "Your vulnerability description closely mirrors the NVD advisory text. Can you describe in your own words how you independently discovered this issue, including your testing methodology and the specific behavior you observed?",
+        question:
+          "Your vulnerability description closely mirrors the NVD advisory text. Can you describe in your own words how you independently discovered this issue, including your testing methodology and the specific behavior you observed?",
         context: plagiarism[0].detail,
       });
     }
 
     const invalidCves = trustedChecks.filter(
-      (c) => c.type === "cve_not_in_nvd" || c.type === "invalid_cve_year"
+      (c) => c.type === "cve_not_in_nvd" || c.type === "invalid_cve_year",
     );
     for (const check of invalidCves.slice(0, 1)) {
       questions.push({
@@ -238,34 +261,40 @@ function generateChallengeQuestions(
   }
 
   const placeholderPocs = evidence.filter(
-    (e) => e.type === "placeholder_url" || e.type === "generic_path"
+    (e) => e.type === "placeholder_url" || e.type === "generic_path",
   );
   if (placeholderPocs.length > 0) {
     questions.push({
       category: "placeholder_poc",
-      question: "Your proof-of-concept uses placeholder URLs or generic paths (e.g., example.com, target.com). Can you provide the actual HTTP request/response from your testing environment, including real headers and response bodies?",
+      question:
+        "Your proof-of-concept uses placeholder URLs or generic paths (e.g., example.com, target.com). Can you provide the actual HTTP request/response from your testing environment, including real headers and response bodies?",
       context: `Detected ${placeholderPocs.length} placeholder/generic reference(s) in the PoC.`,
     });
   }
 
   const severityInflation = evidence.filter(
-    (e) => e.type === "severity_inflation"
+    (e) => e.type === "severity_inflation",
   );
   if (severityInflation.length > 0) {
     questions.push({
       category: "severity_inflation",
-      question: "The claimed severity appears inflated relative to the described impact. Can you provide specific evidence of the impact you're claiming, such as a demonstration of remote code execution, authentication bypass, or data exfiltration?",
+      question:
+        "The claimed severity appears inflated relative to the described impact. Can you provide specific evidence of the impact you're claiming, such as a demonstration of remote code execution, authentication bypass, or data exfiltration?",
       context: severityInflation[0].description,
     });
   }
 
   const fabricatedOutput = evidence.filter(
-    (e) => e.type === "fake_asan" || e.type === "fake_registers" || e.type === "repeating_stack"
+    (e) =>
+      e.type === "fake_asan" ||
+      e.type === "fake_registers" ||
+      e.type === "repeating_stack",
   );
   if (fabricatedOutput.length > 0) {
     questions.push({
       category: "fabricated_output",
-      question: "The debug output in your report appears unusual. Can you provide the exact build flags, compiler version, and sanitizer configuration used, along with the full unedited crash log?",
+      question:
+        "The debug output in your report appears unusual. Can you provide the exact build flags, compiler version, and sanitizer configuration used, along with the full unedited crash log?",
       context: `Detected ${fabricatedOutput.length} potentially fabricated debug output(s).`,
     });
   }
@@ -275,7 +304,10 @@ function generateChallengeQuestions(
 
 const CVE_DATE_CACHE = new Map<string, Date>();
 
-export function registerCvePublicationDate(cveId: string, publishedDate: string): void {
+export function registerCvePublicationDate(
+  cveId: string,
+  publishedDate: string,
+): void {
   try {
     const date = new Date(publishedDate);
     if (!isNaN(date.getTime())) {
@@ -293,13 +325,15 @@ export function computeTemporalSignals(
   const signals: TemporalSignal[] = [];
 
   for (const check of verification.checks) {
-    if (check.type !== "verified_cve" && check.type !== "nvd_plagiarism") continue;
+    if (check.type !== "verified_cve" && check.type !== "nvd_plagiarism")
+      continue;
 
     const cveId = check.target;
     const pubDate = CVE_DATE_CACHE.get(cveId);
     if (!pubDate) continue;
 
-    const hoursSince = (submissionTime.getTime() - pubDate.getTime()) / (1000 * 60 * 60);
+    const hoursSince =
+      (submissionTime.getTime() - pubDate.getTime()) / (1000 * 60 * 60);
 
     if (hoursSince < 0) continue;
 
@@ -333,10 +367,16 @@ export function computeTemporalSignals(
   return signals;
 }
 
-const TEMPLATE_PLACEHOLDER_PATTERNS: Array<{ re: RegExp; replacement: string }> = [
+const TEMPLATE_PLACEHOLDER_PATTERNS: Array<{
+  re: RegExp;
+  replacement: string;
+}> = [
   { re: /CVE-\d{4}-\d{4,}/gi, replacement: "{{CVE}}" },
   { re: /https?:\/\/[^\s"'<>)}\]]+/gi, replacement: "{{URL}}" },
-  { re: /\b\d+\.\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z0-9.]+)?\b/g, replacement: "{{VERSION}}" },
+  {
+    re: /\b\d+\.\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z0-9.]+)?\b/g,
+    replacement: "{{VERSION}}",
+  },
   { re: /\b(?:CVSS[:\s]*)?[0-9]+\.[0-9]\b/gi, replacement: "{{SCORE}}" },
   { re: /\b[A-Z][a-z]+(?:\s[A-Z][a-z]+){1,3}\b/g, replacement: "{{NAME}}" },
   { re: /\b[0-9a-f]{7,40}\b/gi, replacement: "{{HASH}}" },
@@ -403,13 +443,20 @@ function pickEngine2Fields(
   engines: ReadonlyArray<{
     engine: string;
     score?: number;
-    signalBreakdown?: {
-      evidenceStrength?: { strongCount?: number };
-      avri?: { family?: string; goldHitCount?: number };
-    } | unknown;
+    signalBreakdown?:
+      | {
+          evidenceStrength?: { strongCount?: number };
+          avri?: { family?: string; goldHitCount?: number };
+        }
+      | unknown;
   }>,
-): { engine2Score: number | null; strongEvidenceCount: number; goldHitCount: number; avriFamily: string | undefined } {
-  const e2 = engines.find(e => e.engine === "Technical Substance Analyzer");
+): {
+  engine2Score: number | null;
+  strongEvidenceCount: number;
+  goldHitCount: number;
+  avriFamily: string | undefined;
+} {
+  const e2 = engines.find((e) => e.engine === "Technical Substance Analyzer");
   const breakdown = (e2?.signalBreakdown ?? {}) as {
     evidenceStrength?: { strongCount?: number };
     avri?: { family?: string; goldHitCount?: number };
@@ -426,10 +473,10 @@ function computeReferencedVerificationRatio(
   verification: VerificationResult | null,
 ): number {
   const referenced = (verification?.checks ?? []).filter(
-    c => c.source === "referenced_in_report",
+    (c) => c.source === "referenced_in_report",
   );
-  const verified = referenced.filter(c => c.result === "verified").length;
-  const notFound = referenced.filter(c => c.result === "not_found").length;
+  const verified = referenced.filter((c) => c.result === "verified").length;
+  const notFound = referenced.filter((c) => c.result === "not_found").length;
   const total = verified + notFound;
   return total > 0 ? verified / total : 0;
 }
@@ -456,7 +503,10 @@ function buildContext(
  * neutral 50/50 baseline inside generateTriageRecommendation.
  */
 export function buildV36TriageContext(
-  report: { vulnrapCompositeScore: number | null; vulnrapEngineResults: unknown },
+  report: {
+    vulnrapCompositeScore: number | null;
+    vulnrapEngineResults: unknown;
+  },
   verification: VerificationResult | null,
 ): TriageDecisionContext | undefined {
   const stored = (report.vulnrapEngineResults ?? {}) as {
@@ -466,7 +516,8 @@ export function buildV36TriageContext(
       signalBreakdown?: { evidenceStrength?: { strongCount?: number } };
     }>;
   };
-  const { engine2Score, strongEvidenceCount, goldHitCount, avriFamily } = pickEngine2Fields(stored.engines ?? []);
+  const { engine2Score, strongEvidenceCount, goldHitCount, avriFamily } =
+    pickEngine2Fields(stored.engines ?? []);
   return buildContext(
     {
       compositeScore: report.vulnrapCompositeScore,
@@ -490,7 +541,8 @@ export function buildV36TriageContextFromComposite(
   verification: VerificationResult | null,
 ): TriageDecisionContext | undefined {
   if (!composite) return undefined;
-  const { engine2Score, strongEvidenceCount, goldHitCount, avriFamily } = pickEngine2Fields(composite.engineResults);
+  const { engine2Score, strongEvidenceCount, goldHitCount, avriFamily } =
+    pickEngine2Fields(composite.engineResults);
   return buildContext(
     {
       compositeScore: composite.overallScore ?? null,

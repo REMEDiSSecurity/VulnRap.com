@@ -11,9 +11,11 @@ import {
 
 describe("computeMinHash", () => {
   it("returns a fixed-length signature", () => {
-    const sig = computeMinHash("This is a test vulnerability report with enough words for shingles.");
+    const sig = computeMinHash(
+      "This is a test vulnerability report with enough words for shingles.",
+    );
     expect(sig.length).toBe(128);
-    expect(sig.every(v => typeof v === "number")).toBe(true);
+    expect(sig.every((v) => typeof v === "number")).toBe(true);
   });
 
   it("returns identical signatures for identical text", () => {
@@ -24,8 +26,10 @@ describe("computeMinHash", () => {
   });
 
   it("returns similar signatures for similar text", () => {
-    const text1 = "SQL injection vulnerability found in the login endpoint of the web application version 2.0";
-    const text2 = "SQL injection vulnerability found in the login endpoint of the web application version 2.1";
+    const text1 =
+      "SQL injection vulnerability found in the login endpoint of the web application version 2.0";
+    const text2 =
+      "SQL injection vulnerability found in the login endpoint of the web application version 2.1";
     const sig1 = computeMinHash(text1);
     const sig2 = computeMinHash(text2);
     const similarity = jaccardSimilarity(sig1, sig2);
@@ -33,8 +37,12 @@ describe("computeMinHash", () => {
   });
 
   it("returns different signatures for unrelated text", () => {
-    const sig1 = computeMinHash("SQL injection in the login form allows authentication bypass via malformed input.");
-    const sig2 = computeMinHash("The weather forecast predicts sunshine and warm temperatures for the weekend.");
+    const sig1 = computeMinHash(
+      "SQL injection in the login form allows authentication bypass via malformed input.",
+    );
+    const sig2 = computeMinHash(
+      "The weather forecast predicts sunshine and warm temperatures for the weekend.",
+    );
     const similarity = jaccardSimilarity(sig1, sig2);
     expect(similarity).toBeLessThan(0.3);
   });
@@ -50,7 +58,7 @@ describe("computeLSHBuckets", () => {
     const sig = computeMinHash("Test text for LSH bucket generation.");
     const buckets = computeLSHBuckets(sig);
     expect(buckets.length).toBe(16);
-    expect(buckets.every(b => b.startsWith("b"))).toBe(true);
+    expect(buckets.every((b) => b.startsWith("b"))).toBe(true);
   });
 
   it("returns identical buckets for identical signatures", () => {

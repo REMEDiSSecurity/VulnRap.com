@@ -1,5 +1,10 @@
 import { Keyboard } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { getShortcutGroups } from "@/hooks/use-keyboard-shortcuts";
 
 interface KeyboardShortcutsModalProps {
@@ -15,7 +20,10 @@ function Kbd({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function KeyboardShortcutsModal({ open, onClose }: KeyboardShortcutsModalProps) {
+export function KeyboardShortcutsModal({
+  open,
+  onClose,
+}: KeyboardShortcutsModalProps) {
   const groups = getShortcutGroups();
 
   return (
@@ -33,7 +41,10 @@ export function KeyboardShortcutsModal({ open, onClose }: KeyboardShortcutsModal
 
         <div className="space-y-6">
           {groups.map((group) => (
-            <section key={group.context} aria-labelledby={`group-${group.context}`}>
+            <section
+              key={group.context}
+              aria-labelledby={`group-${group.context}`}
+            >
               <h3
                 id={`group-${group.context}`}
                 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2"
@@ -42,8 +53,13 @@ export function KeyboardShortcutsModal({ open, onClose }: KeyboardShortcutsModal
               </h3>
               <ul className="divide-y divide-border/40 rounded-lg border border-border/50 overflow-hidden">
                 {group.shortcuts.map((s, i) => (
-                  <li key={i} className="flex items-center justify-between gap-4 px-4 py-2.5">
-                    <span className="text-sm text-foreground">{s.description}</span>
+                  <li
+                    key={i}
+                    className="flex items-center justify-between gap-4 px-4 py-2.5"
+                  >
+                    <span className="text-sm text-foreground">
+                      {s.description}
+                    </span>
                     <span className="flex items-center gap-1 shrink-0">
                       {s.keys.map((k, ki) => (
                         <span key={ki} className="flex items-center gap-1">
@@ -63,8 +79,8 @@ export function KeyboardShortcutsModal({ open, onClose }: KeyboardShortcutsModal
           ))}
 
           <p className="text-xs text-muted-foreground pt-2">
-            Press <Kbd>?</Kbd> anytime to open this reference. Shortcuts are disabled while typing in
-            text fields.
+            Press <Kbd>?</Kbd> anytime to open this reference. Shortcuts are
+            disabled while typing in text fields.
           </p>
         </div>
       </DialogContent>

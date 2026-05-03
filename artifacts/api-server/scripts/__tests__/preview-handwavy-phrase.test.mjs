@@ -10,11 +10,11 @@
 //    a one-line "Heads up" hint pointing at the colliding curated entry.
 //    The dry-run still runs afterwards so reviewers also see the existing
 //    GREEN/YELLOW corpus warnings.
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPT_PATH = resolve(__dirname, "..", "preview-handwavy-phrase.mjs");
@@ -52,7 +52,11 @@ beforeAll(async () => {
       const token = req.headers["x-calibration-token"] ?? null;
       let parsedBody = null;
       if (body) {
-        try { parsedBody = JSON.parse(body); } catch { parsedBody = body; }
+        try {
+          parsedBody = JSON.parse(body);
+        } catch {
+          parsedBody = body;
+        }
       }
       state.requests.push({
         method: req.method,
@@ -79,7 +83,9 @@ beforeAll(async () => {
           return;
         }
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ phrases: state.phrases, history: state.history }));
+        res.end(
+          JSON.stringify({ phrases: state.phrases, history: state.history }),
+        );
         return;
       }
 
@@ -175,7 +181,12 @@ describe("preview-handwavy-phrase CLI", () => {
           matches: {
             total: 2,
             falsePositives: 0,
-            byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 1, t4Hallucinated: 1 },
+            byTier: {
+              t1Legit: 0,
+              t2Borderline: 0,
+              t3Slop: 1,
+              t4Hallucinated: 1,
+            },
             sampleMatches: [
               { id: "fixture-1", tier: "t3Slop" },
               { id: "fixture-2", tier: "t4Hallucinated" },
@@ -196,8 +207,10 @@ describe("preview-handwavy-phrase CLI", () => {
     ];
 
     const res = await runScript([
-      "--phrase", "as far as i can tell",
-      "--category", "absence",
+      "--phrase",
+      "as far as i can tell",
+      "--category",
+      "absence",
       "--yes",
     ]);
 
@@ -244,10 +257,7 @@ describe("preview-handwavy-phrase CLI", () => {
       },
     ];
 
-    const res = await runScript([
-      "--phrase", "more or less",
-      "--yes",
-    ]);
+    const res = await runScript(["--phrase", "more or less", "--yes"]);
 
     expect(res.code).toBe(0);
     expect(res.stdout).toMatch(/already in the active list/);
@@ -257,14 +267,9 @@ describe("preview-handwavy-phrase CLI", () => {
   });
 
   it("exits 1 with a clear message when the preview POST returns 401", async () => {
-    state.postResponses = [
-      { status: 401, body: { error: "bad token" } },
-    ];
+    state.postResponses = [{ status: 401, body: { error: "bad token" } }];
 
-    const res = await runScript([
-      "--phrase", "as far as i can tell",
-      "--yes",
-    ]);
+    const res = await runScript(["--phrase", "as far as i can tell", "--yes"]);
 
     expect(res.code).toBe(1);
     const posts = state.requests.filter((r) => r.method === "POST");
@@ -279,16 +284,22 @@ describe("preview-handwavy-phrase CLI", () => {
       {
         status: 200,
         body: previewBody({
-          matches: { total: 1, falsePositives: 0, byTier: { t1Legit: 0, t2Borderline: 0, t3Slop: 1, t4Hallucinated: 0 } },
+          matches: {
+            total: 1,
+            falsePositives: 0,
+            byTier: {
+              t1Legit: 0,
+              t2Borderline: 0,
+              t3Slop: 1,
+              t4Hallucinated: 0,
+            },
+          },
         }),
       },
       { status: 403, body: { error: "forbidden" } },
     ];
 
-    const res = await runScript([
-      "--phrase", "as far as i can tell",
-      "--yes",
-    ]);
+    const res = await runScript(["--phrase", "as far as i can tell", "--yes"]);
 
     expect(res.code).toBe(1);
     const posts = state.requests.filter((r) => r.method === "POST");
@@ -318,8 +329,10 @@ describe("preview-handwavy-phrase CLI", () => {
     ];
 
     const res = await runScript([
-      "--phrase", "as far as i can tell",
-      "--token", "secret-token",
+      "--phrase",
+      "as far as i can tell",
+      "--token",
+      "secret-token",
       "--yes",
     ]);
 
@@ -338,10 +351,7 @@ describe("preview-handwavy-phrase CLI", () => {
       },
     ];
 
-    const res = await runScript([
-      "--phrase", "as far as i can tell",
-      "--yes",
-    ]);
+    const res = await runScript(["--phrase", "as far as i can tell", "--yes"]);
 
     expect(res.code).toBe(1);
     const posts = state.requests.filter((r) => r.method === "POST");
@@ -354,14 +364,9 @@ describe("preview-handwavy-phrase CLI", () => {
   });
 
   it("aborts without adding when the server returns an empty body", async () => {
-    state.postResponses = [
-      { status: 200, raw: "" },
-    ];
+    state.postResponses = [{ status: 200, raw: "" }];
 
-    const res = await runScript([
-      "--phrase", "as far as i can tell",
-      "--yes",
-    ]);
+    const res = await runScript(["--phrase", "as far as i can tell", "--yes"]);
 
     expect(res.code).toBe(1);
     const posts = state.requests.filter((r) => r.method === "POST");
@@ -374,10 +379,7 @@ describe("preview-handwavy-phrase CLI", () => {
       { status: 200, raw: "<html>not json</html>", contentType: "text/html" },
     ];
 
-    const res = await runScript([
-      "--phrase", "as far as i can tell",
-      "--yes",
-    ]);
+    const res = await runScript(["--phrase", "as far as i can tell", "--yes"]);
 
     expect(res.code).toBe(1);
     const posts = state.requests.filter((r) => r.method === "POST");
@@ -386,14 +388,9 @@ describe("preview-handwavy-phrase CLI", () => {
   });
 
   it("surfaces an upstream error message when preview returns a non-2xx status", async () => {
-    state.postResponses = [
-      { status: 500, body: { error: "boom" } },
-    ];
+    state.postResponses = [{ status: 500, body: { error: "boom" } }];
 
-    const res = await runScript([
-      "--phrase", "as far as i can tell",
-      "--yes",
-    ]);
+    const res = await runScript(["--phrase", "as far as i can tell", "--yes"]);
 
     expect(res.code).toBe(1);
     expect(res.stderr).toMatch(/Preview failed: boom/);
@@ -411,9 +408,9 @@ describe("preview-handwavy-phrase CLI", () => {
       },
     ];
 
-    const res = await runScript([
-      "--phrase", "as far as i can tell",
-    ], { stdin: "n\n" });
+    const res = await runScript(["--phrase", "as far as i can tell"], {
+      stdin: "n\n",
+    });
 
     expect(res.code).toBe(1);
     const posts = state.requests.filter((r) => r.method === "POST");
@@ -432,8 +429,16 @@ describe("preview-handwavy-phrase CLI", () => {
           overlaps: {
             total: 2,
             matches: [
-              { phrase: "as far as i can tell", category: "absence", relation: "equal" },
-              { phrase: "as far as", category: "absence", relation: "existing-contains-candidate" },
+              {
+                phrase: "as far as i can tell",
+                category: "absence",
+                relation: "equal",
+              },
+              {
+                phrase: "as far as",
+                category: "absence",
+                relation: "existing-contains-candidate",
+              },
             ],
           },
         }),
@@ -450,10 +455,7 @@ describe("preview-handwavy-phrase CLI", () => {
       },
     ];
 
-    const res = await runScript([
-      "--phrase", "as far as i can tell",
-      "--yes",
-    ]);
+    const res = await runScript(["--phrase", "as far as i can tell", "--yes"]);
 
     expect(res.code).toBe(0);
     expect(res.stdout).toMatch(/Overlaps with 2 existing curated entries/);
@@ -500,7 +502,11 @@ describe("preview-handwavy-phrase CLI: pre-dry-run overlap hint (Task #129)", ()
           dryRunOverlaps: {
             total: 1,
             matches: [
-              { phrase: "as far as i can tell", category: "absence", relation: "equal" },
+              {
+                phrase: "as far as i can tell",
+                category: "absence",
+                relation: "equal",
+              },
             ],
           },
         },
@@ -517,10 +523,7 @@ describe("preview-handwavy-phrase CLI: pre-dry-run overlap hint (Task #129)", ()
       },
     ];
 
-    const res = await runScript([
-      "--phrase", "As Far As I Can Tell",
-      "--yes",
-    ]);
+    const res = await runScript(["--phrase", "As Far As I Can Tell", "--yes"]);
 
     expect(res.code).toBe(0);
     // Pre-dry-run hint hits GET first.
@@ -532,7 +535,9 @@ describe("preview-handwavy-phrase CLI: pre-dry-run overlap hint (Task #129)", ()
     expect(posts[0].body.dryRun).toBe(true);
     expect(posts[1].body.dryRun).toBeUndefined();
     // Heads up message rendered before the dry-run.
-    expect(res.stdout).toMatch(/Heads up: this candidate already overlaps with 1 curated entry/);
+    expect(res.stdout).toMatch(
+      /Heads up: this candidate already overlaps with 1 curated entry/,
+    );
     expect(res.stdout).toMatch(/exact duplicate of "as far as i can tell"/);
     // The "Heads up" line must appear ABOVE the dry-run "Previewing against"
     // line — that's the whole point of the early warning.
@@ -553,7 +558,11 @@ describe("preview-handwavy-phrase CLI: pre-dry-run overlap hint (Task #129)", ()
           dryRunOverlaps: {
             total: 1,
             matches: [
-              { phrase: "private poc", category: "absence", relation: "candidate-contains-existing" },
+              {
+                phrase: "private poc",
+                category: "absence",
+                relation: "candidate-contains-existing",
+              },
             ],
           },
         },
@@ -570,10 +579,16 @@ describe("preview-handwavy-phrase CLI: pre-dry-run overlap hint (Task #129)", ()
       },
     ];
 
-    const res = await runScript(["--phrase", "no private poc available", "--yes"]);
+    const res = await runScript([
+      "--phrase",
+      "no private poc available",
+      "--yes",
+    ]);
     expect(res.code).toBe(0);
     expect(res.stdout).toMatch(/Heads up: this candidate already overlaps/);
-    expect(res.stdout).toMatch(/broader than \(would supersede\) "private poc"/);
+    expect(res.stdout).toMatch(
+      /broader than \(would supersede\) "private poc"/,
+    );
   });
 
   it("warns when the candidate is already covered by a broader entry", async () => {
@@ -587,7 +602,11 @@ describe("preview-handwavy-phrase CLI: pre-dry-run overlap hint (Task #129)", ()
           dryRunOverlaps: {
             total: 1,
             matches: [
-              { phrase: "no working proof-of-concept", category: "absence", relation: "existing-contains-candidate" },
+              {
+                phrase: "no working proof-of-concept",
+                category: "absence",
+                relation: "existing-contains-candidate",
+              },
             ],
           },
         },
@@ -606,7 +625,9 @@ describe("preview-handwavy-phrase CLI: pre-dry-run overlap hint (Task #129)", ()
 
     const res = await runScript(["--phrase", "working proof", "--yes"]);
     expect(res.code).toBe(0);
-    expect(res.stdout).toMatch(/already covered by "no working proof-of-concept"/);
+    expect(res.stdout).toMatch(
+      /already covered by "no working proof-of-concept"/,
+    );
   });
 
   it("does not emit the heads-up line when there are no overlaps", async () => {
@@ -631,7 +652,11 @@ describe("preview-handwavy-phrase CLI: pre-dry-run overlap hint (Task #129)", ()
       },
     ];
 
-    const res = await runScript(["--phrase", "totally unrelated phrase", "--yes"]);
+    const res = await runScript([
+      "--phrase",
+      "totally unrelated phrase",
+      "--yes",
+    ]);
     expect(res.code).toBe(0);
     expect(res.stdout).not.toMatch(/Heads up:/);
   });
@@ -696,8 +721,10 @@ describe("preview-handwavy-phrase CLI: pre-dry-run overlap hint (Task #129)", ()
     ];
 
     const res = await runScript([
-      "--phrase", "private poc",
-      "--token", "tok-abc",
+      "--phrase",
+      "private poc",
+      "--token",
+      "tok-abc",
       "--yes",
     ]);
     expect(res.code).toBe(0);
@@ -742,7 +769,10 @@ describe("preview-handwavy-phrase CLI: pre-dry-run history-overlap hint (Task #2
       }),
     ];
     state.postResponses = [
-      { status: 200, body: { ...EMPTY_DRY_RUN_BODY, phrase: "as far as i can tell" } },
+      {
+        status: 200,
+        body: { ...EMPTY_DRY_RUN_BODY, phrase: "as far as i can tell" },
+      },
       {
         status: 200,
         body: {
@@ -787,13 +817,21 @@ describe("preview-handwavy-phrase CLI: pre-dry-run history-overlap hint (Task #2
       { status: 200, body: { ...EMPTY_DRY_RUN_BODY, phrase: "private poc" } },
       {
         status: 200,
-        body: { added: false, phrase: "private poc", category: "absence", total: 1, phrases: [] },
+        body: {
+          added: false,
+          phrase: "private poc",
+          category: "absence",
+          total: 1,
+          phrases: [],
+        },
       },
     ];
 
     const res = await runScript(["--phrase", "private poc", "--yes"]);
     expect(res.code).toBe(0);
-    expect(res.stdout).toMatch(/Heads up: this candidate already overlaps with 1 curated entry/);
+    expect(res.stdout).toMatch(
+      /Heads up: this candidate already overlaps with 1 curated entry/,
+    );
     expect(res.stdout).toMatch(
       /Heads up: this candidate matches 1 previously-removed entry in the history log/,
     );
@@ -811,7 +849,13 @@ describe("preview-handwavy-phrase CLI: pre-dry-run history-overlap hint (Task #2
       { status: 200, body: { ...EMPTY_DRY_RUN_BODY, phrase: "private poc" } },
       {
         status: 201,
-        body: { added: true, phrase: "private poc", category: "absence", total: 1, phrases: [] },
+        body: {
+          added: true,
+          phrase: "private poc",
+          category: "absence",
+          total: 1,
+          phrases: [],
+        },
       },
     ];
 
@@ -836,7 +880,10 @@ describe("preview-handwavy-phrase CLI: pre-dry-run history-overlap hint (Task #2
       },
     ];
     state.postResponses = [
-      { status: 200, body: { ...EMPTY_DRY_RUN_BODY, phrase: "modern threat landscape" } },
+      {
+        status: 200,
+        body: { ...EMPTY_DRY_RUN_BODY, phrase: "modern threat landscape" },
+      },
       {
         status: 201,
         body: {
@@ -850,8 +897,10 @@ describe("preview-handwavy-phrase CLI: pre-dry-run history-overlap hint (Task #2
     ];
 
     const res = await runScript([
-      "--phrase", "modern threat landscape",
-      "--category", "buzzword",
+      "--phrase",
+      "modern threat landscape",
+      "--category",
+      "buzzword",
       "--yes",
     ]);
     expect(res.code).toBe(0);
@@ -877,7 +926,10 @@ describe("preview-handwavy-phrase CLI: pre-dry-run history-overlap hint (Task #2
     state.postResponses = [
       {
         status: 200,
-        body: { ...EMPTY_DRY_RUN_BODY, phrase: "comprehensive zero-trust assessment" },
+        body: {
+          ...EMPTY_DRY_RUN_BODY,
+          phrase: "comprehensive zero-trust assessment",
+        },
       },
       {
         status: 201,
@@ -892,7 +944,8 @@ describe("preview-handwavy-phrase CLI: pre-dry-run history-overlap hint (Task #2
     ];
 
     const res = await runScript([
-      "--phrase", "comprehensive zero-trust assessment",
+      "--phrase",
+      "comprehensive zero-trust assessment",
       "--yes",
     ]);
     expect(res.code).toBe(0);
@@ -914,7 +967,10 @@ describe("preview-handwavy-phrase CLI: pre-dry-run history-overlap hint (Task #2
       }),
     ];
     state.postResponses = [
-      { status: 200, body: { ...EMPTY_DRY_RUN_BODY, phrase: "weak security culture" } },
+      {
+        status: 200,
+        body: { ...EMPTY_DRY_RUN_BODY, phrase: "weak security culture" },
+      },
       {
         status: 201,
         body: {

@@ -5,9 +5,17 @@ import http from "node:http";
 import path from "node:path";
 import os from "node:os";
 import { promises as fs } from "node:fs";
-import type { AddressInfo } from "node:net";
 import express from "express";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import type { AddressInfo } from "node:net";
 
 vi.mock("@workspace/db", () => {
   // Drizzle's query builder is a thenable that resolves on await. The
@@ -80,7 +88,11 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   delete process.env.CALIBRATION_TOKEN;
-  try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  try {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
 });
 
 beforeEach(async () => {
@@ -89,8 +101,12 @@ beforeEach(async () => {
   __resetForTests();
   // Bounce the singleton cache via a throwaway add+delete.
   const tag = `cache-bust-${Date.now()}-${Math.random()}`;
-  await request("POST", "/feedback/calibration/handwavy-phrases", { phrase: tag });
-  await request("DELETE", "/feedback/calibration/handwavy-phrases", { phrase: tag });
+  await request("POST", "/feedback/calibration/handwavy-phrases", {
+    phrase: tag,
+  });
+  await request("DELETE", "/feedback/calibration/handwavy-phrases", {
+    phrase: tag,
+  });
 });
 
 interface HttpResponse<T> {
@@ -98,9 +114,14 @@ interface HttpResponse<T> {
   body: T;
 }
 
-function request<T>(method: string, urlPath: string, body?: unknown): Promise<HttpResponse<T>> {
+function request<T>(
+  method: string,
+  urlPath: string,
+  body?: unknown,
+): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
-    const data = body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+    const data =
+      body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
     const req = http.request(
       {
@@ -109,7 +130,12 @@ function request<T>(method: string, urlPath: string, body?: unknown): Promise<Ht
         port: url.port,
         path: `${url.pathname}${url.search}`,
         headers: {
-          ...(data ? { "Content-Type": "application/json", "Content-Length": String(data.length) } : {}),
+          ...(data
+            ? {
+                "Content-Type": "application/json",
+                "Content-Length": String(data.length),
+              }
+            : {}),
           "X-Calibration-Token": TEST_TOKEN,
         },
       },

@@ -20,26 +20,50 @@ describe("REQUEST_SMUGGLING specific_proxy_or_server gold signal", () => {
 
   // Existing recognized products keep firing.
   for (const name of [
-    "haproxy", "nginx", "envoy", "apache", "cloudflare", "varnish",
-    "squid", "traefik", "tomcat", "jetty", "undertow", "h2o", "gunicorn",
-    "uvicorn", "lighttpd",
+    "haproxy",
+    "nginx",
+    "envoy",
+    "apache",
+    "cloudflare",
+    "varnish",
+    "squid",
+    "traefik",
+    "tomcat",
+    "jetty",
+    "undertow",
+    "h2o",
+    "gunicorn",
+    "uvicorn",
+    "lighttpd",
   ]) {
     it(`fires on bare product name "${name}"`, () => {
-      expect(signal.pattern.test(`The ${name} backend then forwards the smuggled request`)).toBe(true);
+      expect(
+        signal.pattern.test(
+          `The ${name} backend then forwards the smuggled request`,
+        ),
+      ).toBe(true);
     });
   }
 
   // Newly added open-source proxies (Task #426).
   for (const name of ["caddy", "pound", "openresty", "kong"]) {
     it(`fires on newly recognized open-source proxy "${name}"`, () => {
-      expect(signal.pattern.test(`In front of the backend we run ${name} 2.7 as the reverse proxy`)).toBe(true);
+      expect(
+        signal.pattern.test(
+          `In front of the backend we run ${name} 2.7 as the reverse proxy`,
+        ),
+      ).toBe(true);
     });
   }
 
   // Versioned `<vendor>-proxy` shape — the headline use case from the
   // legit-03-request-smuggling fixture (`acme-proxy 2.4.1 - 2.6.3`).
   it("fires on `acme-proxy 2.4.1 - 2.6.3` (the legit-03 fixture string)", () => {
-    expect(signal.pattern.test("acme-proxy 2.4.1 - 2.6.3, source file `src/http/parser.rs` lines 412-455.")).toBe(true);
+    expect(
+      signal.pattern.test(
+        "acme-proxy 2.4.1 - 2.6.3, source file `src/http/parser.rs` lines 412-455.",
+      ),
+    ).toBe(true);
   });
 
   it("fires on a minimal `<vendor>-proxy <semver>` string", () => {
@@ -62,7 +86,9 @@ describe("REQUEST_SMUGGLING specific_proxy_or_server gold signal", () => {
   });
 
   it("does not fire on source-file paths without a name/semver shape", () => {
-    expect(signal.pattern.test("lib/cookie.c at line 712 in 8.10.1")).toBe(false);
+    expect(signal.pattern.test("lib/cookie.c at line 712 in 8.10.1")).toBe(
+      false,
+    );
     expect(signal.pattern.test("src/http/parser.rs lines 412-455")).toBe(false);
     expect(signal.pattern.test("tests/data/testprivkey.pem")).toBe(false);
   });
@@ -83,6 +109,10 @@ describe("REQUEST_SMUGGLING no_proxy_named absence penalty", () => {
   });
 
   it("does NOT match when no proxy is identified at all", () => {
-    expect(ap.pattern.test("a generic smuggling bug between the frontend and backend")).toBe(false);
+    expect(
+      ap.pattern.test(
+        "a generic smuggling bug between the frontend and backend",
+      ),
+    ).toBe(false);
   });
 });

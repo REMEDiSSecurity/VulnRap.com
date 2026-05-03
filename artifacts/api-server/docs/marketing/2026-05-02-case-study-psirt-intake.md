@@ -9,7 +9,7 @@
 > with PSIRT teams during VulnRap's design phase. It is **not** an
 > endorsement from a single named customer, and the metrics below are
 > directional rather than measured against one specific deployment.
-> We're publishing it as a worked example of the *shape* of the win
+> We're publishing it as a worked example of the _shape_ of the win
 > teams can expect, not a guarantee of the exact percentages.
 
 ---
@@ -38,7 +38,7 @@ the queue.
 ## Challenge
 
 The pain wasn't any single category of bad report — it was the
-*indistinguishability* problem. A well-formatted report describing a
+_indistinguishability_ problem. A well-formatted report describing a
 plausible-sounding attack reads almost identically whether it's a real
 finding or a confidently-written hallucination. Triagers had no signal
 to sort the queue by other than "first in, first out", which meant
@@ -56,7 +56,7 @@ Specifically, the team called out three recurring failure modes:
    landing from multiple unrelated reporter accounts.
 3. **Plausible-but-fabricated reports** describing attacks against
    versions or endpoints that didn't exist in the product. These took
-   the longest to disprove because they *read* well.
+   the longest to disprove because they _read_ well.
 
 ---
 
@@ -100,16 +100,16 @@ and dedup. VulnRap only changes the order and grouping of work.
 > against VulnRap's fixture corpora and conversations with similarly
 > sized PSIRT teams, not from a single named customer.
 
-| Metric | Before | After (≈ 6 weeks in) | Change |
-|---|---|---|---|
-| Median time-to-first-response, high-validity reports | ~14 hours | ~5 hours | ~64% faster |
-| Analyst-hours / week spent on eventually-closed-as-invalid reports | ~22 hours | ~12 hours | ~45% reduction |
-| Cross-submission duplicates caught at intake | ~10% | ~70% | ~7× more |
-| Reports auto-batched into "low-priority review" lane | 0 / week | ~25 / week | new behavior |
-| Triager-reported "context-switch fatigue" (qualitative survey, 1–5) | 4.1 | 2.6 | meaningful drop |
+| Metric                                                              | Before    | After (≈ 6 weeks in) | Change          |
+| ------------------------------------------------------------------- | --------- | -------------------- | --------------- |
+| Median time-to-first-response, high-validity reports                | ~14 hours | ~5 hours             | ~64% faster     |
+| Analyst-hours / week spent on eventually-closed-as-invalid reports  | ~22 hours | ~12 hours            | ~45% reduction  |
+| Cross-submission duplicates caught at intake                        | ~10%      | ~70%                 | ~7× more        |
+| Reports auto-batched into "low-priority review" lane                | 0 / week  | ~25 / week           | new behavior    |
+| Triager-reported "context-switch fatigue" (qualitative survey, 1–5) | 4.1       | 2.6                  | meaningful drop |
 
 The biggest win wasn't the raw hour reduction — it was the change in
-*what those hours felt like*. Triagers stopped opening every report
+_what those hours felt like_. Triagers stopped opening every report
 cold and started the day with a pre-sorted queue, which the team said
 was the single most-cited improvement in their post-rollout retro.
 

@@ -34,6 +34,8 @@
 //                    legacy reports without pointlessly rebuilding traces
 //                    for clean ones.
 
+import crypto from "crypto";
+import { fileURLToPath } from "url";
 import {
   db,
   reportsTable,
@@ -44,7 +46,6 @@ import {
   type ScoreBreakdown,
 } from "@workspace/db";
 import { and, eq, isNull, asc, sql } from "drizzle-orm";
-import crypto from "crypto";
 import {
   analyzeWithEnginesTraced,
   computeComposite,
@@ -64,7 +65,6 @@ import {
   type ConcurrencyGuard,
 } from "./backfill-vulnrap-helpers";
 import { getCurrentEngineVersions } from "./lib/engine-versions";
-import { fileURLToPath } from "url";
 import type { SQL } from "drizzle-orm";
 
 // Evidence types that count as "strong" for the v3.6.0 triage matrix's
@@ -140,10 +140,17 @@ function reconstructFromCachedSignals(s: CachedSignals): CompositeResult {
   const validity = clamp(s.validityScore);
   const quality = clamp(s.qualityScore);
   const evidenceItems = s.evidence ?? [];
-  const strongCount = evidenceItems.filter(e => STRONG_EVIDENCE_TYPES.has(e.type)).length;
-  const evidenceWeightSum = evidenceItems.reduce((a, e) => a + (e.weight || 0), 0);
+  const strongCount = evidenceItems.filter((e) =>
+    STRONG_EVIDENCE_TYPES.has(e.type),
+  ).length;
+  const evidenceWeightSum = evidenceItems.reduce(
+    (a, e) => a + (e.weight || 0),
+    0,
+  );
   const evidenceBoost = Math.max(-8, Math.min(15, evidenceWeightSum / 4));
-  const e2Score = Math.round(clamp(validity * 0.6 + quality * 0.4 + evidenceBoost));
+  const e2Score = Math.round(
+    clamp(validity * 0.6 + quality * 0.4 + evidenceBoost),
+  );
   const e2: EngineResult = {
     engine: "Technical Substance Analyzer",
     score: e2Score,
@@ -171,8 +178,7 @@ function reconstructFromCachedSignals(s: CachedSignals): CompositeResult {
         signalCount: evidenceItems.length,
       },
     },
-    note:
-      "Reconstructed from cached validity/quality scores + evidence list (legacy report stored without raw text).",
+    note: "Reconstructed from cached validity/quality scores + evidence list (legacy report stored without raw text).",
   };
 
   // Engine 3 — CWE coherence. We don't persist claimedCwes for these reports,
@@ -271,7 +277,8 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
       ? "legacy reports without composite (with cached hallucination signals)"
       : "legacy reports without composite";
   console.log(`[backfill] ${scopeLabel}: ${totalCandidates}`);
-  if (opts.dryRun) console.log("[backfill] dry-run mode: no writes will be performed");
+  if (opts.dryRun)
+    console.log("[backfill] dry-run mode: no writes will be performed");
 
   let processed = 0;
   let updated = 0;
@@ -293,7 +300,8 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
       break;
     }
 
-    const remaining = opts.limit !== null ? opts.limit - processed : opts.batchSize;
+    const remaining =
+      opts.limit !== null ? opts.limit - processed : opts.batchSize;
     const pageSize = Math.min(opts.batchSize, remaining);
 
     const rows = await db
@@ -319,12 +327,7 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
         priorEngineResults: reportsTable.vulnrapEngineResults,
       })
       .from(reportsTable)
-      .where(
-        and(
-          ...baseFilters,
-          sql`${reportsTable.id} > ${lastId}`,
-        ),
-      )
+      .where(and(...baseFilters, sql`${reportsTable.id} > ${lastId}`))
       .orderBy(asc(reportsTable.id))
       .limit(pageSize);
 
@@ -458,13 +461,17 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
           }
         } else {
           skippedConcurrent++;
-          console.log(`[backfill] #${row.id}: skip (composite changed concurrently)`);
+          console.log(
+            `[backfill] #${row.id}: skip (composite changed concurrently)`,
+          );
         }
         continue;
       }
 
       try {
-        const { composite, trace } = analyzeWithEnginesTraced(text, { reportId: row.id });
+        const { composite, trace } = analyzeWithEnginesTraced(text, {
+          reportId: row.id,
+        });
         // Task #389 — rescored rows get an audit entry on the engine-
         // results blob so the row records the prior composite + label +
         // correlation id, the source ("backfill-rescore"), and the
@@ -553,7 +560,9 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
           }
         } else {
           skippedConcurrent++;
-          console.log(`[backfill] #${row.id}: skip (composite changed concurrently)`);
+          console.log(
+            `[backfill] #${row.id}: skip (composite changed concurrently)`,
+          );
         }
       } catch (err) {
         failed++;

@@ -140,7 +140,9 @@ test.describe("Reports feed fabricated-evidence filter (Task #392)", () => {
     // fabricatedEvidence in the URL, trigger label reads "All evidence".
     await expect(trigger).toHaveText(/All evidence/);
     await expect(page.getByTestId("fabricated-evidence-chip")).toHaveCount(0);
-    await expect(page).toHaveURL((url) => !url.searchParams.has("fabricatedEvidence"));
+    await expect(page).toHaveURL(
+      (url) => !url.searchParams.has("fabricatedEvidence"),
+    );
     for (const row of FIXTURE_ROWS) {
       await expect(page.getByText(row.reportCode)).toBeVisible();
     }
@@ -152,8 +154,8 @@ test.describe("Reports feed fabricated-evidence filter (Task #392)", () => {
     await expect(page.getByTestId("fabricated-evidence-menu")).toHaveCount(0);
 
     // URL persists the new filter (so reviewers can bookmark/share it).
-    await expect(page).toHaveURL((url) =>
-      url.searchParams.get("fabricatedEvidence") === "fake_raw_http",
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get("fabricatedEvidence") === "fake_raw_http",
     );
     // The dismiss chip appears with the short label.
     const chip = page.getByTestId("fabricated-evidence-chip");
@@ -173,8 +175,8 @@ test.describe("Reports feed fabricated-evidence filter (Task #392)", () => {
     // --- Switch to "Stripped crash trace only" ---
     await trigger.click();
     await page.getByTestId("fabricated-evidence-option-stripped_trace").click();
-    await expect(page).toHaveURL((url) =>
-      url.searchParams.get("fabricatedEvidence") === "stripped_trace",
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get("fabricatedEvidence") === "stripped_trace",
     );
     await expect(chip).toContainText("Stripped trace");
     await expect(page.getByText("RPT-FAB-STRIP")).toBeVisible();
@@ -185,8 +187,8 @@ test.describe("Reports feed fabricated-evidence filter (Task #392)", () => {
     // --- Switch to "Either fabricated flag" ---
     await trigger.click();
     await page.getByTestId("fabricated-evidence-option-either").click();
-    await expect(page).toHaveURL((url) =>
-      url.searchParams.get("fabricatedEvidence") === "either",
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get("fabricatedEvidence") === "either",
     );
     await expect(chip).toContainText("Either flag");
     await expect(page.getByText("RPT-FAB-FAKE")).toBeVisible();
@@ -195,7 +197,9 @@ test.describe("Reports feed fabricated-evidence filter (Task #392)", () => {
 
     // --- Per-chip dismiss resets the filter back to "All" ---
     await chip.click();
-    await expect(page).toHaveURL((url) => !url.searchParams.has("fabricatedEvidence"));
+    await expect(page).toHaveURL(
+      (url) => !url.searchParams.has("fabricatedEvidence"),
+    );
     await expect(page.getByTestId("fabricated-evidence-chip")).toHaveCount(0);
     await expect(trigger).toHaveText(/All evidence/);
     for (const row of FIXTURE_ROWS) {
@@ -205,13 +209,15 @@ test.describe("Reports feed fabricated-evidence filter (Task #392)", () => {
     // --- Re-apply a filter, then exercise the global "Clear filters" reset ---
     await trigger.click();
     await page.getByTestId("fabricated-evidence-option-fake_raw_http").click();
-    await expect(page).toHaveURL((url) =>
-      url.searchParams.get("fabricatedEvidence") === "fake_raw_http",
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get("fabricatedEvidence") === "fake_raw_http",
     );
     await expect(page.getByTestId("fabricated-evidence-chip")).toBeVisible();
 
     await page.getByRole("button", { name: "Clear filters" }).click();
-    await expect(page).toHaveURL((url) => !url.searchParams.has("fabricatedEvidence"));
+    await expect(page).toHaveURL(
+      (url) => !url.searchParams.has("fabricatedEvidence"),
+    );
     await expect(page.getByTestId("fabricated-evidence-chip")).toHaveCount(0);
     await expect(trigger).toHaveText(/All evidence/);
     await expect(

@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { EngineTogglePanel } from "./engine-toggle-panel";
 import { refuseEngines, ALL_ENGINES_ON } from "@/lib/engine-fusion";
+import { EngineTogglePanel } from "./engine-toggle-panel";
 
 const BREAKDOWN = { linguistic: 80, factual: 60, template: 40, llm: 20 };
 
@@ -46,10 +46,16 @@ describe("EngineTogglePanel", () => {
   it("renders one stacked contribution segment per enabled engine", async () => {
     render(<EngineTogglePanel breakdown={BREAKDOWN} canonicalScore={55} />);
     const stack = screen.getByTestId("engine-contribution-stack");
-    expect(within(stack).getByTestId("engine-contribution-segment-linguistic")).toBeInTheDocument();
-    expect(within(stack).getByTestId("engine-contribution-segment-llm")).toBeInTheDocument();
+    expect(
+      within(stack).getByTestId("engine-contribution-segment-linguistic"),
+    ).toBeInTheDocument();
+    expect(
+      within(stack).getByTestId("engine-contribution-segment-llm"),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByTestId("engine-toggle-llm"));
-    expect(within(stack).queryByTestId("engine-contribution-segment-llm")).not.toBeInTheDocument();
+    expect(
+      within(stack).queryByTestId("engine-contribution-segment-llm"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a reset button only when at least one engine is disabled", async () => {
@@ -59,7 +65,9 @@ describe("EngineTogglePanel", () => {
     const reset = screen.getByTestId("engine-toggle-reset");
     await userEvent.click(reset);
     expect(screen.queryByTestId("engine-toggle-reset")).not.toBeInTheDocument();
-    const tmpl = screen.getByTestId("engine-toggle-template") as HTMLInputElement;
+    const tmpl = screen.getByTestId(
+      "engine-toggle-template",
+    ) as HTMLInputElement;
     expect(tmpl.checked).toBe(true);
   });
 });

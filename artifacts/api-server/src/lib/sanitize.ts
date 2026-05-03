@@ -10,7 +10,10 @@ export function sanitizeText(input: string): string {
 
   text = text.replace(/<script[\s\S]*?<\/script>/gi, "[removed-script]");
   text = text.replace(/<style[\s\S]*?<\/style>/gi, "[removed-style]");
-  text = text.replace(/on\w+\s*=\s*["'][^"']*["']/gi, "[removed-event-handler]");
+  text = text.replace(
+    /on\w+\s*=\s*["'][^"']*["']/gi,
+    "[removed-event-handler]",
+  );
   text = text.replace(/javascript\s*:/gi, "[removed-js-uri]");
   text = text.replace(/data\s*:\s*text\/html/gi, "[removed-data-uri]");
 
@@ -59,4 +62,3 @@ export function detectBinaryContent(buffer: Buffer): boolean {
   }
   return nullCount / sampleSize > 0.1;
 }
-

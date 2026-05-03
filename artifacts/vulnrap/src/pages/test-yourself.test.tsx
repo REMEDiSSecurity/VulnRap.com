@@ -6,7 +6,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import TestYourself, { parseCsv, parseJsonInput, buildResultsCsv } from "./test-yourself";
+import TestYourself, {
+  parseCsv,
+  parseJsonInput,
+  buildResultsCsv,
+} from "./test-yourself";
 
 describe("parseCsv — RFC-4180-ish", () => {
   it("handles a plain header + body grid", () => {
@@ -19,7 +23,9 @@ describe("parseCsv — RFC-4180-ish", () => {
   });
 
   it("handles quoted fields with embedded commas, newlines, and escaped quotes", () => {
-    const grid = parseCsv(`text,label\n"a, b\nc",valid\n"she said ""hi""",invalid\n`);
+    const grid = parseCsv(
+      `text,label\n"a, b\nc",valid\n"she said ""hi""",invalid\n`,
+    );
     expect(grid).toEqual([
       ["text", "label"],
       ["a, b\nc", "valid"],
@@ -29,17 +35,22 @@ describe("parseCsv — RFC-4180-ish", () => {
 
   it("skips entirely blank lines", () => {
     const grid = parseCsv("text,label\n\nfoo,valid\n");
-    expect(grid).toEqual([["text", "label"], ["foo", "valid"]]);
+    expect(grid).toEqual([
+      ["text", "label"],
+      ["foo", "valid"],
+    ]);
   });
 });
 
 describe("parseJsonInput — label normalization", () => {
   it("accepts a standard array-of-objects shape and normalizes labels", () => {
-    const r = parseJsonInput(JSON.stringify([
-      { report_text: "real bug", expected_label: "valid" },
-      { report_text: "noise", expected_label: "slop" },
-      { text: "alt key", label: "1" },
-    ]));
+    const r = parseJsonInput(
+      JSON.stringify([
+        { report_text: "real bug", expected_label: "valid" },
+        { report_text: "noise", expected_label: "slop" },
+        { text: "alt key", label: "1" },
+      ]),
+    );
     expect(r.errors).toEqual([]);
     expect(r.rows).toEqual([
       { text: "real bug", label: "valid" },
@@ -53,11 +64,13 @@ describe("parseJsonInput — label normalization", () => {
   });
 
   it("collects per-row errors instead of failing the whole upload", () => {
-    const r = parseJsonInput(JSON.stringify([
-      { text: "ok", label: "valid" },
-      { text: "", label: "valid" },
-      { text: "no label", label: "huh" },
-    ]));
+    const r = parseJsonInput(
+      JSON.stringify([
+        { text: "ok", label: "valid" },
+        { text: "", label: "valid" },
+        { text: "no label", label: "huh" },
+      ]),
+    );
     expect(r.rows).toHaveLength(1);
     expect(r.errors).toHaveLength(2);
   });
@@ -77,7 +90,9 @@ describe("buildResultsCsv", () => {
       },
     ]);
     const lines = csv.split("\n");
-    expect(lines[0]).toBe("index,expected_label,predicted_label,composite_score,composite_label,correct,text_preview");
+    expect(lines[0]).toBe(
+      "index,expected_label,predicted_label,composite_score,composite_label,correct,text_preview",
+    );
     expect(lines[1]).toContain('"has ""quotes"", and commas"');
     expect(lines[1]).toContain("NEEDS REVIEW");
   });
@@ -96,11 +111,32 @@ describe("<TestYourself /> — end-to-end happy path", () => {
             precision: 1.0,
             recall: 1.0,
             f1: 1.0,
-            confusionMatrix: { truePositive: 1, falsePositive: 0, trueNegative: 1, falseNegative: 0 },
+            confusionMatrix: {
+              truePositive: 1,
+              falsePositive: 0,
+              trueNegative: 1,
+              falseNegative: 0,
+            },
           },
           perRow: [
-            { index: 0, textPreview: "real bug", expectedLabel: "valid", predictedLabel: "valid", compositeScore: 72, compositeLabel: "PROMISING", correct: true },
-            { index: 1, textPreview: "noise",    expectedLabel: "invalid", predictedLabel: "invalid", compositeScore: 14, compositeLabel: "LIKELY INVALID", correct: true },
+            {
+              index: 0,
+              textPreview: "real bug",
+              expectedLabel: "valid",
+              predictedLabel: "valid",
+              compositeScore: 72,
+              compositeLabel: "PROMISING",
+              correct: true,
+            },
+            {
+              index: 1,
+              textPreview: "noise",
+              expectedLabel: "invalid",
+              predictedLabel: "invalid",
+              compositeScore: 14,
+              compositeLabel: "LIKELY INVALID",
+              correct: true,
+            },
           ],
           rateLimit: { limit: 10, remaining: 9 },
         }),
@@ -114,7 +150,11 @@ describe("<TestYourself /> — end-to-end happy path", () => {
   });
 
   it("uploads CSV, runs the battery, and renders metrics + per-row table", async () => {
-    render(<MemoryRouter><TestYourself /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <TestYourself />
+      </MemoryRouter>,
+    );
 
     const file = new File(
       ["text,label\nreal bug,valid\nnoise,invalid\n"],
@@ -129,10 +169,16 @@ describe("<TestYourself /> — end-to-end happy path", () => {
     const runButton = screen.getByTestId("byo-run");
     fireEvent.click(runButton);
 
-    await waitFor(() => expect(screen.getByTestId("byo-results")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId("byo-results")).toBeInTheDocument(),
+    );
 
-    expect(screen.getByTestId("byo-metric-accuracy")).toHaveTextContent("100.0%");
-    expect(screen.getByTestId("byo-metric-precision")).toHaveTextContent("100.0%");
+    expect(screen.getByTestId("byo-metric-accuracy")).toHaveTextContent(
+      "100.0%",
+    );
+    expect(screen.getByTestId("byo-metric-precision")).toHaveTextContent(
+      "100.0%",
+    );
     expect(screen.getByTestId("byo-metric-recall")).toHaveTextContent("100.0%");
     expect(screen.getByTestId("byo-metric-f1")).toHaveTextContent("100.0%");
 
@@ -148,15 +194,29 @@ describe("<TestYourself /> — end-to-end happy path", () => {
   });
 
   it("shows a cooldown banner when the server returns 429", async () => {
-    fetchSpy.mockImplementation(async () => new Response(
-      JSON.stringify({ error: "Daily rate limit exceeded (10 runs / day per IP). Try again tomorrow." }),
-      { status: 429, headers: { "Content-Type": "application/json" } },
-    ));
+    fetchSpy.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error:
+              "Daily rate limit exceeded (10 runs / day per IP). Try again tomorrow.",
+          }),
+          { status: 429, headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
-    render(<MemoryRouter><TestYourself /></MemoryRouter>);
+    render(
+      <MemoryRouter>
+        <TestYourself />
+      </MemoryRouter>,
+    );
 
-    const file = new File(["text,label\nfoo,valid\n"], "b.csv", { type: "text/csv" });
-    fireEvent.change(await screen.findByTestId("byo-file-input"), { target: { files: [file] } });
+    const file = new File(["text,label\nfoo,valid\n"], "b.csv", {
+      type: "text/csv",
+    });
+    fireEvent.change(await screen.findByTestId("byo-file-input"), {
+      target: { files: [file] },
+    });
     await waitFor(() => expect(screen.getByText(/Parsed/)).toBeInTheDocument());
 
     fireEvent.click(screen.getByTestId("byo-run"));

@@ -21,11 +21,13 @@ export function generateConfigImpactNotices(options: {
       summary: "Running in heuristic-only mode. Detection accuracy is reduced.",
       impact: {
         accuracy_drop: "~15 percentage points (from ~90% to ~75% estimated)",
-        false_negative_increase: "Expect 1-2 additional slop reports to score below threshold per 16 reports",
+        false_negative_increase:
+          "Expect 1-2 additional slop reports to score below threshold per 16 reports",
         latency_improvement: "P95 drops from ~15s to <2s (7-10x faster)",
         confidence_reduction: "All confidence values reduced by 15%",
       },
-      recommendation: "Acceptable for high-volume pre-screening where speed matters more than precision. Consider re-running flagged reports with LLM for final classification.",
+      recommendation:
+        "Acceptable for high-volume pre-screening where speed matters more than precision. Consider re-running flagged reports with LLM for final classification.",
     });
   }
 
@@ -34,13 +36,16 @@ export function generateConfigImpactNotices(options: {
       setting: "skipRedaction",
       severity: "warning",
       title: "PII Redaction Disabled",
-      summary: "Personally identifiable information will NOT be masked before analysis or storage.",
+      summary:
+        "Personally identifiable information will NOT be masked before analysis or storage.",
       impact: {
         accuracy_change: "None",
-        privacy_risk: "HIGH — any PII in the report is exposed in API responses and potentially logged",
+        privacy_risk:
+          "HIGH — any PII in the report is exposed in API responses and potentially logged",
         latency_improvement: "Marginal (~10-50ms saved)",
       },
-      recommendation: "Only disable redaction in controlled environments where PII exposure is acceptable. Never disable in production when processing reports from external researchers.",
+      recommendation:
+        "Only disable redaction in controlled environments where PII exposure is acceptable. Never disable in production when processing reports from external researchers.",
     });
   }
 
@@ -55,7 +60,8 @@ export function generateConfigImpactNotices(options: {
         accuracy: "~75% estimated (heuristic-only baseline)",
         privacy: "No PII protection",
       },
-      recommendation: "Best for batch processing of pre-sanitized reports, CI/CD integration, or real-time pre-screening of high-volume report streams.",
+      recommendation:
+        "Best for batch processing of pre-sanitized reports, CI/CD integration, or real-time pre-screening of high-volume report streams.",
     });
   }
 
@@ -70,7 +76,8 @@ export function generateConfigImpactNotices(options: {
         latency: "P95 ~15-20s (LLM analysis is the bottleneck)",
         privacy: "PII redacted before LLM processing and in API responses",
       },
-      recommendation: "Production triage of individual reports where accuracy is the priority.",
+      recommendation:
+        "Production triage of individual reports where accuracy is the priority.",
     });
   }
 

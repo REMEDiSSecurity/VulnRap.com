@@ -9,13 +9,13 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { setCalibrationToken } from "@workspace/api-client-react";
+import { HandwavyPhrasesAdmin } from "./feedback-analytics";
 import type {
   HandwavyMarker,
   HandwavyHistoryEntry,
   HandwavyPhrasesList,
   HandwavyPhraseRemovalBatchesList,
 } from "@workspace/api-client-react";
-import { HandwavyPhrasesAdmin } from "./feedback-analytics";
 
 // Task #507 — end-to-end coverage for the "drop a row, then click Reinstate
 // batch" flow inside the FLAT hand-wavy admin panel. The engine + route tests
@@ -126,18 +126,14 @@ function installFetchMock(): {
       return jsonResponse(VALID_AUTH_STATUS);
     }
     if (
-      url.includes(
-        "/api/feedback/calibration/handwavy-phrases/removal-batches",
-      )
+      url.includes("/api/feedback/calibration/handwavy-phrases/removal-batches")
     ) {
       return jsonResponse(REMOVAL_BATCHES);
     }
     // Reinstate-batch — match BEFORE the general /handwavy-phrases route.
     // We capture every call here so the test can assert call count + body.
     if (
-      url.includes(
-        "/api/feedback/calibration/handwavy-phrases/reinstate-batch",
-      )
+      url.includes("/api/feedback/calibration/handwavy-phrases/reinstate-batch")
     ) {
       let parsedBody: unknown = null;
       try {
@@ -240,7 +236,10 @@ describe("Task #507 — partial reinstate-batch end-to-end via the confirm dialo
     const dropButton = initialDropButtons.find(
       (b) => b.getAttribute("data-phrase") === DROPPED_PHRASE,
     );
-    expect(dropButton, "expected a drop button for the dropped phrase").toBeTruthy();
+    expect(
+      dropButton,
+      "expected a drop button for the dropped phrase",
+    ).toBeTruthy();
     fireEvent.click(dropButton!);
 
     // After the drop, only the kept phrase remains in the summary list and

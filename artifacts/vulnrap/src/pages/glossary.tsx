@@ -13,13 +13,15 @@ interface Term {
 const TERMS: Term[] = [
   {
     term: "Absence Penalty",
-    short: "A score deduction applied when an expected signal is missing from a report.",
+    short:
+      "A score deduction applied when an expected signal is missing from a report.",
     long: "Many CWE families have a small set of evidence types that a credible report is expected to include — for example, a memory-corruption report should mention an offset, a register, or a crash trace. When those expected markers are absent, the engine applies a calibrated absence penalty rather than passively ignoring the gap. Penalties are bounded so a single missing signal cannot dominate a score.",
     link: { to: "/engines/substance", label: "Substance Engine" },
   },
   {
     term: "Archetype",
-    short: "A canonical shape that real reports of a given CWE family tend to take.",
+    short:
+      "A canonical shape that real reports of a given CWE family tend to take.",
     long: "Archetypes are reference patterns derived from the public corpus — the typical sections, evidence ordering, and proof-of-concept density seen in legitimate reports for a CWE. A submitted report is compared against the archetype for its claimed CWE; large structural deviations contribute to the slop score. Archetypes are versioned alongside the corpus.",
     link: { to: "/architecture", label: "Architecture" },
   },
@@ -31,7 +33,8 @@ const TERMS: Term[] = [
   },
   {
     term: "AVRI Drift",
-    short: "Movement of AVRI for the same input over time, usually from engine recalibration.",
+    short:
+      "Movement of AVRI for the same input over time, usually from engine recalibration.",
     long: "When models, weights, or signal definitions change, previously scored reports can shift score. Drift is monitored on the golden corpus and surfaced as a per-release metric so consumers can decide whether to re-score historical reports or freeze on a specific engine version.",
     link: { to: "/changelog", label: "Changelog" },
   },
@@ -42,7 +45,8 @@ const TERMS: Term[] = [
   },
   {
     term: "Cooldown",
-    short: "A minimum time-between-firings for a signal to prevent score thrash.",
+    short:
+      "A minimum time-between-firings for a signal to prevent score thrash.",
     long: "Some signals — particularly drift- and trend-based ones — are stateful. A cooldown prevents the same condition from re-triggering scoring penalties on every refresh. Cooldowns are recorded in the audit log so operators can see why an expected signal did not fire.",
     link: { to: "/audit-log", label: "Audit Log" },
   },
@@ -54,7 +58,8 @@ const TERMS: Term[] = [
   },
   {
     term: "Corpus",
-    short: "The labeled set of public reports used for calibration and regression.",
+    short:
+      "The labeled set of public reports used for calibration and regression.",
     long: "The corpus is a curated, versioned snapshot of public vulnerability reports with labels for CWE, severity, and slop status. It is used to fit weights, derive archetypes, and run regression checks before each engine release.",
     link: { to: "/corpus-stats", label: "Corpus Stats" },
   },
@@ -66,28 +71,33 @@ const TERMS: Term[] = [
   },
   {
     term: "Evidence Marker",
-    short: "A concrete artifact in the report — a stack trace, payload, screenshot, or command.",
+    short:
+      "A concrete artifact in the report — a stack trace, payload, screenshot, or command.",
     long: "Evidence markers are the smallest unit of substance the engine recognizes. Each marker has a type (trace, payload, request, screenshot, repro command, log line) and contributes differently to the substance score depending on the CWE family.",
   },
   {
     term: "Fingerprint",
-    short: "A normalized representation of a report used for duplicate and similarity checks.",
+    short:
+      "A normalized representation of a report used for duplicate and similarity checks.",
     long: "Fingerprints are content-derived hashes of normalized text and structure. They are used to detect resubmissions, near-duplicates across reporters, and corpus contamination. Fingerprints are not reversible — they cannot reconstruct the original report.",
   },
   {
     term: "Gold Signal",
-    short: "A high-confidence signal that, on its own, strongly classifies a report.",
+    short:
+      "A high-confidence signal that, on its own, strongly classifies a report.",
     long: "Most signals contribute fractionally. A small set of gold signals — for example, a verifiable working PoC against a pinned commit, or a confirmed CWE-coherence violation — are weighted high enough to dominate the AVRI on their own. Gold signals are reviewed manually before promotion.",
     link: { to: "/signals", label: "Signal Reference" },
   },
   {
     term: "Golden Corpus",
-    short: "A frozen subset of the corpus used for release-gating regression tests.",
+    short:
+      "A frozen subset of the corpus used for release-gating regression tests.",
     long: "Before any engine release, the new build is run against the golden corpus and its scores are compared against the previous build's. A delta beyond a published threshold blocks the release. The golden corpus is intentionally small and stable.",
   },
   {
     term: "Headroom",
-    short: "How far the current score sits from the next classification boundary.",
+    short:
+      "How far the current score sits from the next classification boundary.",
     long: "Headroom expresses, for a given report, how many additional positive (or negative) signal points would be needed to push it across the next decision threshold (e.g. from T2 into T3). It is shown in the result view to help triagers understand fragile classifications.",
   },
   {
@@ -131,7 +141,8 @@ const TERMS: Term[] = [
   },
   {
     term: "Slop",
-    short: "Low-quality, often LLM-generated, vulnerability reports that waste triage time.",
+    short:
+      "Low-quality, often LLM-generated, vulnerability reports that waste triage time.",
     long: "Slop is the category VulnRap exists to detect: reports that look superficially like a real vulnerability disclosure but lack substance, coherence, or reproducibility. Slop is not always intentional — well-meaning reporters using AI assistance can produce it too — and the engine tries to be diagnostic rather than punitive.",
     link: { to: "/how-it-works", label: "How It Works" },
   },
@@ -142,7 +153,8 @@ const TERMS: Term[] = [
   },
   {
     term: "Structural Fabrication",
-    short: "Invented but plausible-sounding artifacts — fake CVE IDs, hallucinated line numbers, non-existent functions.",
+    short:
+      "Invented but plausible-sounding artifacts — fake CVE IDs, hallucinated line numbers, non-existent functions.",
     long: "A subclass of slop where the report contains specific, citable-looking details that do not actually exist in the target software. Structural fabrication is detected by cross-referencing claims against the cited source, advisories, or CVE records when available.",
   },
   {
@@ -163,7 +175,8 @@ const TERMS: Term[] = [
   },
   {
     term: "Verification",
-    short: "A signed, time-stamped record that a specific report received a specific score.",
+    short:
+      "A signed, time-stamped record that a specific report received a specific score.",
     long: "Each scored report receives a verification token so consumers (program owners, CNAs, downstream tools) can confirm later that the displayed score was actually produced by the engine and has not been tampered with.",
     link: { to: "/check", label: "Check a verification" },
   },
@@ -182,13 +195,16 @@ const TERMS: Term[] = [
 ];
 
 function slug(term: string) {
-  return term.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return term
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 export default function GlossaryPage() {
   const sorted = useMemo(
     () => [...TERMS].sort((a, b) => a.term.localeCompare(b.term)),
-    []
+    [],
   );
 
   const byLetter = useMemo(() => {
@@ -211,9 +227,9 @@ export default function GlossaryPage() {
           Glossary
         </h1>
         <p className="text-muted-foreground mt-2 max-w-3xl leading-relaxed">
-          Working vocabulary for VulnRap — the scoring engine, the signals, and the report-quality
-          concepts that show up across the docs and blog. Each entry links to the deeper reference
-          where one exists.
+          Working vocabulary for VulnRap — the scoring engine, the signals, and
+          the report-quality concepts that show up across the docs and blog.
+          Each entry links to the deeper reference where one exists.
         </p>
         <p className="text-xs text-muted-foreground/60 mt-3 font-mono">
           {TERMS.length} terms · alphabetical
@@ -223,7 +239,7 @@ export default function GlossaryPage() {
       <Card className="bg-card/40 backdrop-blur border-primary/20">
         <CardContent className="py-4">
           <div className="flex flex-wrap gap-1.5" aria-label="Jump to letter">
-            {letters.map(l => (
+            {letters.map((l) => (
               <a
                 key={l}
                 href={`#letter-${l}`}
@@ -237,7 +253,7 @@ export default function GlossaryPage() {
       </Card>
 
       <div className="space-y-10">
-        {letters.map(letter => (
+        {letters.map((letter) => (
           <section
             key={letter}
             id={`letter-${letter}`}
@@ -247,7 +263,7 @@ export default function GlossaryPage() {
               {letter}
             </h2>
             <div className="space-y-4">
-              {byLetter.get(letter)!.map(term => (
+              {byLetter.get(letter)!.map((term) => (
                 <article
                   key={term.term}
                   id={slug(term.term)}
@@ -272,8 +288,12 @@ export default function GlossaryPage() {
                       </Link>
                     )}
                   </header>
-                  <p className="mt-1 text-sm text-foreground/90">{term.short}</p>
-                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{term.long}</p>
+                  <p className="mt-1 text-sm text-foreground/90">
+                    {term.short}
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                    {term.long}
+                  </p>
                 </article>
               ))}
             </div>

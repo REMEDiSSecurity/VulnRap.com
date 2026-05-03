@@ -10,14 +10,18 @@ import {
 
 describe("signal-mute-boost-panel helpers", () => {
   it("parses URL string into adjustments map", () => {
-    expect(parseSignalAdjustments("ai_phrase:mute,template_match:boost")).toEqual({
+    expect(
+      parseSignalAdjustments("ai_phrase:mute,template_match:boost"),
+    ).toEqual({
       ai_phrase: "mute",
       template_match: "boost",
     });
   });
 
   it("ignores unknown modes and malformed pieces", () => {
-    expect(parseSignalAdjustments("ai_phrase:weird,broken,template_match:boost,")).toEqual({
+    expect(
+      parseSignalAdjustments("ai_phrase:weird,broken,template_match:boost,"),
+    ).toEqual({
       template_match: "boost",
     });
   });
@@ -28,8 +32,14 @@ describe("signal-mute-boost-panel helpers", () => {
   });
 
   it("serializes adjustments map to a stable string", () => {
-    const out = serializeSignalAdjustments({ ai_phrase: "mute", template_match: "boost" });
-    expect(out.split(",").sort()).toEqual(["ai_phrase:mute", "template_match:boost"]);
+    const out = serializeSignalAdjustments({
+      ai_phrase: "mute",
+      template_match: "boost",
+    });
+    expect(out.split(",").sort()).toEqual([
+      "ai_phrase:mute",
+      "template_match:boost",
+    ]);
   });
 
   it("serializes empty map to empty string", () => {
@@ -43,7 +53,12 @@ describe("signal-mute-boost-panel helpers", () => {
       { type: "future_cve", weight: 8 },
     ];
     // Mute removes 10 from baseline; boost adds 5 (doubles 5 → +5 delta).
-    expect(applySignalAdjustments(60, evidence, { ai_phrase: "mute", template_match: "boost" })).toBe(55);
+    expect(
+      applySignalAdjustments(60, evidence, {
+        ai_phrase: "mute",
+        template_match: "boost",
+      }),
+    ).toBe(55);
   });
 
   it("aggregates duplicate signal types when applying adjustments", () => {
@@ -52,9 +67,13 @@ describe("signal-mute-boost-panel helpers", () => {
       { type: "ai_phrase", weight: 6 },
     ];
     // Both rows muted → -10
-    expect(applySignalAdjustments(50, evidence, { ai_phrase: "mute" })).toBe(40);
+    expect(applySignalAdjustments(50, evidence, { ai_phrase: "mute" })).toBe(
+      40,
+    );
     // Both rows boosted → +10
-    expect(applySignalAdjustments(50, evidence, { ai_phrase: "boost" })).toBe(60);
+    expect(applySignalAdjustments(50, evidence, { ai_phrase: "boost" })).toBe(
+      60,
+    );
   });
 
   it("clamps adjusted score to [0, 100]", () => {
@@ -84,8 +103,12 @@ describe("SignalMuteBoostPanel", () => {
         adjustedScore={50}
       />,
     );
-    expect(screen.getByTestId("signal-mute-boost-row-ai_phrase")).toBeInTheDocument();
-    expect(screen.getByTestId("signal-mute-boost-row-template_match")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("signal-mute-boost-row-ai_phrase"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("signal-mute-boost-row-template_match"),
+    ).toBeInTheDocument();
   });
 
   it("renders human-readable labels when provided", () => {
@@ -185,9 +208,21 @@ describe("SignalMuteBoostPanel", () => {
         adjustedScore={60}
       />,
     );
-    expect(screen.getByTestId("signal-mute-boost-ai_phrase-boost").getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByTestId("signal-mute-boost-ai_phrase-normal").getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByTestId("signal-mute-boost-ai_phrase-mute").getAttribute("aria-pressed")).toBe("false");
+    expect(
+      screen
+        .getByTestId("signal-mute-boost-ai_phrase-boost")
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByTestId("signal-mute-boost-ai_phrase-normal")
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(
+      screen
+        .getByTestId("signal-mute-boost-ai_phrase-mute")
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
   });
 
   it("renders nothing when no evidence is provided", () => {

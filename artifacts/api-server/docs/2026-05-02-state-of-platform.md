@@ -55,7 +55,7 @@ Around the engines:
 
 - **Active verification** runs every CVE through NVD, every commit SHA
   through GitHub, every package through its registry. Tagged
-  *referenced* (the report itself pointed at the source) or *fallback*
+  _referenced_ (the report itself pointed at the source) or _fallback_
   (we had to find the source ourselves).
 - **Similarity engine** — MinHash + LSH and Simhash for near-duplicate
   detection, SHA-256 for exact-match dedup, plus per-section
@@ -115,8 +115,8 @@ order of execution in
    `AVRI_FAMILY_CONTRADICTION` and `AVRI_NO_GOLD_SIGNALS` where
    applicable.
 8. **LLM gate** (`src/lib/llm-slop.ts`) — deterministic predicate
-   that decides whether the LLM call is *worth* its cost given the
-   composite signal so far. The LLM is *not* an engine; it is a refiner
+   that decides whether the LLM call is _worth_ its cost given the
+   composite signal so far. The LLM is _not_ an engine; it is a refiner
    on the substance score, and the gate prevents spending tokens on
    rows that already have a clear answer.
 9. **Active verification** (`src/lib/active-verification.ts` +
@@ -133,7 +133,7 @@ order of execution in
     one of: `AUTO_CLOSE`, `MANUAL_REVIEW`, `CHALLENGE_REPORTER`,
     `PRIORITIZE`, `STANDARD_TRIAGE`.
 13. **Persistence** — only on `POST /reports` (the `/reports/check`
-    path is non-storing). Stores redacted text *iff* the submitter
+    path is non-storing). Stores redacted text _iff_ the submitter
     chose `contentMode=full`; otherwise only fingerprints and the
     composite trace are persisted.
 
@@ -151,17 +151,17 @@ below from source.
 
 ### AVRI families (Engine 2 substrate)
 
-| Family id | Display name | Verification mode | Gold signals | Absence penalties |
-| --------- | ------------ | ----------------- | -----------: | ----------------: |
-| `MEMORY_CORRUPTION` | Memory corruption / unsafe C | `SOURCE_CODE` | 8 | 3 |
-| `INJECTION` | Injection (SQLi / Command / LDAP / NoSQL) | `ENDPOINT` | 6 | 2 |
-| `WEB_CLIENT` | Web client (XSS / CSRF / clickjacking / open redirect) | `ENDPOINT` | 11 | 2 |
-| `AUTHN_AUTHZ` | Authentication / Authorization / Session | `ENDPOINT` | 6 | 2 |
-| `CRYPTO` | Cryptography | `SOURCE_CODE` | 5 | 2 |
-| `DESERIALIZATION` | Insecure deserialization / unsafe parsing | `SOURCE_CODE` | 8 | 2 |
-| `RACE_CONCURRENCY` | Race condition / TOCTOU / concurrency | `MANUAL_ONLY` | 6 | 2 |
-| `REQUEST_SMUGGLING` | HTTP request smuggling / desync / parser confusion | `MANUAL_ONLY` | 5 | 2 |
-| `FLAT` | Generic / unclassified | `GENERIC` | 4 | 0 |
+| Family id           | Display name                                           | Verification mode | Gold signals | Absence penalties |
+| ------------------- | ------------------------------------------------------ | ----------------- | -----------: | ----------------: |
+| `MEMORY_CORRUPTION` | Memory corruption / unsafe C                           | `SOURCE_CODE`     |            8 |                 3 |
+| `INJECTION`         | Injection (SQLi / Command / LDAP / NoSQL)              | `ENDPOINT`        |            6 |                 2 |
+| `WEB_CLIENT`        | Web client (XSS / CSRF / clickjacking / open redirect) | `ENDPOINT`        |           11 |                 2 |
+| `AUTHN_AUTHZ`       | Authentication / Authorization / Session               | `ENDPOINT`        |            6 |                 2 |
+| `CRYPTO`            | Cryptography                                           | `SOURCE_CODE`     |            5 |                 2 |
+| `DESERIALIZATION`   | Insecure deserialization / unsafe parsing              | `SOURCE_CODE`     |            8 |                 2 |
+| `RACE_CONCURRENCY`  | Race condition / TOCTOU / concurrency                  | `MANUAL_ONLY`     |            6 |                 2 |
+| `REQUEST_SMUGGLING` | HTTP request smuggling / desync / parser confusion     | `MANUAL_ONLY`     |            5 |                 2 |
+| `FLAT`              | Generic / unclassified                                 | `GENERIC`         |            4 |                 0 |
 
 The per-family reproduction expectation that AVRI grades against:
 
@@ -195,25 +195,24 @@ Verification mode: `SOURCE_CODE`. Gold signals: 8. Absence penalties: 3.
 
 **Gold signals (added when present):**
 
-| Signal id | Description | Points |
-| --------- | ----------- | -----: |
-| `asan_or_sanitizer` | AddressSanitizer / MSan / UBSan / TSAN crash output | +22 |
-| `valgrind` | Valgrind error trace | +18 |
-| `stack_trace_with_offset` | Crash stack trace with hex offsets | +12 |
-| `specific_alloc_function` | Reference to specific allocator function (malloc/calloc/strdup/g_malloc/free) | +8 |
-| `memory_op_with_size` | memcpy/memmove/strncpy/snprintf with explicit size | +8 |
-| `specific_struct_field` | Specific C struct field access (e.g. obj->buf, ptr->len) | +6 |
-| `code_diff_in_c` | Diff/patch hunk against a .c/.h/.cpp file | +12 |
-| `cwe_correct_class` | Mentions CWE-119/120/121/122/125/787/416/590/672/762 | +4 |
+| Signal id                 | Description                                                                   | Points |
+| ------------------------- | ----------------------------------------------------------------------------- | -----: |
+| `asan_or_sanitizer`       | AddressSanitizer / MSan / UBSan / TSAN crash output                           |    +22 |
+| `valgrind`                | Valgrind error trace                                                          |    +18 |
+| `stack_trace_with_offset` | Crash stack trace with hex offsets                                            |    +12 |
+| `specific_alloc_function` | Reference to specific allocator function (malloc/calloc/strdup/g_malloc/free) |     +8 |
+| `memory_op_with_size`     | memcpy/memmove/strncpy/snprintf with explicit size                            |     +8 |
+| `specific_struct_field`   | Specific C struct field access (e.g. obj->buf, ptr->len)                      |     +6 |
+| `code_diff_in_c`          | Diff/patch hunk against a .c/.h/.cpp file                                     |    +12 |
+| `cwe_correct_class`       | Mentions CWE-119/120/121/122/125/787/416/590/672/762                          |     +4 |
 
 **Absence penalties (deducted when missing):**
 
-| Signal id | Description | Penalty |
-| --------- | ----------- | ------: |
-| `no_crash_or_sanitizer` | No sanitizer/valgrind crash output | −8 |
-| `no_size_or_offset` | No explicit byte/size/offset value | −5 |
-| `no_c_source_reference` | No C/C++ source file reference | −5 |
-
+| Signal id               | Description                        | Penalty |
+| ----------------------- | ---------------------------------- | ------: |
+| `no_crash_or_sanitizer` | No sanitizer/valgrind crash output |      −8 |
+| `no_size_or_offset`     | No explicit byte/size/offset value |      −5 |
+| `no_c_source_reference` | No C/C++ source file reference     |      −5 |
 
 #### `INJECTION` — Injection (SQLi / Command / LDAP / NoSQL)
 
@@ -221,22 +220,21 @@ Verification mode: `ENDPOINT`. Gold signals: 6. Absence penalties: 2.
 
 **Gold signals (added when present):**
 
-| Signal id | Description | Points |
-| --------- | ----------- | -----: |
-| `concrete_payload` | Concrete injection payload | +22 |
-| `vulnerable_query_construction` | Shows the unsafe query/exec construction | +14 |
-| `request_response_diff` | Side-by-side normal vs injected request showing differing behavior | +10 |
-| `specific_endpoint_param` | Names a specific endpoint + parameter | +8 |
-| `cwe_correct_class` | Mentions CWE-89/77/78/91/943/917 | +4 |
-| `code_diff_for_fix` | Diff showing parameterized fix | +6 |
+| Signal id                       | Description                                                        | Points |
+| ------------------------------- | ------------------------------------------------------------------ | -----: |
+| `concrete_payload`              | Concrete injection payload                                         |    +22 |
+| `vulnerable_query_construction` | Shows the unsafe query/exec construction                           |    +14 |
+| `request_response_diff`         | Side-by-side normal vs injected request showing differing behavior |    +10 |
+| `specific_endpoint_param`       | Names a specific endpoint + parameter                              |     +8 |
+| `cwe_correct_class`             | Mentions CWE-89/77/78/91/943/917                                   |     +4 |
+| `code_diff_for_fix`             | Diff showing parameterized fix                                     |     +6 |
 
 **Absence penalties (deducted when missing):**
 
-| Signal id | Description | Penalty |
-| --------- | ----------- | ------: |
-| `no_payload` | No concrete injection payload | −12 |
-| `no_endpoint` | No specific URL or endpoint named | −6 |
-
+| Signal id     | Description                       | Penalty |
+| ------------- | --------------------------------- | ------: |
+| `no_payload`  | No concrete injection payload     |     −12 |
+| `no_endpoint` | No specific URL or endpoint named |      −6 |
 
 #### `WEB_CLIENT` — Web client (XSS / CSRF / clickjacking / open redirect)
 
@@ -244,27 +242,26 @@ Verification mode: `ENDPOINT`. Gold signals: 11. Absence penalties: 2.
 
 **Gold signals (added when present):**
 
-| Signal id | Description | Points |
-| --------- | ----------- | -----: |
-| `concrete_payload` | Concrete XSS/JS payload | +22 |
-| `reflection_or_dom_proof` | Shows the response/DOM where the payload is reflected | +12 |
-| `specific_dom_sink` | Names a specific DOM sink/source | +10 |
-| `endpoint_with_param` | Specific endpoint and reflected parameter | +8 |
-| `csrf_specific_request` | (CSRF) shows the cross-origin request being forged | +8 |
-| `ssrf_internal_metadata` | Concrete cloud-metadata or RFC1918 SSRF target URL | +20 |
-| `path_traversal_payload` | Concrete path-traversal payload reaching a sensitive file | +18 |
-| `ssrf_or_traversal_sink` | Sink that fetches a URL or reads a file from user input | +8 |
-| `code_diff_for_fix` | Diff/patch hunk | +10 |
-| `file_with_line` | File path with line number reference | +6 |
-| `cwe_correct_class` | Mentions a WEB_CLIENT-family CWE | +4 |
+| Signal id                 | Description                                               | Points |
+| ------------------------- | --------------------------------------------------------- | -----: |
+| `concrete_payload`        | Concrete XSS/JS payload                                   |    +22 |
+| `reflection_or_dom_proof` | Shows the response/DOM where the payload is reflected     |    +12 |
+| `specific_dom_sink`       | Names a specific DOM sink/source                          |    +10 |
+| `endpoint_with_param`     | Specific endpoint and reflected parameter                 |     +8 |
+| `csrf_specific_request`   | (CSRF) shows the cross-origin request being forged        |     +8 |
+| `ssrf_internal_metadata`  | Concrete cloud-metadata or RFC1918 SSRF target URL        |    +20 |
+| `path_traversal_payload`  | Concrete path-traversal payload reaching a sensitive file |    +18 |
+| `ssrf_or_traversal_sink`  | Sink that fetches a URL or reads a file from user input   |     +8 |
+| `code_diff_for_fix`       | Diff/patch hunk                                           |    +10 |
+| `file_with_line`          | File path with line number reference                      |     +6 |
+| `cwe_correct_class`       | Mentions a WEB_CLIENT-family CWE                          |     +4 |
 
 **Absence penalties (deducted when missing):**
 
-| Signal id | Description | Penalty |
-| --------- | ----------- | ------: |
-| `no_payload` | No concrete XSS/CSRF/redirect/SSRF/traversal payload | −10 |
-| `no_url` | No real URL or endpoint | −4 |
-
+| Signal id    | Description                                          | Penalty |
+| ------------ | ---------------------------------------------------- | ------: |
+| `no_payload` | No concrete XSS/CSRF/redirect/SSRF/traversal payload |     −10 |
+| `no_url`     | No real URL or endpoint                              |      −4 |
 
 #### `AUTHN_AUTHZ` — Authentication / Authorization / Session
 
@@ -272,22 +269,21 @@ Verification mode: `ENDPOINT`. Gold signals: 6. Absence penalties: 2.
 
 **Gold signals (added when present):**
 
-| Signal id | Description | Points |
-| --------- | ----------- | -----: |
-| `two_account_proof` | Demonstrates access between two distinct accounts/users | +16 |
-| `authorization_header_swap` | Shows swapping authorization headers/tokens | +12 |
-| `idor_object_id` | Shows changing an object id to access another resource | +10 |
-| `specific_endpoint` | Names a specific authenticated endpoint | +8 |
-| `policy_or_check_function` | References specific authz policy/check function | +6 |
-| `cwe_correct_class` | Mentions CWE-285/287/306/639/862/863/284 | +4 |
+| Signal id                   | Description                                             | Points |
+| --------------------------- | ------------------------------------------------------- | -----: |
+| `two_account_proof`         | Demonstrates access between two distinct accounts/users |    +16 |
+| `authorization_header_swap` | Shows swapping authorization headers/tokens             |    +12 |
+| `idor_object_id`            | Shows changing an object id to access another resource  |    +10 |
+| `specific_endpoint`         | Names a specific authenticated endpoint                 |     +8 |
+| `policy_or_check_function`  | References specific authz policy/check function         |     +6 |
+| `cwe_correct_class`         | Mentions CWE-285/287/306/639/862/863/284                |     +4 |
 
 **Absence penalties (deducted when missing):**
 
-| Signal id | Description | Penalty |
-| --------- | ----------- | ------: |
-| `no_two_account_proof` | No proof that ≥2 accounts/sessions are involved | −8 |
-| `no_endpoint` | No protected endpoint named | −5 |
-
+| Signal id              | Description                                     | Penalty |
+| ---------------------- | ----------------------------------------------- | ------: |
+| `no_two_account_proof` | No proof that ≥2 accounts/sessions are involved |      −8 |
+| `no_endpoint`          | No protected endpoint named                     |      −5 |
 
 #### `CRYPTO` — Cryptography
 
@@ -295,21 +291,20 @@ Verification mode: `SOURCE_CODE`. Gold signals: 5. Absence penalties: 2.
 
 **Gold signals (added when present):**
 
-| Signal id | Description | Points |
-| --------- | ----------- | -----: |
-| `specific_algo_or_lib` | Names a specific algorithm/mode/library | +14 |
-| `kat_or_test_vector` | Provides KAT/test vector/known plaintext-ciphertext pair | +12 |
-| `specific_misuse` | Names a specific misuse pattern | +10 |
-| `code_reference` | Specific source/file reference for crypto call | +8 |
-| `cwe_correct_class` | Mentions CWE-327/328/330/338/759/760/916 | +4 |
+| Signal id              | Description                                              | Points |
+| ---------------------- | -------------------------------------------------------- | -----: |
+| `specific_algo_or_lib` | Names a specific algorithm/mode/library                  |    +14 |
+| `kat_or_test_vector`   | Provides KAT/test vector/known plaintext-ciphertext pair |    +12 |
+| `specific_misuse`      | Names a specific misuse pattern                          |    +10 |
+| `code_reference`       | Specific source/file reference for crypto call           |     +8 |
+| `cwe_correct_class`    | Mentions CWE-327/328/330/338/759/760/916                 |     +4 |
 
 **Absence penalties (deducted when missing):**
 
-| Signal id | Description | Penalty |
-| --------- | ----------- | ------: |
-| `no_algo_named` | No specific algorithm/mode named | −8 |
-| `no_kat` | No test vector / observable misuse demonstration | −6 |
-
+| Signal id       | Description                                      | Penalty |
+| --------------- | ------------------------------------------------ | ------: |
+| `no_algo_named` | No specific algorithm/mode named                 |      −8 |
+| `no_kat`        | No test vector / observable misuse demonstration |      −6 |
 
 #### `DESERIALIZATION` — Insecure deserialization / unsafe parsing
 
@@ -317,24 +312,23 @@ Verification mode: `SOURCE_CODE`. Gold signals: 8. Absence penalties: 2.
 
 **Gold signals (added when present):**
 
-| Signal id | Description | Points |
-| --------- | ----------- | -----: |
-| `concrete_gadget_or_payload` | Concrete gadget chain/payload (ysoserial, marshalsec, pickle, yaml.load) | +18 |
-| `exec_or_rce_evidence` | Shows arbitrary code/command execution result | +12 |
-| `specific_class_or_lib` | Names a specific deserialized class/library | +8 |
-| `code_reference` | Source code showing the deserialization sink | +8 |
-| `xxe_doctype_entity` | Concrete XXE DOCTYPE/ENTITY declaration with file:/http: URI | +18 |
-| `xml_parser_lib` | Specific XML parser library/API | +10 |
-| `xxe_entity_load_flag` | Parser flag enabling external entity loading | +12 |
-| `cwe_correct_class` | Mentions CWE-502/611/776/827 | +4 |
+| Signal id                    | Description                                                              | Points |
+| ---------------------------- | ------------------------------------------------------------------------ | -----: |
+| `concrete_gadget_or_payload` | Concrete gadget chain/payload (ysoserial, marshalsec, pickle, yaml.load) |    +18 |
+| `exec_or_rce_evidence`       | Shows arbitrary code/command execution result                            |    +12 |
+| `specific_class_or_lib`      | Names a specific deserialized class/library                              |     +8 |
+| `code_reference`             | Source code showing the deserialization sink                             |     +8 |
+| `xxe_doctype_entity`         | Concrete XXE DOCTYPE/ENTITY declaration with file:/http: URI             |    +18 |
+| `xml_parser_lib`             | Specific XML parser library/API                                          |    +10 |
+| `xxe_entity_load_flag`       | Parser flag enabling external entity loading                             |    +12 |
+| `cwe_correct_class`          | Mentions CWE-502/611/776/827                                             |     +4 |
 
 **Absence penalties (deducted when missing):**
 
-| Signal id | Description | Penalty |
-| --------- | ----------- | ------: |
-| `no_payload_or_gadget` | No payload or gadget chain shown | −10 |
-| `no_lib_named` | No specific library/format named | −6 |
-
+| Signal id              | Description                      | Penalty |
+| ---------------------- | -------------------------------- | ------: |
+| `no_payload_or_gadget` | No payload or gadget chain shown |     −10 |
+| `no_lib_named`         | No specific library/format named |      −6 |
 
 #### `RACE_CONCURRENCY` — Race condition / TOCTOU / concurrency
 
@@ -342,22 +336,21 @@ Verification mode: `MANUAL_ONLY`. Gold signals: 6. Absence penalties: 2.
 
 **Gold signals (added when present):**
 
-| Signal id | Description | Points |
-| --------- | ----------- | -----: |
-| `two_thread_or_request_proof` | Shows two interleaved threads/requests/transactions | +14 |
-| `tsan_or_helgrind` | ThreadSanitizer / Helgrind / DRD output | +16 |
-| `lock_or_atomic_reference` | References a specific lock/mutex/atomic primitive | +8 |
-| `filesystem_toctou` | (File-TOCTOU) shows access(2)/stat(2) followed by open(2) | +10 |
-| `specific_function` | Names the specific racing function/handler | +6 |
-| `cwe_correct_class` | Mentions CWE-362/363/364/367/833 | +4 |
+| Signal id                     | Description                                               | Points |
+| ----------------------------- | --------------------------------------------------------- | -----: |
+| `two_thread_or_request_proof` | Shows two interleaved threads/requests/transactions       |    +14 |
+| `tsan_or_helgrind`            | ThreadSanitizer / Helgrind / DRD output                   |    +16 |
+| `lock_or_atomic_reference`    | References a specific lock/mutex/atomic primitive         |     +8 |
+| `filesystem_toctou`           | (File-TOCTOU) shows access(2)/stat(2) followed by open(2) |    +10 |
+| `specific_function`           | Names the specific racing function/handler                |     +6 |
+| `cwe_correct_class`           | Mentions CWE-362/363/364/367/833                          |     +4 |
 
 **Absence penalties (deducted when missing):**
 
-| Signal id | Description | Penalty |
-| --------- | ----------- | ------: |
-| `no_concurrent_proof` | No demonstration of two interleaved actors | −10 |
-| `no_function_or_path` | No specific function/file path named | −5 |
-
+| Signal id             | Description                                | Penalty |
+| --------------------- | ------------------------------------------ | ------: |
+| `no_concurrent_proof` | No demonstration of two interleaved actors |     −10 |
+| `no_function_or_path` | No specific function/file path named       |      −5 |
 
 #### `REQUEST_SMUGGLING` — HTTP request smuggling / desync / parser confusion
 
@@ -365,21 +358,20 @@ Verification mode: `MANUAL_ONLY`. Gold signals: 5. Absence penalties: 2.
 
 **Gold signals (added when present):**
 
-| Signal id | Description | Points |
-| --------- | ----------- | -----: |
-| `raw_http_request` | Raw HTTP/1.1 request bytes with explicit headers | +18 |
-| `te_or_cl_conflict` | Both Transfer-Encoding and Content-Length present (TE.CL/CL.TE) | +14 |
-| `smuggled_second_request` | Shows the smuggled second request (e.g. GPOST / on a new pipeline) | +12 |
-| `specific_proxy_or_server` | Names the specific proxy/server combo | +8 |
-| `cwe_correct_class` | Mentions CWE-444/436/116 | +4 |
+| Signal id                  | Description                                                        | Points |
+| -------------------------- | ------------------------------------------------------------------ | -----: |
+| `raw_http_request`         | Raw HTTP/1.1 request bytes with explicit headers                   |    +18 |
+| `te_or_cl_conflict`        | Both Transfer-Encoding and Content-Length present (TE.CL/CL.TE)    |    +14 |
+| `smuggled_second_request`  | Shows the smuggled second request (e.g. GPOST / on a new pipeline) |    +12 |
+| `specific_proxy_or_server` | Names the specific proxy/server combo                              |     +8 |
+| `cwe_correct_class`        | Mentions CWE-444/436/116                                           |     +4 |
 
 **Absence penalties (deducted when missing):**
 
-| Signal id | Description | Penalty |
-| --------- | ----------- | ------: |
-| `no_raw_request` | No raw HTTP request bytes provided | −10 |
-| `no_proxy_named` | No specific proxy/server identified | −6 |
-
+| Signal id        | Description                         | Penalty |
+| ---------------- | ----------------------------------- | ------: |
+| `no_raw_request` | No raw HTTP request bytes provided  |     −10 |
+| `no_proxy_named` | No specific proxy/server identified |      −6 |
 
 #### `FLAT` — Generic / unclassified
 
@@ -387,20 +379,19 @@ Verification mode: `GENERIC`. Gold signals: 4. Absence penalties: 0.
 
 **Gold signals (added when present):**
 
-| Signal id | Description | Points |
-| --------- | ----------- | -----: |
-| `code_block` | Any fenced code block ≥3 lines | +10 |
-| `real_url` | Real URL with path | +6 |
-| `file_with_line` | File path with line number | +8 |
-| `code_diff` | Diff/patch hunk | +12 |
-
+| Signal id        | Description                    | Points |
+| ---------------- | ------------------------------ | -----: |
+| `code_block`     | Any fenced code block ≥3 lines |    +10 |
+| `real_url`       | Real URL with path             |     +6 |
+| `file_with_line` | File path with line number     |     +8 |
+| `code_diff`      | Diff/patch hunk                |    +12 |
 
 ### Family-agnostic slop signals
 
 The penalties in `src/lib/engines/avri/slop-signals.ts` (currently
 1 function) catch shapes that cut across families
 — e.g. "claims to be a patch but contains no diff hunk or code block"
-— and apply *after* family scoring so a report cannot escape a
+— and apply _after_ family scoring so a report cannot escape a
 cross-family slop pattern by being classified into a family whose
 rubric happens not to require that evidence.
 
@@ -498,63 +489,63 @@ which require the reviewer token described in
 
 #### Tag: `health` (1 operation)
 
-| Method | Path | operationId | Summary |
-| ------ | ---- | ----------- | ------- |
-| `GET` | `/healthz` | `healthCheck` | Health check |
+| Method | Path       | operationId   | Summary      |
+| ------ | ---------- | ------------- | ------------ |
+| `GET`  | `/healthz` | `healthCheck` | Health check |
 
 #### Tag: `reports` (9 operations)
 
-| Method | Path | operationId | Summary |
-| ------ | ---- | ----------- | ------- |
-| `POST` | `/reports` | `submitReport` | Submit a vulnerability report for analysis |
-| `GET` | `/reports/{id}` | `getReport` | Get report analysis results |
-| `DELETE` | `/reports/{id}` | `deleteReport` | Delete a previously submitted report |
-| `GET` | `/reports/{id}/verify` | `getVerification` | Get verification badge data for a report |
-| `GET` | `/reports/{id}/compare/{matchId}` | `compareReports` | Compare two reports side by side |
-| `GET` | `/reports/{id}/triage-report` | `getTriageReport` | Get exportable markdown triage report |
-| `POST` | `/reports/check` | `checkReport` | Check a report against the database without storing it |
-| `GET` | `/reports/lookup/{hash}` | `lookupByHash` | Look up a report by content hash |
-| `GET` | `/reports/feed` | `getReportFeed` | Get recent public reports |
+| Method   | Path                              | operationId       | Summary                                                |
+| -------- | --------------------------------- | ----------------- | ------------------------------------------------------ |
+| `POST`   | `/reports`                        | `submitReport`    | Submit a vulnerability report for analysis             |
+| `GET`    | `/reports/{id}`                   | `getReport`       | Get report analysis results                            |
+| `DELETE` | `/reports/{id}`                   | `deleteReport`    | Delete a previously submitted report                   |
+| `GET`    | `/reports/{id}/verify`            | `getVerification` | Get verification badge data for a report               |
+| `GET`    | `/reports/{id}/compare/{matchId}` | `compareReports`  | Compare two reports side by side                       |
+| `GET`    | `/reports/{id}/triage-report`     | `getTriageReport` | Get exportable markdown triage report                  |
+| `POST`   | `/reports/check`                  | `checkReport`     | Check a report against the database without storing it |
+| `GET`    | `/reports/lookup/{hash}`          | `lookupByHash`    | Look up a report by content hash                       |
+| `GET`    | `/reports/feed`                   | `getReportFeed`   | Get recent public reports                              |
 
 #### Tag: `feedback` (24 operations)
 
-| Method | Path | operationId | Summary |
-| ------ | ---- | ----------- | ------- |
-| `GET` | `/feedback/challenge` | `getFeedbackChallenge` | Get a proof-of-work challenge for feedback submission |
-| `POST` | `/feedback` | `submitFeedback` | Submit user feedback about the tool |
-| `GET` | `/feedback/analytics` | `getFeedbackAnalytics` | Get aggregated feedback analytics |
-| `GET` | `/feedback/calibration` | `getCalibrationReport` | Get calibration report with tuning suggestions |
-| `GET` | `/feedback/calibration/avri-drift` | `getAvriDriftReport` | Get rolling AVRI calibration drift report |
-| `GET` | `/feedback/calibration/avri-drift/notifications` | `getAvriDriftNotifications` | List the persisted AVRI drift notification dedup state |
-| `POST` | `/feedback/calibration/avri-drift/notifications/rearm` | `rearmAvriDriftNotifications` | Re-arm one or more previously-notified AVRI drift flags |
-| `GET` | `/feedback/calibration/avri-drift/scheduler-status` | `getAvriDriftSchedulerStatus` | Get per-replica AVRI drift scheduler status |
-| `GET` | `/feedback/calibration/avri-drift/notifications/rearm-history` | `getAvriDriftRearmHistory` | List the persisted AVRI drift re-arm audit log |
-| `GET` | `/feedback/calibration/auth-brute-force-alerts` | `getCalibrationAuthBruteForceAlerts` | List recent calibration auth brute-force alert decisions |
-| `GET` | `/feedback/calibration/config` | `getScoringConfig` | Get current and historical scoring configurations |
-| `GET` | `/feedback/calibration/auth-status` | `getCalibrationAuthStatus` | Probe whether the reviewer token is configured/valid |
-| `POST` | `/feedback/calibration/apply` | `applyCalibration` | Apply calibration changes to scoring config |
-| `GET` | `/feedback/calibration/handwavy-phrases` | `getHandwavyPhrases` | List the curated FLAT hand-wavy marker phrases |
-| `POST` | `/feedback/calibration/handwavy-phrases` | `addHandwavyPhrase` | Append a new FLAT hand-wavy marker phrase |
-| `PATCH` | `/feedback/calibration/handwavy-phrases` | `editHandwavyPhrase` | Edit a curated FLAT hand-wavy marker phrase in place |
-| `DELETE` | `/feedback/calibration/handwavy-phrases` | `removeHandwavyPhrase` | Remove one or many FLAT hand-wavy marker phrases |
-| `GET` | `/feedback/calibration/handwavy-phrases/removal-batches` | `listHandwavyPhraseRemovalBatches` | List recent FLAT hand-wavy phrase BATCH removal entries (picker-friendly summary) |
-| `GET` | `/feedback/calibration/handwavy-phrases/removal-batches/{removedAt}` | `getHandwavyPhraseRemovalBatch` | Fetch the FULL inner phrase list for a single batch removal entry |
-| `POST` | `/feedback/calibration/handwavy-phrases/undo` | `undoHandwavyPhrase` | Undo a brand-new add of a FLAT hand-wavy marker phrase |
-| `POST` | `/feedback/calibration/handwavy-phrases/undo-batch` | `undoHandwavyPhrasesBatch` | Undo every still-in-window FLAT hand-wavy phrase add in one round-trip |
-| `POST` | `/feedback/calibration/handwavy-phrases/reinstate-batch` | `reinstateHandwavyPhrasesBatch` | Reinstate every not-yet-reinstated phrase from a single batch removal entry |
-| `POST` | `/feedback/calibration/handwavy-phrases/reinstate` | `reinstateHandwavyPhrase` | Reinstate a previously removed FLAT hand-wavy marker phrase from history |
-| `POST` | `/feedback/calibration/handwavy-phrases/revert-edit` | `revertHandwavyPhraseEdit` | Revert a single edit on a curated FLAT hand-wavy marker phrase |
+| Method   | Path                                                                 | operationId                          | Summary                                                                           |
+| -------- | -------------------------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------- |
+| `GET`    | `/feedback/challenge`                                                | `getFeedbackChallenge`               | Get a proof-of-work challenge for feedback submission                             |
+| `POST`   | `/feedback`                                                          | `submitFeedback`                     | Submit user feedback about the tool                                               |
+| `GET`    | `/feedback/analytics`                                                | `getFeedbackAnalytics`               | Get aggregated feedback analytics                                                 |
+| `GET`    | `/feedback/calibration`                                              | `getCalibrationReport`               | Get calibration report with tuning suggestions                                    |
+| `GET`    | `/feedback/calibration/avri-drift`                                   | `getAvriDriftReport`                 | Get rolling AVRI calibration drift report                                         |
+| `GET`    | `/feedback/calibration/avri-drift/notifications`                     | `getAvriDriftNotifications`          | List the persisted AVRI drift notification dedup state                            |
+| `POST`   | `/feedback/calibration/avri-drift/notifications/rearm`               | `rearmAvriDriftNotifications`        | Re-arm one or more previously-notified AVRI drift flags                           |
+| `GET`    | `/feedback/calibration/avri-drift/scheduler-status`                  | `getAvriDriftSchedulerStatus`        | Get per-replica AVRI drift scheduler status                                       |
+| `GET`    | `/feedback/calibration/avri-drift/notifications/rearm-history`       | `getAvriDriftRearmHistory`           | List the persisted AVRI drift re-arm audit log                                    |
+| `GET`    | `/feedback/calibration/auth-brute-force-alerts`                      | `getCalibrationAuthBruteForceAlerts` | List recent calibration auth brute-force alert decisions                          |
+| `GET`    | `/feedback/calibration/config`                                       | `getScoringConfig`                   | Get current and historical scoring configurations                                 |
+| `GET`    | `/feedback/calibration/auth-status`                                  | `getCalibrationAuthStatus`           | Probe whether the reviewer token is configured/valid                              |
+| `POST`   | `/feedback/calibration/apply`                                        | `applyCalibration`                   | Apply calibration changes to scoring config                                       |
+| `GET`    | `/feedback/calibration/handwavy-phrases`                             | `getHandwavyPhrases`                 | List the curated FLAT hand-wavy marker phrases                                    |
+| `POST`   | `/feedback/calibration/handwavy-phrases`                             | `addHandwavyPhrase`                  | Append a new FLAT hand-wavy marker phrase                                         |
+| `PATCH`  | `/feedback/calibration/handwavy-phrases`                             | `editHandwavyPhrase`                 | Edit a curated FLAT hand-wavy marker phrase in place                              |
+| `DELETE` | `/feedback/calibration/handwavy-phrases`                             | `removeHandwavyPhrase`               | Remove one or many FLAT hand-wavy marker phrases                                  |
+| `GET`    | `/feedback/calibration/handwavy-phrases/removal-batches`             | `listHandwavyPhraseRemovalBatches`   | List recent FLAT hand-wavy phrase BATCH removal entries (picker-friendly summary) |
+| `GET`    | `/feedback/calibration/handwavy-phrases/removal-batches/{removedAt}` | `getHandwavyPhraseRemovalBatch`      | Fetch the FULL inner phrase list for a single batch removal entry                 |
+| `POST`   | `/feedback/calibration/handwavy-phrases/undo`                        | `undoHandwavyPhrase`                 | Undo a brand-new add of a FLAT hand-wavy marker phrase                            |
+| `POST`   | `/feedback/calibration/handwavy-phrases/undo-batch`                  | `undoHandwavyPhrasesBatch`           | Undo every still-in-window FLAT hand-wavy phrase add in one round-trip            |
+| `POST`   | `/feedback/calibration/handwavy-phrases/reinstate-batch`             | `reinstateHandwavyPhrasesBatch`      | Reinstate every not-yet-reinstated phrase from a single batch removal entry       |
+| `POST`   | `/feedback/calibration/handwavy-phrases/reinstate`                   | `reinstateHandwavyPhrase`            | Reinstate a previously removed FLAT hand-wavy marker phrase from history          |
+| `POST`   | `/feedback/calibration/handwavy-phrases/revert-edit`                 | `revertHandwavyPhraseEdit`           | Revert a single edit on a curated FLAT hand-wavy marker phrase                    |
 
 #### Tag: `stats` (6 operations)
 
-| Method | Path | operationId | Summary |
-| ------ | ---- | ----------- | ------- |
-| `GET` | `/stats` | `getStats` | Get platform statistics |
-| `GET` | `/stats/recent` | `getRecentActivity` | Get recent submission activity |
-| `GET` | `/stats/distribution` | `getSlopDistribution` | Get slop score distribution |
-| `POST` | `/stats/visit` | `recordVisit` | Record a page visit |
-| `GET` | `/stats/visitors` | `getVisitorStats` | Get visitor statistics |
-| `GET` | `/stats/trends` | `getTrends` | Get trend data over time |
+| Method | Path                  | operationId           | Summary                        |
+| ------ | --------------------- | --------------------- | ------------------------------ |
+| `GET`  | `/stats`              | `getStats`            | Get platform statistics        |
+| `GET`  | `/stats/recent`       | `getRecentActivity`   | Get recent submission activity |
+| `GET`  | `/stats/distribution` | `getSlopDistribution` | Get slop score distribution    |
+| `POST` | `/stats/visit`        | `recordVisit`         | Record a page visit            |
+| `GET`  | `/stats/visitors`     | `getVisitorStats`     | Get visitor statistics         |
+| `GET`  | `/stats/trends`       | `getTrends`           | Get trend data over time       |
 
 Beyond the table, the noteworthy shape facts:
 
@@ -638,9 +629,9 @@ shape. The hint is asserted in
 weight will fail the suite instead of silently degrading.
 
 Beyond the synthetic battery, the platform also calibrates against a
-*real-reports sourcing* corpus described in
+_real-reports sourcing_ corpus described in
 `artifacts/api-server/docs/calibration/2026-05-02-real-reports-sourcing.md`.
-That corpus is the ground truth the synthetic battery is *aimed at*;
+That corpus is the ground truth the synthetic battery is _aimed at_;
 the synthetic fixtures are not a substitute for production data on
 ratio-tuning decisions (see the AVRI-blend calibration doc for the
 precise statement of that constraint).
@@ -756,7 +747,7 @@ can find work-in-flight related to anything you read above:
   robots, RSS feeds, dark/light theme toggle, print-friendly
   results, i18n scaffold, Markdown report export, inline signal
   heatmap. Task #718 is the wave-closing v3.11 + v3.12 changelog
-  drafted *after* the rest of the wave lands.
+  drafted _after_ the rest of the wave lands.
 
 If a section above named a roadmap task, that task's plan file lives
 under `.local/tasks/` and contains the scoped "done looks like" for

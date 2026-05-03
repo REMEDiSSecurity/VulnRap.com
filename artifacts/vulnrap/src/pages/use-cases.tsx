@@ -1,6 +1,18 @@
-import { Target, Shield, Users, GitBranch, Zap, Building, Bug, Search, FileText, ArrowRight, BookOpen } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Target,
+  Shield,
+  Users,
+  GitBranch,
+  Zap,
+  Building,
+  Bug,
+  Search,
+  FileText,
+  ArrowRight,
+  BookOpen,
+} from "lucide-react";
 import { Link } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const useCases = [
   {
@@ -80,7 +92,8 @@ export default function UseCases() {
           Use Cases
         </h1>
         <p className="text-muted-foreground mt-2 max-w-3xl leading-relaxed">
-          VulnRap works for anyone who receives or triages vulnerability reports. Here is how different teams use it.
+          VulnRap works for anyone who receives or triages vulnerability
+          reports. Here is how different teams use it.
         </p>
       </div>
 
@@ -94,13 +107,18 @@ export default function UseCases() {
                 </div>
                 <div>
                   <CardTitle className="text-lg">{uc.title}</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-0.5 italic">{uc.subtitle}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 italic">
+                    {uc.subtitle}
+                  </p>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-3 pl-[4.25rem]">
               {uc.scenarios.map((scenario, j) => (
-                <div key={j} className="flex items-start gap-2.5 text-sm text-muted-foreground leading-relaxed">
+                <div
+                  key={j}
+                  className="flex items-start gap-2.5 text-sm text-muted-foreground leading-relaxed"
+                >
                   <ArrowRight className="w-3.5 h-3.5 text-primary mt-1 shrink-0" />
                   <span>{scenario}</span>
                 </div>
@@ -110,7 +128,10 @@ export default function UseCases() {
         ))}
       </div>
 
-      <Card className="glass-card rounded-xl border-primary/20" data-testid="callout-case-studies">
+      <Card
+        className="glass-card rounded-xl border-primary/20"
+        data-testid="callout-case-studies"
+      >
         <CardHeader className="pb-3">
           <div className="flex items-start gap-4">
             <div className="p-2.5 rounded-lg shrink-0 icon-glow-cyan">
@@ -126,10 +147,10 @@ export default function UseCases() {
         </CardHeader>
         <CardContent className="space-y-4 pl-[4.25rem]">
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Want to see what one of these workflows looks like in practice?
-            Read the worked example of a PSIRT team wiring VulnRap into their
-            intake pipeline — including the thresholds they chose, the
-            integration shape, and illustrative before/after numbers.
+            Want to see what one of these workflows looks like in practice? Read
+            the worked example of a PSIRT team wiring VulnRap into their intake
+            pipeline — including the thresholds they chose, the integration
+            shape, and illustrative before/after numbers.
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
             <a
@@ -155,8 +176,8 @@ export default function UseCases() {
           </div>
           <p className="text-xs text-muted-foreground/70 italic leading-relaxed">
             Numbers in the case study are illustrative — composited from
-            internal testing and design conversations, not from a single
-            named customer.
+            internal testing and design conversations, not from a single named
+            customer.
           </p>
         </CardContent>
       </Card>
@@ -168,11 +189,20 @@ export default function UseCases() {
             Have a use case we have not covered? We would love to hear about it.
           </p>
           <div className="flex items-center justify-center gap-4 text-xs">
-            <Link to="/" className="text-primary hover:underline">Try it now</Link>
+            <Link to="/" className="text-primary hover:underline">
+              Try it now
+            </Link>
             <span className="text-muted-foreground/30">|</span>
-            <Link to="/developers" className="text-primary hover:underline">See the API</Link>
+            <Link to="/developers" className="text-primary hover:underline">
+              See the API
+            </Link>
             <span className="text-muted-foreground/30">|</span>
-            <a href="mailto:remedisllc@gmail.com" className="text-primary hover:underline">Tell us yours</a>
+            <a
+              href="mailto:remedisllc@gmail.com"
+              className="text-primary hover:underline"
+            >
+              Tell us yours
+            </a>
           </div>
         </CardContent>
       </Card>

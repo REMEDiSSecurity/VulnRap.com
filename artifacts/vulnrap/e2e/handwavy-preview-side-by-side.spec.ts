@@ -1,5 +1,5 @@
-import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { test, expect } from "@playwright/test";
 import {
   cleanup,
   injectCalibrationTokenIntoPage,

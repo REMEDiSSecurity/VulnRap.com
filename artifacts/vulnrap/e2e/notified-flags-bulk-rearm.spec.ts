@@ -1,12 +1,12 @@
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   test,
   expect,
   request,
   type APIRequestContext,
 } from "@playwright/test";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 // Notification entries normally arrive via the webhook dispatcher, so the
 // spec seeds them by writing the dedup state JSON file directly. The
@@ -115,9 +115,9 @@ test.describe("Notified flags panel — bulk re-arm", () => {
     page.on("request", (req) => {
       if (
         req.method() === "POST" &&
-        req.url().includes(
-          "/api/feedback/calibration/avri-drift/notifications/rearm",
-        )
+        req
+          .url()
+          .includes("/api/feedback/calibration/avri-drift/notifications/rearm")
       ) {
         const body = req.postDataJSON?.();
         if (body && Array.isArray(body.keys)) {
@@ -202,18 +202,14 @@ test.describe("Notified flags panel — bulk re-arm", () => {
       const body = (await resp.json()) as {
         notified: Array<{ key: string }>;
       };
-      expect(body.notified.map((n) => n.key)).toEqual([
-        SEEDED_RECORDS[3]!.key,
-      ]);
+      expect(body.notified.map((n) => n.key)).toEqual([SEEDED_RECORDS[3]!.key]);
     } finally {
       await apiCtx.dispose();
     }
 
     // Per-row re-arm must still work.
     await survivor.scrollIntoViewIfNeeded();
-    const survivorRow = page
-      .locator("li", { has: survivor })
-      .first();
+    const survivorRow = page.locator("li", { has: survivor }).first();
     const perRowRearm = survivorRow.getByRole("button", { name: /Re-arm/ });
     await expect(perRowRearm).toBeVisible();
     await perRowRearm.click();
@@ -320,9 +316,9 @@ test.describe("Notified flags panel — bulk re-arm", () => {
     page.on("request", (req) => {
       if (
         req.method() === "POST" &&
-        req.url().includes(
-          "/api/feedback/calibration/avri-drift/notifications/rearm",
-        )
+        req
+          .url()
+          .includes("/api/feedback/calibration/avri-drift/notifications/rearm")
       ) {
         const body = req.postDataJSON?.();
         if (body && Array.isArray(body.keys)) {
@@ -355,9 +351,7 @@ test.describe("Notified flags panel — bulk re-arm", () => {
     expect(rearmRequests).toHaveLength(0);
 
     // Cancel must dismiss without sending the POST and leave selection intact.
-    await page
-      .getByTestId("notified-flags-bulk-rearm-confirm-cancel")
-      .click();
+    await page.getByTestId("notified-flags-bulk-rearm-confirm-cancel").click();
     await expect(confirmDialog).toBeHidden();
     expect(rearmRequests).toHaveLength(0);
     await expect(bulkRearm).toHaveText(/Re-arm selected \(21\)/);
@@ -365,9 +359,7 @@ test.describe("Notified flags panel — bulk re-arm", () => {
     // Reopen the dialog and confirm — exactly one POST with all 21 keys.
     await bulkRearm.click();
     await expect(confirmDialog).toBeVisible();
-    await page
-      .getByTestId("notified-flags-bulk-rearm-confirm-confirm")
-      .click();
+    await page.getByTestId("notified-flags-bulk-rearm-confirm-confirm").click();
 
     await expect.poll(() => rearmRequests.length).toBe(1);
     expect(rearmRequests[0]!.keys.sort()).toEqual(
@@ -398,9 +390,9 @@ test.describe("Notified flags panel — bulk re-arm", () => {
     page.on("request", (req) => {
       if (
         req.method() === "POST" &&
-        req.url().includes(
-          "/api/feedback/calibration/avri-drift/notifications/rearm",
-        )
+        req
+          .url()
+          .includes("/api/feedback/calibration/avri-drift/notifications/rearm")
       ) {
         const body = req.postDataJSON?.();
         if (body && Array.isArray(body.keys)) {

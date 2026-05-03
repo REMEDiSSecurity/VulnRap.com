@@ -1,6 +1,6 @@
-import { defineConfig, devices } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { defineConfig, devices } from "@playwright/test";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Repo root is two levels up from artifacts/vulnrap/. The api-server resolves
@@ -15,7 +15,9 @@ const ARCHETYPE_HISTORY_PATH = path.join(
   "artifacts/api-server/data/archetype-history.json",
 );
 
-const VULNRAP_PORT = Number(process.env.E2E_VULNRAP_PORT || process.env.PORT || 20749);
+const VULNRAP_PORT = Number(
+  process.env.E2E_VULNRAP_PORT || process.env.PORT || 20749,
+);
 const API_PORT = Number(process.env.E2E_API_PORT || 8080);
 const BASE_URL = process.env.E2E_BASE_URL || `http://127.0.0.1:${VULNRAP_PORT}`;
 // Task #152 — `/feedback/calibration/handwavy-phrases` GET is gated by
@@ -24,7 +26,8 @@ const BASE_URL = process.env.E2E_BASE_URL || `http://127.0.0.1:${VULNRAP_PORT}`;
 // every spec that drives the panel UI fails. We default a known token here
 // so the Playwright-managed webservers (and the per-test API contexts) all
 // agree on the same value; CI can override via E2E_CALIBRATION_TOKEN.
-const CALIBRATION_TOKEN = process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
+const CALIBRATION_TOKEN =
+  process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
 
 // Task #324 — When E2E_DEV_SERVERS=1, point the Playwright webServer
 // blocks at the dev-mode commands (`vite` + the api-server's `dev`
@@ -78,9 +81,8 @@ const USE_DEV_SERVERS = process.env.E2E_DEV_SERVERS === "1";
 // `test.describe.serial(...)` (intra-file ordering) AND hoisted out of
 // the release-gate list if cross-file parallelism would still race.
 const PARSED_WORKERS = Number.parseInt(process.env.E2E_WORKERS ?? "", 10);
-const WORKERS = Number.isFinite(PARSED_WORKERS) && PARSED_WORKERS > 0
-  ? PARSED_WORKERS
-  : 1;
+const WORKERS =
+  Number.isFinite(PARSED_WORKERS) && PARSED_WORKERS > 0 ? PARSED_WORKERS : 1;
 const FULLY_PARALLEL = process.env.E2E_FULLY_PARALLEL === "1";
 
 export default defineConfig({
@@ -182,72 +184,72 @@ export default defineConfig({
           },
         ]
       : [
-        {
-          // Run the bundled production api-server (dist/index.mjs via `start`),
-          // not `dev`. The `build-if-stale.mjs` helper rebuilds only when
-          // dist/index.mjs is missing or older than the watched sources, so
-          // back-to-back release-gate runs don't pay the full esbuild cost.
-          // Set E2E_SKIP_PROD_BUILD=1 to trust the existing dist (CI builds
-          // in a separate stage); set E2E_FORCE_PROD_BUILD=1 to always
-          // rebuild. The full build still mirrors what ships in the
-          // [services.production] block of artifacts/api-server/.replit-artifact/artifact.toml.
-          command:
-            "node ../../scripts/build-if-stale.mjs api-server && pnpm --filter @workspace/api-server run start",
-          url: `http://127.0.0.1:${API_PORT}/api/healthz`,
-          reuseExistingServer: true,
-          timeout: 240_000,
-          stdout: "pipe",
-          stderr: "pipe",
-          env: {
-            VULNRAP_USE_NEW_COMPOSITE: "true",
-            PORT: String(API_PORT),
-            // Match the runtime env the deployed api-server runs under (see
-            // [services.production.run.env] in
-            // artifacts/api-server/.replit-artifact/artifact.toml) so any
-            // NODE_ENV-gated behaviour is exercised by the smoke test.
-            NODE_ENV: "production",
-            // Required for the hand-wavy phrase panel's GET (strict auth).
-            CALIBRATION_TOKEN,
-            // Pin the archetype-history file to its canonical workspace
-            // path so a non-root webserver cwd doesn't create a stray
-            // nested artifacts/api-server/ directory.
-            ARCHETYPE_HISTORY_PATH,
-            // Task #223 — opt the api-server into honoring a caller-
-            // supplied `addedAt` on POST /handwavy-phrases. The undo
-            // urgent-state spec uses this to seed a phrase whose
-            // 5-minute undo window is ~25s from elapsing, so the
-            // `text-red-400` / `animate-pulse` / `data-undo-urgent="true"`
-            // branch can be exercised without 4m 30s of real wall-clock
-            // wait. Production leaves this unset, so the field is silently
-            // dropped and the audit timestamp comes from `new Date()`.
-            HANDWAVY_ALLOW_TEST_BACKDATE: "1",
+          {
+            // Run the bundled production api-server (dist/index.mjs via `start`),
+            // not `dev`. The `build-if-stale.mjs` helper rebuilds only when
+            // dist/index.mjs is missing or older than the watched sources, so
+            // back-to-back release-gate runs don't pay the full esbuild cost.
+            // Set E2E_SKIP_PROD_BUILD=1 to trust the existing dist (CI builds
+            // in a separate stage); set E2E_FORCE_PROD_BUILD=1 to always
+            // rebuild. The full build still mirrors what ships in the
+            // [services.production] block of artifacts/api-server/.replit-artifact/artifact.toml.
+            command:
+              "node ../../scripts/build-if-stale.mjs api-server && pnpm --filter @workspace/api-server run start",
+            url: `http://127.0.0.1:${API_PORT}/api/healthz`,
+            reuseExistingServer: true,
+            timeout: 240_000,
+            stdout: "pipe",
+            stderr: "pipe",
+            env: {
+              VULNRAP_USE_NEW_COMPOSITE: "true",
+              PORT: String(API_PORT),
+              // Match the runtime env the deployed api-server runs under (see
+              // [services.production.run.env] in
+              // artifacts/api-server/.replit-artifact/artifact.toml) so any
+              // NODE_ENV-gated behaviour is exercised by the smoke test.
+              NODE_ENV: "production",
+              // Required for the hand-wavy phrase panel's GET (strict auth).
+              CALIBRATION_TOKEN,
+              // Pin the archetype-history file to its canonical workspace
+              // path so a non-root webserver cwd doesn't create a stray
+              // nested artifacts/api-server/ directory.
+              ARCHETYPE_HISTORY_PATH,
+              // Task #223 — opt the api-server into honoring a caller-
+              // supplied `addedAt` on POST /handwavy-phrases. The undo
+              // urgent-state spec uses this to seed a phrase whose
+              // 5-minute undo window is ~25s from elapsing, so the
+              // `text-red-400` / `animate-pulse` / `data-undo-urgent="true"`
+              // branch can be exercised without 4m 30s of real wall-clock
+              // wait. Production leaves this unset, so the field is silently
+              // dropped and the audit timestamp comes from `new Date()`.
+              HANDWAVY_ALLOW_TEST_BACKDATE: "1",
+            },
           },
-        },
-        {
-          // Build the production vite bundle and serve it via `vite preview`,
-          // not `vite` (dev). The preview server proxies /api to the bundled
-          // api-server above (see preview.proxy in vite.config.ts), so a
-          // base-path or bundle regression will surface here. The
-          // `build-if-stale.mjs` helper skips the vite build when
-          // dist/public/index.html is newer than every watched source — see
-          // the api-server webServer block above for the env knobs
-          // (E2E_SKIP_PROD_BUILD, E2E_FORCE_PROD_BUILD).
-          command:
-            "node ../../scripts/build-if-stale.mjs vulnrap && pnpm --filter @workspace/vulnrap run serve",
-          url: BASE_URL,
-          reuseExistingServer: true,
-          timeout: 240_000,
-          stdout: "pipe",
-          stderr: "pipe",
-          env: {
-            PORT: String(VULNRAP_PORT),
-            BASE_PATH: "/",
-            NODE_ENV: "production",
-            PREVIEW_API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}`,
-            // Bake the same token into the Vite bundle so the page's own
-            // calls (POST/PATCH/DELETE) carry it automatically too.
-            VITE_CALIBRATION_TOKEN: CALIBRATION_TOKEN,
+          {
+            // Build the production vite bundle and serve it via `vite preview`,
+            // not `vite` (dev). The preview server proxies /api to the bundled
+            // api-server above (see preview.proxy in vite.config.ts), so a
+            // base-path or bundle regression will surface here. The
+            // `build-if-stale.mjs` helper skips the vite build when
+            // dist/public/index.html is newer than every watched source — see
+            // the api-server webServer block above for the env knobs
+            // (E2E_SKIP_PROD_BUILD, E2E_FORCE_PROD_BUILD).
+            command:
+              "node ../../scripts/build-if-stale.mjs vulnrap && pnpm --filter @workspace/vulnrap run serve",
+            url: BASE_URL,
+            reuseExistingServer: true,
+            timeout: 240_000,
+            stdout: "pipe",
+            stderr: "pipe",
+            env: {
+              PORT: String(VULNRAP_PORT),
+              BASE_PATH: "/",
+              NODE_ENV: "production",
+              PREVIEW_API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}`,
+              // Bake the same token into the Vite bundle so the page's own
+              // calls (POST/PATCH/DELETE) carry it automatically too.
+              VITE_CALIBRATION_TOKEN: CALIBRATION_TOKEN,
+            },
           },
-        },
-      ],
+        ],
 });

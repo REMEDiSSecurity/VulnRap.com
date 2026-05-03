@@ -1,9 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
-import type { Request, Response, NextFunction } from "express";
-import type { RateLimitRequestHandler } from "express-rate-limit";
 import { createCalibrationAuthLimiter } from "./calibration-auth-rate-limit";
 import { reportCalibrationAuthRejection } from "./calibration-auth-brute-force-alert";
 import { logger } from "../lib/logger";
+import type { RateLimitRequestHandler } from "express-rate-limit";
+import type { Request, Response, NextFunction } from "express";
 
 // Task #113 — gate every mutation under /feedback/calibration/* behind a
 // shared reviewer token so the API can be safely exposed publicly. The
@@ -83,7 +83,8 @@ function constantTimeEquals(a: string, b: string): boolean {
 // which it would the first time a request hit the lazy path. Tests can swap
 // in a smaller-window, isolated instance via __setCalibrationAuthLimiterForTests
 // and reset back to the production limiter by passing `null`.
-const productionLimiter: RateLimitRequestHandler = createCalibrationAuthLimiter();
+const productionLimiter: RateLimitRequestHandler =
+  createCalibrationAuthLimiter();
 let limiterInstance: RateLimitRequestHandler = productionLimiter;
 
 function getLimiter(): RateLimitRequestHandler {
