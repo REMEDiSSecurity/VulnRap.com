@@ -192,6 +192,13 @@ async function buildAll() {
       "wrangler",
       "zeromq",
       "zeromq-prebuilt",
+      // Task #666 — @resvg/resvg-js loads platform-specific .node binaries
+      // via require(); externalising the JS wrapper + the prebuilt platform
+      // packages lets esbuild skip both the wrapper and the .node files
+      // entirely (rather than tripping on the .node loader for the linux
+      // build).
+      "@resvg/resvg-js",
+      "@resvg/resvg-js-*",
       "playwright",
       "puppeteer",
       "puppeteer-core",

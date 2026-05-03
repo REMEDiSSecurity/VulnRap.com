@@ -16,6 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@workspace/api-zod": "workspace:*",
     "@workspace/avri-rubric": "workspace:*",
     "@workspace/db": "workspace:*",

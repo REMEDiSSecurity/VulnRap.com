@@ -749,6 +749,100 @@ export function useGetScoreHistory<
 }
 
 /**
+ * Task #666 — Returns a 1200×630 PNG composed from the report's score,
+tier, top fired evidence signal and timestamp, suitable for use as
+the og:image / twitter:image when sharing /results/:id links.
+Cached for 24h with a content-derived ETag. On any rendering failure
+or unknown / hidden report, redirects to the static site OG image so
+consumers always get something to display.
+
+ * @summary Dynamic Open Graph card PNG for a results page
+ */
+export const getGetResultOgCardUrl = (id: number) => {
+  return `/api/og/result/${id}.png`;
+};
+
+export const getResultOgCard = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getGetResultOgCardUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetResultOgCardQueryKey = (id: number) => {
+  return [`/api/og/result/${id}.png`] as const;
+};
+
+export const getGetResultOgCardQueryOptions = <
+  TData = Awaited<ReturnType<typeof getResultOgCard>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getResultOgCard>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetResultOgCardQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getResultOgCard>>> = ({
+    signal,
+  }) => getResultOgCard(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getResultOgCard>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetResultOgCardQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getResultOgCard>>
+>;
+export type GetResultOgCardQueryError = ErrorType<void>;
+
+/**
+ * @summary Dynamic Open Graph card PNG for a results page
+ */
+
+export function useGetResultOgCard<
+  TData = Awaited<ReturnType<typeof getResultOgCard>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getResultOgCard>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetResultOgCardQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * Returns a formatted markdown summary with score, verification results, evidence, recommendation, and challenge questions — ready to paste into Jira/ServiceNow
  * @summary Get exportable markdown triage report
  */

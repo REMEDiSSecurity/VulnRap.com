@@ -1341,6 +1341,20 @@ export const GetScoreHistoryResponse = zod.object({
 });
 
 /**
+ * Task #666 — Returns a 1200×630 PNG composed from the report's score,
+tier, top fired evidence signal and timestamp, suitable for use as
+the og:image / twitter:image when sharing /results/:id links.
+Cached for 24h with a content-derived ETag. On any rendering failure
+or unknown / hidden report, redirects to the static site OG image so
+consumers always get something to display.
+
+ * @summary Dynamic Open Graph card PNG for a results page
+ */
+export const GetResultOgCardParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * Returns a formatted markdown summary with score, verification results, evidence, recommendation, and challenge questions — ready to paste into Jira/ServiceNow
  * @summary Get exportable markdown triage report
  */

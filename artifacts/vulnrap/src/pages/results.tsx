@@ -1818,6 +1818,51 @@ export default function Results() {
     markHistoryEntryReconstructed(reportIdForHistory, "check", true);
   }, [reportIdForHistory, reportReconstructed]);
 
+  // Task #666 — Inject dynamic OG card meta tags so Slack/Twitter/email
+  // unfurls of /results/:id show the actual score instead of the static
+  // site card. We mutate document.head directly (no react-helmet-async in
+  // deps) and tag every node we own so we can swap them when the user
+  // navigates between two different report ids without leaving stale tags
+  // from the previous report. The static index.html OG tags act as the
+  // SSR-time fallback for crawlers that don't run JS — once React mounts
+  // and we know the report id, the dynamic /api/og/result/:id.png URL
+  // wins.
+  useEffect(() => {
+    if (!reportIdForHistory) return;
+    const ogUrl = `${window.location.origin}/api/og/result/${reportIdForHistory}.png`;
+    const pageUrl = `${window.location.origin}/results/${reportIdForHistory}`;
+    const tagSpecs: Array<{ key: "og:image" | "og:image:width" | "og:image:height" | "og:url" | "twitter:image" | "twitter:card"; attr: "property" | "name"; value: string }> = [
+      { key: "og:image", attr: "property", value: ogUrl },
+      { key: "og:image:width", attr: "property", value: "1200" },
+      { key: "og:image:height", attr: "property", value: "630" },
+      { key: "og:url", attr: "property", value: pageUrl },
+      { key: "twitter:image", attr: "name", value: ogUrl },
+      { key: "twitter:card", attr: "name", value: "summary_large_image" },
+    ];
+    const owned: HTMLMetaElement[] = [];
+    for (const spec of tagSpecs) {
+      // Prefer to update an existing static tag in-place so we don't end up
+      // with two `og:image` tags fighting for the unfurl. If none exists,
+      // create one and mark it as ours so the cleanup below only removes
+      // tags we actually injected.
+      const selector = `meta[${spec.attr}="${spec.key}"]`;
+      let el = document.head.querySelector<HTMLMetaElement>(selector);
+      if (!el) {
+        el = document.createElement("meta");
+        el.setAttribute(spec.attr, spec.key);
+        el.setAttribute("data-vulnrap-og", "1");
+        document.head.appendChild(el);
+        owned.push(el);
+      }
+      el.setAttribute("content", spec.value);
+    }
+    return () => {
+      for (const el of owned) {
+        el.parentNode?.removeChild(el);
+      }
+    };
+  }, [reportIdForHistory]);
+
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.href);
     toast({ title: "Link copied", description: "Shareable link copied to clipboard." });

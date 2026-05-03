@@ -276,6 +276,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /og/result/{id}.png:
+    get:
+      operationId: getResultOgCard
+      tags: [reports]
+      summary: Dynamic Open Graph card PNG for a results page
+      description: |
+        Task #666 — Returns a 1200×630 PNG composed from the report's score,
+        tier, top fired evidence signal and timestamp, suitable for use as
+        the og:image / twitter:image when sharing /results/:id links.
+        Cached for 24h with a content-derived ETag. On any rendering failure
+        or unknown / hidden report, redirects to the static site OG image so
+        consumers always get something to display.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 1200×630 PNG card
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+            ETag:
+              schema:
+                type: string
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "302":
+          description: Fallback redirect to the static site OG image
+          headers:
+            Location:
+              schema:
+                type: string
+
   /reports/{id}/triage-report:
     get:
       operationId: getTriageReport
