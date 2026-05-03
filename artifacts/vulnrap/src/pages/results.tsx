@@ -1529,6 +1529,74 @@ function escapeEvidenceCsvField(value: string | number | null | undefined): stri
   return s;
 }
 
+// Task #716: paste-ready Markdown export for triagers. The JSON/CSV/TXT
+// exports already cover machine consumers and full-fidelity dumps; this
+// helper produces a compact, human-readable summary that drops cleanly
+// into Slack, Jira, or Linear without manual reformatting. Layout:
+//   # VulnRap Report — VR-XXXX
+//   **Score:** N/100 (Tier)
+//   ## Evidence Signals
+//   - **Label** (weight: N) — description [markers: …]
+//   ## Report
+//   ```
+//   <full redacted report text>
+//   ```
+//   [View live results](https://…/results/123)
+type MarkdownReportInput = {
+  reportCode: string;
+  slopScore: number;
+  slopTier: string;
+  qualityScore?: number | null;
+  evidence?: EvidenceCsvRow[] | null;
+  reportText?: string | null;
+  liveUrl: string;
+};
+
+export function buildReportMarkdown(input: MarkdownReportInput): string {
+  const lines: string[] = [];
+  lines.push(`# VulnRap Report — ${input.reportCode}`);
+  lines.push("");
+  lines.push(`**Score:** ${input.slopScore}/100 (${input.slopTier})`);
+  if (typeof input.qualityScore === "number") {
+    lines.push(`**Quality:** ${input.qualityScore}/100`);
+  }
+  lines.push("");
+  lines.push("## Evidence Signals");
+  const ev = input.evidence ?? [];
+  if (ev.length === 0) {
+    lines.push("");
+    lines.push("_No evidence signals recorded._");
+  } else {
+    lines.push("");
+    for (const e of ev) {
+      const label = EVIDENCE_TYPE_LABELS[e.type] || e.type;
+      const flatMarkers = Array.isArray(e.markers) ? e.markers : [];
+      const ctxMarkers = Array.isArray(e.context?.markers)
+        ? (e.context!.markers!
+            .map((m) => (m && typeof m.id === "string" ? m.id : null))
+            .filter((id): id is string => id != null))
+        : [];
+      const allMarkers = [...flatMarkers, ...ctxMarkers];
+      const matchedSuffix = e.matched ? ` — matched: \`${e.matched}\`` : "";
+      const markerSuffix = allMarkers.length > 0 ? ` _[markers: ${allMarkers.join(", ")}]_` : "";
+      lines.push(`- **${label}** (weight: ${e.weight}) — ${e.description}${matchedSuffix}${markerSuffix}`);
+    }
+  }
+  lines.push("");
+  lines.push("## Report");
+  lines.push("");
+  // Use a long fence so any embedded triple-backticks in the report (e.g.
+  // pasted code blocks) don't prematurely close ours.
+  const text = (input.reportText ?? "").replace(/\r\n/g, "\n");
+  const fence = "`".repeat(Math.max(3, ...(text.match(/`+/g) ?? []).map((s) => s.length + 1)));
+  lines.push(fence);
+  lines.push(text);
+  lines.push(fence);
+  lines.push("");
+  lines.push(`[View live results](${input.liveUrl})`);
+  return lines.join("\n");
+}
+
 export function buildEvidenceCsv(evidence: EvidenceCsvRow[]): string {
   const header = ["type", "description", "weight", "matched", "markers"].join(",");
   const rows = evidence.map((e) => {
@@ -1558,7 +1626,7 @@ export default function Results() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [expandedCompare, setExpandedCompare] = useState<number | null>(null);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
-  const [exporting, setExporting] = useState<"json" | "txt" | "csv" | null>(null);
+  const [exporting, setExporting] = useState<"json" | "txt" | "csv" | "md" | null>(null);
   const [sensitivity, setSensitivity] = useState<SensitivityPreset>(() => getSettings().sensitivityPreset);
   // Task #451: shared scroll-target state for the structural-fabrication
   // markers. Both the diagnostics panel's STRUCTURAL_FABRICATION block and
@@ -1676,6 +1744,34 @@ export default function Results() {
       a.click();
       URL.revokeObjectURL(url);
       toast({ title: "Exported", description: "Evidence CSV downloaded." });
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  // Task #716: paste-ready Markdown export for triagers (Slack/Jira/Linear).
+  const exportMarkdown = () => {
+    if (!report || exporting) return;
+    setExporting("md");
+    try {
+      const ev = (report.evidence as EvidenceCsvRow[] | undefined) ?? [];
+      const md = buildReportMarkdown({
+        reportCode: anonymizeId(id),
+        slopScore: report.slopScore,
+        slopTier: report.slopTier,
+        qualityScore: report.qualityScore ?? null,
+        evidence: ev,
+        reportText: (report as { redactedText?: string | null }).redactedText ?? "",
+        liveUrl: window.location.href,
+      });
+      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `vulnrap-report-${anonymizeId(id)}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Exported", description: "Markdown report downloaded." });
     } finally {
       setExporting(null);
     }
@@ -2014,6 +2110,17 @@ export default function Results() {
           <Button variant="outline" onClick={exportText} disabled={exporting !== null} className="gap-2 glass-card hover:border-primary/30">
             {exporting === "txt" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             {exporting === "txt" ? "Exporting..." : "TXT"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={exportMarkdown}
+            disabled={exporting !== null}
+            className="gap-2 glass-card hover:border-primary/30"
+            data-testid="export-markdown"
+            title="Download a paste-ready Markdown summary (score, evidence signals, full report) for Slack/Jira/Linear."
+          >
+            {exporting === "md" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {exporting === "md" ? "Exporting..." : "Markdown"}
           </Button>
           {deleteToken && (
             <Button
