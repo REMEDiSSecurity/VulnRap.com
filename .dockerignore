@@ -1,0 +1,69 @@
+# Keep the build context small so cold builds are fast and incremental
+# layers stay reusable.
+
+# VCS / editor
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+.idea
+*.swp
+*.swo
+
+# Replit-specific runtime state — not part of a portable container.
+.replit
+.local
+.cache
+.upm
+.config
+.breakpoints
+
+# Dependencies + build outputs (the Dockerfile re-installs / re-builds
+# inside the image; copying the host's node_modules would defeat that and
+# break for cross-platform native deps).
+**/node_modules
+**/dist
+**/.tsbuildinfo
+**/*.tsbuildinfo
+**/coverage
+**/.vite
+**/.next
+
+# Test fixtures + scratch corpora that aren't needed at runtime.
+artifacts/api-server/test/**/__fixtures__
+artifacts/api-server/test/**/fixtures
+artifacts/vulnrap/e2e/.auth
+artifacts/vulnrap/playwright-report
+artifacts/vulnrap/test-results
+
+# Attached assets / scratch folders. These are large and not consumed by
+# the api-server or the SPA build at runtime.
+attached_assets
+tmp
+*.log
+*.tmp
+*.pid
+
+# Local env / secrets — never bake into an image.
+.env
+.env.*
+!.env.example
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+
+# Misc generated artifacts that aren't part of the build inputs.
+all_imports_raw.txt
+imports.txt
+source_files.txt
+unique_potential_dead.txt
+mockup_ui.txt
+vulnrap_ui.txt
+conflict_test.txt
+replit-support-report.md
+
+# Docker artefacts — recursive copy of the same Dockerfile is harmless,
+# but skipping a stale compose override is safer.
+docker-compose.override.yml

@@ -215,6 +215,19 @@ The one thing a local instance **cannot** do is cross-reference reports submitte
 
 If your team wants both privacy and community matching, you can use the hosted instance with **Similarity-Only** privacy mode — only mathematical fingerprints are stored, no report text.
 
+For a one-command container deploy (Postgres + api-server + SPA in a single
+image), see **[docs/self-hosting.md](docs/self-hosting.md)**:
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+The bundled `Dockerfile` is multi-stage, runs as a non-root user, ships a
+`HEALTHCHECK` against `/api/healthz`, and respects `$PORT`. The bundled
+`docker-compose.yml` brings up Postgres + the app together; the historical
+"just Postgres" flow is preserved as `docker compose --profile db-only up`.
+
 ## How Slop Detection Works
 
 Multi-axis evidence collection feeding a three-engine composite (architecture last reweighted in v3.8.0; see [Composite Scoring](#composite-scoring-three-engine-v380) below for how the axes are fused):

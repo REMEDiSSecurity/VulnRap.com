@@ -175,3 +175,111 @@ jobs:
           path: artifacts/vulnrap/playwright-report
           if-no-files-found: ignore
           retention-days: 14
+
+  docker:
+    name: docker image / compose smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          tags: vulnrap:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Report image size
+        run: |
+          docker image inspect vulnrap:ci \
+            --format 'image size: {{.Size}} bytes'
+
+      - name: Bring up the full stack
+        run: |
+          # Use the bundled compose file with the freshly-built image. We
+          # tag the build cache as vulnrap:local because that's what the
+          # compose file references; this avoids an extra build step.
+          docker tag vulnrap:ci vulnrap:local
+          # Compose up with --no-build so it uses the image we just tagged.
+          docker compose up -d --no-build
+
+      - name: Wait for app health
+        run: |
+          # Poll /api/healthz until the container reports healthy. 90s is
+          # generous for first-boot startup migrations against an empty DB.
+          for i in $(seq 1 45); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' "$(docker compose ps -q app)" 2>/dev/null || echo "starting")
+            echo "[$i] healthcheck: $status"
+            if [ "$status" = "healthy" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "App never became healthy. Dumping logs:"
+          docker compose logs app
+          docker compose logs db
+          exit 1
+
+      - name: Smoke test — /api/healthz returns 200
+        run: |
+          set -e
+          body=$(curl -fsS http://localhost:8080/api/healthz)
+          echo "healthz body: $body"
+          echo "$body" | grep -q '"status":"ok"'
+
+      - name: Smoke test — SPA root returns HTML with built bundle hash
+        run: |
+          set -e
+          html=$(curl -fsS http://localhost:8080/)
+          # The built SPA references /assets/index-<hash>.js (vite default).
+          if ! echo "$html" | grep -qE '/assets/index-[A-Za-z0-9_-]+\.js'; then
+            echo "SPA root did not reference a hashed bundle:"
+            echo "$html" | head -40
+            exit 1
+          fi
+
+      - name: Smoke test — DB-backed endpoint responds (catches miswired DATABASE_URL)
+        run: |
+          set -e
+          # /api/stats does a real SELECT against the reports table. If the
+          # app container is pointing at the wrong Postgres (e.g. a stale
+          # .env DATABASE_URL leaking into the container), this returns 5xx
+          # while /api/healthz can still report OK. Belt-and-braces against
+          # the "false-positive healthy stack" failure mode.
+          stats=$(curl -fsS http://localhost:8080/api/stats)
+          echo "stats body: $stats"
+          echo "$stats" | grep -q '"totalReports"'
+
+      - name: Smoke test — static-data-backed endpoint responds
+        run: |
+          set -e
+          # /api/presets is served from artifacts/api-server/data/presets.json,
+          # which is loaded at module import via process.cwd()-relative paths.
+          # If a future Dockerfile change drops the data dir, this is the
+          # canary that fires before users hit it.
+          presets=$(curl -fsS http://localhost:8080/api/presets)
+          echo "presets body (first 200 chars): ${presets:0:200}"
+          echo "$presets" | head -c 1 | grep -qE '[\[{]'
+
+      - name: Smoke test — startup migrations recorded success in logs
+        run: |
+          # Final guard: confirm the api-server logged that it acquired the
+          # DB, ran startup migrations, and started listening. Catches
+          # silent DB connection regressions even if a future endpoint
+          # change tolerates a missing schema.
+          set -e
+          logs=$(docker compose logs app)
+          echo "$logs" | tail -120
+          echo "$logs" | grep -q "Server listening"
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

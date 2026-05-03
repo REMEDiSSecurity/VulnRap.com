@@ -1,21 +1,93 @@
 version: "3.8"
 
+# Full-stack docker-compose for self-hosting VulnRap.
+#
+# Default invocation brings up Postgres + the api-server (which also
+# serves the prerendered SPA) — a one-command "docker compose up" deploy.
+#
+#   cp .env.example .env
+#   # Edit .env (DATABASE_URL is rewritten below to point at the `db` service)
+#   docker compose up
+#
+# To get just Postgres (the historical dev-only flow), use the db-only
+# profile:
+#
+#   docker compose --profile db-only up
+#
+# This profile keeps the previous "I just need a local Postgres while I run
+# pnpm dev on the host" workflow working unchanged.
+
 services:
   db:
     image: postgres:16-alpine
+    profiles: ["", "default", "app", "db-only"]
     environment:
-      POSTGRES_USER: vulnrap
-      POSTGRES_PASSWORD: vulnrap
-      POSTGRES_DB: vulnrap
+      POSTGRES_USER: ${POSTGRES_USER:-vulnrap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vulnrap}
+      POSTGRES_DB: ${POSTGRES_DB:-vulnrap}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - vulnrap_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vulnrap"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vulnrap}"]
       interval: 5s
       timeout: 3s
       retries: 5
+
+  app:
+    # The default profile is empty so `docker compose up` (no --profile)
+    # picks this up; the explicit "app" profile lets you opt in via
+    # `docker compose --profile app up` when running alongside other
+    # compose files.
+    profiles: ["", "default", "app"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vulnrap:local
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # DATABASE_URL is intentionally NOT read from .env here.
+      #
+      # `.env.example` ships a `localhost`-flavoured DATABASE_URL aimed at
+      # host-side `pnpm dev` work (the historical db-only flow). If this
+      # service inherited that value, the app container would try to
+      # connect to *itself* on 5432 instead of the bundled `db` service,
+      # boot would fail silently between healthcheck ticks, and the
+      # whole "one-command self-host" flow would be a footgun.
+      #
+      # Inside compose we always wire the app to the `db` service, built
+      # from the same POSTGRES_* vars Postgres itself uses (so a custom
+      # password in .env reaches both sides). To target an *external*
+      # Postgres, ship a `docker-compose.override.yml` that sets
+      # DATABASE_URL on this service, or invoke the image directly:
+      #   docker run -e DATABASE_URL=... vulnrap:local
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vulnrap}:${POSTGRES_PASSWORD:-vulnrap}@db:5432/${POSTGRES_DB:-vulnrap}
+      PORT: ${PORT:-8080}
+      NODE_ENV: production
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    restart: unless-stopped
+    healthcheck:
+      # Re-state the image's HEALTHCHECK at the compose level so
+      # `docker compose ps` reflects readiness for tooling that hasn't
+      # opted into image-level healthchecks.
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
 volumes:
   vulnrap_pgdata:
