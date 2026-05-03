@@ -21,6 +21,10 @@ import sitemapRouter from "./routes/sitemap";
 import changelogFeedRouter from "./routes/changelog-feed";
 import { logger } from "./lib/logger";
 import { buildPublicUrl, validatePublicUrlEnv } from "./lib/public-url";
+import {
+  buildCorsOriginCallback,
+  validateAllowedOriginsEnv,
+} from "./lib/allowed-origins";
 import { requestIdMiddleware } from "./middlewares/request-id";
 import { httpMetricsMiddleware } from "./middlewares/http-metrics";
 
@@ -33,6 +37,7 @@ import { httpMetricsMiddleware } from "./middlewares/http-metrics";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 validatePublicUrlEnv({ logger });
+const allowedOriginsValidation = validateAllowedOriginsEnv({ logger });
 
 const app: Express = express();
 
@@ -109,23 +114,17 @@ app.use(
 // Task #724 — Per-request Prometheus metrics (duration / count / in-flight).
 app.use(httpMetricsMiddleware);
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-  : [];
-
+// Task #766 — Source the CORS allow-list from validateAllowedOriginsEnv so
+// malformed entries (missing scheme, stray commas, pasted URLs with paths)
+// are logged once at startup and dropped from the allow-list, instead of
+// silently never matching any inbound Origin header. The branching is
+// delegated to buildCorsOriginCallback so the policy can be unit-tested
+// without spinning up Express. Allow-all is gated on `kind === "unset"`
+// only — when ALLOWED_ORIGINS IS set but every entry is malformed we
+// deny cross-origin requests instead of reverting to open mode.
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(null, false);
-      }
-    },
+    origin: buildCorsOriginCallback(allowedOriginsValidation),
     // PUT is allowed for the calibration-tunable admin endpoints
     // (e.g. /api/test/archetype-history/config) so reviewer-driven config
     // updates also work in cross-origin setups, not only same-origin
