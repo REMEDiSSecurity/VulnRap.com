@@ -2,6 +2,10 @@ import { db } from "@workspace/db";
 import { userFeedbackTable, reportsTable } from "@workspace/db";
 import { sql, eq, gte, and, isNotNull } from "drizzle-orm";
 import { getCurrentConfig, type ScoringConfig } from "./scoring-config";
+import {
+  computePerLanguageAgreement,
+  type PerLanguageAgreementReport,
+} from "./multilingual-agreement.js";
 
 const MIN_FEEDBACK_PER_BUCKET = 10;
 
@@ -32,6 +36,8 @@ export interface CalibrationReport {
   suggestions: CalibrationSuggestion[];
   overallHealth: "good" | "needs-attention" | "needs-tuning";
   minFeedbackThreshold: number;
+  perLanguageAgreementRate: number;
+  perLanguageAgreement: PerLanguageAgreementReport;
 }
 
 const BUCKETS = [
@@ -132,6 +138,8 @@ export async function generateCalibrationReport(): Promise<CalibrationReport> {
         ? "needs-attention"
         : "needs-tuning";
 
+  const perLanguageAgreement = computePerLanguageAgreement();
+
   return {
     currentConfig: config,
     totalFeedbackAnalyzed,
@@ -139,6 +147,8 @@ export async function generateCalibrationReport(): Promise<CalibrationReport> {
     suggestions,
     overallHealth,
     minFeedbackThreshold: MIN_FEEDBACK_PER_BUCKET,
+    perLanguageAgreementRate: perLanguageAgreement.agreementRate,
+    perLanguageAgreement,
   };
 }
 
