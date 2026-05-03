@@ -1,4 +1,15 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeSync,
+} from "node:fs";
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "../lib/logger";
@@ -229,7 +240,41 @@ function writePersistedState(
     _meta: PERSIST_META,
     perIp: trimmed,
   };
-  writeFileSync(filePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+  const serialized = JSON.stringify(payload, null, 2) + "\n";
+
+  // Atomic write: serialize to a unique sibling temp file, fsync the
+  // bytes to disk, then rename over the destination. POSIX rename(2)
+  // is atomic on the same filesystem, so a crash (deploy / OOM /
+  // power loss) at any point during the write leaves either the old
+  // file or the fully-written new file in place — never a half-
+  // written JSON blob that the next start would log-and-discard,
+  // silently dropping all cooldowns. The random suffix prevents two
+  // concurrent writers (e.g. overlapping alerts) from clobbering each
+  // other's temp file before rename.
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  let fd: number | null = null;
+  try {
+    fd = openSync(tmpPath, "w", 0o644);
+    writeSync(fd, serialized, 0, "utf8");
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = null;
+    renameSync(tmpPath, filePath);
+  } catch (err) {
+    if (fd !== null) {
+      try {
+        closeSync(fd);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    try {
+      if (existsSync(tmpPath)) unlinkSync(tmpPath);
+    } catch {
+      // best-effort cleanup
+    }
+    throw err;
+  }
 }
 
 function resolveStatePath(opt: string | null | undefined): string | null {

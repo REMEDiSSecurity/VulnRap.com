@@ -1,4 +1,10 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -928,6 +934,49 @@ describe("per-IP cooldown is persisted across process restarts (Task #400)", () 
     expect(persisted.perIp.length).toBe(2);
     const ips = persisted.perIp.map((r) => r.ip).sort();
     expect(ips).toEqual(["10.0.0.2", "10.0.0.3"]);
+  });
+
+  // Task #738 — the cooldown file is written via a write-temp-then-
+  // rename sequence so a crash mid-write can't leave behind a half-
+  // written JSON blob (which the loader would log-and-discard,
+  // silently dropping every persisted cooldown).
+  it("persists via an atomic temp-file + rename so no half-written file or stale .tmp sibling is left behind", async () => {
+    const { createBruteForceAlerter } =
+      await import("./calibration-auth-brute-force-alert");
+    const alerter = createBruteForceAlerter({
+      threshold: 1,
+      windowMs: 60_000,
+      webhookUrl: "https://example.test/hook",
+      runbookUrl: "https://example.test/runbook",
+      dispatch: async () => ({ ok: true, status: 200 }),
+    });
+
+    // Several rapid threshold crossings → several persist() calls;
+    // each one must clean up its temp sibling.
+    for (let i = 1; i <= 4; i++) {
+      alerter.recordWrongTokenEvent({
+        status: 401,
+        gate: "mutation",
+        route: "/x",
+        method: "POST",
+        ip: `10.1.0.${i}`,
+      });
+    }
+    await alerter.flushPending();
+
+    const statePath = process.env.CALIBRATION_AUTH_BRUTE_FORCE_STATE_PATH!;
+    const stateDir = path.dirname(statePath);
+    const entries = readdirSync(stateDir);
+
+    // Only the final, atomically-renamed state file should remain.
+    expect(entries).toEqual(["state.json"]);
+
+    // And the file must still parse cleanly (i.e. not the half-written
+    // case the atomic write is meant to prevent).
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      perIp: Array<{ ip: string; lastAlertedAt: number }>;
+    };
+    expect(persisted.perIp.length).toBe(4);
   });
 });
 
