@@ -1,4 +1,4 @@
-import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check, ChevronDown, ChevronUp, Plug } from "lucide-react";
+import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check, ChevronDown, ChevronUp, Plug, Bot } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -503,6 +503,77 @@ async function analyzeAndPost(filePath, slackWebhook) {
       + \`Similar Reports: \${dupes}\\n\`
       + \`Redacted Items: \${data.redactionSummary?.total || 0}\`
   });
+}`} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
+          <Bot className="w-5 h-5 text-primary" />
+          MCP Server (for Claude Desktop, Cursor, &amp; agents)
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          A standalone <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Model Context Protocol</a> server
+          exposes the public VulnRap API as MCP tools so any LLM-tool ecosystem can call VulnRap from inside an agent
+          chat. The server lives in <code className="font-mono text-xs text-foreground">lib/mcp-server</code> and ships
+          nine tools that map 1:1 to the public REST endpoints — reviewer-only endpoints are intentionally not exposed.
+        </p>
+
+        <Card className="glass-card rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Tools exposed</CardTitle>
+            <CardDescription className="mt-1">
+              Each tool wraps a single public endpoint with input validation via{" "}
+              <code className="font-mono text-xs text-foreground">@workspace/api-zod</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+              <div><code className="font-mono text-foreground">score_report</code> → <code className="font-mono">POST /api/reports/check</code></div>
+              <div><code className="font-mono text-foreground">lookup_report</code> → <code className="font-mono">GET /api/reports/&#123;id&#125;</code></div>
+              <div><code className="font-mono text-foreground">query_stats</code> → <code className="font-mono">GET /api/stats</code></div>
+              <div><code className="font-mono text-foreground">query_transparency</code> → <code className="font-mono">GET /api/public/corpus-stats</code></div>
+              <div><code className="font-mono text-foreground">query_gallery</code> → <code className="font-mono">GET /api/reports/feed</code></div>
+              <div><code className="font-mono text-foreground">get_drift_summary</code> → <code className="font-mono">GET /api/public/drift-summary</code></div>
+              <div><code className="font-mono text-foreground">query_signal_metrics</code> → <code className="font-mono">GET /api/feedback/holdout-eval</code></div>
+              <div><code className="font-mono text-foreground">get_cohort_baseline</code> → <code className="font-mono">GET /api/cohort/baseline</code></div>
+              <div><code className="font-mono text-foreground">test_yourself</code> → <code className="font-mono">GET /api/test/run</code></div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Build &amp; run</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CopyBlock language="bash" code={`pnpm --filter @workspace/mcp-server build
+node ./lib/mcp-server/dist/index.js
+# Override the API base URL for self-hosted deployments:
+VULNRAP_API_BASE_URL=https://my-vulnrap.example pnpm --filter @workspace/mcp-server start`} />
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Claude Desktop config</CardTitle>
+            <CardDescription className="mt-1">
+              Add this block to <code className="font-mono text-xs text-foreground">claude_desktop_config.json</code> and
+              restart Claude Desktop. The server speaks MCP over stdio — no network ports, no auth.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CopyBlock language="json" code={`{
+  "mcpServers": {
+    "vulnrap": {
+      "command": "node",
+      "args": ["/absolute/path/to/lib/mcp-server/dist/index.js"],
+      "env": {
+        "VULNRAP_API_BASE_URL": "https://vulnrap.com"
+      }
+    }
+  }
 }`} />
           </CardContent>
         </Card>
