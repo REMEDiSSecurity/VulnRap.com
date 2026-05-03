@@ -6,9 +6,9 @@ This is a **recipe**, not a hosted service — you create the Discord applicatio
 
 ## What you get
 
-- `/vulnrap-score <id>` — looks the report up via `GET /api/reports/:id/verify` and replies with an embed showing the slop score, tier, similarity match count, section-reuse count, and a link to open the full report on vulnrap.com.
+- `/vulnrap-score <id>` — looks the report up via `GET /api/reports/:id` and replies with an embed showing the slop score, tier, similarity match count, section-reuse count, the **top fired signals** (up to 3, ranked by weight), and a link to open the full report on vulnrap.com. If the full-report fetch fails, the bot falls back to the lighter `GET /api/reports/:id/verify` badge so the command still produces a useful embed (without the top-signals field).
 
-The embed color shifts from green (clean / likely human) through amber to red (slop), so you can eyeball severity at a glance.
+The embed color shifts from green (clean / likely human) through amber to red (slop), so you can eyeball severity at a glance. The "Top signals" field surfaces the highest-weight evidence items the engine fired (e.g. `ai_phrase`, `placeholder_url`, `severity_inflation`) so reviewers can triage in-channel without clicking through.
 
 ## Prerequisites
 

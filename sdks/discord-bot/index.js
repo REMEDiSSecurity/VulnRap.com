@@ -50,8 +50,7 @@ function parseReportId(raw) {
   return null;
 }
 
-async function fetchVerification(reportId) {
-  const url = `${API_BASE}/reports/${encodeURIComponent(reportId)}/verify`;
+async function fetchJson(url) {
   const res = await fetch(url, {
     headers: {
       Accept: "application/json",
@@ -69,6 +68,71 @@ async function fetchVerification(reportId) {
     throw err;
   }
   return res.json();
+}
+
+async function fetchVerification(reportId) {
+  return fetchJson(
+    `${API_BASE}/reports/${encodeURIComponent(reportId)}/verify`,
+  );
+}
+
+async function fetchReport(reportId) {
+  return fetchJson(`${API_BASE}/reports/${encodeURIComponent(reportId)}`);
+}
+
+// Pulls richer report data so we can show top fired signals; on any
+// non-404 failure we fall back to the lightweight verify badge so the
+// command still produces a useful embed.
+async function fetchReportData(reportId) {
+  try {
+    const report = await fetchReport(reportId);
+    return { source: "report", data: reportFromAnalysis(report) };
+  } catch (err) {
+    if (err.status === 404) throw err;
+    const badge = await fetchVerification(reportId);
+    return { source: "verify", data: badge };
+  }
+}
+
+function reportFromAnalysis(report) {
+  const evidence = Array.isArray(report.evidence) ? report.evidence : [];
+  const topSignals = [...evidence]
+    .filter((e) => e && typeof e.weight === "number")
+    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
+    .slice(0, 3);
+
+  return {
+    id: report.id,
+    reportCode: report.reportCode,
+    slopScore: report.slopScore,
+    slopTier: report.slopTier,
+    similarityMatchCount: Array.isArray(report.similarityMatches)
+      ? report.similarityMatches.length
+      : 0,
+    sectionMatchCount: Array.isArray(report.sectionMatches)
+      ? report.sectionMatches.length
+      : 0,
+    createdAt: report.createdAt,
+    verifyUrl: report.verifyUrl,
+    topSignals,
+  };
+}
+
+function truncate(text, max = 80) {
+  const s = String(text ?? "").replace(/\s+/g, " ").trim();
+  if (s.length <= max) return s;
+  return `${s.slice(0, max - 1).trimEnd()}…`;
+}
+
+function formatTopSignals(signals) {
+  if (!Array.isArray(signals) || signals.length === 0) return null;
+  return signals
+    .map((sig) => {
+      const desc = truncate(sig.description || sig.type || "signal");
+      const weight = typeof sig.weight === "number" ? ` (+${sig.weight})` : "";
+      return `• ${desc}${weight}`;
+    })
+    .join("\n");
 }
 
 function buildEmbed(badge) {
@@ -102,7 +166,18 @@ function buildEmbed(badge) {
         value: `${badge.sectionMatchCount ?? 0} block(s)`,
         inline: true,
       },
-    )
+    );
+
+  const topSignalsValue = formatTopSignals(badge.topSignals);
+  if (topSignalsValue) {
+    embed.addFields({
+      name: "Top signals",
+      value: topSignalsValue,
+      inline: false,
+    });
+  }
+
+  embed
     .setFooter({
       text: "vulnrap.com — open the report for the full breakdown",
     });
@@ -141,8 +216,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
   await interaction.deferReply();
 
   try {
-    const badge = await fetchVerification(reportId);
-    await interaction.editReply({ embeds: [buildEmbed(badge)] });
+    const { data } = await fetchReportData(reportId);
+    await interaction.editReply({ embeds: [buildEmbed(data)] });
   } catch (err) {
     const msg =
       err.status === 404
