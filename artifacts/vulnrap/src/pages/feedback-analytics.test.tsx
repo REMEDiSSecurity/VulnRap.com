@@ -3288,7 +3288,7 @@ describe("HandwavyPhrasesAdmin — production-scan-window help block (Task #460 
     // need the page to mount without unhandled rejections. Every
     // network call returns a benign empty payload.
     fetchSpy = vi.spyOn(globalThis, "fetch");
-    fetchSpy.mockImplementation(async (input) => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
       const url =
         typeof input === "string"
           ? input

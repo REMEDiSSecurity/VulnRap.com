@@ -290,16 +290,16 @@ describe("DatasetCohortMeansSection per-tier delta sparkline (Task #516)", () =>
     // the history fetch entirely (or coalesced it into the run query)
     // would otherwise still make the empty T3 assertion pass — but for
     // the wrong reason.
-    const calls = fetchSpy.mock.calls.map(([input]) =>
+    const calls = fetchSpy.mock.calls.map(([input]: [unknown]) =>
       typeof input === "string"
         ? input
         : input instanceof URL
           ? input.toString()
           : (input as Request).url,
     );
-    expect(calls.some((u) => u.includes("/api/test/run"))).toBe(true);
+    expect(calls.some((u: string) => u.includes("/api/test/run"))).toBe(true);
     expect(
-      calls.some((u) => u.includes("/api/test/dataset-history")),
+      calls.some((u: string) => u.includes("/api/test/dataset-history")),
     ).toBe(true);
   });
 });

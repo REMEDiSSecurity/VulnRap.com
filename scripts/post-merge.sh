@@ -74,11 +74,23 @@ fi
 # `lib/` (even pure schema additions like phrase_suggestions in #634).
 # We're in wind-down mode — no new scoring work is landing — so default
 # the gate to BYPASS for post-merge runs to let the in-flight queue
-# drain cleanly. To re-enable, unset SCORING_GATE_BYPASS or remove the
-# line below. The gate itself is unchanged and can still be invoked
+# drain cleanly. The gate itself is unchanged and is still invoked
 # directly via `bash scripts/scoring-gate.sh`.
+#
+# To RE-ENABLE the gate in post-merge: delete the two lines below, or
+# set SCORING_GATE_BYPASS=0 in the environment.
+#
+# This default is intentionally LOUD — every post-merge run prints a
+# WIND-DOWN BYPASS warning so a future agent can't miss that the
+# guardrail is off. After any scoring-engine change in `lib/` or
+# `artifacts/api-server/src/lib/`, run the gate manually:
+#     bash scripts/scoring-gate.sh
 : "${SCORING_GATE_BYPASS:=1}"
 export SCORING_GATE_BYPASS
+if [ "$SCORING_GATE_BYPASS" = "1" ]; then
+  echo "[post-merge] WARNING: SCORING_GATE_BYPASS=1 (wind-down default). The pre-merge scoring gate is disabled for post-merge runs." >&2
+  echo "[post-merge] WARNING: Run 'bash scripts/scoring-gate.sh' manually after any scoring-engine change. See replit.md > Wind-Down Notes." >&2
+fi
 
 if [ "$RUN_GATE" -eq 1 ]; then
   echo "[post-merge] Scoring-relevant paths changed (or range unknown); running pre-merge scoring gate..."

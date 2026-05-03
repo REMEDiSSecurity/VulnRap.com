@@ -42,11 +42,16 @@ export interface HandwavyCategoryFlipBadgeProps {
   // history badge ("handwavy-history") keep their existing selectors. This
   // is what the existing E2E specs latch onto.
   testIdPrefix: string;
+  // Optional timestamp formatter for tests that need a deterministic stand-in
+  // for `formatAuditTimestamp` (which depends on the runtime locale/clock).
+  // Production callers can omit this and the default formatter is used.
+  formatTimestamp?: (iso: string | null | undefined) => string | null;
 }
 
 export function HandwavyCategoryFlipBadge({
   flips,
   testIdPrefix,
+  formatTimestamp = formatAuditTimestamp,
 }: HandwavyCategoryFlipBadgeProps) {
   if (flips.length < HANDWAVY_CATEGORY_FLIP_MIN) return null;
   return (
@@ -78,7 +83,7 @@ export function HandwavyCategoryFlipBadge({
           </div>
           <ol className="space-y-1 text-[10px] leading-snug">
             {flips.map((e, i) => {
-              const at = formatAuditTimestamp(e.editedAt);
+              const at = formatTimestamp(e.editedAt);
               return (
                 <li key={`${e.editedAt}-${i}`} className="space-y-0.5">
                   <div>
