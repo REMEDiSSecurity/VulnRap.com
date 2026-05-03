@@ -22,6 +22,7 @@ import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { DriftFlagsBanner } from "@/components/drift-flags-banner";
 import { TriageEngineCard, type VulnrapEngineResultPanel } from "@/components/triage-engine-card";
 import { CohortBaselineRibbon } from "@/components/cohort-baseline-ribbon";
+import { VerificationTrustPanel } from "@/components/verification-trust-panel";
 import { useQueryClient } from "@tanstack/react-query";
 
 function getQualityColor(score: number) {
@@ -1696,6 +1697,9 @@ export default function Results() {
               score={vulnrap.compositeScore}
               cwe={report.avriFamily ?? null}
             />
+            {triageChecks.length > 0 && (
+              <VerificationTrustPanel checks={triageChecks} summary={triageSummary} />
+            )}
             <div className="space-y-3">
               {vulnrap.engines.map((eng) => (
                 <TriageEngineCard key={eng.engine} engine={eng} />
