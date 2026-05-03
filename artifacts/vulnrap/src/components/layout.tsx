@@ -13,6 +13,7 @@ import { LaserEffects } from "@/components/laser-effects";
 import { CursorBugs } from "@/components/cursor-bugs";
 import { CURRENT_VERSION, RELEASE_DATE } from "@/pages/changelog";
 import { resetOnboardingTour } from "@/components/onboarding-tour";
+import { t } from "@/lib/i18n";
 
 function feedbackMailto(page: string) {
   const subject = encodeURIComponent("VulnRap Feedback");
@@ -367,7 +368,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <span className="font-bold text-sm tracking-tight uppercase text-primary/80 group-hover:text-primary transition-colors">VulnRap</span>
               </Link>
               <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-                Free &amp; anonymous vulnerability report validation — made by and for frustrated PSIRTlings.
+                {t("footer.tagline")}
               </p>
               <Link
                 to="/changelog"
@@ -380,18 +381,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">Product</h4>
-              <Link to="/" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Submit</Link>
-              <Link to="/check" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Check</Link>
-              <Link to="/batch" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Batch</Link>
-              <Link to="/compare" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Compare</Link>
+              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">{t("footer.product")}</h4>
+              <Link to="/" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.submit")}</Link>
+              <Link to="/check" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.check")}</Link>
+              <Link to="/batch" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.batch")}</Link>
+              <Link to="/compare" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.compare")}</Link>
               <Link to="/use-cases" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Use Cases</Link>
               <Link to="/pricing" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Pricing</Link>
             </div>
 
             <div className="flex flex-col gap-2">
-              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">Resources</h4>
-              <Link to="/developers" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">API Docs</Link>
+              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">{t("footer.resources")}</h4>
+              <Link to="/developers" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.apiDocs")}</Link>
               <a
                 href="/agents.md"
                 target="_blank"
@@ -401,13 +402,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
               >
                 Agents Manual
               </a>
-              <Link to="/blog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Blog</Link>
-              <Link to="/changelog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Changelog</Link>
+              <Link to="/blog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.blog")}</Link>
+              <Link to="/changelog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.changelog")}</Link>
               <Link to="/roadmap" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Roadmap</Link>
               <Link to="/incidents" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Incidents</Link>
               <Link to="/stats" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Stats</Link>
               <Link to="/transparency" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Impact</Link>
-              <Link to="/status" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Status</Link>
+              <Link to="/status" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">{t("nav.status")}</Link>
               <Link to="/showcase" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Showcase</Link>
               <Link to="/community" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Community</Link>
               <button
@@ -416,12 +417,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 className="text-muted-foreground/80 hover:text-primary transition-colors w-fit text-left"
                 data-testid="footer-restart-tour"
               >
-                Restart tour
+                {t("footer.restartTour")}
               </button>
             </div>
 
             <div className="flex flex-col gap-2">
-              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">Legal</h4>
+              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">{t("footer.legal")}</h4>
               <Link to="/security" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Security</Link>
               <Link to="/privacy" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Privacy</Link>
               <Link to="/terms" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Terms</Link>
@@ -448,7 +449,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               className="inline-flex items-center gap-1.5 hover:text-primary transition-colors group"
             >
               <MessageSquare className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
-              <span>Send us feedback</span>
+              <span>{t("footer.sendFeedback")}</span>
             </a>
             <span className="text-muted-foreground/40 text-center leading-relaxed">
               Funded and developed by the creators of{" "}

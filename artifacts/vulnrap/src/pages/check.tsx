@@ -30,6 +30,7 @@ import {
 } from "@/components/signal-mute-boost-panel";
 import { AdvancedSensitivityPanel } from "@/components/advanced-sensitivity-panel";
 import { SUBMIT_CHECK_EVENT, TOGGLE_REDACTION_EVENT, FOCUS_TEXTAREA_EVENT } from "@/hooks/use-keyboard-shortcuts";
+import { t } from "@/lib/i18n";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md"];
@@ -104,11 +105,11 @@ function CheckVerificationPanel({ checks, summary }: { checks: VerificationCheck
       <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpanded(!expanded)}>
         <CardTitle className="flex items-center gap-2 text-sm">
           <Shield className="w-4 h-4 text-primary" />
-          Active Verification
+          {t("check.activeVerification")}
           <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{checks.length} checks</Badge>
           <span className="ml-auto">{expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}</span>
         </CardTitle>
-        <CardDescription className="text-xs">Live verification of referenced files, CVEs, and resources</CardDescription>
+        <CardDescription className="text-xs">{t("check.activeVerificationDesc")}</CardDescription>
       </CardHeader>
       {expanded && (
         <CardContent className="space-y-2">
@@ -179,7 +180,7 @@ function AdvancedSignalControl({
       >
         <CardTitle className="flex items-center gap-2 text-sm">
           <Sliders className="w-4 h-4 text-primary" />
-          Advanced
+          {t("check.advanced")}
           {hasOverrides && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
               {Object.keys(adjustments).length} override{Object.keys(adjustments).length === 1 ? "" : "s"}

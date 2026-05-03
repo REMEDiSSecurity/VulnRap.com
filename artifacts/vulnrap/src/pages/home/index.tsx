@@ -30,6 +30,7 @@ import { SlopDetectionCard } from "./slop-detection-card";
 import { VisitorCounter } from "./visitor-counter";
 import { TrustBadges } from "./trust-badges";
 import { OnboardingTour, hasSeenOnboardingTour } from "@/components/onboarding-tour";
+import { t } from "@/lib/i18n";
 
 // Below-the-fold sections — lazy loaded so they don't bloat the initial
 // home-page JS bundle. The user has to scroll past several full-height
@@ -168,7 +169,7 @@ export default function Home() {
           timestamp: new Date().toISOString(),
           type: "submit",
         });
-        toast({ title: "Analysis complete", description: "Navigating to results..." });
+        toast({ title: t("home.analysisCompleteToast"), description: "Navigating to results..." });
         setTimeout(() => navigate(`/results/${data.id}`), 600);
       },
       onError: (err: unknown) => {
@@ -185,7 +186,7 @@ export default function Home() {
           }
         }
         toast({
-          title: "Upload failed",
+          title: t("home.uploadFailedToast"),
           description: message,
           variant: "destructive"
         });
@@ -274,15 +275,15 @@ export default function Home() {
   const getButtonContent = () => {
     switch (stage) {
       case "uploading":
-        return <><Loader2 className="w-5 h-5 animate-spin" /> Uploading...</>;
+        return <><Loader2 className="w-5 h-5 animate-spin" /> {t("home.uploading")}</>;
       case "analyzing":
-        return <><Loader2 className="w-5 h-5 animate-spin" /> Analyzing report...</>;
+        return <><Loader2 className="w-5 h-5 animate-spin" /> {t("home.analyzing")}</>;
       case "done":
-        return <><CheckCircle className="w-5 h-5" /> Complete</>;
+        return <><CheckCircle className="w-5 h-5" /> {t("home.complete")}</>;
       case "error":
-        return <><XCircle className="w-5 h-5" /> Failed - Try Again</>;
+        return <><XCircle className="w-5 h-5" /> {t("home.failedTryAgain")}</>;
       default:
-        return "Analyze Report";
+        return t("home.analyzeReport");
     }
   };
 
@@ -347,9 +348,9 @@ export default function Home() {
             <img ref={logoRef} src={logoSrc} alt="VulnRap" className="relative z-10 w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-xl logo-glow gradient-border" />
           </div>
         </div>
-        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-primary uppercase glow-text" data-testid="text-heading">Vuln Report Rap Sheet</h1>
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-primary uppercase glow-text" data-testid="text-heading">{t("home.heading")}</h1>
         <p className="text-sm sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed px-2">
-          Assess the likelihood that an incoming vulnerability report describes a real, reproducible issue. Cross-check claims against live sources, detect duplicate submissions, and surface what deserves analyst time. Built for PSIRT teams, triage analysts, and anyone buried in an inbox full of incoming reports.
+          {t("home.tagline")}
         </p>
         <TrustBadges />
       </div>
@@ -360,10 +361,10 @@ export default function Home() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UploadCloud className="w-5 h-5 text-primary" />
-            Submit Report
+            {t("home.submitReport")}
             <Explainer text="Submit a vulnerability report for analysis. Upload a file or paste your report text directly. We'll verify factual claims, check it against previously submitted reports, and score the likelihood the issue is real and reproducible." />
           </CardTitle>
-          <CardDescription>Upload a file, paste text, or link to a report (Max 5MB)</CardDescription>
+          <CardDescription>{t("home.submitReportDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 sm:space-y-8">
           <div className="rounded-lg bg-yellow-500/5 border border-yellow-500/20 px-3 sm:px-4 py-2.5 sm:py-3 text-xs text-muted-foreground leading-relaxed">
@@ -454,15 +455,15 @@ export default function Home() {
                   </div>
                 </div>
                 <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setFile(null); setFileError(null); setStage("idle"); }} className="h-7 text-xs" data-testid="button-clear">
-                  Clear Selection
+                  {t("home.clearSelection")}
                 </Button>
               </>
             ) : (
               <>
                 <UploadCloud className="w-6 h-6 text-muted-foreground shrink-0" />
                 <div className="text-center">
-                  <p className="font-medium text-sm">Drag & drop your report here</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">or click to browse files (.txt, .md)</p>
+                  <p className="font-medium text-sm">{t("home.dragDropHere")}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t("home.dragDropHelp")}</p>
                 </div>
               </>
             )}
@@ -487,7 +488,7 @@ export default function Home() {
                   onClick={() => { setRawText(""); setStage("idle"); }}
                   data-testid="button-clear-text"
                 >
-                  Clear text
+                  {t("home.clearText")}
                 </button>
               )}
             </div>

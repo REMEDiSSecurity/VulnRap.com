@@ -25,6 +25,7 @@ import { CohortBaselineRibbon } from "@/components/cohort-baseline-ribbon";
 import { AbPresetComparison } from "@/components/ab-preset-comparison";
 import { VerificationTrustPanel } from "@/components/verification-trust-panel";
 import { useQueryClient } from "@tanstack/react-query";
+import { t } from "@/lib/i18n";
 
 function getQualityColor(score: number) {
   if (score >= 70) return "text-green-500";
@@ -59,7 +60,7 @@ function Hint({ text }: { text: string }) {
         className="inline-flex"
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
         onBlur={() => setOpen(false)}
-        aria-label="More info"
+        aria-label={t("common.moreInfo")}
       >
         <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-primary transition-colors" />
       </button>
