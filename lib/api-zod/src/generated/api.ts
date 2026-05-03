@@ -3149,6 +3149,86 @@ export const GetAvriDriftRearmHistoryResponse = zod
   );
 
 /**
+ * Task #631 — Returns the curated preset library (sensitivity profiles
+plus per-engine weights). Sourced from a static JSON file shipped
+with the api-server; safe to cache for an hour. Each preset has an
+opaque `id` that the `/check` page accepts via `?preset=<id>` to
+load the configuration into local settings.
+
+ * @summary List curated scoring presets
+ */
+export const listPresetsResponsePresetsItemSlopThresholdLowMin = 0;
+export const listPresetsResponsePresetsItemSlopThresholdLowMax = 100;
+
+export const listPresetsResponsePresetsItemSlopThresholdHighMin = 0;
+export const listPresetsResponsePresetsItemSlopThresholdHighMax = 100;
+
+export const listPresetsResponsePresetsItemEngineWeightsLinguisticMin = 0;
+export const listPresetsResponsePresetsItemEngineWeightsLinguisticMax = 2;
+
+export const listPresetsResponsePresetsItemEngineWeightsFactualMin = 0;
+export const listPresetsResponsePresetsItemEngineWeightsFactualMax = 2;
+
+export const listPresetsResponsePresetsItemEngineWeightsTemplateMin = 0;
+export const listPresetsResponsePresetsItemEngineWeightsTemplateMax = 2;
+
+export const listPresetsResponsePresetsItemEngineWeightsLlmMin = 0;
+export const listPresetsResponsePresetsItemEngineWeightsLlmMax = 2;
+
+export const ListPresetsResponse = zod
+  .object({
+    version: zod.string(),
+    presets: zod.array(
+      zod
+        .object({
+          id: zod
+            .string()
+            .describe("Opaque slug used in `\/check?preset=<id>` deep-links."),
+          name: zod.string(),
+          description: zod.string(),
+          audience: zod
+            .string()
+            .describe("Who this preset is calibrated for (free text)."),
+          sensitivity: zod.enum(["lenient", "balanced", "strict"]),
+          slopThresholdLow: zod
+            .number()
+            .min(listPresetsResponsePresetsItemSlopThresholdLowMin)
+            .max(listPresetsResponsePresetsItemSlopThresholdLowMax),
+          slopThresholdHigh: zod
+            .number()
+            .min(listPresetsResponsePresetsItemSlopThresholdHighMin)
+            .max(listPresetsResponsePresetsItemSlopThresholdHighMax),
+          engineWeights: zod
+            .object({
+              linguistic: zod
+                .number()
+                .min(listPresetsResponsePresetsItemEngineWeightsLinguisticMin)
+                .max(listPresetsResponsePresetsItemEngineWeightsLinguisticMax),
+              factual: zod
+                .number()
+                .min(listPresetsResponsePresetsItemEngineWeightsFactualMin)
+                .max(listPresetsResponsePresetsItemEngineWeightsFactualMax),
+              template: zod
+                .number()
+                .min(listPresetsResponsePresetsItemEngineWeightsTemplateMin)
+                .max(listPresetsResponsePresetsItemEngineWeightsTemplateMax),
+              llm: zod
+                .number()
+                .min(listPresetsResponsePresetsItemEngineWeightsLlmMin)
+                .max(listPresetsResponsePresetsItemEngineWeightsLlmMax),
+            })
+            .describe(
+              'Per-engine emphasis weights in the [0, 2] range. 1.0 means \"use the\nplatform default weighting\"; lower values de-emphasise that engine,\nhigher values emphasise it. Currently informational on \/check (the\npage applies sensitivity + slop thresholds locally) but surfaced on\n\/presets so reviewers can compare profiles at a glance.\n',
+            ),
+        })
+        .describe("A single curated preset profile."),
+    ),
+  })
+  .describe(
+    "Curated public preset library returned by `GET \/api\/presets`. The\n`version` string lets clients cache-bust when curators ship a new\nrevision of `presets.json`.\n",
+  );
+
+/**
  * Task #617 — Public, read-only summary of the rolling weekly
 T1-vs-T3 mean composite spread. Wraps the internal AVRI drift
 compute and strips every reviewer-only field (cohort sample IDs,

@@ -9,6 +9,7 @@ import latencyRouter from "./latency";
 import testFixturesRouter from "./test-fixtures";
 import newsletterRouter from "./newsletter";
 import cohortRouter from "./cohort";
+import presetsRouter from "./presets";
 
 const router: IRouter = Router();
 
@@ -20,6 +21,7 @@ router.use(statsRouter);
 router.use(latencyRouter);
 router.use(newsletterRouter);
 router.use(cohortRouter);
+router.use(presetsRouter);
 router.use(publicRouter);
 // v3.6.0 §7: Dev-only test endpoint at GET /api/test/run. The handler itself
 // returns 404 in production, so it is safe to mount unconditionally here.

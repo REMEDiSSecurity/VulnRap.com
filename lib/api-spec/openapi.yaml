@@ -22,6 +22,8 @@ tags:
     description: Cohort baseline distributions for contextualizing scores
   - name: public
     description: Public-safe transparency endpoints (no reviewer-only fields)
+  - name: presets
+    description: Curated public preset library (sensitivity + per-engine weights)
 paths:
   /healthz:
     get:
@@ -761,6 +763,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /presets:
+    get:
+      operationId: listPresets
+      tags: [presets]
+      summary: List curated scoring presets
+      description: |
+        Task #631 — Returns the curated preset library (sensitivity profiles
+        plus per-engine weights). Sourced from a static JSON file shipped
+        with the api-server; safe to cache for an hour. Each preset has an
+        opaque `id` that the `/check` page accepts via `?preset=<id>` to
+        load the configuration into local settings.
+      responses:
+        "200":
+          description: Curated preset library
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresetLibrary"
 
   /public/drift-summary:
     get:
@@ -6061,3 +6082,82 @@ components:
           items:
             $ref: "#/components/schemas/TrendsFeedbackItem"
       required: [days, totalReports, totalFeedback, dailyReports, feedbackTrend]
+
+    PresetEngineWeights:
+      type: object
+      description: |
+        Per-engine emphasis weights in the [0, 2] range. 1.0 means "use the
+        platform default weighting"; lower values de-emphasise that engine,
+        higher values emphasise it. Currently informational on /check (the
+        page applies sensitivity + slop thresholds locally) but surfaced on
+        /presets so reviewers can compare profiles at a glance.
+      properties:
+        linguistic:
+          type: number
+          minimum: 0
+          maximum: 2
+        factual:
+          type: number
+          minimum: 0
+          maximum: 2
+        template:
+          type: number
+          minimum: 0
+          maximum: 2
+        llm:
+          type: number
+          minimum: 0
+          maximum: 2
+      required: [linguistic, factual, template, llm]
+
+    PresetEntry:
+      type: object
+      description: A single curated preset profile.
+      properties:
+        id:
+          type: string
+          description: Opaque slug used in `/check?preset=<id>` deep-links.
+        name:
+          type: string
+        description:
+          type: string
+        audience:
+          type: string
+          description: Who this preset is calibrated for (free text).
+        sensitivity:
+          type: string
+          enum: [lenient, balanced, strict]
+        slopThresholdLow:
+          type: integer
+          minimum: 0
+          maximum: 100
+        slopThresholdHigh:
+          type: integer
+          minimum: 0
+          maximum: 100
+        engineWeights:
+          $ref: "#/components/schemas/PresetEngineWeights"
+      required:
+        - id
+        - name
+        - description
+        - audience
+        - sensitivity
+        - slopThresholdLow
+        - slopThresholdHigh
+        - engineWeights
+
+    PresetLibrary:
+      type: object
+      description: |
+        Curated public preset library returned by `GET /api/presets`. The
+        `version` string lets clients cache-bust when curators ship a new
+        revision of `presets.json`.
+      properties:
+        version:
+          type: string
+        presets:
+          type: array
+          items:
+            $ref: "#/components/schemas/PresetEntry"
+      required: [version, presets]

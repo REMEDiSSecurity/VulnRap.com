@@ -69,6 +69,7 @@ import type {
   NewsletterSubscribeBody,
   NewsletterSubscribeResponse,
   PlatformStats,
+  PresetLibrary,
   PublicDriftSummary,
   RecentActivity,
   ReportAnalysis,
@@ -2167,6 +2168,87 @@ export function useGetAvriDriftRearmHistory<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAvriDriftRearmHistoryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #631 — Returns the curated preset library (sensitivity profiles
+plus per-engine weights). Sourced from a static JSON file shipped
+with the api-server; safe to cache for an hour. Each preset has an
+opaque `id` that the `/check` page accepts via `?preset=<id>` to
+load the configuration into local settings.
+
+ * @summary List curated scoring presets
+ */
+export const getListPresetsUrl = () => {
+  return `/api/presets`;
+};
+
+export const listPresets = async (
+  options?: RequestInit,
+): Promise<PresetLibrary> => {
+  return customFetch<PresetLibrary>(getListPresetsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPresetsQueryKey = () => {
+  return [`/api/presets`] as const;
+};
+
+export const getListPresetsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPresets>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPresets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListPresetsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listPresets>>> = ({
+    signal,
+  }) => listPresets({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPresets>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPresetsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPresets>>
+>;
+export type ListPresetsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List curated scoring presets
+ */
+
+export function useListPresets<
+  TData = Awaited<ReturnType<typeof listPresets>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPresets>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPresetsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

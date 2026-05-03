@@ -3446,6 +3446,81 @@ export interface TrendsData {
 }
 
 /**
+ * Per-engine emphasis weights in the [0, 2] range. 1.0 means "use the
+platform default weighting"; lower values de-emphasise that engine,
+higher values emphasise it. Currently informational on /check (the
+page applies sensitivity + slop thresholds locally) but surfaced on
+/presets so reviewers can compare profiles at a glance.
+
+ */
+export interface PresetEngineWeights {
+  /**
+   * @minimum 0
+   * @maximum 2
+   */
+  linguistic: number;
+  /**
+   * @minimum 0
+   * @maximum 2
+   */
+  factual: number;
+  /**
+   * @minimum 0
+   * @maximum 2
+   */
+  template: number;
+  /**
+   * @minimum 0
+   * @maximum 2
+   */
+  llm: number;
+}
+
+export type PresetEntrySensitivity =
+  (typeof PresetEntrySensitivity)[keyof typeof PresetEntrySensitivity];
+
+export const PresetEntrySensitivity = {
+  lenient: "lenient",
+  balanced: "balanced",
+  strict: "strict",
+} as const;
+
+/**
+ * A single curated preset profile.
+ */
+export interface PresetEntry {
+  /** Opaque slug used in `/check?preset=<id>` deep-links. */
+  id: string;
+  name: string;
+  description: string;
+  /** Who this preset is calibrated for (free text). */
+  audience: string;
+  sensitivity: PresetEntrySensitivity;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  slopThresholdLow: number;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  slopThresholdHigh: number;
+  engineWeights: PresetEngineWeights;
+}
+
+/**
+ * Curated public preset library returned by `GET /api/presets`. The
+`version` string lets clients cache-bust when curators ship a new
+revision of `presets.json`.
+
+ */
+export interface PresetLibrary {
+  version: string;
+  presets: PresetEntry[];
+}
+
+/**
  * Privacy mode — full shares content, similarity_only stores only hashes
  */
 export type SubmitReportBodyContentMode =

@@ -1,0 +1,126 @@
+{
+  "$comment": "Task #631 — Curated public preset library. Each preset bundles a sensitivity calibration plus per-engine weights so PSIRT/triage teams can pick a starting profile from /presets and deep-link to /check?preset=<id>. Weights are informational descriptors of how each scoring engine is emphasised; the /check page applies sensitivity + slop thresholds to local settings when a preset is loaded. Keep weights in [0, 2] and sensitivity in {lenient, balanced, strict}. Edit this file (and bump the version when shipping changes) — there is no admin UI for v1.",
+  "version": "1.0.0",
+  "presets": [
+    {
+      "id": "psirt-aggressive",
+      "name": "PSIRT Aggressive",
+      "description": "Tuned for PSIRT inboxes drowning in AI-generated noise. Strict sensitivity with heavy weighting on factual fabrication and template detection so obvious slop fails fast.",
+      "audience": "PSIRT teams triaging public disclosure mailboxes",
+      "sensitivity": "strict",
+      "slopThresholdLow": 15,
+      "slopThresholdHigh": 60,
+      "engineWeights": {
+        "linguistic": 1.2,
+        "factual": 1.6,
+        "template": 1.5,
+        "llm": 1.1
+      }
+    },
+    {
+      "id": "bounty-triage-conservative",
+      "name": "Bounty Triage Conservative",
+      "description": "Balanced calibration for paid-bounty triage. Avoids penalising terse human-authored reports while still catching wholesale fabrication.",
+      "audience": "Bug bounty triagers who pay per valid report",
+      "sensitivity": "balanced",
+      "slopThresholdLow": 25,
+      "slopThresholdHigh": 75,
+      "engineWeights": {
+        "linguistic": 0.8,
+        "factual": 1.2,
+        "template": 1.0,
+        "llm": 1.0
+      }
+    },
+    {
+      "id": "maintainer-minimal-noise",
+      "name": "Maintainer Minimal Noise",
+      "description": "Lenient profile for solo open-source maintainers. Surfaces only high-confidence slop so first-time human contributors are not scared off.",
+      "audience": "Open-source project maintainers",
+      "sensitivity": "lenient",
+      "slopThresholdLow": 30,
+      "slopThresholdHigh": 80,
+      "engineWeights": {
+        "linguistic": 0.7,
+        "factual": 1.0,
+        "template": 0.9,
+        "llm": 0.8
+      }
+    },
+    {
+      "id": "appsec-internal",
+      "name": "AppSec Internal Pentest",
+      "description": "For internal AppSec teams reviewing reports from contracted pentesters. Boosts factual & template signals, expects high evidence quality.",
+      "audience": "Internal AppSec / product security teams",
+      "sensitivity": "strict",
+      "slopThresholdLow": 20,
+      "slopThresholdHigh": 65,
+      "engineWeights": {
+        "linguistic": 1.0,
+        "factual": 1.4,
+        "template": 1.3,
+        "llm": 1.0
+      }
+    },
+    {
+      "id": "academic-disclosure",
+      "name": "Academic Disclosure",
+      "description": "For academic researchers writing long-form coordinated disclosures. Linguistic patterns common in papers (formal voice, hedging) are de-emphasised.",
+      "audience": "Academic researchers & coordinated disclosure programs",
+      "sensitivity": "balanced",
+      "slopThresholdLow": 30,
+      "slopThresholdHigh": 80,
+      "engineWeights": {
+        "linguistic": 0.6,
+        "factual": 1.3,
+        "template": 1.1,
+        "llm": 1.0
+      }
+    },
+    {
+      "id": "ai-allowlist",
+      "name": "AI-Assisted Allowlist",
+      "description": "Acknowledges that human reporters increasingly use LLMs to draft. Down-weights linguistic AI signals while keeping factual + template scrutiny intact.",
+      "audience": "Programs that explicitly allow LLM-assisted authoring",
+      "sensitivity": "lenient",
+      "slopThresholdLow": 35,
+      "slopThresholdHigh": 80,
+      "engineWeights": {
+        "linguistic": 0.5,
+        "factual": 1.3,
+        "template": 1.1,
+        "llm": 0.6
+      }
+    },
+    {
+      "id": "vendor-coordinator",
+      "name": "Vendor Coordinator",
+      "description": "For vendor coordinators ingesting reports from many programs. Balanced weights, slightly stricter than default to flag obvious cross-program duplicates and templates.",
+      "audience": "Multi-product vendor coordinators (e.g. CNAs)",
+      "sensitivity": "balanced",
+      "slopThresholdLow": 22,
+      "slopThresholdHigh": 70,
+      "engineWeights": {
+        "linguistic": 1.0,
+        "factual": 1.2,
+        "template": 1.3,
+        "llm": 1.0
+      }
+    },
+    {
+      "id": "research-strict",
+      "name": "Research Strict",
+      "description": "Maximum sensitivity for calibration / corpus research where false negatives are worse than false positives.",
+      "audience": "Researchers calibrating downstream classifiers",
+      "sensitivity": "strict",
+      "slopThresholdLow": 10,
+      "slopThresholdHigh": 50,
+      "engineWeights": {
+        "linguistic": 1.4,
+        "factual": 1.6,
+        "template": 1.5,
+        "llm": 1.3
+      }
+    }
+  ]
+}

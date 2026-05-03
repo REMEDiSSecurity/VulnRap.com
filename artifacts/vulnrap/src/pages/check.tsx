@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { UploadCloud, Shield, Loader2, CheckCircle, XCircle, Search, AlertTriangle, ClipboardPaste, Hash, Layers, Lightbulb, ShieldCheck, HelpCircle, ExternalLink, Link2, BarChart3, Target, Brain, Cpu, FileText, Eye, Gauge, AlertCircle, ChevronDown, ChevronUp, Leaf, MessageSquareWarning, Copy, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, Zap, Sliders } from "lucide-react";
-import { useCheckReport, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type CheckReportBody, type TriageAssistant, type GapItem } from "@workspace/api-client-react";
+import { useCheckReport, useListPresets, getListPresetsQueryKey, type Verification, type VerificationCheck, type VerificationSummary, type TriageRecommendation, type ChallengeQuestion, type TemporalSignal, type TemplateMatch, type RevisionResult, type CheckReportBody, type TriageAssistant, type GapItem } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -420,6 +420,11 @@ export default function Check() {
   // Task #628 — Per-signal mute/boost adjustments live entirely in the URL
   // query string (no localStorage, no server round-trip) so a session can be
   // shared by copying the link.
+  // Task #631 — `?preset=<id>` deep-links from `/presets` share the same
+  // URL surface, so both handlers read from the same `useSearchParams`
+  // tuple. Presets seed sensitivity + slop thresholds; per-signal
+  // adjustments layer on top via the SIGNAL_ADJUSTMENTS_URL_PARAM key,
+  // which is independent of the `preset` key.
   const [searchParams, setSearchParams] = useSearchParams();
   const signalAdjustments = useMemo(
     () => parseSignalAdjustments(searchParams.get(SIGNAL_ADJUSTMENTS_URL_PARAM)),
@@ -440,6 +445,43 @@ export default function Check() {
       { replace: true },
     );
   };
+
+  const presetIdParam = searchParams.get("preset");
+  const { data: presetLibrary } = useListPresets({
+    query: { enabled: !!presetIdParam, queryKey: getListPresetsQueryKey() },
+  });
+  const appliedPresetIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!presetIdParam || !presetLibrary) return;
+    if (appliedPresetIdRef.current === presetIdParam) return;
+    const match = presetLibrary.presets.find((p) => p.id === presetIdParam);
+    if (!match) {
+      toast({
+        title: "Unknown preset",
+        description: `No curated preset matches "${presetIdParam}". Pick one from the preset library.`,
+        variant: "destructive",
+      });
+      appliedPresetIdRef.current = presetIdParam;
+      const next = new URLSearchParams(searchParams);
+      next.delete("preset");
+      setSearchParams(next, { replace: true });
+      return;
+    }
+    appliedPresetIdRef.current = presetIdParam;
+    saveSettings({
+      sensitivityPreset: match.sensitivity,
+      slopThresholdLow: match.slopThresholdLow,
+      slopThresholdHigh: match.slopThresholdHigh,
+    });
+    setSensitivity(match.sensitivity);
+    toast({
+      title: `Preset loaded: ${match.name}`,
+      description: `Sensitivity ${match.sensitivity}, slop tiers ${match.slopThresholdLow}/${match.slopThresholdHigh}.`,
+    });
+    const next = new URLSearchParams(searchParams);
+    next.delete("preset");
+    setSearchParams(next, { replace: true });
+  }, [presetIdParam, presetLibrary, searchParams, setSearchParams, toast]);
 
   const checkMutation = useCheckReport({
     mutation: {
