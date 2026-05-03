@@ -464,6 +464,105 @@ func main() {
       <div className="space-y-4">
         <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
           <Plug className="w-5 h-5 text-primary" />
+          GitHub Action
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Drop-in composite action that scores incoming security advisory PRs
+          (or VDP issue bodies) against VulnRap and exposes the slop score,
+          tier, and triage verdict as step outputs you can gate merges on or
+          post back as PR comments. Pure <code className="font-mono text-xs text-foreground">bash</code> + <code className="font-mono text-xs text-foreground">curl</code> + <code className="font-mono text-xs text-foreground">jq</code>,
+          no <code className="font-mono text-xs text-foreground">node_modules</code>.
+        </p>
+
+        <Card className="glass-card rounded-xl" data-testid="card-github-action">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Badge variant="outline" className="border-primary/40 text-primary text-[10px] font-mono uppercase">GitHub Action</Badge>
+              <code className="text-primary font-mono text-xs">vulnrap/vulnrap/sdks/github-action</code>
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Inputs: <code className="font-mono text-xs text-foreground">report-text</code> or{" "}
+              <code className="font-mono text-xs text-foreground">report-file</code>,{" "}
+              optional <code className="font-mono text-xs text-foreground">fail-threshold</code> (default 70).
+              Outputs: <code className="font-mono text-xs text-foreground">slop-score</code>,{" "}
+              <code className="font-mono text-xs text-foreground">slop-tier</code>,{" "}
+              <code className="font-mono text-xs text-foreground">verdict</code>,{" "}
+              <code className="font-mono text-xs text-foreground">quality-score</code>,{" "}
+              <code className="font-mono text-xs text-foreground">confidence</code>,{" "}
+              <code className="font-mono text-xs text-foreground">similarity-match-count</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <CopyBlock language="yaml" code={`name: VulnRap triage
+
+on:
+  pull_request:
+    paths:
+      - "advisories/**.md"
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed so the diff against the base branch works
+
+      - name: Pick the changed advisory
+        id: pick
+        run: |
+          file=$(git diff --name-only origin/\${{ github.base_ref }}... \\
+                  | grep -E '^advisories/.*\\.md$' | head -n1)
+          echo "file=\${file}" >> "$GITHUB_OUTPUT"
+
+      - name: Score with VulnRap
+        id: vulnrap
+        if: steps.pick.outputs.file != ''
+        uses: vulnrap/vulnrap/sdks/github-action@main
+        with:
+          report-file: \${{ steps.pick.outputs.file }}
+          fail-threshold: 80   # block the PR if it scores 80+
+
+      - name: Comment on the PR
+        if: steps.pick.outputs.file != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const score   = \`\${{ steps.vulnrap.outputs.slop-score }}\`;
+            const tier    = \`\${{ steps.vulnrap.outputs.slop-tier }}\`;
+            const verdict = \`\${{ steps.vulnrap.outputs.verdict }}\`;
+            const dupes   = \`\${{ steps.vulnrap.outputs.similarity-match-count }}\`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: \`### VulnRap analysis\\n\\n- **Slop score:** \${score}/100 (\${tier})\\n- **Verdict:** \\\`\${verdict}\\\`\\n- **Similar reports:** \${dupes}\`,
+            });`} />
+            <a
+              href="https://github.com/vulnrap/vulnrap/blob/main/sdks/github-action/README.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              data-testid="link-github-action-readme"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Read the GitHub Action docs
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <p className="text-[11px] text-muted-foreground/60 italic mt-2">
+              Repo path: <code className="font-mono">sdks/github-action/</code>
+              {" "}— not published to the Marketplace; reference by repo path or vendor it.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
+          <Plug className="w-5 h-5 text-primary" />
           Integration Recipes
         </h2>
         <p className="text-sm text-muted-foreground">

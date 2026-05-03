@@ -1,0 +1,70 @@
+name: "VulnRap Report Scorer"
+description: "Score a vulnerability advisory or VDP report against the VulnRap multi-engine pipeline and expose the slop score, tier and triage verdict as outputs."
+author: "VulnRap"
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  report-text:
+    description: "Inline report text. Mutually exclusive with report-file. One of report-text / report-file is required."
+    required: false
+    default: ""
+  report-file:
+    description: "Path to a report file inside the workspace (.txt, .md, .pdf). Mutually exclusive with report-text."
+    required: false
+    default: ""
+  api-base-url:
+    description: "Base URL of the VulnRap API. Override for self-hosted deployments."
+    required: false
+    default: "https://vulnrap.com"
+  fail-threshold:
+    description: "Composite slop score (0-100) at which the action exits non-zero. Set to a number above 100 (e.g. 999) to never fail. Default 70."
+    required: false
+    default: "70"
+  skip-llm:
+    description: "Skip LLM analysis — use only local heuristic/statistical scoring."
+    required: false
+    default: "false"
+  skip-redaction:
+    description: "Skip PII auto-redaction (forces skip-llm true server-side)."
+    required: false
+    default: "false"
+
+outputs:
+  slop-score:
+    description: "Composite slop score (0-100). Higher = more likely AI slop / low-substance."
+    value: ${{ steps.score.outputs.slop-score }}
+  slop-tier:
+    description: "Human-readable slop tier name returned by the API."
+    value: ${{ steps.score.outputs.slop-tier }}
+  verdict:
+    description: "Triage verdict derived from the API's archetype field. One of AUTO_CLOSE, REQUEST_DETAILS, PRIORITIZE_REVIEW, ACCEPT, UNKNOWN."
+    value: ${{ steps.score.outputs.verdict }}
+  quality-score:
+    description: "Quality / completeness score (0-100, higher is better)."
+    value: ${{ steps.score.outputs.quality-score }}
+  confidence:
+    description: "Confidence in the slop score (0.0-1.0)."
+    value: ${{ steps.score.outputs.confidence }}
+  similarity-match-count:
+    description: "Number of near-duplicate reports detected in the public corpus."
+    value: ${{ steps.score.outputs.similarity-match-count }}
+  raw-json:
+    description: "Path to the raw JSON response written under $RUNNER_TEMP."
+    value: ${{ steps.score.outputs.raw-json }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Score report against VulnRap
+      id: score
+      shell: bash
+      env:
+        INPUT_REPORT_TEXT: ${{ inputs.report-text }}
+        INPUT_REPORT_FILE: ${{ inputs.report-file }}
+        INPUT_API_BASE_URL: ${{ inputs.api-base-url }}
+        INPUT_FAIL_THRESHOLD: ${{ inputs.fail-threshold }}
+        INPUT_SKIP_LLM: ${{ inputs.skip-llm }}
+        INPUT_SKIP_REDACTION: ${{ inputs.skip-redaction }}
+      run: ${{ github.action_path }}/entrypoint.sh
