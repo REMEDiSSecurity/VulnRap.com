@@ -1465,13 +1465,22 @@ test.describe("Bulk-removal preview panel (Task #154)", () => {
       expect(dryRunBodies).toHaveLength(1);
       expect([...dryRunBodies[0].phrases].sort()).toEqual([...phrases].sort());
 
-      // Open the per-phrase outcomes list and dismiss the only
-      // high-thrash row. The `dropPhraseFromBulkPreview` helper schedules
-      // a ~250ms debounced re-fetch with the surviving 1-phrase list.
-      await panel
-        .getByTestId("handwavy-bulk-preview-results-details")
-        .locator("summary")
-        .click();
+      // Open the per-phrase outcomes list (only if it isn't already
+      // open — Task #257 makes it auto-expand when the batch contains a
+      // high-thrash phrase, which it does here, so an unconditional
+      // summary click would COLLAPSE the list and hide the dismiss
+      // button) and dismiss the only high-thrash row. The
+      // `dropPhraseFromBulkPreview` helper schedules a ~250ms debounced
+      // re-fetch with the surviving 1-phrase list.
+      const outcomesDetails = panel.getByTestId(
+        "handwavy-bulk-preview-results-details",
+      );
+      const alreadyOpen = await outcomesDetails.evaluate(
+        (el) => (el as HTMLDetailsElement).open,
+      );
+      if (!alreadyOpen) {
+        await outcomesDetails.locator("summary").click();
+      }
       await panel
         .locator(
           `[data-testid="handwavy-bulk-preview-result-drop"][data-phrase="${thrashy}"]`,
