@@ -38,6 +38,7 @@ const Blog = lazyRetry(() => import("@/pages/blog"));
 const Changelog = lazyRetry(() => import("@/pages/changelog"));
 const History = lazyRetry(() => import("@/pages/history"));
 const Compare = lazyRetry(() => import("@/pages/compare"));
+const CompareDetectors = lazyRetry(() => import("@/pages/compare-detectors"));
 const Batch = lazyRetry(() => import("@/pages/batch"));
 const FeedbackAnalytics = lazyRetry(() => import("@/pages/feedback-analytics"));
 const ReportsExplorer = lazyRetry(() => import("@/pages/reports"));
@@ -85,6 +86,7 @@ function AppRoutes() {
             <Route path="/changelog" element={<Changelog />} />
             <Route path="/history" element={<History />} />
             <Route path="/compare" element={<Compare />} />
+            <Route path="/compare-detectors" element={<CompareDetectors />} />
             <Route path="/batch" element={<Batch />} />
             <Route path="/feedback-analytics" element={<FeedbackAnalytics />} />
             <Route path="/reports" element={<ReportsExplorer />} />

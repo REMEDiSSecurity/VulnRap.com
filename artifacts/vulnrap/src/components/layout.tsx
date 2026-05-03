@@ -3,8 +3,8 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Activity, Search, Code, BookOpen, MessageSquare, Menu, X, Github,
   Clock, GitCompare, UploadCloud, BarChart3, Database, Eye, FileText,
-  ChevronDown, FileEdit, Sparkles, Users, Network, FlaskConical, Library, ScrollText,
-  Compass,
+  ChevronDown, FileEdit, Sparkles, Users, Network, FlaskConical, Library,
+  ScrollText, Scale, Compass,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
@@ -72,7 +72,7 @@ const NAV: NavEntry[] = [
   {
     label: "Docs",
     icon: <BookOpen className="w-3.5 h-3.5" />,
-    matchPrefixes: ["/developers", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works"],
+    matchPrefixes: ["/developers", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works", "/compare-detectors"],
     align: "right",
     items: [
       { to: "/how-it-works", label: "How It Works", icon: <Compass className="w-4 h-4" />, description: "Interactive walkthrough of the scoring pipeline, step by step." },
@@ -81,6 +81,7 @@ const NAV: NavEntry[] = [
       { to: "/engines/substance", label: "Substance Engine", icon: <FlaskConical className="w-4 h-4" />, description: "Engine 2 deep-dive: technical substance density." },
       { to: "/presets", label: "Presets", icon: <Library className="w-4 h-4" />, description: "Curated sensitivity + per-engine weight profiles for common triage workflows." },
       { to: "/whitepaper", label: "Whitepaper", icon: <ScrollText className="w-4 h-4" />, description: "Long-form, citation-style methodology document — print-friendly." },
+      { to: "/compare-detectors", label: "Compare Detectors", icon: <Scale className="w-4 h-4" />, description: "Capability matrix vs. generic LLM detectors, plagiarism checkers, and manual triage." },
       { to: "/blog", label: "Blog", icon: <FileText className="w-4 h-4" />, description: "Field tests, methodology, and post-mortems." },
       { to: "/changelog", label: "Changelog", icon: <BookOpen className="w-4 h-4" />, description: "Per-release notes and version history." },
       { to: "/community", label: "Community", icon: <Users className="w-4 h-4" />, description: "GitHub, mailing list, and how to contribute." },
