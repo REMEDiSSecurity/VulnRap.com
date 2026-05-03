@@ -4,8 +4,10 @@ import {
   type Page,
   type Route,
 } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
+import {
+  injectCalibrationTokenIntoPage,
+  uniquePhrase,
+} from "./helpers/handwavy";
 
 // Task #231 — End-to-end coverage for the reviewer-tunable production-scan
 // window control added in Task #125. The control was previously only
@@ -147,7 +149,7 @@ test.describe("Hand-wavy production-scan-window control (Task #231)", () => {
   test("Valid custom limit is forwarded to the API and surfaced in the production-block subtitle", async ({
     page,
   }) => {
-    const phrase = `task231 valid ${randomUUID().replace(/-/g, "").slice(0, 8)}`;
+    const phrase = uniquePhrase("task231 valid");
     const customLimit = 5000;
     const captured: { value: CapturedDryRunRequest | null } = { value: null };
 
@@ -269,7 +271,7 @@ test.describe("Hand-wavy production-scan-window control (Task #231)", () => {
   test("Reviewer-chosen window persists across a full page reload via localStorage", async ({
     page,
   }) => {
-    const phrase = `task231 persist ${randomUUID().replace(/-/g, "").slice(0, 8)}`;
+    const phrase = uniquePhrase("task231 persist");
     const persistedLimit = 4000;
 
     await injectCalibrationTokenIntoPage(page);

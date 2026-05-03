@@ -1,6 +1,11 @@
-import { test, expect, request, type APIRequestContext } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
+import { test, expect } from "@playwright/test";
+import {
+  addPhrase,
+  cleanup,
+  injectCalibrationTokenIntoPage,
+  newApiContext,
+  uniquePhrases,
+} from "./helpers/handwavy";
 
 // Task #238 — End-to-end coverage for the "Retry failed" action that lives
 // on the bulk-remove and bulk-undo results banners. The reviewer kicks off
@@ -8,55 +13,19 @@ import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
 // new banner button re-runs ONLY those failed rows through the same
 // endpoint and replaces the banner with the fresh per-phrase outcomes.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-const CALIBRATION_TOKEN =
-  process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
-
-function uniquePhrases(count: number, label = "synthetic"): string[] {
-  const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  return Array.from(
-    { length: count },
-    (_, i) => `task238 retry ${id} ${label} ${i + 1}`,
-  );
-}
-
-function authHeaders(): Record<string, string> {
-  return CALIBRATION_TOKEN
-    ? { "X-Calibration-Token": CALIBRATION_TOKEN }
-    : {};
-}
-
-async function addPhrase(api: APIRequestContext, phrase: string): Promise<void> {
-  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    headers: authHeaders(),
-    data: { phrase, category: "hedging", reviewer: "e2e-task238" },
-  });
-  expect(
-    res.ok(),
-    `POST handwavy-phrases failed for "${phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      headers: authHeaders(),
-      data: { phrases, reviewer: "e2e-task238-cleanup" },
-    })
-    .catch(() => undefined);
-}
+const REVIEWER = "e2e-task238";
+const CLEANUP_REVIEWER = "e2e-task238-cleanup";
 
 test.describe("Retry failed on bulk results banner (Task #238)", () => {
   test("Bulk-remove banner exposes Retry failed and re-runs only the failed phrase", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(2, "remove-mixed");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task238 retry remove-mixed");
     const [, transientPhrase] = phrases;
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -155,7 +124,7 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
         ).toHaveCount(0, { timeout: 15_000 });
       }
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -163,11 +132,11 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
   test("Retry failed is hidden on an all-success bulk-remove banner", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(2, "all-success");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task238 retry all-success");
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -195,7 +164,7 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
       ).toHaveCount(phrases.length);
       await expect(banner.getByTestId("handwavy-bulk-retry-failed")).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -203,13 +172,13 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
   test("Retry failed honors the calibration cooldown after a 429 lands mid-batch (Task #335)", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(2, "retry-cooldown");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task238 retry retry-cooldown");
     const [, transientPhrase] = phrases;
     const COOLDOWN_SECONDS = 5;
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -338,7 +307,7 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
       expect(postCooldownDeletes).toBe(deletesBeforeForceClick);
     } finally {
       await page.unroute("**/api/feedback/calibration/handwavy-phrases");
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -346,12 +315,12 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
   test("Bulk-undo banner exposes Retry failed and re-runs only the failed reinstate", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = uniquePhrases(2, "undo-mixed");
+    const apiCtx = await newApiContext();
+    const phrases = uniquePhrases(2, "task238 retry undo-mixed");
     const [, transientPhrase] = phrases;
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -452,7 +421,7 @@ test.describe("Retry failed on bulk results banner (Task #238)", () => {
       // No more retryable failures.
       await expect(banner.getByTestId("handwavy-bulk-retry-failed")).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });

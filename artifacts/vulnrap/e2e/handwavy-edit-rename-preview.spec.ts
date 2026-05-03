@@ -1,6 +1,11 @@
-import { test, expect, request, type APIRequestContext } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
+import { test, expect } from "@playwright/test";
+import {
+  addPhrase,
+  cleanup,
+  injectCalibrationTokenIntoPage,
+  newApiContext,
+  uniquePhrase,
+} from "./helpers/handwavy";
 
 // Task #247 — End-to-end coverage for the per-row Edit-then-rename flow
 // in the curated FLAT hand-wavy phrase list. The Edit row used to only
@@ -19,54 +24,25 @@ import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
 //     Trash flow shows and gates the live PATCH behind an explicit
 //     acknowledgment checkbox when valid hand-wavy detections WOULD be
 //     un-flagged.
+//
+// Each seeded phrase carries the `"task247 rename"` prefix (via the
+// shared `uniquePhrase` helper) + a UUID so fixture / production
+// overlap is effectively impossible, guaranteeing a deterministic
+// "no real detections lost" preview for the happy-path test.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-const CALIBRATION_TOKEN =
-  process.env.CALIBRATION_TOKEN || process.env.VITE_CALIBRATION_TOKEN || "";
-
-function uniquePhrase(label = "synthetic"): string {
-  const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  // "task247" + a UUID makes accidental fixture / production overlap
-  // effectively impossible, which guarantees a deterministic
-  // "no real detections lost" preview for the happy-path test.
-  return `task247 rename ${id} ${label}`;
-}
-
-function authHeaders(): Record<string, string> {
-  return CALIBRATION_TOKEN ? { "X-Calibration-Token": CALIBRATION_TOKEN } : {};
-}
-
-async function addPhrase(api: APIRequestContext, phrase: string): Promise<void> {
-  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    headers: authHeaders(),
-    data: { phrase, category: "hedging", reviewer: "e2e-task247" },
-  });
-  expect(
-    res.ok(),
-    `POST handwavy-phrases failed for "${phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      headers: authHeaders(),
-      data: { phrases, reviewer: "e2e-task247-cleanup" },
-    })
-    .catch(() => undefined);
-}
+const REVIEWER = "e2e-task247";
+const CLEANUP_REVIEWER = "e2e-task247-cleanup";
 
 test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
   test("rename with zero impact applies in one click without showing the preview panel", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const original = uniquePhrase("zero-impact-from");
-    const renamed = uniquePhrase("zero-impact-to");
+    const apiCtx = await newApiContext();
+    const original = uniquePhrase("task247 rename", "zero-impact-from");
+    const renamed = uniquePhrase("task247 rename", "zero-impact-to");
 
     try {
-      await addPhrase(apiCtx, original);
+      await addPhrase(apiCtx, original, { reviewer: REVIEWER });
 
       // Track DELETE dry-run previews and live PATCH calls so we can
       // assert exactly one of each landed for the zero-impact path.
@@ -152,7 +128,7 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
         `Expected exactly one PATCH with newPhrase for the zero-impact one-click path, saw ${ownPatch.length}`,
       ).toBe(1);
     } finally {
-      await cleanup(apiCtx, [original, renamed]);
+      await cleanup(apiCtx, [original, renamed], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -160,12 +136,12 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
   test("rename whose dryRun reports valid detections lost surfaces the impact panel and gates the live PATCH behind the acknowledgment checkbox", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const original = uniquePhrase("ack-from");
-    const renamed = uniquePhrase("ack-to");
+    const apiCtx = await newApiContext();
+    const original = uniquePhrase("task247 rename", "ack-from");
+    const renamed = uniquePhrase("task247 rename", "ack-to");
 
     try {
-      await addPhrase(apiCtx, original);
+      await addPhrase(apiCtx, original, { reviewer: REVIEWER });
 
       // Intercept the dryRun=true DELETE for the original phrase and
       // inject a synthetic "valid detections lost" response. Mirrors
@@ -363,7 +339,7 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
         "Expected the live PATCH body to carry newPhrase to perform the rename",
       ).toBe(true);
     } finally {
-      await cleanup(apiCtx, [original, renamed]);
+      await cleanup(apiCtx, [original, renamed], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -392,15 +368,15 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
     const OLDEST_ISO = "2026-04-01T00:00:00.000Z";
     const NEWEST_ISO = "2026-04-29T00:00:00.000Z";
 
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const original = uniquePhrase("range-from");
-    const renamed = uniquePhrase("range-to");
+    const apiCtx = await newApiContext();
+    const original = uniquePhrase("task247 rename", "range-from");
+    const renamed = uniquePhrase("task247 rename", "range-to");
 
     try {
       // Need a real row in the active list so the per-row Edit affordance
       // is mounted; the dryRun=true DELETE is intercepted below so the
       // synthesized impact (with timestamps) drives the rendered panel.
-      await addPhrase(apiCtx, original);
+      await addPhrase(apiCtx, original, { reviewer: REVIEWER });
 
       await page.route(
         "**/api/feedback/calibration/handwavy-phrases",
@@ -524,7 +500,7 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
         panel.getByTestId("handwavy-bulk-preview-curated-range"),
       ).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, [original, renamed]);
+      await cleanup(apiCtx, [original, renamed], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -789,12 +765,12 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
   test("'Back out' on the rename impact preview cancels without firing the live PATCH", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const original = uniquePhrase("backout-from");
-    const renamed = uniquePhrase("backout-to");
+    const apiCtx = await newApiContext();
+    const original = uniquePhrase("task247 rename", "backout-from");
+    const renamed = uniquePhrase("task247 rename", "backout-to");
 
     try {
-      await addPhrase(apiCtx, original);
+      await addPhrase(apiCtx, original, { reviewer: REVIEWER });
 
       let patchCalls = 0;
       await page.route(
@@ -893,7 +869,7 @@ test.describe("Per-row Edit-then-rename impact preview (Task #247)", () => {
         "Back out must not fire a live PATCH",
       ).toBe(0);
     } finally {
-      await cleanup(apiCtx, [original, renamed]);
+      await cleanup(apiCtx, [original, renamed], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });

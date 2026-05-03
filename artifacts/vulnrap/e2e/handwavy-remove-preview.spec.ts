@@ -1,6 +1,11 @@
-import { test, expect, request, type APIRequestContext } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
+import { test, expect } from "@playwright/test";
+import {
+  addPhrase,
+  cleanup,
+  injectCalibrationTokenIntoPage,
+  newApiContext,
+  uniquePhrase,
+} from "./helpers/handwavy";
 
 // Task #173 — End-to-end coverage for the per-row Trash button on the
 // curated FLAT hand-wavy phrase list. The Trash button now first issues
@@ -13,54 +18,25 @@ import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
 //     by the batch confirm step (`BulkRemovalImpactBlock`) and gates the
 //     destructive removal behind an explicit acknowledgment checkbox
 //     when valid hand-wavy detections WOULD be un-flagged.
+//
+// Including "task173" + a UUID in every seeded phrase (via the shared
+// `uniquePhrase` helper, prefix `"task173 preview"`) makes accidental
+// fixture / production overlap effectively impossible, which guarantees
+// a deterministic "no real detections lost" preview for the happy-path
+// test that must short-circuit to the live DELETE.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-const CALIBRATION_TOKEN =
-  process.env.CALIBRATION_TOKEN || process.env.VITE_CALIBRATION_TOKEN || "";
-
-function uniquePhrase(label = "synthetic"): string {
-  const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  // Including "task173" + a UUID makes it almost impossible for these to
-  // accidentally match a fixture or production report — guaranteeing a
-  // deterministic "no real detections lost" preview for the happy-path
-  // test, which must short-circuit to the live DELETE.
-  return `task173 preview ${id} ${label}`;
-}
-
-function authHeaders(): Record<string, string> {
-  return CALIBRATION_TOKEN ? { "X-Calibration-Token": CALIBRATION_TOKEN } : {};
-}
-
-async function addPhrase(api: APIRequestContext, phrase: string): Promise<void> {
-  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    headers: authHeaders(),
-    data: { phrase, category: "hedging", reviewer: "e2e-task173" },
-  });
-  expect(
-    res.ok(),
-    `POST handwavy-phrases failed for "${phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      headers: authHeaders(),
-      data: { phrases, reviewer: "e2e-task173-cleanup" },
-    })
-    .catch(() => undefined);
-}
+const REVIEWER = "e2e-task173";
+const CLEANUP_REVIEWER = "e2e-task173-cleanup";
 
 test.describe("Single-phrase removal-impact preview (Task #173)", () => {
   test("phrase with zero impact still removes in one click without showing the preview panel", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("zero-impact");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task173 preview", "zero-impact");
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
 
       // Track DELETE traffic so we can assert exactly one dryRun preview
       // was issued AND exactly one live DELETE landed.
@@ -122,7 +98,7 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
         `Expected exactly one live DELETE for the zero-impact one-click path, saw ${liveCount}`,
       ).toBe(1);
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -130,11 +106,11 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
   test("phrase whose dryRun reports valid detections lost surfaces the impact panel and gates the live DELETE behind the acknowledgment checkbox", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("ack");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task173 preview", "ack");
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
 
       // Intercept the dryRun=true DELETE for the exact phrase under test
       // and inject a synthetic "valid detections lost" response. This
@@ -278,7 +254,7 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
         `Expected exactly one live DELETE after the ack confirm, saw ${liveDeleteCalls}`,
       ).toBe(1);
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -292,11 +268,11 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
   test("inline sample-match list renders curated + production IDs grouped by tier with production links to the report viewer", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("inline-matches");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task173 preview", "inline-matches");
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
 
       await page.route(
         "**/api/feedback/calibration/handwavy-phrases",
@@ -530,7 +506,7 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
         ),
       ).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -542,11 +518,11 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
   test("inline sample-match list is not rendered when the dry-run returns no sampleMatches", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("no-matches");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task173 preview", "no-matches");
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
 
       await page.route(
         "**/api/feedback/calibration/handwavy-phrases",
@@ -626,7 +602,7 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
         panel.getByTestId("handwavy-remove-preview-matches"),
       ).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -640,8 +616,8 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
   test("inline sample-match list caps each tier at 5 IDs with a per-tier 'Show all N' toggle", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("show-all-toggle");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task173 preview", "show-all-toggle");
 
     // Fill T3_SLOP with the server's hard cap (12 entries) on both corpora —
     // far above the 5-item default — so the toggle MUST be required for the
@@ -657,7 +633,7 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
     );
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
 
       await page.route(
         "**/api/feedback/calibration/handwavy-phrases",
@@ -876,7 +852,7 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
         ).toHaveCount(0);
       }
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -895,11 +871,11 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
   test("production block renders the scan-range line and the curated block does not (Task #218 / #293)", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("scan-range");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task173 preview", "scan-range");
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
 
       await page.route(
         "**/api/feedback/calibration/handwavy-phrases",
@@ -1027,7 +1003,7 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
         page.getByTestId("handwavy-bulk-preview-curated-range"),
       ).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -1035,11 +1011,11 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
   test("'Back out' on the impact preview panel cancels without firing the live DELETE", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("backout");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task173 preview", "backout");
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
 
       let liveDeleteCalls = 0;
       await page.route(
@@ -1128,7 +1104,7 @@ test.describe("Single-phrase removal-impact preview (Task #173)", () => {
         "Back out must not fire a live DELETE",
       ).toBe(0);
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });

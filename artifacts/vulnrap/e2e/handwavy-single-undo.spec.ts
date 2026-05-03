@@ -1,6 +1,11 @@
-import { test, expect, request, type APIRequestContext, type Page } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
+import { test, expect, type Page } from "@playwright/test";
+import {
+  addPhrase,
+  cleanup,
+  injectCalibrationTokenIntoPage,
+  newApiContext,
+  uniquePhrase,
+} from "./helpers/handwavy";
 
 // Task #237 / #332 — E2E coverage for the post-Trash Undo stack. Each
 // successful per-row Trash pushes onto a bounded stack so the reviewer
@@ -11,41 +16,8 @@ import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
 // the OLDER stacked entry while leaving the newer one intact — the
 // gap the original Task #237 banner couldn't close.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-const CALIBRATION_TOKEN =
-  process.env.E2E_CALIBRATION_TOKEN || "e2e-calibration-token";
-
-function uniquePhrase(label = "synthetic"): string {
-  const id = randomUUID().replace(/-/g, "").slice(0, 12);
-  return `task237 undo ${id} ${label}`;
-}
-
-function authHeaders(): Record<string, string> {
-  return CALIBRATION_TOKEN
-    ? { "X-Calibration-Token": CALIBRATION_TOKEN }
-    : {};
-}
-
-async function addPhrase(api: APIRequestContext, phrase: string): Promise<void> {
-  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    headers: authHeaders(),
-    data: { phrase, category: "hedging", reviewer: "e2e-task237" },
-  });
-  expect(
-    res.ok(),
-    `POST handwavy-phrases failed for "${phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function cleanup(api: APIRequestContext, phrase: string): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      headers: authHeaders(),
-      data: { phrase, reviewer: "e2e-task237-cleanup" },
-    })
-    .catch(() => undefined);
-}
+const REVIEWER = "e2e-task237";
+const CLEANUP_REVIEWER = "e2e-task237-cleanup";
 
 async function trashRow(page: Page, phrase: string): Promise<void> {
   const row = page
@@ -65,11 +37,11 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
   test("Undo banner appears after a single-phrase Trash and reinstates the phrase via the existing endpoint", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("happy");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task237 undo", "happy");
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -101,7 +73,7 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
         page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
       ).toHaveCount(1, { timeout: 15_000 });
     } finally {
-      await cleanup(apiCtx, phrase);
+      await cleanup(apiCtx, phrase, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -109,11 +81,11 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
   test("Dismiss clears the banner without reinstating the phrase", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("dismiss");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task237 undo", "dismiss");
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -132,7 +104,7 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
         page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: phrase }),
       ).toHaveCount(0, { timeout: 5_000 });
     } finally {
-      await cleanup(apiCtx, phrase);
+      await cleanup(apiCtx, phrase, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -140,13 +112,13 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
   test("A second per-row Trash STACKS alongside the first so both stay one-click reversible (Task #332)", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const first = uniquePhrase("first");
-    const second = uniquePhrase("second");
+    const apiCtx = await newApiContext();
+    const first = uniquePhrase("task237 undo", "first");
+    const second = uniquePhrase("task237 undo", "second");
 
     try {
-      await addPhrase(apiCtx, first);
-      await addPhrase(apiCtx, second);
+      await addPhrase(apiCtx, first, { reviewer: REVIEWER });
+      await addPhrase(apiCtx, second, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -174,8 +146,8 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
       await expect(firstEntry).toHaveAttribute("data-phrase", first);
       await expect(secondEntry).toHaveAttribute("data-phrase", second);
     } finally {
-      await cleanup(apiCtx, first);
-      await cleanup(apiCtx, second);
+      await cleanup(apiCtx, first, { reviewer: CLEANUP_REVIEWER });
+      await cleanup(apiCtx, second, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -183,15 +155,15 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
   test('"Undo all" rolls back every stacked per-row Trash in one click and reports succeeded vs. skipped (Task #472)', async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const first = uniquePhrase("undoall-first");
-    const second = uniquePhrase("undoall-second");
-    const third = uniquePhrase("undoall-third");
+    const apiCtx = await newApiContext();
+    const first = uniquePhrase("task237 undo", "undoall-first");
+    const second = uniquePhrase("task237 undo", "undoall-second");
+    const third = uniquePhrase("task237 undo", "undoall-third");
 
     try {
-      await addPhrase(apiCtx, first);
-      await addPhrase(apiCtx, second);
-      await addPhrase(apiCtx, third);
+      await addPhrase(apiCtx, first, { reviewer: REVIEWER });
+      await addPhrase(apiCtx, second, { reviewer: REVIEWER });
+      await addPhrase(apiCtx, third, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -242,9 +214,9 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
         page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: third }),
       ).toHaveCount(1, { timeout: 15_000 });
     } finally {
-      await cleanup(apiCtx, first);
-      await cleanup(apiCtx, second);
-      await cleanup(apiCtx, third);
+      await cleanup(apiCtx, first, { reviewer: CLEANUP_REVIEWER });
+      await cleanup(apiCtx, second, { reviewer: CLEANUP_REVIEWER });
+      await cleanup(apiCtx, third, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -252,13 +224,13 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
   test("Each stacked entry shows a 'Slot N of MAX' position indicator (Task #473)", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const first = uniquePhrase("slot-first");
-    const second = uniquePhrase("slot-second");
+    const apiCtx = await newApiContext();
+    const first = uniquePhrase("task237 undo", "slot-first");
+    const second = uniquePhrase("task237 undo", "slot-second");
 
     try {
-      await addPhrase(apiCtx, first);
-      await addPhrase(apiCtx, second);
+      await addPhrase(apiCtx, first, { reviewer: REVIEWER });
+      await addPhrase(apiCtx, second, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -298,8 +270,8 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
         stack.getByTestId("handwavy-single-undo-evict-warning"),
       ).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, first);
-      await cleanup(apiCtx, second);
+      await cleanup(apiCtx, first, { reviewer: CLEANUP_REVIEWER });
+      await cleanup(apiCtx, second, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -307,16 +279,16 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
   test("At cap, the oldest entry is flagged 'Next Trash evicts this entry' so reviewers see eviction order before it happens (Task #473)", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
+    const apiCtx = await newApiContext();
     // SINGLE_UNDO_MAX is 5 — Trash exactly that many phrases to fill
     // the stack so the oldest entry must wear the urgent affordance.
     const phrases = Array.from({ length: 5 }, (_, i) =>
-      uniquePhrase(`evict-${i}`),
+      uniquePhrase("task237 undo", `evict-${i}`),
     );
 
     try {
       for (const p of phrases) {
-        await addPhrase(apiCtx, p);
+        await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       }
 
       await injectCalibrationTokenIntoPage(page);
@@ -355,7 +327,7 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
       ).toHaveCount(1);
     } finally {
       for (const p of phrases) {
-        await cleanup(apiCtx, p);
+        await cleanup(apiCtx, p, { reviewer: CLEANUP_REVIEWER });
       }
       await apiCtx.dispose();
     }
@@ -364,13 +336,13 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
   test("Undoing the OLDER stacked entry rolls back that specific Trash and leaves the newer entry intact (Task #332)", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const older = uniquePhrase("older");
-    const newer = uniquePhrase("newer");
+    const apiCtx = await newApiContext();
+    const older = uniquePhrase("task237 undo", "older");
+    const newer = uniquePhrase("task237 undo", "newer");
 
     try {
-      await addPhrase(apiCtx, older);
-      await addPhrase(apiCtx, newer);
+      await addPhrase(apiCtx, older, { reviewer: REVIEWER });
+      await addPhrase(apiCtx, newer, { reviewer: REVIEWER });
 
       await injectCalibrationTokenIntoPage(page);
       await page.goto("/feedback-analytics", { waitUntil: "networkidle" });
@@ -409,8 +381,8 @@ test.describe("Per-row post-Trash Undo banner (Task #237)", () => {
         page.locator(`[data-testid="handwavy-row"]`).filter({ hasText: newer }),
       ).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, older);
-      await cleanup(apiCtx, newer);
+      await cleanup(apiCtx, older, { reviewer: CLEANUP_REVIEWER });
+      await cleanup(apiCtx, newer, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });

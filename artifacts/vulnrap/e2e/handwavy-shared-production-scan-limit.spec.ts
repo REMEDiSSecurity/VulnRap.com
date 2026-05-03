@@ -1,6 +1,11 @@
-import { test, expect, request, type APIRequestContext, type Page } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
+import { test, expect, type Page } from "@playwright/test";
+import {
+  addPhrase,
+  cleanup,
+  injectCalibrationTokenIntoPage,
+  newApiContext,
+  uniquePhrase,
+} from "./helpers/handwavy";
 
 // Task #230 — the production-scan window persisted in the calibration UI is
 // the same value across every tool that runs a production-archive scan, not
@@ -22,40 +27,11 @@ import { injectCalibrationTokenIntoPage } from "./helpers/handwavy";
 // the test passes/fails on whether the UI actually plumbed the value
 // through, independent of any server response shape.
 
-const API_PORT = Number(process.env.E2E_API_PORT || 8080);
-const API_BASE = process.env.E2E_API_BASE || `http://127.0.0.1:${API_PORT}`;
-const CALIBRATION_TOKEN = process.env.CALIBRATION_TOKEN || process.env.VITE_CALIBRATION_TOKEN || "";
+const REVIEWER = "e2e-task230";
+const CLEANUP_REVIEWER = "e2e-task230-cleanup";
 
 const LIMIT_KEY = "vulnrap.calibration.productionScanLimit";
 const LEGACY_LIMIT_KEY = "vulnrap.handwavy.productionScanLimit";
-
-function uniquePhrase(label: string): string {
-  return `task230 ${label} ${randomUUID().replace(/-/g, "").slice(0, 12)}`;
-}
-
-function authHeaders(): Record<string, string> {
-  return CALIBRATION_TOKEN ? { "X-Calibration-Token": CALIBRATION_TOKEN } : {};
-}
-
-async function addPhrase(api: APIRequestContext, phrase: string): Promise<void> {
-  const res = await api.post("/api/feedback/calibration/handwavy-phrases", {
-    headers: authHeaders(),
-    data: { phrase, category: "hedging", reviewer: "e2e-task230" },
-  });
-  expect(
-    res.ok(),
-    `POST handwavy-phrases failed for "${phrase}": ${res.status()} ${await res.text()}`,
-  ).toBeTruthy();
-}
-
-async function cleanup(api: APIRequestContext, phrases: string[]): Promise<void> {
-  await api
-    .delete("/api/feedback/calibration/handwavy-phrases", {
-      headers: authHeaders(),
-      data: { phrases, reviewer: "e2e-task230-cleanup" },
-    })
-    .catch(() => undefined);
-}
 
 // Pre-seed the limit key so the calibration page picks it up on first
 // render, with the rendered input pulling from localStorage in its
@@ -104,11 +80,11 @@ test.describe("Task #230 shared production-scan window", () => {
   test("non-default limit propagates to the single-phrase DELETE dry-run request body", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("single");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task230", "single");
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
       // Pre-seed the limit so the input renders with the value already
       // applied; this proves the localStorage value (not just a typed
       // value) flows through to the DELETE preview.
@@ -202,7 +178,7 @@ test.describe("Task #230 shared production-scan window", () => {
       await expect.poll(() => captured.length, { timeout: 15_000 }).toBeGreaterThan(0);
       expect(captured[0]).toBe(750);
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -210,11 +186,11 @@ test.describe("Task #230 shared production-scan window", () => {
   test("non-default limit propagates to the batch DELETE dry-run request body", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrases = [uniquePhrase("batch1"), uniquePhrase("batch2")];
+    const apiCtx = await newApiContext();
+    const phrases = [uniquePhrase("task230", "batch1"), uniquePhrase("task230", "batch2")];
 
     try {
-      for (const p of phrases) await addPhrase(apiCtx, p);
+      for (const p of phrases) await addPhrase(apiCtx, p, { reviewer: REVIEWER });
       await setStoredLimit(page, LIMIT_KEY, "5000");
       await injectCalibrationTokenIntoPage(page);
 
@@ -267,7 +243,7 @@ test.describe("Task #230 shared production-scan window", () => {
       await expect(panel).toBeVisible({ timeout: 15_000 });
       await expect(panel).toContainText(/up to 5000 reports/);
     } finally {
-      await cleanup(apiCtx, phrases);
+      await cleanup(apiCtx, phrases, { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -275,11 +251,11 @@ test.describe("Task #230 shared production-scan window", () => {
   test("default limit (2000) is omitted from the request body so the legacy shape is preserved", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("default");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task230", "default");
 
     try {
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
       // No localStorage seed → default applies.
       await injectCalibrationTokenIntoPage(page);
 
@@ -324,7 +300,7 @@ test.describe("Task #230 shared production-scan window", () => {
       expect(dryRunBodies[0].has).toBe(false);
       expect(dryRunBodies[0].value).toBeUndefined();
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
@@ -354,7 +330,7 @@ test.describe("Task #327 production-scan timestamp range surfaced on every previ
   test("add-phrase preview production block renders the 'Scanned N reports from … to …' line", async ({
     page,
   }) => {
-    const phrase = uniquePhrase("addrange");
+    const phrase = uniquePhrase("task230", "addrange");
 
     // Intercept the add-phrase dryRun POST and synthesize a preview whose
     // production block carries an explicit createdAt window. We don't add
@@ -455,14 +431,14 @@ test.describe("Task #327 production-scan timestamp range surfaced on every previ
   test("single-remove preview production block renders the 'Scanned N reports from … to …' line", async ({
     page,
   }) => {
-    const apiCtx = await request.newContext({ baseURL: API_BASE });
-    const phrase = uniquePhrase("rmrange");
+    const apiCtx = await newApiContext();
+    const phrase = uniquePhrase("task230", "rmrange");
 
     try {
       // Need a real row in the active list so the per-row Trash button
       // is mounted; the dryRun DELETE is intercepted below so the
       // synthesized impact (with timestamps) drives the rendered panel.
-      await addPhrase(apiCtx, phrase);
+      await addPhrase(apiCtx, phrase, { reviewer: REVIEWER });
 
       await page.route(
         "**/api/feedback/calibration/handwavy-phrases",
@@ -562,7 +538,7 @@ test.describe("Task #327 production-scan timestamp range surfaced on every previ
         panel.getByTestId("handwavy-bulk-preview-curated-range"),
       ).toHaveCount(0);
     } finally {
-      await cleanup(apiCtx, [phrase]);
+      await cleanup(apiCtx, [phrase], { reviewer: CLEANUP_REVIEWER });
       await apiCtx.dispose();
     }
   });
