@@ -3860,6 +3860,57 @@ export interface GallerySample {
 }
 
 /**
+ * Curator-assigned severity tier.
+ */
+export type IncidentEntrySeverity =
+  (typeof IncidentEntrySeverity)[keyof typeof IncidentEntrySeverity];
+
+export const IncidentEntrySeverity = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
+} as const;
+
+/**
+ * Task #707 — One public incident postmortem. Severity uses a
+plain four-tier scale; `changelogAnchor` (when present) is the
+anchor fragment of the related `/changelog#anchor` entry so the
+UI can link the remediation to the shipped release notes.
+
+ */
+export interface IncidentEntry {
+  /** Opaque slug for the incident (stable across curator edits). */
+  id: string;
+  /** ISO date the incident started (YYYY-MM-DD). */
+  date: string;
+  /** Human-readable incident duration (e.g. "42 minutes", "3 hours"). */
+  duration: string;
+  /** Curator-assigned severity tier. */
+  severity: IncidentEntrySeverity;
+  /** One-sentence description of what happened. */
+  summary: string;
+  /** Plain-language root cause analysis. */
+  rootCause: string;
+  /** What we changed to prevent recurrence. */
+  remediation: string;
+  /** Optional `/changelog#anchor` fragment linking to the related release notes. */
+  changelogAnchor?: string;
+}
+
+/**
+ * Public incident log returned by `GET /api/incidents`. The
+`version` string lets clients cache-bust when curators ship a
+new revision of `incidents.json`. `incidents` is empty when no
+public incidents have been recorded.
+
+ */
+export interface IncidentLog {
+  version: string;
+  incidents: IncidentEntry[];
+}
+
+/**
  * Curated sample-report gallery returned by `GET /api/gallery`. The
 `version` string lets clients cache-bust when curators ship a new
 revision of `gallery.json`.

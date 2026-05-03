@@ -4,8 +4,8 @@ import {
   Activity, Search, Code, BookOpen, MessageSquare, Menu, X, Github,
   Clock, GitCompare, UploadCloud, BarChart3, Database, Eye, FileText,
   ChevronDown, FileEdit, Sparkles, Users, Network, FlaskConical, Library,
-  ScrollText, Scale, Compass, Rocket, Sliders, Images, ShieldAlert, Radar, BadgeCheck, Map as MapIcon,
-  HeartPulse,
+  ScrollText, Scale, Compass, Rocket, Sliders, Images, ShieldAlert, Radar, BadgeCheck,
+  Map as MapIcon, Siren, HeartPulse,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
@@ -73,7 +73,7 @@ const NAV: NavEntry[] = [
   {
     label: "Docs",
     icon: <BookOpen className="w-3.5 h-3.5" />,
-    matchPrefixes: ["/developers", "/quickstart", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works", "/compare-detectors", "/playground", "/gallery", "/cwe", "/signals", "/badges", "/roadmap", "/status"],
+    matchPrefixes: ["/developers", "/quickstart", "/architecture", "/blog", "/changelog", "/community", "/engines", "/presets", "/whitepaper", "/how-it-works", "/compare-detectors", "/playground", "/gallery", "/cwe", "/signals", "/badges", "/roadmap", "/status", "/incidents"],
     align: "right",
     items: [
       { to: "/quickstart", label: "Quickstart", icon: <Rocket className="w-4 h-4" />, description: "Zero to first scored report in five copy-paste steps." },
@@ -93,6 +93,7 @@ const NAV: NavEntry[] = [
       { to: "/blog", label: "Blog", icon: <FileText className="w-4 h-4" />, description: "Field tests, methodology, and post-mortems." },
       { to: "/changelog", label: "Changelog", icon: <BookOpen className="w-4 h-4" />, description: "Per-release notes and version history." },
       { to: "/roadmap", label: "Roadmap", icon: <MapIcon className="w-4 h-4" />, description: "Now / Next / Later — what's being built and what's queued." },
+      { to: "/incidents", label: "Incidents", icon: <Siren className="w-4 h-4" />, description: "Public postmortems for engine outages, scoring regressions, and calibration mistakes." },
       { to: "/community", label: "Community", icon: <Users className="w-4 h-4" />, description: "GitHub, mailing list, and how to contribute." },
       { to: "/status", label: "Status", icon: <HeartPulse className="w-4 h-4" />, description: "Live API uptime, scoring latency, and per-engine health." },
     ],
@@ -403,6 +404,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Link to="/blog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Blog</Link>
               <Link to="/changelog" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Changelog</Link>
               <Link to="/roadmap" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Roadmap</Link>
+              <Link to="/incidents" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Incidents</Link>
               <Link to="/stats" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Stats</Link>
               <Link to="/transparency" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Impact</Link>
               <Link to="/status" className="text-muted-foreground/80 hover:text-primary transition-colors w-fit">Status</Link>

@@ -1163,6 +1163,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/GalleryResponse"
 
+  /incidents:
+    get:
+      operationId: listIncidents
+      tags: [public]
+      summary: List public incident postmortems
+      description: |
+        Task #707 — Returns the public incident log rendered on
+        `/incidents`. Sourced from a static JSON file shipped with the
+        api-server (curator-edited only — there is no admin/write
+        endpoint). Each entry documents one operational incident
+        (engine outage, scoring regression, calibration mistake) with
+        date, duration, severity, summary, root cause, remediation,
+        and an optional `/changelog#anchor` link to the corresponding
+        release notes. Returns an empty array when no incidents have
+        been recorded.
+      responses:
+        "200":
+          description: Public incident log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentLog"
+
   /public/drift-summary:
     get:
       operationId: getPublicDriftSummary
@@ -7181,6 +7204,58 @@ components:
           minimum: 1
           description: Seed report id; click-through opens `/results/<reportId>`.
       required: [id, label, title, snippet, score, topSignals, reportId]
+
+    IncidentEntry:
+      type: object
+      description: |
+        Task #707 — One public incident postmortem. Severity uses a
+        plain four-tier scale; `changelogAnchor` (when present) is the
+        anchor fragment of the related `/changelog#anchor` entry so the
+        UI can link the remediation to the shipped release notes.
+      properties:
+        id:
+          type: string
+          description: Opaque slug for the incident (stable across curator edits).
+        date:
+          type: string
+          format: date
+          description: ISO date the incident started (YYYY-MM-DD).
+        duration:
+          type: string
+          description: Human-readable incident duration (e.g. "42 minutes", "3 hours").
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+          description: Curator-assigned severity tier.
+        summary:
+          type: string
+          description: One-sentence description of what happened.
+        rootCause:
+          type: string
+          description: Plain-language root cause analysis.
+        remediation:
+          type: string
+          description: What we changed to prevent recurrence.
+        changelogAnchor:
+          type: string
+          description: Optional `/changelog#anchor` fragment linking to the related release notes.
+      required: [id, date, duration, severity, summary, rootCause, remediation]
+
+    IncidentLog:
+      type: object
+      description: |
+        Public incident log returned by `GET /api/incidents`. The
+        `version` string lets clients cache-bust when curators ship a
+        new revision of `incidents.json`. `incidents` is empty when no
+        public incidents have been recorded.
+      properties:
+        version:
+          type: string
+        incidents:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentEntry"
+      required: [version, incidents]
 
     GalleryResponse:
       type: object

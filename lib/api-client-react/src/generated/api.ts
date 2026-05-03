@@ -71,6 +71,7 @@ import type {
   HashLookupResult,
   HealthStatus,
   HoldoutEvalResponse,
+  IncidentLog,
   LatencySnapshot,
   ListHandwavyPhraseRemovalBatchesParams,
   ListPhraseSuggestionsParams,
@@ -3188,6 +3189,91 @@ export function useListGallery<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListGalleryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #707 — Returns the public incident log rendered on
+`/incidents`. Sourced from a static JSON file shipped with the
+api-server (curator-edited only — there is no admin/write
+endpoint). Each entry documents one operational incident
+(engine outage, scoring regression, calibration mistake) with
+date, duration, severity, summary, root cause, remediation,
+and an optional `/changelog#anchor` link to the corresponding
+release notes. Returns an empty array when no incidents have
+been recorded.
+
+ * @summary List public incident postmortems
+ */
+export const getListIncidentsUrl = () => {
+  return `/api/incidents`;
+};
+
+export const listIncidents = async (
+  options?: RequestInit,
+): Promise<IncidentLog> => {
+  return customFetch<IncidentLog>(getListIncidentsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListIncidentsQueryKey = () => {
+  return [`/api/incidents`] as const;
+};
+
+export const getListIncidentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listIncidents>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listIncidents>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListIncidentsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listIncidents>>> = ({
+    signal,
+  }) => listIncidents({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listIncidents>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListIncidentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listIncidents>>
+>;
+export type ListIncidentsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List public incident postmortems
+ */
+
+export function useListIncidents<
+  TData = Awaited<ReturnType<typeof listIncidents>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listIncidents>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListIncidentsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

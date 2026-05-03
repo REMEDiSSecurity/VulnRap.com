@@ -1,0 +1,5 @@
+{
+  "$comment": "Task #707 — Public incident postmortems. Each entry documents one operational incident (engine outage, scoring regression, calibration mistake) with what happened, root cause, remediation, and a link to the relevant changelog anchor. Curator-edited only; bump `version` when shipping changes. Empty array means we have no public incidents on file.",
+  "version": "1.0.0",
+  "incidents": []
+}

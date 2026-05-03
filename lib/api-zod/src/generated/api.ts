@@ -3703,6 +3703,66 @@ export const ListGalleryResponse = zod
   );
 
 /**
+ * Task #707 — Returns the public incident log rendered on
+`/incidents`. Sourced from a static JSON file shipped with the
+api-server (curator-edited only — there is no admin/write
+endpoint). Each entry documents one operational incident
+(engine outage, scoring regression, calibration mistake) with
+date, duration, severity, summary, root cause, remediation,
+and an optional `/changelog#anchor` link to the corresponding
+release notes. Returns an empty array when no incidents have
+been recorded.
+
+ * @summary List public incident postmortems
+ */
+export const ListIncidentsResponse = zod
+  .object({
+    version: zod.string(),
+    incidents: zod.array(
+      zod
+        .object({
+          id: zod
+            .string()
+            .describe(
+              "Opaque slug for the incident (stable across curator edits).",
+            ),
+          date: zod.coerce
+            .date()
+            .describe("ISO date the incident started (YYYY-MM-DD)."),
+          duration: zod
+            .string()
+            .describe(
+              'Human-readable incident duration (e.g. \"42 minutes\", \"3 hours\").',
+            ),
+          severity: zod
+            .enum(["low", "medium", "high", "critical"])
+            .describe("Curator-assigned severity tier."),
+          summary: zod
+            .string()
+            .describe("One-sentence description of what happened."),
+          rootCause: zod
+            .string()
+            .describe("Plain-language root cause analysis."),
+          remediation: zod
+            .string()
+            .describe("What we changed to prevent recurrence."),
+          changelogAnchor: zod
+            .string()
+            .optional()
+            .describe(
+              "Optional `\/changelog#anchor` fragment linking to the related release notes.",
+            ),
+        })
+        .describe(
+          "Task #707 — One public incident postmortem. Severity uses a\nplain four-tier scale; `changelogAnchor` (when present) is the\nanchor fragment of the related `\/changelog#anchor` entry so the\nUI can link the remediation to the shipped release notes.\n",
+        ),
+    ),
+  })
+  .describe(
+    "Public incident log returned by `GET \/api\/incidents`. The\n`version` string lets clients cache-bust when curators ship a\nnew revision of `incidents.json`. `incidents` is empty when no\npublic incidents have been recorded.\n",
+  );
+
+/**
  * Task #617 — Public, read-only summary of the rolling weekly
 T1-vs-T3 mean composite spread. Wraps the internal AVRI drift
 compute and strips every reviewer-only field (cohort sample IDs,

@@ -66,6 +66,7 @@ const Badges = lazyRetry(() => import("@/pages/badges"));
 const Pricing = lazyRetry(() => import("@/pages/pricing"));
 const Roadmap = lazyRetry(() => import("@/pages/roadmap"));
 const Status = lazyRetry(() => import("@/pages/status"));
+const Incidents = lazyRetry(() => import("@/pages/incidents"));
 const NotFound = lazyRetry(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
@@ -129,6 +130,7 @@ function AppRoutes() {
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/roadmap" element={<Roadmap />} />
             <Route path="/status" element={<Status />} />
+            <Route path="/incidents" element={<Incidents />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
