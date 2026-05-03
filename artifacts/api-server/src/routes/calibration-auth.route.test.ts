@@ -19,6 +19,7 @@ let baseUrl: string;
 let tmpDir: string;
 let phrasesPath: string;
 let __resetForTests: () => void;
+let restoreFileAlerter: (() => void) | null = null;
 
 const SEED = JSON.stringify(
   {
@@ -41,6 +42,25 @@ beforeAll(async () => {
   const handwavy = await import("../lib/engines/avri/handwavy-phrases");
   __resetForTests = handwavy.__resetHandwavyPhrasesForTests;
 
+  // Task #761 — inject a fresh per-file brute-force alerter (with a
+  // threshold high enough to never fire) so the wrong-token 401s in
+  // the auth-gate describe blocks below cannot accumulate on the
+  // lazy singleton and emit unexpected "calibration auth: brute-force
+  // probe threshold crossed" warns that bleed into other test files.
+  // The Task #749 ack describe overrides this with its own per-test
+  // alerter via beforeEach; that is intentional and harmless.
+  const bruteForce = await import(
+    "../middlewares/calibration-auth-brute-force-alert"
+  );
+  const fileAlerter = bruteForce.createBruteForceAlerter({
+    windowMs: 60_000,
+    threshold: 1_000_000,
+    webhookUrl: "",
+    statePath: null,
+  });
+  bruteForce.__setBruteForceAlerterForTests(fileAlerter);
+  restoreFileAlerter = () => bruteForce.__setBruteForceAlerterForTests(null);
+
   const app = express();
   app.use(express.json());
   app.use(calibrationRouter);
@@ -54,6 +74,10 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   delete process.env.CALIBRATION_TOKEN;
+  if (restoreFileAlerter) {
+    restoreFileAlerter();
+    restoreFileAlerter = null;
+  }
   try {
     await fs.rm(tmpDir, { recursive: true, force: true });
   } catch {

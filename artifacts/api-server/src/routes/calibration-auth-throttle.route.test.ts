@@ -91,6 +91,7 @@ interface HarnessOptions {
 
 let activeHarness: Harness | null = null;
 let restoreLimiter: (() => void) | null = null;
+let restoreAlerter: (() => void) | null = null;
 
 async function startHarness(opts: HarnessOptions = {}): Promise<Harness> {
   const tmpDir = await fs.mkdtemp(
@@ -131,6 +132,23 @@ async function startHarness(opts: HarnessOptions = {}): Promise<Harness> {
   __setCalibrationAuthLimiterForTests(limiter);
   restoreLimiter = () => __setCalibrationAuthLimiterForTests(null);
 
+  // Task #761 — inject a fresh per-test brute-force alerter (with a
+  // threshold high enough to never fire) so the many wrong-token 401s
+  // these tests generate cannot accumulate on the lazy singleton and
+  // emit unexpected "calibration auth: brute-force probe threshold
+  // crossed" warns that bleed into other test files. Mirrors the
+  // isolation pattern used in calibration-auth-logging.test.ts.
+  const { createBruteForceAlerter, __setBruteForceAlerterForTests } =
+    await import("../middlewares/calibration-auth-brute-force-alert");
+  const alerter = createBruteForceAlerter({
+    windowMs: 60_000,
+    threshold: 1_000_000,
+    webhookUrl: "",
+    statePath: null,
+  });
+  __setBruteForceAlerterForTests(alerter);
+  restoreAlerter = () => __setBruteForceAlerterForTests(null);
+
   const app = express();
   app.use(express.json());
   app.use(calibrationRouter);
@@ -157,6 +175,10 @@ afterEach(async () => {
   if (restoreLimiter) {
     restoreLimiter();
     restoreLimiter = null;
+  }
+  if (restoreAlerter) {
+    restoreAlerter();
+    restoreAlerter = null;
   }
   if (activeHarness) {
     await activeHarness.close();
