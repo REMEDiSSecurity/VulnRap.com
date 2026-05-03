@@ -55,6 +55,7 @@
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-dialog": "^1.1.15",
+    "qrcode-generator": "^2.0.4",
     "react-router-dom": "^7.14.0",
     "recharts": "^2.15.4"
   }

@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2, Brain, Cpu, GitCompare, ChevronDown, ChevronUp, Download, BarChart3, Target, Eye, Gauge, Leaf, Shield, MessageSquareWarning, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, FlaskConical, Terminal, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle, Copy, AlertTriangle, FileText, Clock, Search, HelpCircle, Lightbulb, ShieldCheck, Hash, Layers, Award, Trash2, Brain, Cpu, GitCompare, ChevronDown, ChevronUp, Download, BarChart3, Target, Eye, Gauge, Leaf, Shield, MessageSquareWarning, RefreshCw, Fingerprint, Timer, Crosshair, ListChecks, Microscope, UserCheck, BrainCircuit, ShieldOff, FlaskConical, Terminal, Loader2, Printer } from "lucide-react";
+import qrcodegen from "qrcode-generator";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
@@ -1619,6 +1620,115 @@ export function buildEvidenceCsv(evidence: EvidenceCsvRow[]): string {
   return [header, ...rows].join("\r\n");
 }
 
+function PrintQrFooter({ url, reportId }: { url: string; reportId: number }) {
+  // Tiny QR via qrcode-generator (~14KB). Type 0 = auto-size, level "M".
+  // Only rendered (visually) inside the print stylesheet via .print-only.
+  let svg = "";
+  try {
+    const qr = qrcodegen(0, "M");
+    qr.addData(url);
+    qr.make();
+    svg = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  } catch {
+    svg = "";
+  }
+  return (
+    <div
+      className="print-only print-qr-footer"
+      data-testid="print-qr-footer"
+      aria-hidden="true"
+    >
+      <div className="print-qr-svg" dangerouslySetInnerHTML={{ __html: svg }} />
+      <div className="print-qr-meta">
+        <div className="print-qr-label">Live results</div>
+        <div className="print-qr-url">{url}</div>
+        <div className="print-qr-id">Report #{reportId}</div>
+      </div>
+    </div>
+  );
+}
+
+const PRINT_STYLES = `
+.print-only { display: none; }
+@media print {
+  @page { margin: 14mm; }
+  html, body, #root {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  body * {
+    color: #000000 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+  /* Hide app chrome — nav, footer, sidebars, settings, share/export/delete buttons. */
+  nav, header > nav, footer, aside,
+  [data-print-hide],
+  [data-testid="export-evidence-csv"],
+  .no-print {
+    display: none !important;
+  }
+  /* Single-column, full-width layout. */
+  .max-w-4xl, .max-w-3xl, .max-w-2xl, .max-w-xl {
+    max-width: 100% !important;
+  }
+  .grid { display: block !important; }
+  .grid > * { width: 100% !important; margin-bottom: 0.75rem; }
+  .md\\:flex-row, .sm\\:flex-row { flex-direction: column !important; }
+  /* Force every card / glass surface to a clean white-on-black-border look. */
+  .glass-card, [class*="bg-card"], [class*="bg-muted"], [class*="bg-primary"],
+  [class*="bg-secondary"], [class*="bg-destructive"], [class*="bg-accent"],
+  [class*="bg-popover"], [class*="bg-background"] {
+    background: #ffffff !important;
+    background-image: none !important;
+    border: 1px solid #000000 !important;
+    border-radius: 4px !important;
+  }
+  /* Strip glow / gradients on dividers. */
+  .glow-text, .glow-border { text-shadow: none !important; box-shadow: none !important; }
+  [class*="bg-gradient"] { background: none !important; }
+  /* Borders to black for print contrast. */
+  [class*="border-"] { border-color: #000000 !important; }
+  /* Progress bars: just outline + filled portion. */
+  .bg-primary, [class*="bg-green"], [class*="bg-yellow"], [class*="bg-orange"],
+  [class*="bg-red"], [class*="bg-destructive"] {
+    background: #000000 !important;
+  }
+  /* Links: black + underline so URLs are obvious on paper. */
+  a { color: #000000 !important; text-decoration: underline !important; }
+  /* Show the print-only footer (QR code). */
+  .print-only { display: block !important; }
+  .print-qr-footer {
+    display: flex !important;
+    align-items: center;
+    gap: 14px;
+    margin-top: 24px;
+    padding-top: 12px;
+    border-top: 1px solid #000000 !important;
+    page-break-inside: avoid;
+  }
+  .print-qr-svg svg { width: 110px; height: 110px; }
+  .print-qr-meta { font-family: ui-monospace, monospace; font-size: 10px; line-height: 1.45; }
+  .print-qr-label { font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+  .print-qr-url { word-break: break-all; }
+  /* Force every collapsible section open: details, accordions, tabs, hidden panels. */
+  details { display: block !important; }
+  details > summary { display: block !important; list-style: none !important; }
+  details:not([open]) > *:not(summary) { display: block !important; }
+  [hidden], .hidden { display: revert !important; }
+  [data-state="closed"], [aria-expanded="false"] + [role="region"],
+  [data-state="inactive"] {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  [role="tabpanel"] { display: block !important; }
+  /* Avoid awkward breaks in the middle of cards. */
+  section, article, .glass-card { page-break-inside: avoid; }
+  h1, h2, h3 { page-break-after: avoid; }
+}
+`;
+
 export default function Results() {
   const params = useParams<{ id: string }>();
   const id = parseInt(params.id || "0", 10);
@@ -2069,8 +2179,11 @@ export default function Results() {
     ? (showAllEvidence ? evidence : evidence.slice(0, 6))
     : [];
 
+  const liveResultsUrl = typeof window !== "undefined" ? window.location.href : `/results/${report.id}`;
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
+      <style dangerouslySetInnerHTML={{ __html: PRINT_STYLES }} />
       <DriftFlagsBanner />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-4 sm:pb-6">
         <div>
@@ -2088,10 +2201,20 @@ export default function Results() {
             </span>
           </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap" data-print-hide>
           <Button variant="outline" onClick={copyLink} className="gap-2 glass-card hover:border-primary/30">
             <Copy className="w-4 h-4" />
             Share Link
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => window.print()}
+            className="gap-2 glass-card hover:border-primary/30"
+            data-testid="button-print"
+            title="Print or save this report as PDF using a clean light-themed layout."
+          >
+            <Printer className="w-4 h-4" />
+            Print
           </Button>
           <Button variant="outline" onClick={exportJSON} disabled={exporting !== null} className="gap-2 glass-card hover:border-primary/30">
             {exporting === "json" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
@@ -3097,9 +3220,13 @@ export default function Results() {
         />
       )}
 
-      <FeedbackForm reportId={id} />
+      <PrintQrFooter url={liveResultsUrl} reportId={report.id} />
 
-      <Card className="glass-card rounded-xl">
+      <div data-print-hide>
+        <FeedbackForm reportId={id} />
+      </div>
+
+      <Card className="glass-card rounded-xl" data-print-hide>
         <CardContent className="flex flex-col sm:flex-row items-center justify-center gap-3 py-6">
           <Button onClick={() => navigate("/")} className="gap-2 w-full sm:w-auto">
             <FileText className="w-4 h-4" />
