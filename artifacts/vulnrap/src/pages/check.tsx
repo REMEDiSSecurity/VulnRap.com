@@ -25,6 +25,7 @@ import {
   SIGNAL_ADJUSTMENTS_URL_PARAM,
   type SignalAdjustments,
 } from "@/components/signal-mute-boost-panel";
+import { AdvancedSensitivityPanel } from "@/components/advanced-sensitivity-panel";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".txt", ".md"];
@@ -804,6 +805,18 @@ export default function Check() {
               adjustments={signalAdjustments}
               onChange={handleSignalAdjustmentsChange}
               baselineScore={result.slopScore}
+            />
+          )}
+
+          {result.breakdown && (
+            <AdvancedSensitivityPanel
+              canonicalScore={result.slopScore}
+              subScores={{
+                engine1: result.breakdown.linguistic ?? null,
+                engine2: result.breakdown.factual ?? null,
+                engine3: result.breakdown.template ?? null,
+                avri: result.breakdown.llm ?? null,
+              }}
             />
           )}
 
