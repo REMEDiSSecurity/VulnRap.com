@@ -24,6 +24,8 @@ import {
   DeleteReportResponse,
   CompareReportsParams,
   CompareReportsResponse,
+  CheckReportDryRunBatchBody,
+  CheckReportDryRunBatchResponse,
 } from "@workspace/api-zod";
 import {
   reportSubmittedTotal,
@@ -88,8 +90,14 @@ import {
 } from "../lib/active-verification";
 import { classifyReport } from "../lib/engines/avri/classify";
 import { visitorHash, type VisitorAttribution } from "../lib/visitor";
-import { recordAndScore as recordVelocity } from "../lib/engines/avri/velocity";
-import { recordAndScore as recordTemplateFingerprint } from "../lib/engines/avri/template-fingerprint";
+import {
+  recordAndScore as recordVelocity,
+  peek as peekVelocity,
+} from "../lib/engines/avri/velocity";
+import {
+  recordAndScore as recordTemplateFingerprint,
+  peek as peekTemplateFingerprint,
+} from "../lib/engines/avri/template-fingerprint";
 import {
   analyzeWithEngines,
   analyzeWithEnginesTraced,
@@ -321,7 +329,18 @@ async function runStage<T>(
 async function performAnalysis(
   originalText: string,
   redactedText: string,
-  opts?: { skipLlm?: boolean; visitor?: VisitorAttribution | null },
+  opts?: {
+    skipLlm?: boolean;
+    visitor?: VisitorAttribution | null;
+    // Task #732 — when true, the AVRI velocity + template-fingerprint
+    // counters are *peeked* instead of incremented, so a caller can replay
+    // historical reports through the pipeline without polluting in-memory
+    // rolling state. Used by POST /reports/check/dry-run-batch so a
+    // 25-item replay can't (a) self-contaminate later items in the same
+    // batch via velocity/template penalties or (b) bleed those penalties
+    // into subsequent live submissions from the same IP.
+    skipBehavioralSignals?: boolean;
+  },
 ): Promise<AnalysisResult> {
   const pipelineStart = Date.now();
 
@@ -386,11 +405,16 @@ async function performAnalysis(
       if (isAvriEnabled()) {
         try {
           const vh = visitorHash(opts?.visitor ?? null);
-          const v = recordVelocity(vh);
+          // Task #732 — peek (non-mutating) when the caller asked for a
+          // read-only run; otherwise record-and-score as usual.
+          const readOnly = opts?.skipBehavioralSignals === true;
+          const v = readOnly ? peekVelocity(vh) : recordVelocity(vh);
           velocityPenalty = v.penalty;
-          const t = recordTemplateFingerprint(safeRedacted);
+          const t = readOnly
+            ? peekTemplateFingerprint(safeRedacted)
+            : recordTemplateFingerprint(safeRedacted);
           templatePenalty = t.penalty;
-          if (v.penalty !== 0 || t.penalty !== 0) {
+          if (!readOnly && (v.penalty !== 0 || t.penalty !== 0)) {
             logger.info(
               {
                 avriVelocityCount: v.submissionCount,
@@ -1517,6 +1541,162 @@ router.post("/reports", async (req, res): Promise<void> => {
 function anonymizeId(id: number): string {
   return `VR-${id.toString(16).padStart(4, "0").toUpperCase()}`;
 }
+
+// Task #732 — auto-close dry-run preview. Lets recipe consumers (HackerOne,
+// Bugcrowd, Intigriti, GHSA, ...) replay the last N inbox submissions through
+// the same scoring/matrix used by POST /reports/check and see, per item,
+// what *would* have been auto-closed under the recipe's safety gates
+// (action == AUTO_CLOSE && AVRI goldHitCount == 0). Read-only: nothing is
+// persisted. LLM is forced off so a 25-item batch stays cheap and lives
+// inside the existing analysisLimiter (30 req / 15 min / IP) bucket — see
+// app.ts where the limiter is bound to this exact path.
+const DRY_RUN_BATCH_PER_ITEM_MAX = 256 * 1024; // 256KB per item, well under the 1MB express.json cap.
+router.post(
+  "/reports/check/dry-run-batch",
+  async (req, res): Promise<void> => {
+    const parsed = CheckReportDryRunBatchBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    const { reports } = parsed.data;
+
+    for (let i = 0; i < reports.length; i++) {
+      const size = Buffer.byteLength(reports[i].rawText, "utf-8");
+      if (size > DRY_RUN_BATCH_PER_ITEM_MAX) {
+        res.status(413).json({
+          error: `reports[${i}].rawText exceeds ${DRY_RUN_BATCH_PER_ITEM_MAX} bytes (got ${size}). Trim the body or split into multiple batches.`,
+        });
+        return;
+      }
+    }
+
+    const items: Array<{
+      id: string | null;
+      index: number;
+      compositeScore: number | null;
+      action:
+        | "AUTO_CLOSE"
+        | "MANUAL_REVIEW"
+        | "CHALLENGE_REPORTER"
+        | "PRIORITIZE"
+        | "STANDARD_TRIAGE";
+      reason: string;
+      goldHitCount: number;
+      wouldAutoClose: boolean;
+      error: string | null;
+    }> = [];
+
+    let scored = 0;
+    let wouldAutoCloseCount = 0;
+
+    // Run sequentially so a 25-item batch can't fan out to 25 concurrent
+    // analysis pipelines (each of which kicks off LSH/factual lookups). The
+    // pipeline itself is fast in skipLlm mode; sequential keeps the per-IP
+    // CPU/memory footprint bounded and predictable for rate-limit sizing.
+    for (let i = 0; i < reports.length; i++) {
+      const item = reports[i];
+      const id = item.id ?? null;
+      const text = sanitizeText(item.rawText);
+
+      if (text.length === 0) {
+        items.push({
+          id,
+          index: i,
+          compositeScore: null,
+          action: "STANDARD_TRIAGE",
+          reason: "Empty content after sanitization.",
+          goldHitCount: 0,
+          wouldAutoClose: false,
+          error: "Content is empty or contains no readable text.",
+        });
+        continue;
+      }
+
+      try {
+        const { redactedText } = redactReport(text);
+        const analysis = await performAnalysis(text, redactedText, {
+          skipLlm: true,
+          // Task #732 — peek the AVRI velocity/template counters instead of
+          // recording, so replaying a week of historical reports doesn't
+          // pollute live state or self-contaminate later items in the batch.
+          skipBehavioralSignals: true,
+          visitor: {
+            ip: req.ip ?? req.socket.remoteAddress ?? null,
+            userAgent: req.headers["user-agent"] ?? null,
+          },
+        });
+
+        const composite = analysis.vulnrapComposite;
+        const compositeScore =
+          typeof composite?.overallScore === "number"
+            ? Math.round(composite.overallScore)
+            : null;
+
+        // Mirror pickEngine2Fields (kept private in triage-recommendation.ts)
+        // to extract the AVRI goldHitCount that gates auto-close. Falling back
+        // to 0 when the engine layer is disabled is the conservative choice —
+        // wouldAutoClose still requires action == AUTO_CLOSE, and a missing
+        // engine layer means the matrix used the neutral 50/50 baseline which
+        // never lands in the AUTO_CLOSE band on its own.
+        let goldHitCount = 0;
+        const e2 = composite?.engineResults?.find(
+          (e) => e.engine === "Technical Substance Analyzer",
+        );
+        const e2Breakdown = (e2?.signalBreakdown ?? {}) as {
+          avri?: { goldHitCount?: number };
+        };
+        if (typeof e2Breakdown.avri?.goldHitCount === "number") {
+          goldHitCount = e2Breakdown.avri.goldHitCount;
+        }
+
+        const rec = analysis.triageRecommendation;
+        const action = rec?.action ?? "STANDARD_TRIAGE";
+        const reason = rec?.reason ?? "No recommendation produced.";
+        const wouldAutoClose = action === "AUTO_CLOSE" && goldHitCount === 0;
+        if (wouldAutoClose) wouldAutoCloseCount++;
+        scored++;
+
+        items.push({
+          id,
+          index: i,
+          compositeScore,
+          action,
+          reason,
+          goldHitCount,
+          wouldAutoClose,
+          error: null,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.warn(
+          { err, index: i },
+          "[dry-run-batch] item scoring failed (returning per-item error, continuing batch)",
+        );
+        items.push({
+          id,
+          index: i,
+          compositeScore: null,
+          action: "STANDARD_TRIAGE",
+          reason: "Scoring pipeline crashed for this item.",
+          goldHitCount: 0,
+          wouldAutoClose: false,
+          error: msg,
+        });
+      }
+    }
+
+    const response = CheckReportDryRunBatchResponse.parse({
+      items,
+      summary: {
+        total: reports.length,
+        scored,
+        wouldAutoCloseCount,
+      },
+    });
+    res.json(response);
+  },
+);
 
 router.post("/reports/check", (req, res, next): void => {
   upload.single("file")(req, res, (err) => {

@@ -564,6 +564,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /reports/check/dry-run-batch:
+    post:
+      operationId: checkReportDryRunBatch
+      tags: [reports]
+      summary: Preview auto-close decisions for a batch of reports
+      description: |
+        Read-only batch endpoint that runs the same scoring pipeline as
+        `POST /reports/check` against an array of report bodies and
+        returns, per item, the composite score, the recommended triage
+        action, the AVRI gold-signal hit count, and a `wouldAutoClose`
+        boolean that mirrors the safety gates in the platform-specific
+        recipes (HackerOne, Bugcrowd, etc.). Use this to spot-check what
+        the auto-close path *would* have closed across the last week of
+        an inbox before flipping auto-close on for real.
+
+        Nothing is persisted — neither the report bodies nor the
+        decisions land on the public feed or in the database. LLM
+        analysis is forced off so this stays cheap and rate-limit
+        friendly. The endpoint shares the analysis rate-limit bucket
+        (30 requests / 15 min / IP) with `POST /reports/check`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DryRunBatchBody"
+      responses:
+        "200":
+          description: Per-item dry-run decisions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DryRunBatchResult"
+        "400":
+          description: Invalid request (empty array, oversize body, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: A single item exceeds the per-item size cap
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /reports/lookup/{hash}:
     get:
       operationId: lookupByHash
@@ -3327,6 +3373,124 @@ components:
         - feedback
         - llmEnhanced
         - previouslySubmitted
+
+    DryRunBatchBody:
+      type: object
+      description: |
+        Request body for `POST /reports/check/dry-run-batch`. Each item is
+        a single report body (Markdown, plain text, or anything you'd
+        normally drop into the `rawText` field of `POST /reports/check`).
+      properties:
+        reports:
+          type: array
+          minItems: 1
+          maxItems: 25
+          description: Up to 25 report bodies to score in one call.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                maxLength: 128
+                description: |
+                  Optional caller-supplied identifier (e.g. the HackerOne
+                  report id) echoed back on the matching response item so
+                  callers can join results to their inbox without relying
+                  on array order.
+              rawText:
+                type: string
+                minLength: 1
+                description: The full report body to score (Markdown allowed).
+            required:
+              - rawText
+      required:
+        - reports
+
+    DryRunBatchResultItem:
+      type: object
+      properties:
+        id:
+          type: ["string", "null"]
+          description: Echo of the caller-supplied id (null when none was provided).
+        index:
+          type: integer
+          description: Zero-based position of this item in the request `reports` array.
+        compositeScore:
+          type: ["integer", "null"]
+          description: |
+            Composite score 0..100, higher = better. `null` when the
+            scoring pipeline could not produce a composite (e.g. the
+            new-composite engine layer is disabled server-side).
+        action:
+          type: string
+          enum:
+            [
+              AUTO_CLOSE,
+              MANUAL_REVIEW,
+              CHALLENGE_REPORTER,
+              PRIORITIZE,
+              STANDARD_TRIAGE,
+            ]
+          description: Recommended triage action from the same matrix used by `POST /reports/check`.
+        reason:
+          type: string
+          description: One-line explanation the matrix used for this action.
+        goldHitCount:
+          type: integer
+          description: |
+            Number of AVRI family-specific gold signals (sanitizer trace,
+            injection payload, etc.) detected by the Technical Substance
+            Analyzer. 0 when no gold signals matched.
+        wouldAutoClose:
+          type: boolean
+          description: |
+            True iff this item satisfies the auto-close safety gates
+            documented in the platform-specific recipes:
+            `action == AUTO_CLOSE` AND `goldHitCount == 0`. Use this to
+            preview what a "flip auto-close on" rollout would have done
+            against historical inbox traffic.
+        error:
+          type: ["string", "null"]
+          description: |
+            Per-item error message when scoring this item failed (the
+            request as a whole still returns 200 so partial failures
+            don't poison the rest of the batch). `null` on success.
+      required:
+        - id
+        - index
+        - compositeScore
+        - action
+        - reason
+        - goldHitCount
+        - wouldAutoClose
+        - error
+
+    DryRunBatchResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DryRunBatchResultItem"
+        summary:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: Total items in the batch (matches `reports.length` in the request).
+            scored:
+              type: integer
+              description: Items that scored without error.
+            wouldAutoCloseCount:
+              type: integer
+              description: How many items satisfied the auto-close safety gates.
+          required:
+            - total
+            - scored
+            - wouldAutoCloseCount
+      required:
+        - items
+        - summary
 
     HashLookupResult:
       type: object

@@ -2332,6 +2332,119 @@ export const CheckReportResponse = zod.object({
 });
 
 /**
+ * Read-only batch endpoint that runs the same scoring pipeline as
+`POST /reports/check` against an array of report bodies and
+returns, per item, the composite score, the recommended triage
+action, the AVRI gold-signal hit count, and a `wouldAutoClose`
+boolean that mirrors the safety gates in the platform-specific
+recipes (HackerOne, Bugcrowd, etc.). Use this to spot-check what
+the auto-close path *would* have closed across the last week of
+an inbox before flipping auto-close on for real.
+
+Nothing is persisted — neither the report bodies nor the
+decisions land on the public feed or in the database. LLM
+analysis is forced off so this stays cheap and rate-limit
+friendly. The endpoint shares the analysis rate-limit bucket
+(30 requests / 15 min / IP) with `POST /reports/check`.
+
+ * @summary Preview auto-close decisions for a batch of reports
+ */
+export const checkReportDryRunBatchBodyReportsItemIdMax = 128;
+
+export const checkReportDryRunBatchBodyReportsMax = 25;
+
+export const CheckReportDryRunBatchBody = zod
+  .object({
+    reports: zod
+      .array(
+        zod.object({
+          id: zod
+            .string()
+            .max(checkReportDryRunBatchBodyReportsItemIdMax)
+            .optional()
+            .describe(
+              "Optional caller-supplied identifier (e.g. the HackerOne\nreport id) echoed back on the matching response item so\ncallers can join results to their inbox without relying\non array order.\n",
+            ),
+          rawText: zod
+            .string()
+            .min(1)
+            .describe("The full report body to score (Markdown allowed)."),
+        }),
+      )
+      .min(1)
+      .max(checkReportDryRunBatchBodyReportsMax)
+      .describe("Up to 25 report bodies to score in one call."),
+  })
+  .describe(
+    "Request body for `POST \/reports\/check\/dry-run-batch`. Each item is\na single report body (Markdown, plain text, or anything you'd\nnormally drop into the `rawText` field of `POST \/reports\/check`).\n",
+  );
+
+export const CheckReportDryRunBatchResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod
+        .string()
+        .nullable()
+        .describe(
+          "Echo of the caller-supplied id (null when none was provided).",
+        ),
+      index: zod
+        .number()
+        .describe(
+          "Zero-based position of this item in the request `reports` array.",
+        ),
+      compositeScore: zod
+        .number()
+        .nullable()
+        .describe(
+          "Composite score 0..100, higher = better. `null` when the\nscoring pipeline could not produce a composite (e.g. the\nnew-composite engine layer is disabled server-side).\n",
+        ),
+      action: zod
+        .enum([
+          "AUTO_CLOSE",
+          "MANUAL_REVIEW",
+          "CHALLENGE_REPORTER",
+          "PRIORITIZE",
+          "STANDARD_TRIAGE",
+        ])
+        .describe(
+          "Recommended triage action from the same matrix used by `POST \/reports\/check`.",
+        ),
+      reason: zod
+        .string()
+        .describe("One-line explanation the matrix used for this action."),
+      goldHitCount: zod
+        .number()
+        .describe(
+          "Number of AVRI family-specific gold signals (sanitizer trace,\ninjection payload, etc.) detected by the Technical Substance\nAnalyzer. 0 when no gold signals matched.\n",
+        ),
+      wouldAutoClose: zod
+        .boolean()
+        .describe(
+          'True iff this item satisfies the auto-close safety gates\ndocumented in the platform-specific recipes:\n`action == AUTO_CLOSE` AND `goldHitCount == 0`. Use this to\npreview what a \"flip auto-close on\" rollout would have done\nagainst historical inbox traffic.\n',
+        ),
+      error: zod
+        .string()
+        .nullable()
+        .describe(
+          "Per-item error message when scoring this item failed (the\nrequest as a whole still returns 200 so partial failures\ndon't poison the rest of the batch). `null` on success.\n",
+        ),
+    }),
+  ),
+  summary: zod.object({
+    total: zod
+      .number()
+      .describe(
+        "Total items in the batch (matches `reports.length` in the request).",
+      ),
+    scored: zod.number().describe("Items that scored without error."),
+    wouldAutoCloseCount: zod
+      .number()
+      .describe("How many items satisfied the auto-close safety gates."),
+  }),
+});
+
+/**
  * Check if a report with the given SHA-256 content hash has been seen before
  * @summary Look up a report by content hash
  */

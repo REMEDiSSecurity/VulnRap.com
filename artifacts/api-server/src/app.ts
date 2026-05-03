@@ -154,6 +154,7 @@ const analysisLimiter = rateLimit({
   message: { error: "Analysis rate limit exceeded. Please try again later." },
 });
 app.post("/api/reports/check", analysisLimiter);
+app.post("/api/reports/check/dry-run-batch", analysisLimiter);
 app.post("/api/reports", analysisLimiter);
 
 // Task #116 — wrong-token attempts on /api/feedback/calibration mutation

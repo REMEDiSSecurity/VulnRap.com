@@ -1373,6 +1373,108 @@ export interface CheckResult {
   existingReportId?: number | null;
 }
 
+export type DryRunBatchBodyReportsItem = {
+  /**
+   * Optional caller-supplied identifier (e.g. the HackerOne
+report id) echoed back on the matching response item so
+callers can join results to their inbox without relying
+on array order.
+
+   * @maxLength 128
+   */
+  id?: string;
+  /**
+   * The full report body to score (Markdown allowed).
+   * @minLength 1
+   */
+  rawText: string;
+};
+
+/**
+ * Request body for `POST /reports/check/dry-run-batch`. Each item is
+a single report body (Markdown, plain text, or anything you'd
+normally drop into the `rawText` field of `POST /reports/check`).
+
+ */
+export interface DryRunBatchBody {
+  /**
+   * Up to 25 report bodies to score in one call.
+   * @minItems 1
+   * @maxItems 25
+   */
+  reports: DryRunBatchBodyReportsItem[];
+}
+
+/**
+ * Recommended triage action from the same matrix used by `POST /reports/check`.
+ */
+export type DryRunBatchResultItemAction =
+  (typeof DryRunBatchResultItemAction)[keyof typeof DryRunBatchResultItemAction];
+
+export const DryRunBatchResultItemAction = {
+  AUTO_CLOSE: "AUTO_CLOSE",
+  MANUAL_REVIEW: "MANUAL_REVIEW",
+  CHALLENGE_REPORTER: "CHALLENGE_REPORTER",
+  PRIORITIZE: "PRIORITIZE",
+  STANDARD_TRIAGE: "STANDARD_TRIAGE",
+} as const;
+
+export interface DryRunBatchResultItem {
+  /**
+   * Echo of the caller-supplied id (null when none was provided).
+   * @nullable
+   */
+  id: string | null;
+  /** Zero-based position of this item in the request `reports` array. */
+  index: number;
+  /**
+   * Composite score 0..100, higher = better. `null` when the
+scoring pipeline could not produce a composite (e.g. the
+new-composite engine layer is disabled server-side).
+
+   * @nullable
+   */
+  compositeScore: number | null;
+  /** Recommended triage action from the same matrix used by `POST /reports/check`. */
+  action: DryRunBatchResultItemAction;
+  /** One-line explanation the matrix used for this action. */
+  reason: string;
+  /** Number of AVRI family-specific gold signals (sanitizer trace,
+injection payload, etc.) detected by the Technical Substance
+Analyzer. 0 when no gold signals matched.
+ */
+  goldHitCount: number;
+  /** True iff this item satisfies the auto-close safety gates
+documented in the platform-specific recipes:
+`action == AUTO_CLOSE` AND `goldHitCount == 0`. Use this to
+preview what a "flip auto-close on" rollout would have done
+against historical inbox traffic.
+ */
+  wouldAutoClose: boolean;
+  /**
+   * Per-item error message when scoring this item failed (the
+request as a whole still returns 200 so partial failures
+don't poison the rest of the batch). `null` on success.
+
+   * @nullable
+   */
+  error: string | null;
+}
+
+export type DryRunBatchResultSummary = {
+  /** Total items in the batch (matches `reports.length` in the request). */
+  total: number;
+  /** Items that scored without error. */
+  scored: number;
+  /** How many items satisfied the auto-close safety gates. */
+  wouldAutoCloseCount: number;
+};
+
+export interface DryRunBatchResult {
+  items: DryRunBatchResultItem[];
+  summary: DryRunBatchResultSummary;
+}
+
 export interface HashLookupResult {
   found: boolean;
   /** @nullable */

@@ -37,6 +37,8 @@ import type {
   CweCatalogResponse,
   DeleteReportBody,
   DeleteReportResponse,
+  DryRunBatchBody,
+  DryRunBatchResult,
   ErrorResponse,
   FeedbackAnalytics,
   FeedbackChallenge,
@@ -1503,6 +1505,107 @@ export const useCheckReport = <
   TContext
 > => {
   return useMutation(getCheckReportMutationOptions(options));
+};
+
+/**
+ * Read-only batch endpoint that runs the same scoring pipeline as
+`POST /reports/check` against an array of report bodies and
+returns, per item, the composite score, the recommended triage
+action, the AVRI gold-signal hit count, and a `wouldAutoClose`
+boolean that mirrors the safety gates in the platform-specific
+recipes (HackerOne, Bugcrowd, etc.). Use this to spot-check what
+the auto-close path *would* have closed across the last week of
+an inbox before flipping auto-close on for real.
+
+Nothing is persisted — neither the report bodies nor the
+decisions land on the public feed or in the database. LLM
+analysis is forced off so this stays cheap and rate-limit
+friendly. The endpoint shares the analysis rate-limit bucket
+(30 requests / 15 min / IP) with `POST /reports/check`.
+
+ * @summary Preview auto-close decisions for a batch of reports
+ */
+export const getCheckReportDryRunBatchUrl = () => {
+  return `/api/reports/check/dry-run-batch`;
+};
+
+export const checkReportDryRunBatch = async (
+  dryRunBatchBody: DryRunBatchBody,
+  options?: RequestInit,
+): Promise<DryRunBatchResult> => {
+  return customFetch<DryRunBatchResult>(getCheckReportDryRunBatchUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(dryRunBatchBody),
+  });
+};
+
+export const getCheckReportDryRunBatchMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkReportDryRunBatch>>,
+    TError,
+    { data: BodyType<DryRunBatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof checkReportDryRunBatch>>,
+  TError,
+  { data: BodyType<DryRunBatchBody> },
+  TContext
+> => {
+  const mutationKey = ["checkReportDryRunBatch"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof checkReportDryRunBatch>>,
+    { data: BodyType<DryRunBatchBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return checkReportDryRunBatch(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CheckReportDryRunBatchMutationResult = NonNullable<
+  Awaited<ReturnType<typeof checkReportDryRunBatch>>
+>;
+export type CheckReportDryRunBatchMutationBody = BodyType<DryRunBatchBody>;
+export type CheckReportDryRunBatchMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Preview auto-close decisions for a batch of reports
+ */
+export const useCheckReportDryRunBatch = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkReportDryRunBatch>>,
+    TError,
+    { data: BodyType<DryRunBatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof checkReportDryRunBatch>>,
+  TError,
+  { data: BodyType<DryRunBatchBody> },
+  TContext
+> => {
+  return useMutation(getCheckReportDryRunBatchMutationOptions(options));
 };
 
 /**

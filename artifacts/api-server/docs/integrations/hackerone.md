@@ -278,6 +278,93 @@ and have a senior triager spot-check the list. The composite is
 calibrated against a public corpus, but every program's inbound mix is
 different.
 
+## Step 5 — Validate before flipping it on (recommended)
+
+Rather than rolling your own logging/spot-check workflow, point the
+batch endpoint `POST /api/reports/check/dry-run-batch` at the last week
+of your inbox. It runs the same scoring/matrix as `POST /api/reports/check`
+across up to 25 reports per call and returns the per-item triage action,
+the composite score, the AVRI gold-signal hit count, and a single
+`wouldAutoClose` boolean that already encodes the safety gates from
+Step 4 (`action == AUTO_CLOSE` AND `goldHitCount == 0`).
+
+Nothing about the call lands in the public feed or the database — there
+is no DB write, no public listing, no diagnostics blob. The endpoint
+also runs in **read-only mode** for the AVRI behavioral signals: the
+submission-velocity and template-fingerprint counters are *peeked*
+instead of incremented, so replaying a week of historical reports does
+not pollute live state and items inside the same batch can't
+self-contaminate via velocity or template penalties.
+
+The endpoint shares the analysis rate-limit bucket (30 req / 15 min /
+IP) with `POST /api/reports/check`, so a one-week backlog of ~600
+reports comfortably fits in a single 25-batch loop run from one egress
+IP.
+
+```bash
+#!/usr/bin/env bash
+# dry-run-week.sh — preview what auto-close would have closed
+# across the last week of an H1 program inbox.
+set -euo pipefail
+
+: "${H1_USER:?H1 API username required}"
+: "${H1_TOKEN:?H1 API token required}"
+PROGRAM="${1:?program handle required, e.g. acme-inc}"
+
+SINCE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%S.000Z)
+
+# 1. Pull every page of submissions in the last week. HackerOne returns a
+#    JSON-API `links.next` URL on each page until the cursor exhausts, so
+#    we loop until that link disappears.
+NEXT="https://api.hackerone.com/v1/reports?filter%5Bprogram%5D%5B%5D=$PROGRAM&filter%5Bcreated_at__gt%5D=$SINCE&page%5Bsize%5D=100"
+ALL_DATA="[]"
+while [ -n "$NEXT" ] && [ "$NEXT" != "null" ]; do
+  PAGE=$(curl -fsS -u "$H1_USER:$H1_TOKEN" "$NEXT")
+  ALL_DATA=$(jq -s '.[0] + .[1].data' <(echo "$ALL_DATA") <(echo "$PAGE"))
+  NEXT=$(echo "$PAGE" | jq -r '.links.next // ""')
+done
+
+# 2. Build the dry-run batch body (id + rawText per item).
+BATCH=$(echo "$ALL_DATA" | jq '{
+  reports: [
+    .[] | {
+      id:      (.id | tostring),
+      rawText: (.attributes.title + "\n\n" + .attributes.vulnerability_information)
+    }
+  ]
+}')
+
+# 3. POST in chunks of 25 and concat the per-item results.
+echo "id,composite,action,goldHits,wouldAutoClose,reason"
+echo "$BATCH" | jq -c '.reports | _nwise(25) | {reports: .}' \
+  | while IFS= read -r CHUNK; do
+      curl -fsS -X POST https://vulnrap.com/api/reports/check/dry-run-batch \
+        -H "Content-Type: application/json" \
+        -d "$CHUNK" \
+      | jq -r '.items[] | [
+          .id, .compositeScore, .action, .goldHitCount,
+          .wouldAutoClose, (.reason | gsub(",";";"))
+        ] | @csv'
+    done
+```
+
+Pipe the output into your spreadsheet of choice and have a senior
+triager spot-check every row where `wouldAutoClose=true`. When the
+`wouldAutoClose=true` set looks right for a full week, you have evidence
+to flip the script in Step 4 from "log only" to "close for real".
+
+Notes:
+
+- Capture the CSV yourself — the endpoint does **not** keep a server-side
+  history of dry-run runs. Re-running tomorrow re-scores against any
+  pipeline updates that shipped in the meantime, which is usually what
+  you want, but it does mean you can't go back and ask "what did the
+  v3.6.1 run say last Tuesday?" without your own log.
+- The same endpoint is the validation tool referenced from every
+  platform-specific recipe (Bugcrowd, Intigriti, GitHub Security
+  Advisories). The body shape and gates are identical — only the
+  ingestion side (how you pull the report bodies) differs per platform.
+
 ## Putting it together
 
 Minimal end-to-end handler. Drop it in any WSGI/ASGI/Lambda runner —
