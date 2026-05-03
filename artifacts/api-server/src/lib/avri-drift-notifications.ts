@@ -95,6 +95,49 @@ export interface SchedulerStallRecord {
   intervalMs: number;
 }
 
+/**
+ * Audit entry recorded every time the silent-replica watchdog
+ * dispatches a "peer replica heartbeat is stale" alert. Persisted to
+ * the same state file as drift flags so a process restart still
+ * remembers which silence windows were already announced and never
+ * double-pages reviewers for the same wedged peer.
+ */
+export interface ReplicaSilenceRecord {
+  /**
+   * Stable per-silence key: `SILENT|<replicaId>|<expectedNextTickAt>`.
+   * The expected-tick suffix means a different silence window for the
+   * same replica (i.e. the replica resumed and later got stuck on a
+   * different expected tick) produces a distinct key and a fresh alert.
+   */
+  key: string;
+  /** Replica id of the silent peer. */
+  replicaId: string;
+  /** Hostname of the silent peer at the time of detection. */
+  hostname: string;
+  /** ISO timestamp when the silence was detected and dispatched. */
+  detectedAt: string;
+  /** ISO timestamp of the silent peer's missed scheduled tick. */
+  expectedNextTickAt: string;
+  /**
+   * ISO timestamp of the silent peer's last persisted heartbeat (the
+   * `heartbeatAt` field from its last shared-state write).
+   */
+  lastHeartbeatAt: string;
+  /** ms past `expectedNextTickAt` when detected. */
+  overdueByMs: number;
+  /**
+   * Silent peer's configured retry interval at the time of detection
+   * (the SLA component of the overdue threshold).
+   */
+  retryIntervalMs: number;
+  /**
+   * Grace window applied on top of `retryIntervalMs` to avoid pages on
+   * a tick that's a few seconds late (matches the calibration UI's
+   * `OVERDUE_GRACE_MS`).
+   */
+  graceMs: number;
+}
+
 interface NotificationsFile {
   _meta?: unknown;
   notified: NotifiedFlagRecord[];
@@ -118,6 +161,13 @@ interface NotificationsFile {
    * and the surface degrades to "this replica only".
    */
   schedulerHeartbeats?: Record<string, PersistedSchedulerHeartbeat>;
+  /**
+   * Task #737 — bounded audit log of silent-replica alerts dispatched
+   * by the watchdog (one entry per detected silence window per peer).
+   * Optional on disk so older state files keep loading; `readState`
+   * normalizes it to an array.
+   */
+  replicaSilenceAlerts?: ReplicaSilenceRecord[];
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -154,6 +204,11 @@ const STALL_HISTORY_LIMIT = 100;
 // file diffable. Oldest by `heartbeatAt` is trimmed first so the most
 // recently-active replicas always win.
 const SCHEDULER_HEARTBEAT_LIMIT = 50;
+// Task #737 — Cap the silent-replica audit log. A wedged peer should
+// be a rare event (one entry per silence window per replica), so 100
+// entries covers years of normal operation while staying tiny on disk.
+// Trimmed oldest-first.
+const REPLICA_SILENCE_HISTORY_LIMIT = 100;
 
 let RESOLVED_PATH: string | null = null;
 
@@ -247,6 +302,7 @@ function readState(): NotificationsFile {
       rearmHistory: [],
       schedulerStalls: [],
       schedulerHeartbeats: {},
+      replicaSilenceAlerts: [],
     };
   }
   try {
@@ -399,12 +455,48 @@ function readState(): NotificationsFile {
         };
       }
     }
+    // Task #737 — load any persisted silent-replica alerts. Older
+    // state files won't have this block; treat as an empty audit log.
+    const rawSilences = Array.isArray(parsed.replicaSilenceAlerts)
+      ? parsed.replicaSilenceAlerts
+      : [];
+    const cleanedSilences: ReplicaSilenceRecord[] = [];
+    for (const entry of rawSilences) {
+      if (
+        entry &&
+        typeof entry === "object" &&
+        typeof (entry as ReplicaSilenceRecord).key === "string" &&
+        typeof (entry as ReplicaSilenceRecord).replicaId === "string" &&
+        typeof (entry as ReplicaSilenceRecord).hostname === "string" &&
+        typeof (entry as ReplicaSilenceRecord).detectedAt === "string" &&
+        typeof (entry as ReplicaSilenceRecord).expectedNextTickAt ===
+          "string" &&
+        typeof (entry as ReplicaSilenceRecord).lastHeartbeatAt === "string" &&
+        typeof (entry as ReplicaSilenceRecord).overdueByMs === "number" &&
+        typeof (entry as ReplicaSilenceRecord).retryIntervalMs === "number" &&
+        typeof (entry as ReplicaSilenceRecord).graceMs === "number"
+      ) {
+        const e = entry as ReplicaSilenceRecord;
+        cleanedSilences.push({
+          key: e.key,
+          replicaId: e.replicaId,
+          hostname: e.hostname,
+          detectedAt: e.detectedAt,
+          expectedNextTickAt: e.expectedNextTickAt,
+          lastHeartbeatAt: e.lastHeartbeatAt,
+          overdueByMs: e.overdueByMs,
+          retryIntervalMs: e.retryIntervalMs,
+          graceMs: e.graceMs,
+        });
+      }
+    }
     return {
       _meta: parsed._meta,
       notified: cleaned,
       rearmHistory: cleanedHistory,
       schedulerStalls: cleanedStalls,
       schedulerHeartbeats: cleanedHeartbeats,
+      replicaSilenceAlerts: cleanedSilences,
     };
   } catch (err) {
     logger.warn(
@@ -416,6 +508,7 @@ function readState(): NotificationsFile {
       rearmHistory: [],
       schedulerStalls: [],
       schedulerHeartbeats: {},
+      replicaSilenceAlerts: [],
     };
   }
 }
@@ -436,6 +529,10 @@ function writeState(file: NotificationsFile): void {
   // by oldest `heartbeatAt` so the most recently active replicas always
   // win. Rolling deploys churn replica IDs (each boot generates a fresh
   // suffix) so without a cap the file would grow per-deploy forever.
+  // Task #737 — silent-replica audit log, capped oldest-first.
+  const trimmedSilences = (file.replicaSilenceAlerts ?? []).slice(
+    -REPLICA_SILENCE_HISTORY_LIMIT,
+  );
   const heartbeatsIn = file.schedulerHeartbeats ?? {};
   const heartbeatEntries = Object.entries(heartbeatsIn);
   let trimmedHeartbeats: Record<string, PersistedSchedulerHeartbeat>;
@@ -452,11 +549,12 @@ function writeState(file: NotificationsFile): void {
   const payload: NotificationsFile = {
     _meta:
       file._meta ??
-      "Persisted dedup state for AVRI drift notifications. `notified` records flags already dispatched to AVRI_DRIFT_WEBHOOK_URL (capped at 500). `rearmHistory` is a bounded audit log of reviewer-driven re-arm events (capped at 200). `schedulerStalls` is a bounded audit log of stalled-scheduler alerts dispatched by the watchdog (capped at 100). `schedulerHeartbeats` is a per-replica scheduler health snapshot keyed by replica id (capped at 50).",
+      "Persisted dedup state for AVRI drift notifications. `notified` records flags already dispatched to AVRI_DRIFT_WEBHOOK_URL (capped at 500). `rearmHistory` is a bounded audit log of reviewer-driven re-arm events (capped at 200). `schedulerStalls` is a bounded audit log of stalled-scheduler alerts dispatched by the watchdog (capped at 100). `schedulerHeartbeats` is a per-replica scheduler health snapshot keyed by replica id (capped at 50). `replicaSilenceAlerts` is a bounded audit log of silent-replica alerts dispatched by the watchdog when a peer's heartbeat exceeds its retry interval + grace (capped at 100).",
     notified: trimmed,
     rearmHistory: trimmedHistory,
     schedulerStalls: trimmedStalls,
     schedulerHeartbeats: trimmedHeartbeats,
+    replicaSilenceAlerts: trimmedSilences,
   };
   writeFileSync(filePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
 }
@@ -699,6 +797,7 @@ export async function notifyDriftFlagsIfNew(
     // Preserve persisted per-replica heartbeats — this writer only
     // touches the dedup state, not heartbeats.
     schedulerHeartbeats: fresh.schedulerHeartbeats ?? {},
+    replicaSilenceAlerts: fresh.replicaSilenceAlerts ?? [],
   });
 
   return {
@@ -993,7 +1092,9 @@ function persistLocalHeartbeat(now: Date): void {
       _meta: state._meta,
       notified: state.notified,
       rearmHistory: state.rearmHistory ?? [],
+      schedulerStalls: state.schedulerStalls ?? [],
       schedulerHeartbeats: heartbeats,
+      replicaSilenceAlerts: state.replicaSilenceAlerts ?? [],
     });
   } catch (err) {
     logger.warn(
@@ -1446,6 +1547,15 @@ export async function detectAndNotifyStalledScheduler(
     notified: fresh.notified,
     rearmHistory: fresh.rearmHistory ?? [],
     schedulerStalls: mergedStalls,
+    // Task #737 — preserve persisted per-replica heartbeats here too:
+    // before #737 this writer omitted `schedulerHeartbeats`, which
+    // caused `writeState` to default it to `{}` and silently clobber
+    // every peer replica's heartbeat any time the local watchdog
+    // dispatched a stall alert. The silent-replica detector relies on
+    // those heartbeats, so the clobber would defeat #737's whole
+    // point.
+    schedulerHeartbeats: fresh.schedulerHeartbeats ?? {},
+    replicaSilenceAlerts: fresh.replicaSilenceAlerts ?? [],
   });
 
   return {
@@ -1466,6 +1576,368 @@ export async function detectAndNotifyStalledScheduler(
  */
 export function listSchedulerStalls(): SchedulerStallRecord[] {
   return (readState().schedulerStalls ?? []).map((s) => ({ ...s }));
+}
+
+// ---------------------------------------------------------------------------
+// Task #737 — Silent-replica watchdog.
+//
+// Task #397 added per-replica heartbeats so the calibration page can
+// render an "Overdue" badge when any replica's `nextTickAt + retry +
+// grace` is in the past. The badge only helps a reviewer who happens
+// to look at the page, though — a wedged peer replica can sit silent
+// for hours between manual checks.
+//
+// The silent-replica detector closes that loop: it reads the same
+// per-replica heartbeats the UI does (via `getDriftSchedulerStatus()`),
+// applies the exact same overdue threshold (`nextTickAt + retry +
+// grace`), and dispatches an `avri_drift_replica_silent` webhook for
+// each peer replica that crosses the threshold. Dedup is per-replica
+// per-silence-window so a single wedged peer pages reviewers exactly
+// once per stall window — not on every watchdog tick.
+//
+// We deliberately skip the *current* replica here: the existing
+// `detectAndNotifyStalledScheduler` (Task #396) already covers
+// "this replica's own scheduler is overdue" using the in-memory
+// `nextTickAt` and a different (stricter) `2 * intervalMs` semantic.
+// Re-firing here would just double-page reviewers for the same wedge.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_REPLICA_OVERDUE_GRACE_MS = 60_000;
+
+function autoReplicaOverdueGraceMs(): number {
+  return parseIntervalEnv(
+    process.env.AVRI_REPLICA_OVERDUE_GRACE_MS,
+    DEFAULT_REPLICA_OVERDUE_GRACE_MS,
+  );
+}
+
+/**
+ * Compute whether a replica heartbeat snapshot represents a silent
+ * (overdue) replica. A replica is silent when:
+ *   - its scheduler is started AND
+ *   - it has a known `nextTickAt` AND
+ *   - the wall clock is more than `(retryIntervalMs ?? 0) + graceMs`
+ *     past `nextTickAt`.
+ *
+ * The retry-interval cushion absorbs the case where the replica is
+ * currently retrying after a transient failure (so we only page on
+ * persistent silence, not normal back-off). The grace covers fake-timer
+ * drift and small clock skew between replicas.
+ *
+ * Mirrors the calibration UI's `isReplicaOverdue` so the server-side
+ * watchdog and the on-page badge always agree on what "Overdue" means.
+ */
+export function isReplicaOverdue(
+  status: DriftSchedulerStatus,
+  nowMs: number,
+  graceMs: number,
+): boolean {
+  if (!status.schedulerStarted) return false;
+  if (status.nextTickAt == null) return false;
+  const nextMs = Date.parse(status.nextTickAt);
+  if (!Number.isFinite(nextMs)) return false;
+  const cushion = (status.retryIntervalMs ?? 0) + graceMs;
+  return nextMs + cushion < nowMs;
+}
+
+/**
+ * Payload dispatched by the silent-replica watchdog. Intentionally a
+ * separate shape (and event name) from {@link SchedulerStallPayload}
+ * so consumers can branch on `event` without parsing the rest of the
+ * body.
+ */
+export interface ReplicaSilencePayload {
+  event: "avri_drift_replica_silent";
+  detectedAt: string;
+  replicaId: string;
+  hostname: string;
+  expectedNextTickAt: string;
+  lastHeartbeatAt: string;
+  overdueByMs: number;
+  retryIntervalMs: number;
+  graceMs: number;
+  intervalMs: number | null;
+  schedulerStartedAt: string | null;
+  lastTickAt: string | null;
+  lastTickOk: boolean | null;
+  ticksCompleted: number;
+  calibrationUrl: string;
+  runbookUrl: string;
+}
+
+export type ReplicaSilenceDispatcher = (
+  url: string,
+  payload: ReplicaSilencePayload,
+) => Promise<{ ok: boolean; status?: number; error?: string }>;
+
+const defaultReplicaSilenceDispatcher: ReplicaSilenceDispatcher = async (
+  url,
+  payload,
+) => {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "vulnrap-avri-drift-notifier/1.0",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      return { ok: false, status: res.status, error: `HTTP ${res.status}` };
+    }
+    return { ok: true, status: res.status };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+};
+
+export interface DetectOverdueReplicasOptions {
+  webhookUrl?: string;
+  publicUrl?: string;
+  runbookUrl?: string;
+  dispatch?: ReplicaSilenceDispatcher;
+  now?: () => Date;
+  /**
+   * Override the per-replica grace window applied on top of
+   * `retryIntervalMs`. Defaults to env AVRI_REPLICA_OVERDUE_GRACE_MS,
+   * falling back to 60s — matches the calibration UI's grace so the
+   * watchdog and the on-page badge agree.
+   */
+  graceMs?: number;
+  /**
+   * Override the heartbeat list (used by tests to skip the persisted
+   * shared-state read). When set, the detector treats this as the
+   * full set of replicas to consider.
+   */
+  statuses?: DriftSchedulerStatus[];
+  /**
+   * Override the replica id treated as "this process". Defaults to
+   * `currentReplicaId()`. The current replica is skipped because its
+   * own stall is covered by `detectAndNotifyStalledScheduler`.
+   */
+  currentReplicaId?: string;
+}
+
+export interface DetectOverdueReplicasReplicaResult {
+  replicaId: string;
+  /** True when the replica is overdue per `isReplicaOverdue`. */
+  silent: boolean;
+  /**
+   * True when the silence was detected but a record for the same
+   * silent-replica window already exists in the persisted state.
+   */
+  alreadyAlerted: boolean;
+  /** True when a webhook URL was configured AND the dispatch succeeded. */
+  dispatched: boolean;
+  /** Status from the webhook attempt (only populated when dispatched). */
+  dispatchResult?: { ok: boolean; status?: number; error?: string };
+  /**
+   * True when the silence was new but no webhook URL was configured;
+   * we still record the silence locally so wiring up a webhook later
+   * doesn't produce a retroactive flood for silences that long since
+   * recovered.
+   */
+  webhookSkipped: boolean;
+  /** The persisted record (when one was created or already existed). */
+  record?: ReplicaSilenceRecord;
+}
+
+export interface DetectOverdueReplicasResult {
+  /** Per-replica outcome, one entry per replica that was considered. */
+  replicas: DetectOverdueReplicasReplicaResult[];
+  /** Calibration deep link included in any dispatched payload. */
+  calibrationUrl: string;
+  /** Runbook link included in any dispatched payload. */
+  runbookUrl: string;
+}
+
+/**
+ * Read the per-replica heartbeat snapshots, find any silent peers,
+ * dispatch a `avri_drift_replica_silent` webhook for each newly-silent
+ * peer, and persist the dedup record. Resolves on every call — never
+ * throws — so the watchdog can swallow errors uniformly.
+ *
+ * Idempotent within a silence window per replica: calling this
+ * repeatedly while the same peer is silent on the same missed tick
+ * produces exactly one webhook (the first call) and returns
+ * `alreadyAlerted: true` for that peer on subsequent calls.
+ */
+export async function detectAndNotifyOverdueReplicas(
+  opts: DetectOverdueReplicasOptions = {},
+): Promise<DetectOverdueReplicasResult> {
+  const links = buildLinks(opts.publicUrl, opts.runbookUrl);
+  const now = (opts.now ?? (() => new Date()))();
+  const nowMs = now.getTime();
+  const graceMs = opts.graceMs ?? autoReplicaOverdueGraceMs();
+  const selfReplicaId = opts.currentReplicaId ?? currentReplicaId();
+  const statuses = opts.statuses ?? getDriftSchedulerStatus();
+
+  const webhookUrl = (
+    opts.webhookUrl ??
+    process.env.AVRI_DRIFT_WEBHOOK_URL ??
+    ""
+  ).trim();
+  const dispatch = opts.dispatch ?? defaultReplicaSilenceDispatcher;
+
+  const replicas: DetectOverdueReplicasReplicaResult[] = [];
+
+  for (const status of statuses) {
+    // Skip the current replica — its own stall is covered by
+    // `detectAndNotifyStalledScheduler`. Re-firing here would just
+    // produce a duplicate page for the same wedge.
+    if (status.replicaId === selfReplicaId) continue;
+    if (!isReplicaOverdue(status, nowMs, graceMs)) continue;
+
+    const expectedNextTickAt = status.nextTickAt!;
+    const overdueByMs = nowMs - Date.parse(expectedNextTickAt);
+    const retryIntervalMs = status.retryIntervalMs ?? 0;
+    const dedupKey = `SILENT|${status.replicaId}|${expectedNextTickAt}`;
+
+    // Re-read state inside the loop so a previous iteration's write
+    // (e.g. two peer replicas silent in the same poll) is reflected.
+    const state = readState();
+    const seen = state.replicaSilenceAlerts ?? [];
+    const existing = seen.find((s) => s.key === dedupKey);
+    if (existing) {
+      replicas.push({
+        replicaId: status.replicaId,
+        silent: true,
+        alreadyAlerted: true,
+        dispatched: false,
+        webhookSkipped: false,
+        record: { ...existing },
+      });
+      continue;
+    }
+
+    const record: ReplicaSilenceRecord = {
+      key: dedupKey,
+      replicaId: status.replicaId,
+      hostname: status.hostname,
+      detectedAt: now.toISOString(),
+      expectedNextTickAt,
+      // `heartbeatAt` is the wall-clock at which the silent peer last
+      // wrote to the shared state file; null only happens for the
+      // "live in-memory" entry of the responding replica, which we
+      // never reach because we skip self above.
+      lastHeartbeatAt: status.heartbeatAt ?? expectedNextTickAt,
+      overdueByMs,
+      retryIntervalMs,
+      graceMs,
+    };
+
+    let dispatched = false;
+    let dispatchResult: DetectOverdueReplicasReplicaResult["dispatchResult"];
+    let webhookSkipped = false;
+
+    if (webhookUrl.length === 0) {
+      webhookSkipped = true;
+      logger.info(
+        { replicaId: status.replicaId, expectedNextTickAt, overdueByMs },
+        "[avri-drift-notifications] AVRI_DRIFT_WEBHOOK_URL not set; recording silent-replica alert without dispatch.",
+      );
+    } else {
+      const payload: ReplicaSilencePayload = {
+        event: "avri_drift_replica_silent",
+        detectedAt: record.detectedAt,
+        replicaId: status.replicaId,
+        hostname: status.hostname,
+        expectedNextTickAt,
+        lastHeartbeatAt: record.lastHeartbeatAt,
+        overdueByMs,
+        retryIntervalMs,
+        graceMs,
+        intervalMs: status.intervalMs,
+        schedulerStartedAt: status.startedAt,
+        lastTickAt: status.lastTickAt,
+        lastTickOk: status.lastTickOk,
+        ticksCompleted: status.ticksCompleted,
+        calibrationUrl: links.calibrationUrl,
+        runbookUrl: links.runbookUrl,
+      };
+      dispatchResult = await dispatch(webhookUrl, payload);
+      dispatched = dispatchResult.ok;
+      if (!dispatchResult.ok) {
+        logger.warn(
+          {
+            dispatchResult,
+            replicaId: status.replicaId,
+            expectedNextTickAt,
+            overdueByMs,
+          },
+          "[avri-drift-notifications] Silent-replica webhook dispatch failed; will retry on the next watchdog tick.",
+        );
+        // Do NOT persist — let the next watchdog call try again.
+        replicas.push({
+          replicaId: status.replicaId,
+          silent: true,
+          alreadyAlerted: false,
+          dispatched: false,
+          dispatchResult,
+          webhookSkipped: false,
+          record,
+        });
+        continue;
+      }
+      logger.warn(
+        {
+          replicaId: status.replicaId,
+          expectedNextTickAt,
+          overdueByMs,
+          status: dispatchResult.status,
+        },
+        "[avri-drift-notifications] Silent-replica webhook dispatched.",
+      );
+    }
+
+    // Re-read state right before writing so any concurrent writer
+    // that landed during the awaited dispatch is preserved instead of
+    // being clobbered by the stale snapshot we read above.
+    const fresh = readState();
+    const freshSilences = fresh.replicaSilenceAlerts ?? [];
+    const silenceAlreadyPersisted = freshSilences.some(
+      (s) => s.key === dedupKey,
+    );
+    const mergedSilences = silenceAlreadyPersisted
+      ? freshSilences
+      : [...freshSilences, record];
+    writeState({
+      _meta: fresh._meta,
+      notified: fresh.notified,
+      rearmHistory: fresh.rearmHistory ?? [],
+      schedulerStalls: fresh.schedulerStalls ?? [],
+      schedulerHeartbeats: fresh.schedulerHeartbeats ?? {},
+      replicaSilenceAlerts: mergedSilences,
+    });
+
+    replicas.push({
+      replicaId: status.replicaId,
+      silent: true,
+      alreadyAlerted: false,
+      dispatched,
+      dispatchResult,
+      webhookSkipped,
+      record,
+    });
+  }
+
+  return {
+    replicas,
+    calibrationUrl: links.calibrationUrl,
+    runbookUrl: links.runbookUrl,
+  };
+}
+
+/**
+ * Snapshot of the persisted silent-replica audit log. Returns a fresh
+ * array on every call so callers can safely mutate the result.
+ */
+export function listReplicaSilenceAlerts(): ReplicaSilenceRecord[] {
+  return (readState().replicaSilenceAlerts ?? []).map((s) => ({ ...s }));
 }
 
 const DEFAULT_WATCHDOG_INTERVAL_MS = 5 * 60 * 1000;
@@ -1491,6 +1963,24 @@ export interface SchedulerWatchdogOptions extends DetectStalledSchedulerOptions 
    * that hasn't had a chance to run its first tick yet.
    */
   initialDelayMs?: number;
+  /**
+   * Task #737 — inject a custom dispatcher for the silent-replica
+   * sweep. Defaults to the same fetch-based dispatcher the local
+   * stall watchdog uses. Tests pass a recorder so they can assert
+   * the dispatched payload without real HTTP.
+   */
+  replicaSilenceDispatch?: ReplicaSilenceDispatcher;
+  /**
+   * Task #737 — override the per-replica grace window applied on top
+   * of `retryIntervalMs`. See {@link DetectOverdueReplicasOptions}.
+   */
+  replicaOverdueGraceMs?: number;
+  /**
+   * Task #737 — override the heartbeat list for the silent-replica
+   * sweep (used by tests). When set, the same array is fed into
+   * `detectAndNotifyOverdueReplicas` on every tick.
+   */
+  replicaSilenceStatuses?: DriftSchedulerStatus[];
 }
 
 export interface SchedulerWatchdog {
@@ -1535,6 +2025,27 @@ export function startStalledSchedulerWatchdog(
       logger.warn(
         { err },
         "[avri-drift-notifications] Stalled-scheduler watchdog tick threw unexpectedly (non-fatal).",
+      );
+    }
+    // Task #737 — also sweep peer replicas. The local stall check
+    // above only sees this replica's in-memory `nextTickAt`; a peer
+    // replica that has gone silent only shows up here, in the shared
+    // heartbeat file. We run this *after* the local stall check so a
+    // single throw in either path doesn't suppress the other.
+    try {
+      await detectAndNotifyOverdueReplicas({
+        webhookUrl: opts.webhookUrl,
+        publicUrl: opts.publicUrl,
+        runbookUrl: opts.runbookUrl,
+        dispatch: opts.replicaSilenceDispatch,
+        now: opts.now,
+        graceMs: opts.replicaOverdueGraceMs,
+        statuses: opts.replicaSilenceStatuses,
+      });
+    } catch (err) {
+      logger.warn(
+        { err },
+        "[avri-drift-notifications] Silent-replica watchdog tick threw unexpectedly (non-fatal).",
       );
     } finally {
       completed += 1;
@@ -1702,6 +2213,7 @@ export function removeNotifiedFlags(
       // Preserve persisted per-replica heartbeats — re-arming dedup
       // state must not clobber scheduler heartbeats from other replicas.
       schedulerHeartbeats: state.schedulerHeartbeats ?? {},
+      replicaSilenceAlerts: state.replicaSilenceAlerts ?? [],
     });
   }
   // Echo back the newest-trimmed snapshot so callers see the same view
@@ -1753,6 +2265,8 @@ export const __testing = {
   REARM_HISTORY_LIMIT,
   STALL_HISTORY_LIMIT,
   SCHEDULER_HEARTBEAT_LIMIT,
+  REPLICA_SILENCE_HISTORY_LIMIT,
+  DEFAULT_REPLICA_OVERDUE_GRACE_MS,
   DEFAULT_WATCHDOG_INTERVAL_MS,
   DEFAULT_INTERVAL_MS,
   DEFAULT_RETRY_INTERVAL_MS,

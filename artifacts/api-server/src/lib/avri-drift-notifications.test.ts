@@ -22,6 +22,9 @@ import {
   detectAndNotifyStalledScheduler,
   listSchedulerStalls,
   startStalledSchedulerWatchdog,
+  isReplicaOverdue,
+  detectAndNotifyOverdueReplicas,
+  listReplicaSilenceAlerts,
   __testing,
   type WebhookDispatcher,
   type WebhookPayload,
@@ -31,6 +34,9 @@ import {
   type SchedulerStallPayload,
   type SchedulerStallRecord,
   type DriftSchedulerStatus,
+  type ReplicaSilenceDispatcher,
+  type ReplicaSilencePayload,
+  type ReplicaSilenceRecord,
 } from "./avri-drift-notifications";
 import type { AvriDriftReport, DriftFlag } from "./avri-drift";
 
@@ -1881,5 +1887,429 @@ describe("startStalledSchedulerWatchdog", () => {
     watchdog.stop();
     await vi.advanceTimersByTimeAsync(10_000);
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("isReplicaOverdue", () => {
+  const NOW = Date.parse("2026-04-29T00:10:00.000Z");
+
+  it("returns false when scheduler is not started", () => {
+    expect(
+      isReplicaOverdue(
+        makeStatus({ schedulerStarted: false, nextTickAt: null }),
+        NOW,
+        60_000,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when nextTickAt is null", () => {
+    expect(
+      isReplicaOverdue(makeStatus({ nextTickAt: null }), NOW, 60_000),
+    ).toBe(false);
+  });
+
+  it("returns false when nextTickAt is unparseable", () => {
+    expect(
+      isReplicaOverdue(makeStatus({ nextTickAt: "not-a-date" }), NOW, 60_000),
+    ).toBe(false);
+  });
+
+  it("returns false when within retry + grace window past nextTickAt", () => {
+    // nextTickAt 30s before now, retry=5s, grace=60s → cushion 65s, not overdue.
+    expect(
+      isReplicaOverdue(
+        makeStatus({
+          nextTickAt: "2026-04-29T00:09:30.000Z",
+          retryIntervalMs: 5_000,
+        }),
+        NOW,
+        60_000,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns true when nextTickAt + retry + grace is past now", () => {
+    // nextTickAt 5min ago, retry=5s, grace=60s → far past cushion.
+    expect(
+      isReplicaOverdue(
+        makeStatus({
+          nextTickAt: "2026-04-29T00:05:00.000Z",
+          retryIntervalMs: 5_000,
+        }),
+        NOW,
+        60_000,
+      ),
+    ).toBe(true);
+  });
+
+  it("treats null retryIntervalMs as zero retry cushion", () => {
+    // 90s past expected, retry=null → cushion = 60s grace; overdue.
+    expect(
+      isReplicaOverdue(
+        makeStatus({
+          nextTickAt: "2026-04-29T00:08:30.000Z",
+          retryIntervalMs: null,
+        }),
+        NOW,
+        60_000,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("detectAndNotifyOverdueReplicas", () => {
+  let tmpDir: string;
+  let statePath: string;
+  let originalEnv: { url?: string; statePath?: string; grace?: string };
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "avri-drift-replica-silent-"));
+    statePath = path.join(tmpDir, "notifications.json");
+    originalEnv = {
+      url: process.env.AVRI_DRIFT_WEBHOOK_URL,
+      statePath: process.env.AVRI_DRIFT_NOTIFICATIONS_PATH,
+      grace: process.env.AVRI_REPLICA_OVERDUE_GRACE_MS,
+    };
+    process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = statePath;
+    delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    delete process.env.AVRI_REPLICA_OVERDUE_GRACE_MS;
+    __testing.resetResolvedPath();
+    __testing.resetSchedulerStatus();
+    __testing.resetReplicaIdentity();
+  });
+
+  afterEach(() => {
+    if (originalEnv.url === undefined)
+      delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    else process.env.AVRI_DRIFT_WEBHOOK_URL = originalEnv.url;
+    if (originalEnv.statePath === undefined)
+      delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    else process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = originalEnv.statePath;
+    if (originalEnv.grace === undefined)
+      delete process.env.AVRI_REPLICA_OVERDUE_GRACE_MS;
+    else process.env.AVRI_REPLICA_OVERDUE_GRACE_MS = originalEnv.grace;
+    __testing.resetResolvedPath();
+    __testing.resetSchedulerStatus();
+    __testing.resetReplicaIdentity();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function silentPeer(
+    overrides: Partial<DriftSchedulerStatus> = {},
+  ): DriftSchedulerStatus {
+    return makeStatus({
+      replicaId: "peer-A",
+      hostname: "peer-A-host",
+      nextTickAt: "2026-04-29T00:00:00.000Z",
+      retryIntervalMs: 5_000,
+      heartbeatAt: "2026-04-28T23:59:30.000Z",
+      ...overrides,
+    });
+  }
+
+  it("dispatches and persists for a newly silent peer replica", async () => {
+    const calls: { url: string; payload: ReplicaSilencePayload }[] = [];
+    const dispatch: ReplicaSilenceDispatcher = async (url, payload) => {
+      calls.push({ url, payload });
+      return { ok: true, status: 200 };
+    };
+    const result = await detectAndNotifyOverdueReplicas({
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+      now: () => new Date("2026-04-29T00:10:00.000Z"),
+      graceMs: 60_000,
+      currentReplicaId: "self",
+      statuses: [silentPeer()],
+    });
+
+    expect(result.replicas).toHaveLength(1);
+    expect(result.replicas[0]).toMatchObject({
+      replicaId: "peer-A",
+      silent: true,
+      alreadyAlerted: false,
+      dispatched: true,
+      webhookSkipped: false,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("https://example.com/hook");
+    expect(calls[0].payload.event).toBe("avri_drift_replica_silent");
+    expect(calls[0].payload.replicaId).toBe("peer-A");
+    expect(calls[0].payload.expectedNextTickAt).toBe(
+      "2026-04-29T00:00:00.000Z",
+    );
+    expect(calls[0].payload.overdueByMs).toBe(10 * 60 * 1000);
+    expect(calls[0].payload.retryIntervalMs).toBe(5_000);
+    expect(calls[0].payload.graceMs).toBe(60_000);
+
+    const persisted = listReplicaSilenceAlerts();
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].key).toBe(
+      "SILENT|peer-A|2026-04-29T00:00:00.000Z",
+    );
+  });
+
+  it("skips the current replica even when overdue", async () => {
+    const calls: ReplicaSilencePayload[] = [];
+    const dispatch: ReplicaSilenceDispatcher = async (_u, p) => {
+      calls.push(p);
+      return { ok: true, status: 200 };
+    };
+    const result = await detectAndNotifyOverdueReplicas({
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+      now: () => new Date("2026-04-29T00:10:00.000Z"),
+      graceMs: 60_000,
+      currentReplicaId: "peer-A",
+      statuses: [silentPeer()],
+    });
+
+    expect(result.replicas).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+    expect(listReplicaSilenceAlerts()).toHaveLength(0);
+  });
+
+  it("dedups within the same silence window", async () => {
+    const calls: ReplicaSilencePayload[] = [];
+    const dispatch: ReplicaSilenceDispatcher = async (_u, p) => {
+      calls.push(p);
+      return { ok: true, status: 200 };
+    };
+    const peer = silentPeer();
+    await detectAndNotifyOverdueReplicas({
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+      now: () => new Date("2026-04-29T00:10:00.000Z"),
+      graceMs: 60_000,
+      currentReplicaId: "self",
+      statuses: [peer],
+    });
+    const second = await detectAndNotifyOverdueReplicas({
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+      now: () => new Date("2026-04-29T00:10:00.000Z"),
+      graceMs: 60_000,
+      currentReplicaId: "self",
+      statuses: [peer],
+    });
+    expect(calls).toHaveLength(1);
+    expect(second.replicas[0]).toMatchObject({
+      alreadyAlerted: true,
+      dispatched: false,
+    });
+    expect(listReplicaSilenceAlerts()).toHaveLength(1);
+  });
+
+  it("re-fires when the expected tick advances to a new window", async () => {
+    const calls: ReplicaSilencePayload[] = [];
+    const dispatch: ReplicaSilenceDispatcher = async (_u, p) => {
+      calls.push(p);
+      return { ok: true, status: 200 };
+    };
+    await detectAndNotifyOverdueReplicas({
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+      now: () => new Date("2026-04-29T00:10:00.000Z"),
+      graceMs: 60_000,
+      currentReplicaId: "self",
+      statuses: [silentPeer()],
+    });
+    await detectAndNotifyOverdueReplicas({
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+      now: () => new Date("2026-04-29T00:20:00.000Z"),
+      graceMs: 60_000,
+      currentReplicaId: "self",
+      statuses: [
+        silentPeer({ nextTickAt: "2026-04-29T00:15:00.000Z" }),
+      ],
+    });
+    expect(calls).toHaveLength(2);
+    expect(listReplicaSilenceAlerts()).toHaveLength(2);
+  });
+
+  it("does not persist when the webhook dispatch fails", async () => {
+    const dispatch: ReplicaSilenceDispatcher = async () => ({
+      ok: false,
+      status: 503,
+      error: "HTTP 503",
+    });
+    const result = await detectAndNotifyOverdueReplicas({
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+      now: () => new Date("2026-04-29T00:10:00.000Z"),
+      graceMs: 60_000,
+      currentReplicaId: "self",
+      statuses: [silentPeer()],
+    });
+    expect(result.replicas[0]).toMatchObject({
+      silent: true,
+      dispatched: false,
+      webhookSkipped: false,
+    });
+    expect(result.replicas[0].dispatchResult).toEqual({
+      ok: false,
+      status: 503,
+      error: "HTTP 503",
+    });
+    expect(listReplicaSilenceAlerts()).toHaveLength(0);
+  });
+
+  it("records a silence locally without dispatching when webhook is unset", async () => {
+    let dispatchCalls = 0;
+    const dispatch: ReplicaSilenceDispatcher = async () => {
+      dispatchCalls += 1;
+      return { ok: true, status: 200 };
+    };
+    const result = await detectAndNotifyOverdueReplicas({
+      webhookUrl: "",
+      dispatch,
+      now: () => new Date("2026-04-29T00:10:00.000Z"),
+      graceMs: 60_000,
+      currentReplicaId: "self",
+      statuses: [silentPeer()],
+    });
+    expect(dispatchCalls).toBe(0);
+    expect(result.replicas[0]).toMatchObject({
+      silent: true,
+      dispatched: false,
+      webhookSkipped: true,
+    });
+    expect(listReplicaSilenceAlerts()).toHaveLength(1);
+  });
+
+  it("listReplicaSilenceAlerts returns mutable copies", async () => {
+    const dispatch: ReplicaSilenceDispatcher = async () => ({
+      ok: true,
+      status: 200,
+    });
+    await detectAndNotifyOverdueReplicas({
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+      now: () => new Date("2026-04-29T00:10:00.000Z"),
+      graceMs: 60_000,
+      currentReplicaId: "self",
+      statuses: [silentPeer()],
+    });
+    const a = listReplicaSilenceAlerts();
+    a.push({
+      key: "SILENT|junk|x",
+      replicaId: "junk",
+      hostname: "junk",
+      detectedAt: "x",
+      expectedNextTickAt: "x",
+      lastHeartbeatAt: "x",
+      overdueByMs: 0,
+      retryIntervalMs: 0,
+      graceMs: 0,
+    });
+    expect(listReplicaSilenceAlerts()).toHaveLength(1);
+  });
+
+  it("skips peers that are not yet overdue", async () => {
+    const calls: ReplicaSilencePayload[] = [];
+    const dispatch: ReplicaSilenceDispatcher = async (_u, p) => {
+      calls.push(p);
+      return { ok: true, status: 200 };
+    };
+    const result = await detectAndNotifyOverdueReplicas({
+      webhookUrl: "https://example.com/hook",
+      dispatch,
+      now: () => new Date("2026-04-29T00:10:00.000Z"),
+      graceMs: 60_000,
+      currentReplicaId: "self",
+      statuses: [
+        // 30s past nextTickAt with retry 5s + grace 60s = cushion 65s → not overdue.
+        silentPeer({ nextTickAt: "2026-04-29T00:09:30.000Z" }),
+      ],
+    });
+    expect(result.replicas).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("startStalledSchedulerWatchdog — silent-replica wiring", () => {
+  let tmpDir: string;
+  let statePath: string;
+  let originalEnv: { url?: string; statePath?: string };
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(
+      path.join(tmpdir(), "avri-drift-stall-watchdog-silent-"),
+    );
+    statePath = path.join(tmpDir, "notifications.json");
+    originalEnv = {
+      url: process.env.AVRI_DRIFT_WEBHOOK_URL,
+      statePath: process.env.AVRI_DRIFT_NOTIFICATIONS_PATH,
+    };
+    process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = statePath;
+    delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    __testing.resetResolvedPath();
+    __testing.resetSchedulerStatus();
+    __testing.resetReplicaIdentity();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-29T00:10:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (originalEnv.url === undefined)
+      delete process.env.AVRI_DRIFT_WEBHOOK_URL;
+    else process.env.AVRI_DRIFT_WEBHOOK_URL = originalEnv.url;
+    if (originalEnv.statePath === undefined)
+      delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    else process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = originalEnv.statePath;
+    __testing.resetResolvedPath();
+    __testing.resetSchedulerStatus();
+    __testing.resetReplicaIdentity();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("invokes detectAndNotifyOverdueReplicas on every tick", async () => {
+    const stallCalls: SchedulerStallPayload[] = [];
+    const silenceCalls: ReplicaSilencePayload[] = [];
+    const stallDispatch: SchedulerStallDispatcher = async (_u, p) => {
+      stallCalls.push(p);
+      return { ok: true, status: 200 };
+    };
+    const silenceDispatch: ReplicaSilenceDispatcher = async (_u, p) => {
+      silenceCalls.push(p);
+      return { ok: true, status: 200 };
+    };
+    const peer = makeStatus({
+      replicaId: "peer-A",
+      hostname: "peer-A-host",
+      nextTickAt: "2026-04-29T00:00:00.000Z",
+      retryIntervalMs: 5_000,
+    });
+    const watchdog = startStalledSchedulerWatchdog({
+      watchdogIntervalMs: 1_000,
+      initialDelayMs: 1_000,
+      webhookUrl: "https://example.com/hook",
+      dispatch: stallDispatch,
+      // Local stall path: pass a healthy local status so it doesn't fire.
+      status: makeStatus({
+        nextTickAt: "2026-04-29T00:11:00.000Z",
+        intervalMs: 60_000,
+      }),
+      replicaSilenceDispatch: silenceDispatch,
+      replicaOverdueGraceMs: 60_000,
+      replicaSilenceStatuses: [peer],
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(stallCalls).toHaveLength(0);
+      expect(silenceCalls).toHaveLength(1);
+      expect(silenceCalls[0].replicaId).toBe("peer-A");
+      // Second tick — silence-window dedup keeps the count at 1.
+      await vi.advanceTimersByTimeAsync(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(silenceCalls).toHaveLength(1);
+    } finally {
+      watchdog.stop();
+    }
   });
 });
