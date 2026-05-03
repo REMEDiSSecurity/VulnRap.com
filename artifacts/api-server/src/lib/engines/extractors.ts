@@ -75,6 +75,17 @@ export const STRENGTH_MULTIPLIERS: Record<EvidenceType, number> = {
 // omits the English acronym. Cyrillic ranges are written explicitly
 // ([а-яА-Я]) because JS \w is ASCII-only; accented Latin chars use the
 // /i flag which case-folds them in modern V8.
+//
+// Task #754: extended the same long-form coverage to German, Simplified
+// and Traditional Chinese, Italian, and Korean — the next-largest
+// researcher populations in the corpus after the five from Task #424.
+// Reports like "Pufferüberlauf", "命令注入", "iniezione di comandi", or
+// "원격 코드 실행" now route to the right vulnerability class instead of
+// the underspecified bucket. CJK and Hangul characters are case-insensitive
+// by definition so the /i flag is dropped on those patterns; German uses
+// /i so umlauts case-fold (ä↔Ä etc.). Where Simplified and Traditional
+// glyphs differ (e.g. 缓/緩, 络/絡, 远/遠), both are listed in alternation
+// rather than relying on Han unification.
 const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
   XSS: [
     /cross.?site.?script/i,
@@ -86,6 +97,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /scripts?\s+inter[\s-]?sites?/i, // FR
     /межсайтов[а-яА-Я]+\s+скриптинг/i, // RU
     /クロスサイトスクリプティング/, // JA
+    /seiten[üu]bergreifend[a-zäöüß]*\s+skript/i, // DE
+    /跨站(?:点)?(?:脚本|腳本)/, // ZH (Simplified/Traditional)
+    /script(?:ing)?\s+(?:cross[\s-]?site|tra\s+siti|inter[\s-]?siti)/i, // IT
+    /(?:크로스[\s-]?사이트|사이트\s*간)\s*스크립팅/, // KO
   ],
   SQLi: [
     /sql.?inject/i,
@@ -97,6 +112,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /injection\s+(?:de\s+)?SQL/i, // FR
     /SQL[-\s]?инъекци[а-яА-Я]*/i, // RU
     /SQLインジェクション/, // JA
+    /SQL[-\s]?injektion/i, // DE
+    /SQL\s*注入/, // ZH
+    /iniezione\s+(?:di\s+)?SQL/i, // IT
+    /SQL[-\s]?(?:인젝션|주입)/, // KO
   ],
   SSRF: [
     /server.?side.?request/i,
@@ -107,6 +126,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /falsification\s+de\s+requ[eê]te\s+c[oô]t[eé]\s+serveur/i, // FR
     /подделк[а-яА-Я]+\s+запрос[а-яА-Я]+\s+на\s+сторон[а-яА-Я]+\s+сервер[а-яА-Я]*/i, // RU
     /サーバーサイドリクエストフォージェリ/, // JA
+    /serverseitig[a-zäöüß]*\s+(?:anfrage|anforderung|request)f[äa]lschung/i, // DE
+    /(?:服务器|伺服器)端\s*请求(?:伪造|偽造)|(?:服务器|伺服器)端\s*請求(?:伪造|偽造)/, // ZH
+    /falsificazione\s+(?:di\s+)?richiest[ae]\s+lato\s+server/i, // IT
+    /서버[\s-]?(?:측|사이드)\s*요청\s*위조/, // KO
   ],
   XXE: [
     /xml.?external.?entit/i,
@@ -116,6 +139,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /entit[eé]\s+externe\s+XML/i, // FR
     /внешн[а-яА-Я]+\s+сущност[а-яА-Я]+\s+XML/i, // RU
     /XML外部(?:実体|エンティティ)/, // JA
+    /(?:externe\s+XML[-\s]?entit[äa]t|XML[-\s]?externe[a-zäöüß]*[-\s]+entit[äa]t)/i, // DE
+    /XML\s*外部(?:实体|實體)/, // ZH
+    /entit[aà]\s+esterna\s+XML/i, // IT
+    /XML\s*외부\s*(?:엔터티|엔티티|개체)/, // KO
   ],
   "Buffer Overflow": [
     /buffer.?overflow/i,
@@ -127,6 +154,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /(?:d[eé]bordement|d[eé]passement)\s+(?:de\s+)?tampon/i, // FR
     /переполнени[а-яА-Я]+\s+буфер[а-яА-Я]*/i, // RU
     /バッファオーバーフロー/, // JA
+    /puffer[üu]berlauf/i, // DE
+    /(?:缓冲区|緩衝區)(?:溢出|溢位)/, // ZH
+    /overflow\s+del\s+buffer/i, // IT
+    /버퍼\s*오버플(?:로우|로워|로)/, // KO
   ],
   "Use After Free": [
     /use.?after.?free/i,
@@ -137,6 +168,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /utilisation\s+apr[eè]s\s+lib[eé]ration/i, // FR
     /использовани[а-яА-Я]+\s+после\s+освобожден[а-яА-Я]+/i, // RU
     /解放後使用/, // JA
+    /(?:nutzung|verwendung|benutzung)\s+nach\s+(?:freigabe|freigeben)/i, // DE
+    /(?:释放|釋放)(?:后|後)使用/, // ZH
+    /uso\s+dopo\s+(?:il\s+)?(?:rilascio|liberazione)/i, // IT
+    /해제\s*후\s*사용/, // KO
   ],
   "Path Traversal": [
     /path.?traversal/i,
@@ -147,6 +182,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /travers[eé]e\s+(?:de\s+)?(?:r[eé]pertoire|chemin)/i, // FR
     /обход\s+(?:каталог[а-яА-Я]*|директор[а-яА-Я]+)/i, // RU
     /(?:ディレクトリ|パス)トラバーサル/, // JA
+    /(?:pfad|verzeichnis)[\s-]?(?:traversierung|durchquerung)/i, // DE
+    /(?:路径|路徑)(?:遍历|遍歷)/, // ZH
+    /attraversamento\s+(?:di\s+|del(?:la)?\s+)?(?:percorso|directory|cartella)/i, // IT
+    /(?:경로|디렉(?:터|토)리)\s*(?:탐색|순회|트래버설)/, // KO
   ],
   LFI: [
     /local.?file.?inclusion/i,
@@ -156,6 +195,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /inclusion\s+(?:locale\s+)?de\s+fichiers?(?:\s+(?:locale|local|locaux)e?s?)?/i, // FR
     /локальн[а-яА-Я]+\s+включени[а-яА-Я]+\s+файл[а-яА-Я]*/i, // RU
     /ローカルファイルインクル[ーー]ジョン/, // JA
+    /lokale[a-zäöüß]*\s+datei[\s-]?(?:einbindung|inklusion|einbettung)/i, // DE
+    /本地(?:文件|檔案)包含/, // ZH
+    /inclusione\s+(?:locale\s+)?(?:di\s+)?file(?:\s+local[ie])?/i, // IT
+    /로컬\s*파일\s*(?:포함|인클루(?:전|션))/, // KO
   ],
   "Auth Bypass": [
     /auth(?:entication|orization).?bypass/i,
@@ -166,6 +209,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /contournement\s+d[\u2019']?\s*authentification/i, // FR
     /обход\s+(?:аутентификации|авторизации)/i, // RU
     /認証(?:バイパス|回避)/, // JA
+    /(?:authentifizierungs|authentifizierung)[\s-]?(?:bypass|umgehung)|umgehung\s+der\s+authentifizierung/i, // DE
+    /(?:身份验证|身份驗證|认证|認證)\s*(?:绕过|繞過)/, // ZH
+    /(?:bypass|elusione|aggiramento)\s+(?:dell[\s'’]?\s*)?autenticazione/i, // IT
+    /인증\s*(?:우회|바이패스)/, // KO
   ],
   CSRF: [
     /cross.?site.?request.?forgery/i,
@@ -175,6 +222,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /falsification\s+de\s+requ[eê]te\s+inter[\s-]?sites?/i, // FR
     /межсайтов[а-яА-Я]+\s+подделк[а-яА-Я]+\s+запрос[а-яА-Я]*/i, // RU
     /クロスサイトリクエストフォージェリ/, // JA
+    /(?:standort|seiten|site)[\s-]?[üu]bergreifend[a-zäöüß]*\s+(?:anfrage|anforderung|request)f[äa]lschung/i, // DE
+    /跨站(?:请求|請求)(?:伪造|偽造)/, // ZH
+    /falsificazione\s+(?:di\s+)?richiest[ae]\s+(?:tra\s+siti|cross[\s-]?site|inter[\s-]?siti)/i, // IT
+    /(?:크로스[\s-]?사이트|사이트\s*간)\s*요청\s*위조/, // KO
   ],
   "Open Redirect": [
     /open.?redirect/i,
@@ -184,6 +235,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /redirection\s+(?:ouverte|non\s+valid[eé]e)/i, // FR
     /открыт[а-яА-Я]+\s+(?:перенаправлени[а-яА-Я]+|редирект[а-яА-Я]*)/i, // RU
     /オープンリダイレクト/, // JA
+    /offene\s+(?:weiterleitung|umleitung|umlenkung)/i, // DE
+    /(?:开放|開放|任意)(?:重定向|跳转|跳轉)/, // ZH
+    /reindirizzamento\s+(?:aperto|non\s+convalidato)/i, // IT
+    /(?:열린|오픈)\s*(?:리다이렉트|리디렉(?:션|트))/, // KO
   ],
   "Insecure Deserialization": [
     /insecure.?deseriali[sz]/i,
@@ -194,6 +249,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /d[eé]s[eé]rialisation\s+(?:non\s+s[eé]curis[eé]e|non\s+s[uû]re|ins[eé]curis[eé]e)/i, // FR
     /небезопасн[а-яА-Я]+\s+десериализаци[а-яА-Я]+/i, // RU
     /(?:安全でない|安全ではない)デシリアライ[ゼズ]ーション/, // JA
+    /unsichere\s+deserialisierung/i, // DE
+    /不安全的?反序列化/, // ZH
+    /deserializzazione\s+(?:non\s+sicura|insicura)/i, // IT
+    /안전하지\s*않은\s*역직렬화/, // KO
   ],
   "Prototype Pollution": [
     /prototype.?pollution/i,
@@ -203,6 +262,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /pollution\s+de\s+prototype/i, // FR
     /загрязнени[а-яА-Я]+\s+прототип[а-яА-Я]*/i, // RU
     /プロトタイプ汚染/, // JA
+    /prototyp(?:en)?[\s-]?(?:verschmutzung|verunreinigung|vergiftung)/i, // DE
+    /原型(?:链|鏈)?污染/, // ZH
+    /inquinamento\s+(?:del\s+)?prototipo/i, // IT
+    /프로토타입\s*오염/, // KO
   ],
   "Command Injection": [
     /command.?inject/i,
@@ -213,6 +276,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /injection\s+de\s+commandes?/i, // FR
     /(?:внедрени[а-яА-Я]+|инъекци[а-яА-Я]+)\s+команд[а-яА-Я]*/i, // RU
     /コマンドインジェクション/, // JA
+    /(?:befehls?|kommando)[\s-]?injektion|injektion\s+von\s+befehlen/i, // DE
+    /命令注入/, // ZH
+    /iniezione\s+(?:di\s+)?comand[oi]/i, // IT
+    /(?:명령(?:어)?|커맨드)\s*(?:주입|인젝션)/, // KO
   ],
   RCE: [
     /remote.?code.?execution/i,
@@ -222,6 +289,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /ex[eé]cution\s+(?:de\s+code\s+[aà]\s+distance|distante\s+de\s+code)/i, // FR
     /удал[её]нн[а-яА-Я]+\s+выполнени[а-яА-Я]+\s+код[а-яА-Я]*/i, // RU
     /リモートコード実行/, // JA
+    /(?:remote|entfernte[a-zäöüß]*)[\s-]?(?:code|quellcode)[\s-]?ausf[üu]hrung|ausf[üu]hrung\s+(?:von\s+)?(?:remote|entfernte[a-zäöüß]*)[\s-]+(?:code|quellcode)/i, // DE
+    /(?:远程|遠程|遠端)(?:代码|代碼|程式碼)(?:执行|執行)/, // ZH
+    /esecuzione\s+(?:remota\s+(?:di\s+)?codice|(?:di\s+)?codice\s+(?:remot[oa]|a\s+distanza))/i, // IT
+    /원격\s*코드\s*실행/, // KO
   ],
   "Info Disclosure": [
     /information.?disclosure/i,
@@ -232,6 +303,10 @@ const VULN_TYPE_PATTERNS: Record<string, RegExp[]> = {
     /divulgation\s+d[\u2019']?\s*informations?/i, // FR
     /(?:раскрыти[а-яА-Я]+|утечк[а-яА-Я]+)\s+информаци[а-яА-Я]+/i, // RU
     /情報漏(?:洩|えい)/, // JA
+    /(?:informations(?:offenlegung|preisgabe|leck)|offenlegung\s+von\s+informationen|datenleck)/i, // DE
+    /(?:信息|資訊|资讯|数据|資料|數據)(?:泄露|泄漏|洩漏|洩露)/, // ZH
+    /(?:divulgazione|esposizione|fuga)\s+(?:di\s+)?(?:informazioni|dati)/i, // IT
+    /정보\s*(?:노출|유출|누출)/, // KO
   ],
 };
 

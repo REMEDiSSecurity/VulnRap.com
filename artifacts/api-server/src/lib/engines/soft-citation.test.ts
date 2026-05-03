@@ -239,6 +239,133 @@ describe("Task #424: foreign-language shorthand", () => {
   });
 });
 
+// Task #754: terse vulnerability shorthand in the next four researcher
+// languages — German, Simplified/Traditional Chinese, Italian, and Korean.
+// Same shape as the Task #424 block: one foreign-language phrasing per
+// language exercising a different vulnerability class so a regression in
+// any single language's regex (or a Han-unification mistake on ZH glyphs)
+// surfaces here. A second block re-exercises the soft-citation lift in E3.
+describe("Task #754: foreign-language shorthand (DE/ZH/IT/KO)", () => {
+  it("German: 'Pufferüberlauf' resolves to Buffer Overflow / CWE-119", () => {
+    expect(
+      detectSoftCitation(
+        "ein Pufferüberlauf in der malloc-Routine ermöglicht RIP-Kontrolle",
+      ),
+    ).toEqual({
+      name: "Buffer Overflow",
+      cweId: "119",
+    });
+  });
+
+  it("German: 'Umgehung der Authentifizierung' resolves to Auth Bypass / CWE-287", () => {
+    expect(
+      detectSoftCitation(
+        "Umgehung der Authentifizierung möglich über manipuliertes JWT",
+      ),
+    ).toEqual({
+      name: "Auth Bypass",
+      cweId: "287",
+    });
+  });
+
+  it("Chinese (Simplified): '命令注入' resolves to Command Injection / CWE-77", () => {
+    expect(
+      detectSoftCitation("/api/run 接口存在命令注入,可执行任意系统命令"),
+    ).toEqual({
+      name: "Command Injection",
+      cweId: "77",
+    });
+  });
+
+  it("Chinese (Traditional): '緩衝區溢位' resolves to Buffer Overflow / CWE-119", () => {
+    expect(
+      detectSoftCitation("在 strcpy 呼叫處發生緩衝區溢位,可覆寫返回位址"),
+    ).toEqual({
+      name: "Buffer Overflow",
+      cweId: "119",
+    });
+  });
+
+  it("Chinese (Traditional): '遠端程式碼執行' resolves to RCE / CWE-78", () => {
+    expect(
+      detectSoftCitation("反序列化端點存在遠端程式碼執行漏洞"),
+    ).toEqual({
+      name: "RCE",
+      cweId: "78",
+    });
+  });
+
+  it("Italian: 'iniezione di comandi' resolves to Command Injection / CWE-77", () => {
+    expect(
+      detectSoftCitation(
+        "ho trovato una iniezione di comandi tramite il parametro cmd=",
+      ),
+    ).toEqual({
+      name: "Command Injection",
+      cweId: "77",
+    });
+  });
+
+  it("Italian: 'deserializzazione non sicura' resolves to Insecure Deserialization / CWE-502", () => {
+    expect(
+      detectSoftCitation(
+        "il payload pickle innesca una deserializzazione non sicura",
+      ),
+    ).toEqual({
+      name: "Insecure Deserialization",
+      cweId: "502",
+    });
+  });
+
+  it("Korean: '원격 코드 실행' resolves to RCE / CWE-78", () => {
+    expect(
+      detectSoftCitation("/api/eval 엔드포인트에서 원격 코드 실행 가능"),
+    ).toEqual({
+      name: "RCE",
+      cweId: "78",
+    });
+  });
+
+  it("Korean: '경로 탐색' resolves to Path Traversal / CWE-22", () => {
+    expect(
+      detectSoftCitation("file= 파라미터를 통한 경로 탐색 발견"),
+    ).toEqual({
+      name: "Path Traversal",
+      cweId: "22",
+    });
+  });
+
+  // End-to-end: a fully German terse report should clear the soft-citation
+  // bar in legacy E3 the same way the equivalent English shorthand does
+  // (E3 = 60). Mirrors the analogous Task #424 Spanish lift test so the
+  // two new-language batches share the same regression coverage.
+  it("German terse report lifts to E3 = 60 with inferred CWE-77", () => {
+    const text = "eine Befehlsinjektion über den filename-Parameter gefunden";
+    const signals = extractSignals(text);
+    expect(signals.claimedCwes).toEqual([]);
+    const r = runEngine3(signals, text);
+    expect(r.score).toBe(60);
+    expect(r.signalBreakdown).toMatchObject({
+      softCitation: { name: "Command Injection", inferredCwe: "CWE-77" },
+    });
+  });
+
+  // Sanity: the new-language patterns must not regress the suppression of
+  // generic non-vulnerability prose. A German/Chinese/Italian/Korean
+  // report that doesn't actually name a recognised class should still
+  // return null, the same as English and the Task #424 languages.
+  it("DE/ZH/IT/KO prose with no recognised class still returns null", () => {
+    expect(
+      detectSoftCitation("ich glaube Ihre Anwendung hat ein Sicherheitsproblem"),
+    ).toBeNull();
+    expect(detectSoftCitation("我觉得你们的应用有安全问题")).toBeNull();
+    expect(
+      detectSoftCitation("penso che la vostra applicazione abbia un problema"),
+    ).toBeNull();
+    expect(detectSoftCitation("귀사의 애플리케이션에 보안 문제가 있는 것 같습니다")).toBeNull();
+  });
+});
+
 describe("Sprint 13C: legacy E3 soft-citation tier", () => {
   it("terse XSS report (no CWE token) lifts to E3 = 60", () => {
     const text = "found a stored xss in the comments section";
