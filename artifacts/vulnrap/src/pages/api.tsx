@@ -928,8 +928,8 @@ jobs:
                 /api/reports/check
               </code>
               , post the composite score as an internal comment, and (opt-in)
-              close the AUTO_CLOSE tier with a templated reply. Reference shell
-              + Python scripts inline.
+              close the AUTO_CLOSE tier with a templated reply. Reference
+              shell, Python, and Go scripts inline.
             </CardDescription>
           </CardHeader>
           <CardContent>

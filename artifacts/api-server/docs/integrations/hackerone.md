@@ -419,6 +419,237 @@ def h1_hooks():
     return ("", 204)
 ```
 
+## Go: end-to-end with the official SDK
+
+If your triage tooling lives in Go, the [official SDK](https://github.com/vulnrap/vulnrap/blob/main/sdks/go/vulnrap/README.md)
+(`github.com/vulnrap/vulnrap/sdks/go/vulnrap`) collapses Steps 2 and 3 into
+a couple of typed calls — no hand-rolled `net/http` POST against
+`/api/reports/check`, no manual JSON shape tracking. The snippet below is
+a drop-in handler for the same `report-created` webhook covered in Steps
+1–3: it verifies the H1 signature, pulls the report body, runs the
+read-only pipeline via `Client.TestYourself`, and posts the composite
+score back as an internal H1 comment.
+
+```bash
+go get github.com/vulnrap/vulnrap/sdks/go/vulnrap
+```
+
+```go
+// h1_hooks.go — minimal end-to-end H1 → VulnRap → internal comment handler.
+package main
+
+import (
+        "bytes"
+        "context"
+        "crypto/hmac"
+        "crypto/sha256"
+        "encoding/hex"
+        "encoding/json"
+        "fmt"
+        "io"
+        "log"
+        "net/http"
+        "os"
+        "strconv"
+        "time"
+
+        "github.com/vulnrap/vulnrap/sdks/go/vulnrap"
+)
+
+var (
+        h1User    = os.Getenv("H1_USER")
+        h1Token   = os.Getenv("H1_TOKEN")
+        h1Secret  = []byte(os.Getenv("H1_WEBHOOK_SECRET"))
+        vulnrapCl = vulnrap.NewClient(
+                vulnrap.WithUserAgent("acme-h1-triage/1.0"),
+                vulnrap.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}),
+        )
+)
+
+// H1's report-created webhook payload (only the fields we need).
+type h1Webhook struct {
+        Type   string `json:"type"`
+        Report struct {
+                ID json.Number `json:"id"`
+        } `json:"report"`
+}
+
+func verifyH1Signature(body []byte, header string) bool {
+        mac := hmac.New(sha256.New, h1Secret)
+        mac.Write(body)
+        expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+        return hmac.Equal([]byte(expected), []byte(header))
+}
+
+func fetchReportText(ctx context.Context, reportID string) (string, error) {
+        url := "https://api.hackerone.com/v1/reports/" + reportID
+        req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+        req.SetBasicAuth(h1User, h1Token)
+        resp, err := http.DefaultClient.Do(req)
+        if err != nil {
+                return "", err
+        }
+        defer resp.Body.Close()
+        if resp.StatusCode/100 != 2 {
+                return "", fmt.Errorf("h1 report fetch: HTTP %d", resp.StatusCode)
+        }
+        var payload struct {
+                Data struct {
+                        Attributes struct {
+                                Title                    string `json:"title"`
+                                VulnerabilityInformation string `json:"vulnerability_information"`
+                        } `json:"attributes"`
+                } `json:"data"`
+        }
+        if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+                return "", err
+        }
+        a := payload.Data.Attributes
+        return a.Title + "\n\n" + a.VulnerabilityInformation, nil
+}
+
+func postInternalComment(ctx context.Context, reportID string, res *vulnrap.CheckResult) error {
+        composite, label, action, reason := summarize(res)
+
+        var lines bytes.Buffer
+        if res.Vulnrap != nil {
+                for _, e := range res.Vulnrap.Engines {
+                        fmt.Fprintf(&lines, "- **%s**: %d/100 — %s\n", e.Engine, e.Score, e.Verdict)
+                }
+        }
+        body := fmt.Sprintf(
+                "**VulnRap analysis** — composite **%d/100** (%s)\n\n"+
+                        "Recommended triage action: `%s`\n%s\n\n%s\n"+
+                        "Similar prior reports: **%d**\n",
+                composite, label, action, reason, lines.String(), len(res.SimilarityMatches),
+        )
+
+        payload := map[string]any{
+                "data": map[string]any{
+                        "type": "activity-comment",
+                        "attributes": map[string]any{
+                                "message":  body,
+                                "internal": true,
+                        },
+                },
+        }
+        buf, _ := json.Marshal(payload)
+
+        url := "https://api.hackerone.com/v1/reports/" + reportID + "/activities"
+        req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
+        req.SetBasicAuth(h1User, h1Token)
+        req.Header.Set("Content-Type", "application/json")
+        resp, err := http.DefaultClient.Do(req)
+        if err != nil {
+                return err
+        }
+        defer resp.Body.Close()
+        if resp.StatusCode/100 != 2 {
+                b, _ := io.ReadAll(resp.Body)
+                return fmt.Errorf("h1 internal comment: HTTP %d: %s", resp.StatusCode, b)
+        }
+        return nil
+}
+
+// summarize pulls composite + recommendation off CheckResult. The SDK's typed
+// surface covers the composite; recommendation lives in the raw payload.
+func summarize(res *vulnrap.CheckResult) (composite int, label, action, reason string) {
+        action, reason = "STANDARD_TRIAGE", ""
+        label = res.SlopTier
+        if res.Vulnrap != nil {
+                composite = res.Vulnrap.CompositeScore
+                if res.Vulnrap.Label != "" {
+                        label = res.Vulnrap.Label
+                }
+        }
+        if raw, ok := res.Raw["recommendation"]; ok {
+                var rec struct {
+                        Action string `json:"action"`
+                        Reason string `json:"reason"`
+                }
+                if json.Unmarshal(raw, &rec) == nil {
+                        if rec.Action != "" {
+                                action = rec.Action
+                        }
+                        reason = rec.Reason
+                }
+        }
+        return composite, label, action, reason
+}
+
+func h1Hooks(w http.ResponseWriter, r *http.Request) {
+        raw, err := io.ReadAll(r.Body)
+        if err != nil {
+                http.Error(w, "read body", http.StatusBadRequest)
+                return
+        }
+        if !verifyH1Signature(raw, r.Header.Get("X-HackerOne-Signature")) {
+                http.Error(w, "bad signature", http.StatusUnauthorized)
+                return
+        }
+
+        var hook h1Webhook
+        if err := json.Unmarshal(raw, &hook); err != nil || hook.Type != "report-created" {
+                w.WriteHeader(http.StatusNoContent)
+                return
+        }
+        reportID := hook.Report.ID.String()
+        if _, err := strconv.Atoi(reportID); err != nil {
+                http.Error(w, "bad report id", http.StatusBadRequest)
+                return
+        }
+
+        ctx := r.Context()
+
+        text, err := fetchReportText(ctx, reportID)
+        if err != nil {
+                log.Printf("h1 fetch %s: %v", reportID, err)
+                w.WriteHeader(http.StatusNoContent) // never block triage on us
+                return
+        }
+
+        // Read-only scoring — nothing lands on the public VulnRap feed.
+        res, err := vulnrapCl.TestYourself(ctx, &vulnrap.TestYourselfInput{RawText: text})
+        if err != nil {
+                log.Printf("vulnrap test_yourself %s: %v", reportID, err)
+                w.WriteHeader(http.StatusNoContent)
+                return
+        }
+
+        if err := postInternalComment(ctx, reportID, res); err != nil {
+                log.Printf("h1 comment %s: %v", reportID, err)
+        }
+        w.WriteHeader(http.StatusNoContent)
+}
+
+func main() {
+        http.HandleFunc("/h1-hooks", h1Hooks)
+        log.Fatal(http.ListenAndServe(":8080", nil))
+}
+```
+
+A few notes specific to the Go path:
+
+- **`TestYourself` is the SDK twin of `POST /api/reports/check`** —
+  same pipeline, no DB write, no public feed entry, no `id` /
+  `deleteToken` returned. `Client.ScoreReport` is the persisting
+  variant if you also want a diagnostics blob to link from the
+  internal comment.
+- **`CheckResult.Vulnrap`** carries the typed composite (score, label,
+  per-engine breakdown). The SDK keeps the rest of the server payload
+  on `CheckResult.Raw` so you can pull experimental fields like
+  `recommendation.action` / `recommendation.reason` without waiting on
+  an SDK release — that is what `summarize` above does.
+- **Errors are typed.** Wrap `vulnrapCl.TestYourself` returns with
+  `errors.As(err, &apiErr)` (where `apiErr` is `*vulnrap.APIError`) if
+  you want to branch on `apiErr.StatusCode` — for example, treat 429
+  as "back off and let a human triage" rather than "post nothing".
+- **The auto-close logic from Step 4 maps 1:1.** Read
+  `recommendation.action` off `res.Raw` (as in `summarize`) and the
+  AVRI gold-hit count off the Technical Substance Analyzer entry of
+  `res.Vulnrap.Engines` to gate a `POST /v1/reports/{id}/state_changes`
+  call with `state: "not-applicable"`.
+
 ## Operational notes
 
 - **Rate limits.** VulnRap caps at 30 analyses / 15 min / IP. If your
