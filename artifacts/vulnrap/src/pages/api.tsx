@@ -269,6 +269,45 @@ curl -X POST https://vulnrap.com/api/reports/check \\
           Hand-written, idiomatic clients that wrap the four most common endpoints. No code generation, no extra dependencies.
         </p>
 
+        <Card className="glass-card rounded-xl" data-testid="card-sdk-python">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Badge variant="outline" className="border-yellow-500 text-yellow-500 text-[10px] font-mono uppercase">Python</Badge>
+              <code className="text-primary font-mono text-xs">pip install vulnrap</code>
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Idiomatic Python client for security teams scripting PSIRT workflows, CI gates, and triage bots.
+              Methods: <code className="font-mono text-xs text-foreground">score_report</code>,{" "}
+              <code className="font-mono text-xs text-foreground">lookup_report</code>,{" "}
+              <code className="font-mono text-xs text-foreground">query_stats</code>,{" "}
+              <code className="font-mono text-xs text-foreground">test_yourself</code>.
+              Fully type-hinted (<code className="font-mono text-xs text-foreground">py.typed</code>),
+              one runtime dep (<code className="font-mono text-xs text-foreground">httpx</code>),
+              typed errors via <code className="font-mono text-xs text-foreground">vulnrap.APIError</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <CopyBlock language="python" code={`pip install vulnrap
+
+from vulnrap import Client
+
+with Client() as c:
+    res = c.test_yourself(raw_text="Found a path traversal in /api/files...")
+    print(f"slop={res.slop_score}/{res.slop_tier} confidence={res.confidence:.2f}")`} />
+            <a
+              href="https://github.com/vulnrap/vulnrap/blob/main/sdks/python/vulnrap/README.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              data-testid="link-python-sdk-readme"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Read the Python SDK docs
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </CardContent>
+        </Card>
+
         <Card className="glass-card rounded-xl" data-testid="card-sdk-go">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
