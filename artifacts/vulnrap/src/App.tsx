@@ -60,6 +60,8 @@ const Quickstart = lazyRetry(() => import("@/pages/quickstart"));
 const Playground = lazyRetry(() => import("@/pages/playground"));
 const AuditLog = lazyRetry(() => import("@/pages/audit-log"));
 const Gallery = lazyRetry(() => import("@/pages/gallery"));
+const SignalsIndex = lazyRetry(() => import("@/pages/signals-index"));
+const SignalsDetail = lazyRetry(() => import("@/pages/signals-detail"));
 const NotFound = lazyRetry(() => import("@/pages/not-found"));
 
 const queryClient = new QueryClient();
@@ -117,6 +119,8 @@ function AppRoutes() {
             <Route path="/playground" element={<Playground />} />
             <Route path="/audit-log" element={<AuditLog />} />
             <Route path="/gallery" element={<Gallery />} />
+            <Route path="/signals" element={<SignalsIndex />} />
+            <Route path="/signals/:id" element={<SignalsDetail />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

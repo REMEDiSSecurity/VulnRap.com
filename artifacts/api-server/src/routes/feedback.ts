@@ -318,4 +318,71 @@ router.get("/feedback/holdout-eval", async (_req, res): Promise<void> => {
   }
 });
 
+// Task #662 — Per-signal precision/recall. For each evidence signal type
+// that has appeared on at least one rated report, compute how often its
+// presence correlates with "actually slop" feedback (rating ≤ 2 OR
+// helpful = false). The numbers are diagnostic — they are computed across
+// the full feedback set, not the holdout split — so the per-signal
+// explainer pages can show "when this signal fires, the report is rated
+// slop X% of the time (N samples)". A signal with <5 samples is returned
+// with null precision so the UI can render "insufficient data" instead
+// of an unstable percentage.
+router.get("/feedback/per-signal-eval", async (_req, res): Promise<void> => {
+  try {
+    const ratingThreshold = 2;
+
+    const rows = await db
+      .select({
+        evidence: reportsTable.evidence,
+        rating: userFeedbackTable.rating,
+        helpful: userFeedbackTable.helpful,
+      })
+      .from(userFeedbackTable)
+      .innerJoin(reportsTable, eq(userFeedbackTable.reportId, reportsTable.id))
+      .where(isNotNull(reportsTable.slopScore));
+
+    type Bucket = { fires: number; firesAndSlop: number; firesAndNotSlop: number };
+    const perSignal = new Map<string, Bucket>();
+
+    for (const row of rows) {
+      const actuallySlop = row.rating <= ratingThreshold || row.helpful === false;
+      const evidence = (row.evidence ?? []) as Array<{ type?: string }>;
+      const seen = new Set<string>();
+      for (const e of evidence) {
+        if (!e?.type || seen.has(e.type)) continue;
+        seen.add(e.type);
+        let bucket = perSignal.get(e.type);
+        if (!bucket) {
+          bucket = { fires: 0, firesAndSlop: 0, firesAndNotSlop: 0 };
+          perSignal.set(e.type, bucket);
+        }
+        bucket.fires++;
+        if (actuallySlop) bucket.firesAndSlop++;
+        else bucket.firesAndNotSlop++;
+      }
+    }
+
+    const signals = Array.from(perSignal.entries())
+      .map(([type, b]) => ({
+        type,
+        samples: b.fires,
+        firesAndSlop: b.firesAndSlop,
+        firesAndNotSlop: b.firesAndNotSlop,
+        // "Precision" here = P(actually slop | signal fired). With <5
+        // samples we return null to discourage the UI from showing a
+        // jittery 0% / 100% on a single feedback row.
+        precision: b.fires >= 5 ? b.firesAndSlop / b.fires : null,
+      }))
+      .sort((a, b) => b.samples - a.samples);
+
+    res.json({
+      totalFeedbackRows: rows.length,
+      signals,
+    });
+  } catch (err) {
+    _req.log?.error(err, "Failed to compute per-signal eval");
+    res.status(500).json({ error: "Failed to compute per-signal eval." });
+  }
+});
+
 export default router;
