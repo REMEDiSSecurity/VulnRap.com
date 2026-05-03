@@ -36,6 +36,8 @@ tags:
     description: Embeddable public assets (badges, snippets) for third-party triage tools
   - name: webhooks
     description: Reviewer-managed webhook subscriptions (Task #673)
+  - name: roadmap
+    description: Public roadmap (Now / Next / Later)
 paths:
   /webhooks:
     get:
@@ -1118,6 +1120,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PresetLibrary"
+
+  /roadmap:
+    get:
+      operationId: listRoadmap
+      tags: [roadmap]
+      summary: List public roadmap items (Now / Next / Later)
+      description: |
+        Task #693 — Returns the public roadmap rendered on `/roadmap`.
+        Sourced from a static JSON file shipped with the api-server so
+        curators can edit `roadmap.json` and bump `version` without a
+        redeploy of the schema. Items carry a `column` (now | next |
+        later), a `status` badge, a one-line description, and an
+        optional fuzzy ETA. The response is intentionally illustrative
+        — the page header reminds visitors it is not a contractual
+        commitment.
+      responses:
+        "200":
+          description: Public roadmap
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoadmapResponse"
 
   /gallery:
     get:
@@ -6980,6 +7004,50 @@ components:
         - slopThresholdLow
         - slopThresholdHigh
         - engineWeights
+
+    RoadmapItem:
+      type: object
+      description: A single public roadmap entry shown on `/roadmap`.
+      properties:
+        id:
+          type: string
+          description: Opaque slug for the roadmap item (stable across curator edits).
+        column:
+          type: string
+          enum: [now, next, later]
+          description: Which roadmap column the card renders in.
+        status:
+          type: string
+          enum: [in_progress, shipping_soon, planned, research]
+          description: Status badge shown on the card.
+        title:
+          type: string
+          description: Card title.
+        description:
+          type: string
+          description: One-line description of the item.
+        eta:
+          type: string
+          description: Optional fuzzy ETA (e.g. "Q2 2026"). Illustrative only.
+      required: [id, column, status, title, description]
+
+    RoadmapResponse:
+      type: object
+      description: |
+        Public roadmap returned by `GET /api/roadmap`. The `version`
+        string lets clients cache-bust when curators ship a new
+        revision of `roadmap.json`. `updatedAt` is a free-form ISO
+        date string surfaced in the page footer.
+      properties:
+        version:
+          type: string
+        updatedAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoadmapItem"
+      required: [version, items]
 
     GallerySample:
       type: object

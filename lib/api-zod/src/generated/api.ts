@@ -3596,6 +3596,54 @@ export const ListPresetsResponse = zod
   );
 
 /**
+ * Task #693 — Returns the public roadmap rendered on `/roadmap`.
+Sourced from a static JSON file shipped with the api-server so
+curators can edit `roadmap.json` and bump `version` without a
+redeploy of the schema. Items carry a `column` (now | next |
+later), a `status` badge, a one-line description, and an
+optional fuzzy ETA. The response is intentionally illustrative
+— the page header reminds visitors it is not a contractual
+commitment.
+
+ * @summary List public roadmap items (Now / Next / Later)
+ */
+export const ListRoadmapResponse = zod
+  .object({
+    version: zod.string(),
+    updatedAt: zod.string().optional(),
+    items: zod.array(
+      zod
+        .object({
+          id: zod
+            .string()
+            .describe(
+              "Opaque slug for the roadmap item (stable across curator edits).",
+            ),
+          column: zod
+            .enum(["now", "next", "later"])
+            .describe("Which roadmap column the card renders in."),
+          status: zod
+            .enum(["in_progress", "shipping_soon", "planned", "research"])
+            .describe("Status badge shown on the card."),
+          title: zod.string().describe("Card title."),
+          description: zod
+            .string()
+            .describe("One-line description of the item."),
+          eta: zod
+            .string()
+            .optional()
+            .describe(
+              'Optional fuzzy ETA (e.g. \"Q2 2026\"). Illustrative only.',
+            ),
+        })
+        .describe("A single public roadmap entry shown on `\/roadmap`."),
+    ),
+  })
+  .describe(
+    "Public roadmap returned by `GET \/api\/roadmap`. The `version`\nstring lets clients cache-bust when curators ship a new\nrevision of `roadmap.json`. `updatedAt` is a free-form ISO\ndate string surfaced in the page footer.\n",
+  );
+
+/**
  * Task #647 — Returns the curated sample-report gallery rendered on
 `/gallery`. Sourced from a static JSON file shipped with the
 api-server; safe to cache for an hour. Each sample carries the

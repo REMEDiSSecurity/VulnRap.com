@@ -3700,6 +3700,62 @@ export interface PresetEntry {
 }
 
 /**
+ * Which roadmap column the card renders in.
+ */
+export type RoadmapItemColumn =
+  (typeof RoadmapItemColumn)[keyof typeof RoadmapItemColumn];
+
+export const RoadmapItemColumn = {
+  now: "now",
+  next: "next",
+  later: "later",
+} as const;
+
+/**
+ * Status badge shown on the card.
+ */
+export type RoadmapItemStatus =
+  (typeof RoadmapItemStatus)[keyof typeof RoadmapItemStatus];
+
+export const RoadmapItemStatus = {
+  in_progress: "in_progress",
+  shipping_soon: "shipping_soon",
+  planned: "planned",
+  research: "research",
+} as const;
+
+/**
+ * A single public roadmap entry shown on `/roadmap`.
+ */
+export interface RoadmapItem {
+  /** Opaque slug for the roadmap item (stable across curator edits). */
+  id: string;
+  /** Which roadmap column the card renders in. */
+  column: RoadmapItemColumn;
+  /** Status badge shown on the card. */
+  status: RoadmapItemStatus;
+  /** Card title. */
+  title: string;
+  /** One-line description of the item. */
+  description: string;
+  /** Optional fuzzy ETA (e.g. "Q2 2026"). Illustrative only. */
+  eta?: string;
+}
+
+/**
+ * Public roadmap returned by `GET /api/roadmap`. The `version`
+string lets clients cache-bust when curators ship a new
+revision of `roadmap.json`. `updatedAt` is a free-form ISO
+date string surfaced in the page footer.
+
+ */
+export interface RoadmapResponse {
+  version: string;
+  updatedAt?: string;
+  items: RoadmapItem[];
+}
+
+/**
  * Curator-assigned bucket the sample illustrates.
  */
 export type GallerySampleLabel =

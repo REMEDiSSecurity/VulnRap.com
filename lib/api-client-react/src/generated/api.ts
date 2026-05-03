@@ -89,6 +89,7 @@ import type {
   ReportAnalysis,
   ReportComparison,
   ReportFeed,
+  RoadmapResponse,
   ScoreHistoryResponse,
   ScoreStabilitySchedulerStatus,
   ScoreStabilitySummary,
@@ -3020,6 +3021,90 @@ export function useListPresets<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListPresetsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #693 — Returns the public roadmap rendered on `/roadmap`.
+Sourced from a static JSON file shipped with the api-server so
+curators can edit `roadmap.json` and bump `version` without a
+redeploy of the schema. Items carry a `column` (now | next |
+later), a `status` badge, a one-line description, and an
+optional fuzzy ETA. The response is intentionally illustrative
+— the page header reminds visitors it is not a contractual
+commitment.
+
+ * @summary List public roadmap items (Now / Next / Later)
+ */
+export const getListRoadmapUrl = () => {
+  return `/api/roadmap`;
+};
+
+export const listRoadmap = async (
+  options?: RequestInit,
+): Promise<RoadmapResponse> => {
+  return customFetch<RoadmapResponse>(getListRoadmapUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListRoadmapQueryKey = () => {
+  return [`/api/roadmap`] as const;
+};
+
+export const getListRoadmapQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRoadmap>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listRoadmap>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListRoadmapQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listRoadmap>>> = ({
+    signal,
+  }) => listRoadmap({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listRoadmap>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListRoadmapQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listRoadmap>>
+>;
+export type ListRoadmapQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List public roadmap items (Now / Next / Later)
+ */
+
+export function useListRoadmap<
+  TData = Awaited<ReturnType<typeof listRoadmap>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listRoadmap>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListRoadmapQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

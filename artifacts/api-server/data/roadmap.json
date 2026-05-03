@@ -1,0 +1,98 @@
+{
+  "$comment": "Task #693 — Public roadmap rendered on /roadmap. Items are grouped by `column` (now | next | later). `status` drives a small badge on the card (in_progress | planned | research | shipping_soon). ETAs are intentionally fuzzy quarter strings — the page header reminds visitors that this is illustrative, not a contractual commitment. Edit this file (and bump `version` when shipping changes) — there is no admin UI.",
+  "version": "1.0.0",
+  "updatedAt": "2026-05-01",
+  "items": [
+    {
+      "id": "per-signal-precision-recall",
+      "column": "now",
+      "status": "in_progress",
+      "title": "Per-signal precision / recall panel",
+      "description": "Show how often each detector fires correctly, drawn from the holdout corpus.",
+      "eta": "Q2 2026"
+    },
+    {
+      "id": "score-confidence-interval",
+      "column": "now",
+      "status": "in_progress",
+      "title": "Score confidence interval",
+      "description": "Surface a ± band on the composite score so borderline reports are obvious at a glance.",
+      "eta": "Q2 2026"
+    },
+    {
+      "id": "duplicate-report-finder",
+      "column": "now",
+      "status": "shipping_soon",
+      "title": "Duplicate report finder",
+      "description": "Cluster near-identical submissions across the public corpus to flag copy-paste campaigns.",
+      "eta": "Q2 2026"
+    },
+    {
+      "id": "per-cwe-fpr-dashboard",
+      "column": "next",
+      "status": "planned",
+      "title": "Per-CWE false-positive-rate dashboard",
+      "description": "Break down false-positive rates by CWE family so calibrators can spot weak spots.",
+      "eta": "Q3 2026"
+    },
+    {
+      "id": "signal-correlation-matrix",
+      "column": "next",
+      "status": "planned",
+      "title": "Signal correlation matrix",
+      "description": "Heatmap of which detectors tend to fire together — useful for picking non-redundant signal sets.",
+      "eta": "Q3 2026"
+    },
+    {
+      "id": "byo-fixture-battery",
+      "column": "next",
+      "status": "planned",
+      "title": "Bring-your-own fixture battery",
+      "description": "Upload your own labelled corpus and re-run the scorer against it for site-specific calibration.",
+      "eta": "Q3 2026"
+    },
+    {
+      "id": "embeddable-iframe-widget",
+      "column": "next",
+      "status": "research",
+      "title": "Embeddable iframe results widget",
+      "description": "Drop a one-line iframe into Jira / advisory systems to show the score next to a report.",
+      "eta": "Q3 2026"
+    },
+    {
+      "id": "browser-extension-bounty",
+      "column": "next",
+      "status": "research",
+      "title": "Browser extension for bounty platforms",
+      "description": "Inline scores on HackerOne / Bugcrowd inboxes so triagers see slop before clicking through."
+    },
+    {
+      "id": "rust-sdk",
+      "column": "later",
+      "status": "planned",
+      "title": "Rust SDK",
+      "description": "First-class Rust client to complement the existing TypeScript and Python SDKs."
+    },
+    {
+      "id": "webhook-delivery",
+      "column": "later",
+      "status": "planned",
+      "title": "Webhook delivery system",
+      "description": "Push scored results to subscribed endpoints with HMAC signatures and retries."
+    },
+    {
+      "id": "self-hosted-deployment",
+      "column": "later",
+      "status": "research",
+      "title": "Self-hosted deployment guide",
+      "description": "Reference Docker compose + air-gapped install path for teams that can't ship reports off-prem."
+    },
+    {
+      "id": "jira-integration-recipe",
+      "column": "later",
+      "status": "research",
+      "title": "Jira integration recipe",
+      "description": "Reference automation that scores newly-filed Jira issues and posts the badge as a comment."
+    }
+  ]
+}

@@ -17,6 +17,7 @@ import webhooksRouter from "./webhooks";
 import galleryRouter from "./gallery";
 import ogCardRouter from "./og-card";
 import embedRouter from "./embed";
+import roadmapRouter from "./roadmap";
 
 const router: IRouter = Router();
 
@@ -36,6 +37,7 @@ router.use(webhooksRouter);
 router.use(galleryRouter);
 router.use(ogCardRouter);
 router.use(embedRouter);
+router.use(roadmapRouter);
 router.use(publicRouter);
 // v3.6.0 §7: Dev-only test endpoint at GET /api/test/run. The handler itself
 // returns 404 in production, so it is safe to mount unconditionally here.
