@@ -1739,6 +1739,35 @@ export interface NewsletterSubscribeResponse {
   ok: boolean;
   /** True when the HMAC of this address was already on file. */
   alreadySubscribed: boolean;
+  /** True when the server requires the user to click a link in a
+confirmation email before the subscription is considered
+active (NEWSLETTER_DOUBLE_OPT_IN is on). Always false for
+duplicate signups.
+ */
+  pendingConfirmation: boolean;
+  message: string;
+}
+
+export interface NewsletterConfirmResponse {
+  ok: boolean;
+  /** True when this token was used to confirm a prior click. */
+  alreadyConfirmed: boolean;
+  message: string;
+}
+
+export interface NewsletterUnsubscribeBody {
+  /**
+   * The opaque token from the unsubscribe link in the email.
+   * @minLength 16
+   * @maxLength 128
+   */
+  token: string;
+}
+
+export interface NewsletterUnsubscribeResponse {
+  ok: boolean;
+  /** True when a matching subscription was removed; false when the token was unknown / already used. */
+  removed: boolean;
   message: string;
 }
 
@@ -4450,6 +4479,22 @@ export const GetReportFeedSort = {
   score_asc: "score_asc",
   score_desc: "score_desc",
 } as const;
+
+export type ConfirmNewsletterParams = {
+  /**
+   * @minLength 16
+   * @maxLength 128
+   */
+  token: string;
+};
+
+export type UnsubscribeNewsletterGetParams = {
+  /**
+   * @minLength 16
+   * @maxLength 128
+   */
+  token: string;
+};
 
 export type GetAuditLogParams = {
   /**

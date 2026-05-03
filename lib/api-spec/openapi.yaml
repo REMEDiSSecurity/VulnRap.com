@@ -672,6 +672,15 @@ paths:
         When NEWSLETTER_FORWARD_URL is configured, the raw email is forwarded to
         that destination as a best-effort POST. Per-IP rate limited to 20
         signups per hour.
+
+        Task #733 — On a fresh signup the server mints a per-row random
+        token (only the SHA-256 hash is persisted) and dispatches a
+        welcome email containing a one-click unsubscribe link backed by
+        `/newsletter/unsubscribe`. When `NEWSLETTER_DOUBLE_OPT_IN` is
+        truthy, the row stays in a "pending confirmation" state until
+        the recipient clicks the link in the confirm email
+        (`/newsletter/confirm`); the response field
+        `pendingConfirmation` reflects which mode is in effect.
       requestBody:
         required: true
         content:
@@ -693,6 +702,106 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
           description: Too many signups from this IP
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /newsletter/confirm:
+    get:
+      operationId: confirmNewsletter
+      tags: [newsletter]
+      summary: Confirm a pending newsletter subscription
+      description: |
+        Task #733 — Confirms a subscription created with double opt-in.
+        Idempotent: re-clicking after confirmation returns the same 200
+        success body so a forwarded email never surfaces a scary error.
+        The token is the opaque random string sent in the confirm
+        email; the server stores only its SHA-256 hash so a DB
+        compromise cannot replay confirm / unsubscribe links.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+      responses:
+        "200":
+          description: Subscription confirmed (or was already confirmed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterConfirmResponse"
+        "400":
+          description: Token missing or malformed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Token does not match any pending subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /newsletter/unsubscribe:
+    get:
+      operationId: unsubscribeNewsletterGet
+      tags: [newsletter]
+      summary: One-click unsubscribe (link from email)
+      description: |
+        Task #733 — Removes the HMAC row matching the SHA-256 hash of
+        the supplied token. Idempotent: an unknown token returns 200
+        with `removed: false` so a re-clicked link does not look like a
+        failure. Exposed as GET so the link works straight from an
+        email client without JavaScript.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+      responses:
+        "200":
+          description: Unsubscribe processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterUnsubscribeResponse"
+        "400":
+          description: Token missing or malformed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: unsubscribeNewsletter
+      tags: [newsletter]
+      summary: Unsubscribe from the newsletter (richer client form)
+      description: |
+        Task #733 — POST variant of the unsubscribe endpoint for
+        clients that prefer a request body to a query string. Same
+        semantics as the GET form.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewsletterUnsubscribeBody"
+      responses:
+        "200":
+          description: Unsubscribe processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsletterUnsubscribeResponse"
+        "400":
+          description: Token missing or malformed
           content:
             application/json:
               schema:
@@ -4556,11 +4665,60 @@ components:
         alreadySubscribed:
           type: boolean
           description: True when the HMAC of this address was already on file.
+        pendingConfirmation:
+          type: boolean
+          description: |
+            True when the server requires the user to click a link in a
+            confirmation email before the subscription is considered
+            active (NEWSLETTER_DOUBLE_OPT_IN is on). Always false for
+            duplicate signups.
         message:
           type: string
       required:
         - ok
         - alreadySubscribed
+        - pendingConfirmation
+        - message
+
+    NewsletterConfirmResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        alreadyConfirmed:
+          type: boolean
+          description: True when this token was used to confirm a prior click.
+        message:
+          type: string
+      required:
+        - ok
+        - alreadyConfirmed
+        - message
+
+    NewsletterUnsubscribeBody:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 16
+          maxLength: 128
+          description: The opaque token from the unsubscribe link in the email.
+      required:
+        - token
+
+    NewsletterUnsubscribeResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        removed:
+          type: boolean
+          description: True when a matching subscription was removed; false when the token was unknown / already used.
+        message:
+          type: string
+      required:
+        - ok
+        - removed
         - message
 
     SubmitFeedbackBody:

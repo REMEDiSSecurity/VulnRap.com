@@ -10,5 +10,11 @@ export interface NewsletterSubscribeResponse {
   ok: boolean;
   /** True when the HMAC of this address was already on file. */
   alreadySubscribed: boolean;
+  /** True when the server requires the user to click a link in a
+confirmation email before the subscription is considered
+active (NEWSLETTER_DOUBLE_OPT_IN is on). Always false for
+duplicate signups.
+ */
+  pendingConfirmation: boolean;
   message: string;
 }

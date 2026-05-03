@@ -156,6 +156,7 @@ function NewsletterForm() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState<{
     alreadySubscribed: boolean;
+    pendingConfirmation: boolean;
   } | null>(null);
   const subscribe = useSubscribeNewsletter();
 
@@ -172,9 +173,16 @@ function NewsletterForm() {
     }
     try {
       const res = await subscribe.mutateAsync({ data: { email: trimmed } });
-      setSubmitted({ alreadySubscribed: res.alreadySubscribed });
+      setSubmitted({
+        alreadySubscribed: res.alreadySubscribed,
+        pendingConfirmation: res.pendingConfirmation,
+      });
       toast({
-        title: res.alreadySubscribed ? "Already subscribed" : "Subscribed",
+        title: res.alreadySubscribed
+          ? "Already subscribed"
+          : res.pendingConfirmation
+            ? "Check your inbox"
+            : "Subscribed",
         description: res.message,
       });
       if (!res.alreadySubscribed) setEmail("");
@@ -206,7 +214,9 @@ function NewsletterForm() {
           Low-volume updates: major releases, new detection signals, calibration
           audits, and the occasional field-test write-up. No tracking, no
           third-party newsletter platform — just an HMAC of your address on file
-          so we don't double-send.
+          so we don't double-send. We'll send a short welcome email with a
+          one-click unsubscribe link; deployments with double opt-in enabled
+          will ask you to confirm first.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -260,7 +270,9 @@ function NewsletterForm() {
             <span className="leading-relaxed">
               {submitted.alreadySubscribed
                 ? "That address is already on the list. Thanks for sticking with us."
-                : "You're on the list. Watch for updates when we ship."}
+                : submitted.pendingConfirmation
+                  ? "Almost there — check your inbox for a confirmation link."
+                  : "You're on the list. We'll send a quick welcome email with a one-click unsubscribe link shortly."}
             </span>
           </div>
         )}

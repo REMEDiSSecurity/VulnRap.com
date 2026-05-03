@@ -32,6 +32,7 @@ import type {
   CheckReportBody,
   CheckResult,
   CohortBaseline,
+  ConfirmNewsletterParams,
   CorpusStats,
   CweCatalogResponse,
   DeleteReportBody,
@@ -75,8 +76,11 @@ import type {
   LatencySnapshot,
   ListHandwavyPhraseRemovalBatchesParams,
   ListPhraseSuggestionsParams,
+  NewsletterConfirmResponse,
   NewsletterSubscribeBody,
   NewsletterSubscribeResponse,
+  NewsletterUnsubscribeBody,
+  NewsletterUnsubscribeResponse,
   PhraseSuggestionList,
   PhraseSuggestionPatchBody,
   PhraseSuggestionPatchResponse,
@@ -104,6 +108,7 @@ import type {
   TestYourselfRunBody,
   TestYourselfRunResponse,
   TrendsData,
+  UnsubscribeNewsletterGetParams,
   VerificationBadge,
   VersionInfo,
   VisitRecorded,
@@ -1690,6 +1695,15 @@ When NEWSLETTER_FORWARD_URL is configured, the raw email is forwarded to
 that destination as a best-effort POST. Per-IP rate limited to 20
 signups per hour.
 
+Task #733 — On a fresh signup the server mints a per-row random
+token (only the SHA-256 hash is persisted) and dispatches a
+welcome email containing a one-click unsubscribe link backed by
+`/newsletter/unsubscribe`. When `NEWSLETTER_DOUBLE_OPT_IN` is
+truthy, the row stays in a "pending confirmation" state until
+the recipient clicks the link in the confirm email
+(`/newsletter/confirm`); the response field
+`pendingConfirmation` reflects which mode is in effect.
+
  * @summary Subscribe to the VulnRap community mailing list
  */
 export const getSubscribeNewsletterUrl = () => {
@@ -1773,6 +1787,316 @@ export const useSubscribeNewsletter = <
   TContext
 > => {
   return useMutation(getSubscribeNewsletterMutationOptions(options));
+};
+
+/**
+ * Task #733 — Confirms a subscription created with double opt-in.
+Idempotent: re-clicking after confirmation returns the same 200
+success body so a forwarded email never surfaces a scary error.
+The token is the opaque random string sent in the confirm
+email; the server stores only its SHA-256 hash so a DB
+compromise cannot replay confirm / unsubscribe links.
+
+ * @summary Confirm a pending newsletter subscription
+ */
+export const getConfirmNewsletterUrl = (params: ConfirmNewsletterParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/newsletter/confirm?${stringifiedParams}`
+    : `/api/newsletter/confirm`;
+};
+
+export const confirmNewsletter = async (
+  params: ConfirmNewsletterParams,
+  options?: RequestInit,
+): Promise<NewsletterConfirmResponse> => {
+  return customFetch<NewsletterConfirmResponse>(
+    getConfirmNewsletterUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getConfirmNewsletterQueryKey = (
+  params?: ConfirmNewsletterParams,
+) => {
+  return [`/api/newsletter/confirm`, ...(params ? [params] : [])] as const;
+};
+
+export const getConfirmNewsletterQueryOptions = <
+  TData = Awaited<ReturnType<typeof confirmNewsletter>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: ConfirmNewsletterParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof confirmNewsletter>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getConfirmNewsletterQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof confirmNewsletter>>
+  > = ({ signal }) => confirmNewsletter(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof confirmNewsletter>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ConfirmNewsletterQueryResult = NonNullable<
+  Awaited<ReturnType<typeof confirmNewsletter>>
+>;
+export type ConfirmNewsletterQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Confirm a pending newsletter subscription
+ */
+
+export function useConfirmNewsletter<
+  TData = Awaited<ReturnType<typeof confirmNewsletter>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: ConfirmNewsletterParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof confirmNewsletter>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getConfirmNewsletterQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #733 — Removes the HMAC row matching the SHA-256 hash of
+the supplied token. Idempotent: an unknown token returns 200
+with `removed: false` so a re-clicked link does not look like a
+failure. Exposed as GET so the link works straight from an
+email client without JavaScript.
+
+ * @summary One-click unsubscribe (link from email)
+ */
+export const getUnsubscribeNewsletterGetUrl = (
+  params: UnsubscribeNewsletterGetParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/newsletter/unsubscribe?${stringifiedParams}`
+    : `/api/newsletter/unsubscribe`;
+};
+
+export const unsubscribeNewsletterGet = async (
+  params: UnsubscribeNewsletterGetParams,
+  options?: RequestInit,
+): Promise<NewsletterUnsubscribeResponse> => {
+  return customFetch<NewsletterUnsubscribeResponse>(
+    getUnsubscribeNewsletterGetUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getUnsubscribeNewsletterGetQueryKey = (
+  params?: UnsubscribeNewsletterGetParams,
+) => {
+  return [`/api/newsletter/unsubscribe`, ...(params ? [params] : [])] as const;
+};
+
+export const getUnsubscribeNewsletterGetQueryOptions = <
+  TData = Awaited<ReturnType<typeof unsubscribeNewsletterGet>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: UnsubscribeNewsletterGetParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof unsubscribeNewsletterGet>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getUnsubscribeNewsletterGetQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof unsubscribeNewsletterGet>>
+  > = ({ signal }) =>
+    unsubscribeNewsletterGet(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof unsubscribeNewsletterGet>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type UnsubscribeNewsletterGetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof unsubscribeNewsletterGet>>
+>;
+export type UnsubscribeNewsletterGetQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary One-click unsubscribe (link from email)
+ */
+
+export function useUnsubscribeNewsletterGet<
+  TData = Awaited<ReturnType<typeof unsubscribeNewsletterGet>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: UnsubscribeNewsletterGetParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof unsubscribeNewsletterGet>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getUnsubscribeNewsletterGetQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #733 — POST variant of the unsubscribe endpoint for
+clients that prefer a request body to a query string. Same
+semantics as the GET form.
+
+ * @summary Unsubscribe from the newsletter (richer client form)
+ */
+export const getUnsubscribeNewsletterUrl = () => {
+  return `/api/newsletter/unsubscribe`;
+};
+
+export const unsubscribeNewsletter = async (
+  newsletterUnsubscribeBody: NewsletterUnsubscribeBody,
+  options?: RequestInit,
+): Promise<NewsletterUnsubscribeResponse> => {
+  return customFetch<NewsletterUnsubscribeResponse>(
+    getUnsubscribeNewsletterUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(newsletterUnsubscribeBody),
+    },
+  );
+};
+
+export const getUnsubscribeNewsletterMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unsubscribeNewsletter>>,
+    TError,
+    { data: BodyType<NewsletterUnsubscribeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unsubscribeNewsletter>>,
+  TError,
+  { data: BodyType<NewsletterUnsubscribeBody> },
+  TContext
+> => {
+  const mutationKey = ["unsubscribeNewsletter"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof unsubscribeNewsletter>>,
+    { data: BodyType<NewsletterUnsubscribeBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return unsubscribeNewsletter(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UnsubscribeNewsletterMutationResult = NonNullable<
+  Awaited<ReturnType<typeof unsubscribeNewsletter>>
+>;
+export type UnsubscribeNewsletterMutationBody =
+  BodyType<NewsletterUnsubscribeBody>;
+export type UnsubscribeNewsletterMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Unsubscribe from the newsletter (richer client form)
+ */
+export const useUnsubscribeNewsletter = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unsubscribeNewsletter>>,
+    TError,
+    { data: BodyType<NewsletterUnsubscribeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof unsubscribeNewsletter>>,
+  TError,
+  { data: BodyType<NewsletterUnsubscribeBody> },
+  TContext
+> => {
+  return useMutation(getUnsubscribeNewsletterMutationOptions(options));
 };
 
 /**
