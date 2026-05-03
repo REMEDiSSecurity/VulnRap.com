@@ -1,0 +1,602 @@
+{
+  "T1-01-uaf-libfoo": {
+    "score": 90
+  },
+  "T1-02-sqli-django": {
+    "score": 74
+  },
+  "T1-03-ssrf-aws": {
+    "score": 76
+  },
+  "T1-04-pathtraversal-flask": {
+    "score": 68
+  },
+  "T1-05-xxe-libxml": {
+    "score": 56
+  },
+  "T1-06-prototype-pollution": {
+    "score": 26
+  },
+  "T1-07-jwt-none": {
+    "score": 60
+  },
+  "T1-08-redis-cmdinj": {
+    "score": 56
+  },
+  "T1-09-ssrf-graphql": {
+    "score": 64
+  },
+  "T1-10-rce-deserialize": {
+    "score": 65
+  },
+  "T1-11-toctou-symlink": {
+    "score": 56
+  },
+  "T1-AVRI-firefox-uaf": {
+    "score": 90
+  },
+  "T1-AVRI-cve-2025-0725-curl": {
+    "score": 90
+  },
+  "T1-AVRI-curl-hsts-bypass": {
+    "score": 71
+  },
+  "T1-12-cors-credentials": {
+    "score": 65
+  },
+  "T2-01-xss-unconfirmed": {
+    "score": 49
+  },
+  "T2-02-csrf-noproof": {
+    "score": 7
+  },
+  "T2-03-info-disclosure-headers": {
+    "score": 43
+  },
+  "T2-04-rate-limit-missing": {
+    "score": 14
+  },
+  "T2-05-clickjack-noframeguard": {
+    "score": 23
+  },
+  "T2-06-mixed-content": {
+    "score": 31
+  },
+  "T2-07-idor-suspicion": {
+    "score": 53
+  },
+  "T2-08-weak-jwt-secret": {
+    "score": 20
+  },
+  "T2-09-stack-trace-on-error": {
+    "score": 41
+  },
+  "T2-10-open-redirect": {
+    "score": 17
+  },
+  "T3-01-generic-letter": {
+    "score": 15
+  },
+  "T3-02-marketing-tone": {
+    "score": 20
+  },
+  "T3-03-checklist-no-evidence": {
+    "score": 16
+  },
+  "T3-04-buzzword-soup": {
+    "score": 5
+  },
+  "T3-05-no-target": {
+    "score": 27
+  },
+  "T3-06-vague-xss": {
+    "score": 16
+  },
+  "T3-07-handwave-rce": {
+    "score": 19
+  },
+  "T3-08-checklist": {
+    "score": 10
+  },
+  "T3-09-ssrf-handwave": {
+    "score": 19
+  },
+  "T3-AVRI-generic-xss": {
+    "score": 0
+  },
+  "T3-AVRI-ssrf-template": {
+    "score": 12
+  },
+  "T3-AVRI-ipfs-traversal": {
+    "score": 14
+  },
+  "T3-AVRI-http3-dos": {
+    "score": 0
+  },
+  "T3-10-empty-shell": {
+    "score": 20
+  },
+  "T3-11-fabricated-diff-no-proof": {
+    "score": 5
+  },
+  "T3-12-paraphrased-cve-renamed-fn": {
+    "score": 19
+  },
+  "T3-13-narrated-curl-no-evidence": {
+    "score": 22
+  },
+  "T3-14-pseudo-asan-symbolless": {
+    "score": 18
+  },
+  "T3-15-prose-poc-no-payload": {
+    "score": 24
+  },
+  "T3-16-fabricated-diff-injection": {
+    "score": 26
+  },
+  "T3-17-fabricated-diff-web-client": {
+    "score": 26
+  },
+  "T3-18-fabricated-diff-memory-corruption": {
+    "score": 3
+  },
+  "T3-19-no-gold-injection": {
+    "score": 21
+  },
+  "T3-20-no-gold-web-client": {
+    "score": 21
+  },
+  "T3-21-no-gold-memory-corruption": {
+    "score": 21
+  },
+  "T3-22-no-gold-authn-authz": {
+    "score": 8
+  },
+  "T3-23-contradiction-injection": {
+    "score": 27
+  },
+  "T3-24-contradiction-web-client": {
+    "score": 10
+  },
+  "T3-25-contradiction-memory-corruption": {
+    "score": 17
+  },
+  "T3-26-contradiction-authn-authz": {
+    "score": 5
+  },
+  "T3-27-flat-slop-no-poc": {
+    "score": 5
+  },
+  "T3-28-flat-slop-structural-only": {
+    "score": 5
+  },
+  "T3-29-flat-slop-buzzword-soup": {
+    "score": 5
+  },
+  "T4-01-fake-cve-fake-fn": {
+    "score": 9
+  },
+  "T4-02-round-addresses": {
+    "score": 8
+  },
+  "T4-03-plagiarized-nvd": {
+    "score": 19
+  },
+  "T4-04-fake-asan-no-summary": {
+    "score": 8
+  },
+  "T4-05-fake-cwe-mismatch": {
+    "score": 39
+  },
+  "T4-06-fake-stacktrace-repeat": {
+    "score": 11
+  },
+  "T4-07-fake-pid-fake-fn": {
+    "score": 10
+  },
+  "T4-08-fake-cve-id": {
+    "score": 9
+  },
+  "T4-09-ai-tool-curl-uaf": {
+    "score": 13
+  },
+  "T4-12-fake-prologue-offsets": {
+    "score": 0
+  },
+  "T4-13-fake-thread-id-out-of-range": {
+    "score": 0
+  },
+  "T4-14-fake-region-vs-access": {
+    "score": 0
+  },
+  "T4-17-fake-shadow-bytes": {
+    "score": 6
+  },
+  "T4-18-fake-shadow-byte-mismatch": {
+    "score": 6
+  },
+  "T4-15-fake-thread-id-mismatch": {
+    "score": 18
+  },
+  "T4-10-fake-openssl-regression": {
+    "score": 13
+  },
+  "T4-11-impossible-http-shape": {
+    "score": 28
+  },
+  "T4-15-fake-graphql-extensions-and-path": {
+    "score": 0
+  },
+  "T4-16-fake-graphql-impossible-shape": {
+    "score": 23
+  },
+  "T1-01-uaf-libfoo__variant-suffix-note": {
+    "score": 90
+  },
+  "T1-02-sqli-django__variant-suffix-note": {
+    "score": 74
+  },
+  "T1-03-ssrf-aws__variant-suffix-note": {
+    "score": 76
+  },
+  "T1-04-pathtraversal-flask__variant-suffix-note": {
+    "score": 68
+  },
+  "T1-05-xxe-libxml__variant-suffix-note": {
+    "score": 56
+  },
+  "T1-06-prototype-pollution__variant-suffix-note": {
+    "score": 26
+  },
+  "T1-07-jwt-none__variant-suffix-note": {
+    "score": 61
+  },
+  "T1-08-redis-cmdinj__variant-suffix-note": {
+    "score": 56
+  },
+  "T1-09-ssrf-graphql__variant-suffix-note": {
+    "score": 63
+  },
+  "T1-10-rce-deserialize__variant-suffix-note": {
+    "score": 65
+  },
+  "T1-11-toctou-symlink__variant-suffix-note": {
+    "score": 56
+  },
+  "T1-AVRI-firefox-uaf__variant-suffix-note": {
+    "score": 90
+  },
+  "T1-AVRI-cve-2025-0725-curl__variant-suffix-note": {
+    "score": 90
+  },
+  "T1-AVRI-curl-hsts-bypass__variant-suffix-note": {
+    "score": 71
+  },
+  "T1-12-cors-credentials__variant-suffix-note": {
+    "score": 65
+  },
+  "T2-01-xss-unconfirmed__variant-suffix-note": {
+    "score": 49
+  },
+  "T2-02-csrf-noproof__variant-suffix-note": {
+    "score": 7
+  },
+  "T2-03-info-disclosure-headers__variant-suffix-note": {
+    "score": 43
+  },
+  "T2-04-rate-limit-missing__variant-suffix-note": {
+    "score": 14
+  },
+  "T2-05-clickjack-noframeguard__variant-suffix-note": {
+    "score": 23
+  },
+  "T2-06-mixed-content__variant-suffix-note": {
+    "score": 31
+  },
+  "T2-07-idor-suspicion__variant-suffix-note": {
+    "score": 53
+  },
+  "T2-08-weak-jwt-secret__variant-suffix-note": {
+    "score": 20
+  },
+  "T2-09-stack-trace-on-error__variant-suffix-note": {
+    "score": 41
+  },
+  "T2-10-open-redirect__variant-suffix-note": {
+    "score": 18
+  },
+  "T3-01-generic-letter__variant-suffix-note": {
+    "score": 15
+  },
+  "T3-02-marketing-tone__variant-suffix-note": {
+    "score": 25
+  },
+  "T3-03-checklist-no-evidence__variant-suffix-note": {
+    "score": 17
+  },
+  "T3-04-buzzword-soup__variant-suffix-note": {
+    "score": 5
+  },
+  "T3-05-no-target__variant-suffix-note": {
+    "score": 27
+  },
+  "T3-06-vague-xss__variant-suffix-note": {
+    "score": 16
+  },
+  "T3-07-handwave-rce__variant-suffix-note": {
+    "score": 19
+  },
+  "T3-08-checklist__variant-suffix-note": {
+    "score": 6
+  },
+  "T3-09-ssrf-handwave__variant-suffix-note": {
+    "score": 19
+  },
+  "T3-AVRI-generic-xss__variant-suffix-note": {
+    "score": 0
+  },
+  "T3-AVRI-ssrf-template__variant-suffix-note": {
+    "score": 12
+  },
+  "T3-AVRI-ipfs-traversal__variant-suffix-note": {
+    "score": 14
+  },
+  "T3-AVRI-http3-dos__variant-suffix-note": {
+    "score": 0
+  },
+  "T3-10-empty-shell__variant-suffix-note": {
+    "score": 20
+  },
+  "T3-11-fabricated-diff-no-proof__variant-suffix-note": {
+    "score": 5
+  },
+  "T3-12-paraphrased-cve-renamed-fn__variant-suffix-note": {
+    "score": 19
+  },
+  "T3-13-narrated-curl-no-evidence__variant-suffix-note": {
+    "score": 22
+  },
+  "T3-14-pseudo-asan-symbolless__variant-suffix-note": {
+    "score": 18
+  },
+  "T3-15-prose-poc-no-payload__variant-suffix-note": {
+    "score": 25
+  },
+  "T3-16-fabricated-diff-injection__variant-suffix-note": {
+    "score": 26
+  },
+  "T3-17-fabricated-diff-web-client__variant-suffix-note": {
+    "score": 26
+  },
+  "T3-18-fabricated-diff-memory-corruption__variant-suffix-note": {
+    "score": 3
+  },
+  "T3-19-no-gold-injection__variant-suffix-note": {
+    "score": 16
+  },
+  "T3-20-no-gold-web-client__variant-suffix-note": {
+    "score": 16
+  },
+  "T3-21-no-gold-memory-corruption__variant-suffix-note": {
+    "score": 16
+  },
+  "T3-22-no-gold-authn-authz__variant-suffix-note": {
+    "score": 8
+  },
+  "T3-23-contradiction-injection__variant-suffix-note": {
+    "score": 27
+  },
+  "T3-24-contradiction-web-client__variant-suffix-note": {
+    "score": 10
+  },
+  "T3-25-contradiction-memory-corruption__variant-suffix-note": {
+    "score": 17
+  },
+  "T3-26-contradiction-authn-authz__variant-suffix-note": {
+    "score": 6
+  },
+  "T3-27-flat-slop-no-poc__variant-suffix-note": {
+    "score": 5
+  },
+  "T3-28-flat-slop-structural-only__variant-suffix-note": {
+    "score": 5
+  },
+  "T3-29-flat-slop-buzzword-soup__variant-suffix-note": {
+    "score": 5
+  },
+  "T4-01-fake-cve-fake-fn__variant-suffix-note": {
+    "score": 5
+  },
+  "T4-02-round-addresses__variant-suffix-note": {
+    "score": 8
+  },
+  "T4-03-plagiarized-nvd__variant-suffix-note": {
+    "score": 19
+  },
+  "T4-04-fake-asan-no-summary__variant-suffix-note": {
+    "score": 8
+  },
+  "T4-05-fake-cwe-mismatch__variant-suffix-note": {
+    "score": 39
+  },
+  "T4-06-fake-stacktrace-repeat__variant-suffix-note": {
+    "score": 11
+  },
+  "T4-07-fake-pid-fake-fn__variant-suffix-note": {
+    "score": 10
+  },
+  "T4-08-fake-cve-id__variant-suffix-note": {
+    "score": 9
+  },
+  "T4-09-ai-tool-curl-uaf__variant-suffix-note": {
+    "score": 8
+  },
+  "T4-12-fake-prologue-offsets__variant-suffix-note": {
+    "score": 0
+  },
+  "T4-13-fake-thread-id-out-of-range__variant-suffix-note": {
+    "score": 0
+  },
+  "T4-14-fake-region-vs-access__variant-suffix-note": {
+    "score": 0
+  },
+  "T4-17-fake-shadow-bytes__variant-suffix-note": {
+    "score": 6
+  },
+  "T4-18-fake-shadow-byte-mismatch__variant-suffix-note": {
+    "score": 6
+  },
+  "T4-15-fake-thread-id-mismatch__variant-suffix-note": {
+    "score": 18
+  },
+  "T4-10-fake-openssl-regression__variant-suffix-note": {
+    "score": 13
+  },
+  "T4-11-impossible-http-shape__variant-suffix-note": {
+    "score": 28
+  },
+  "T4-15-fake-graphql-extensions-and-path__variant-suffix-note": {
+    "score": 0
+  },
+  "T4-16-fake-graphql-impossible-shape__variant-suffix-note": {
+    "score": 23
+  },
+  "T1-01-uaf-libfoo__variant-heading-prefix": {
+    "score": 90
+  },
+  "T1-02-sqli-django__variant-heading-prefix": {
+    "score": 74
+  },
+  "T1-03-ssrf-aws__variant-heading-prefix": {
+    "score": 76
+  },
+  "T1-04-pathtraversal-flask__variant-heading-prefix": {
+    "score": 68
+  },
+  "T1-05-xxe-libxml__variant-heading-prefix": {
+    "score": 56
+  },
+  "T1-06-prototype-pollution__variant-heading-prefix": {
+    "score": 26
+  },
+  "T1-07-jwt-none__variant-heading-prefix": {
+    "score": 60
+  },
+  "T1-08-redis-cmdinj__variant-heading-prefix": {
+    "score": 56
+  },
+  "T1-09-ssrf-graphql__variant-heading-prefix": {
+    "score": 64
+  },
+  "T1-10-rce-deserialize__variant-heading-prefix": {
+    "score": 65
+  },
+  "T1-11-toctou-symlink__variant-heading-prefix": {
+    "score": 56
+  },
+  "T1-AVRI-firefox-uaf__variant-heading-prefix": {
+    "score": 90
+  },
+  "T1-AVRI-cve-2025-0725-curl__variant-heading-prefix": {
+    "score": 90
+  },
+  "T1-AVRI-curl-hsts-bypass__variant-heading-prefix": {
+    "score": 71
+  },
+  "T1-12-cors-credentials__variant-heading-prefix": {
+    "score": 65
+  },
+  "T2-01-xss-unconfirmed__variant-heading-prefix": {
+    "score": 49
+  },
+  "T2-02-csrf-noproof__variant-heading-prefix": {
+    "score": 6
+  },
+  "T2-03-info-disclosure-headers__variant-heading-prefix": {
+    "score": 43
+  },
+  "T2-04-rate-limit-missing__variant-heading-prefix": {
+    "score": 14
+  },
+  "T2-05-clickjack-noframeguard__variant-heading-prefix": {
+    "score": 23
+  },
+  "T2-06-mixed-content__variant-heading-prefix": {
+    "score": 31
+  },
+  "T2-07-idor-suspicion__variant-heading-prefix": {
+    "score": 53
+  },
+  "T2-08-weak-jwt-secret__variant-heading-prefix": {
+    "score": 20
+  },
+  "T2-09-stack-trace-on-error__variant-heading-prefix": {
+    "score": 41
+  },
+  "T2-10-open-redirect__variant-heading-prefix": {
+    "score": 17
+  },
+  "T3-01-generic-letter__variant-heading-prefix": {
+    "score": 15
+  },
+  "T3-02-marketing-tone__variant-heading-prefix": {
+    "score": 20
+  },
+  "T3-03-checklist-no-evidence__variant-heading-prefix": {
+    "score": 16
+  },
+  "T3-04-buzzword-soup__variant-heading-prefix": {
+    "score": 5
+  },
+  "T3-05-no-target__variant-heading-prefix": {
+    "score": 27
+  },
+  "T3-06-vague-xss__variant-heading-prefix": {
+    "score": 21
+  },
+  "T3-07-handwave-rce__variant-heading-prefix": {
+    "score": 18
+  },
+  "T3-08-checklist__variant-heading-prefix": {
+    "score": 5
+  },
+  "T3-09-ssrf-handwave__variant-heading-prefix": {
+    "score": 18
+  },
+  "T3-AVRI-generic-xss__variant-heading-prefix": {
+    "score": 0
+  },
+  "T3-AVRI-ssrf-template__variant-heading-prefix": {
+    "score": 12
+  },
+  "T3-AVRI-ipfs-traversal__variant-heading-prefix": {
+    "score": 14
+  },
+  "T3-AVRI-http3-dos__variant-heading-prefix": {
+    "score": 0
+  },
+  "T3-10-empty-shell__variant-heading-prefix": {
+    "score": 20
+  },
+  "T3-11-fabricated-diff-no-proof__variant-heading-prefix": {
+    "score": 5
+  },
+  "T3-12-paraphrased-cve-renamed-fn__variant-heading-prefix": {
+    "score": 19
+  },
+  "T3-13-narrated-curl-no-evidence__variant-heading-prefix": {
+    "score": 22
+  },
+  "T3-14-pseudo-asan-symbolless__variant-heading-prefix": {
+    "score": 18
+  },
+  "T3-15-prose-poc-no-payload__variant-heading-prefix": {
+    "score": 24
+  },
+  "T3-16-fabricated-diff-injection__variant-heading-prefix": {
+    "score": 26
+  },
+  "T3-17-fabricated-diff-web-client__variant-heading-prefix": {
+    "score": 26
+  }
+}
