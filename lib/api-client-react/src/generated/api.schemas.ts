@@ -3879,6 +3879,63 @@ export interface PhraseSuggestionPatchResponse {
   status: PhraseSuggestionPatchResponseStatus;
 }
 
+export type WebhookEventTypesItem =
+  (typeof WebhookEventTypesItem)[keyof typeof WebhookEventTypesItem];
+
+export const WebhookEventTypesItem = {
+  reportscored: "report.scored",
+} as const;
+
+/**
+ * A reviewer-registered webhook subscription. The plaintext signing
+secret is never returned by this schema — it is shown exactly
+once on the WebhookCreateResponse at registration time.
+
+ */
+export interface Webhook {
+  id: number;
+  url: string;
+  eventTypes: WebhookEventTypesItem[];
+  createdAt: string;
+  lastDeliveredAt: string | null;
+  failureCount: number;
+}
+
+export interface WebhookList {
+  webhooks: Webhook[];
+}
+
+export type WebhookCreateBodyEventTypesItem =
+  (typeof WebhookCreateBodyEventTypesItem)[keyof typeof WebhookCreateBodyEventTypesItem];
+
+export const WebhookCreateBodyEventTypesItem = {
+  reportscored: "report.scored",
+} as const;
+
+export interface WebhookCreateBody {
+  /** Destination URL (http or https) up to 1000 characters. */
+  url: string;
+  /** Subset of supported events to subscribe to. Defaults to
+`[report.scored]` when omitted. v1 only supports
+`report.scored`.
+ */
+  eventTypes?: WebhookCreateBodyEventTypesItem[];
+}
+
+export type WebhookCreateResponse = Webhook & {
+  /** Per-webhook HMAC SHA-256 signing secret. Returned exactly
+once at registration time — only the SHA-256 hash is
+persisted server-side, so the caller must capture this
+value to verify incoming `X-VulnRap-Signature` headers.
+Re-register the webhook to receive a new secret.
+ */
+  secret: string;
+};
+
+export interface WebhookDeleteResponse {
+  id: number;
+}
+
 /**
  * Privacy mode — full shares content, similarity_only stores only hashes
  */

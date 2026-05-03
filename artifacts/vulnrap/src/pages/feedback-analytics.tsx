@@ -59,6 +59,11 @@ import {
   type AvriDriftFlag,
   type AvriDriftFamilyMean,
   getCalibrationToken,
+  useListWebhooks, getListWebhooksQueryKey,
+  useCreateWebhook,
+  useDeleteWebhook,
+  type Webhook,
+  type WebhookCreateResponse,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -84,7 +89,7 @@ import {
   BarChart3, Users, ArrowRight, Clock, Hash, Settings, Shield, Zap,
   CheckCircle2, XCircle, Info, Play, Layers, Activity, BookOpen, ExternalLink,
   Plus, Trash2, MessageCircleQuestion, RotateCcw, Pencil, Save, X as XIcon, Undo2,
-  KeyRound, Calendar, ChevronDown, ChevronRight, RefreshCw, Download,
+  KeyRound, Calendar, ChevronDown, ChevronRight, RefreshCw, Download, Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCalibrationCooldown } from "@/lib/calibration-cooldown";
@@ -18450,6 +18455,161 @@ function HoldoutPartitionCard({ title, subtitle, partition, accent }: {
   );
 }
 
+// Task #673 — Reviewer-only webhook management surface. Lists registered
+// webhooks (URL, last delivery, failure count), supports registering a
+// new destination (the freshly-generated signing secret is shown ONCE),
+// and supports deleting a webhook. Gated visually behind the calibration
+// auth state — the API itself enforces the gate, but hiding the section
+// for non-reviewers keeps the dashboard tidy.
+function WebhooksSection() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const auth = useCalibrationAuthState();
+  const enabled = auth.kind === "valid" || auth.kind === "open";
+
+  const { data, isLoading, isError, error } = useListWebhooks({
+    query: {
+      queryKey: getListWebhooksQueryKey(),
+      refetchInterval: 30_000,
+      enabled,
+      retry: false,
+    },
+  });
+
+  const createMutation = useCreateWebhook();
+  const deleteMutation = useDeleteWebhook();
+
+  const [newUrl, setNewUrl] = useState("");
+  const [revealedSecret, setRevealedSecret] = useState<{ id: number; url: string; secret: string } | null>(null);
+
+  if (!enabled) return null;
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    const url = newUrl.trim();
+    if (url.length === 0) return;
+    try {
+      const res = (await createMutation.mutateAsync({ data: { url, eventTypes: ["report.scored"] } })) as WebhookCreateResponse;
+      setNewUrl("");
+      setRevealedSecret({ id: res.id, url: res.url, secret: res.secret });
+      await queryClient.invalidateQueries({ queryKey: getListWebhooksQueryKey() });
+      toast({
+        title: "Webhook registered",
+        description: "Copy the signing secret now — it is shown only once.",
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to register webhook.";
+      toast({ title: "Could not register webhook", description: msg, variant: "destructive" });
+    }
+  }
+
+  async function handleDelete(id: number) {
+    try {
+      await deleteMutation.mutateAsync({ id });
+      await queryClient.invalidateQueries({ queryKey: getListWebhooksQueryKey() });
+      if (revealedSecret?.id === id) setRevealedSecret(null);
+      toast({ title: "Webhook deleted" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to delete webhook.";
+      toast({ title: "Could not delete webhook", description: msg, variant: "destructive" });
+    }
+  }
+
+  const webhooks: Webhook[] = data?.webhooks ?? [];
+
+  return (
+    <Card className="glass-card rounded-xl border-primary/10" data-testid="webhooks-section">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Plug className="w-4 h-4 text-primary" />
+          Webhooks
+          <Badge variant="secondary" className="ml-auto text-[10px]">{webhooks.length}</Badge>
+        </CardTitle>
+        <CardDescription>
+          Reviewer-only. Register a destination URL to receive a signed POST
+          whenever a report is scored. v1 emits one event: <code className="font-mono">report.scored</code>.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="url"
+            placeholder="https://example.com/hooks/vulnrap"
+            value={newUrl}
+            onChange={(e) => setNewUrl(e.target.value)}
+            className="flex-1 rounded-md border border-border/50 bg-background/40 px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary/50"
+            data-testid="webhook-url-input"
+            required
+          />
+          <Button type="submit" disabled={createMutation.isPending || newUrl.trim().length === 0} data-testid="webhook-register-button">
+            <Plus className="w-4 h-4 mr-1" /> Register
+          </Button>
+        </form>
+
+        {revealedSecret && (
+          <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 space-y-2" data-testid="webhook-secret-reveal">
+            <div className="flex items-center gap-2 text-xs text-yellow-300">
+              <KeyRound className="w-3.5 h-3.5" />
+              <span className="font-medium">Signing secret for {revealedSecret.url} (id {revealedSecret.id})</span>
+              <button
+                type="button"
+                className="ml-auto text-muted-foreground hover:text-foreground"
+                onClick={() => setRevealedSecret(null)}
+                aria-label="Dismiss"
+              >
+                <XIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="font-mono text-xs break-all bg-background/60 rounded p-2 select-all">
+              {revealedSecret.secret}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              Copy this now — only its SHA-256 hash is stored on the server. Re-register the webhook to receive a new secret.
+            </div>
+          </div>
+        )}
+
+        {isLoading ? (
+          <Skeleton className="h-24 rounded-md" />
+        ) : isError ? (
+          <div className="text-xs text-red-400">
+            Failed to load webhooks: {error instanceof Error ? error.message : "unknown error"}
+          </div>
+        ) : webhooks.length === 0 ? (
+          <div className="text-xs text-muted-foreground/60 py-4 text-center">No webhooks registered yet.</div>
+        ) : (
+          <div className="divide-y divide-border/10" data-testid="webhooks-list">
+            {webhooks.map((w) => (
+              <div key={w.id} className="py-2 flex items-center gap-3 text-xs">
+                <div className="flex-1 min-w-0">
+                  <div className="font-mono truncate text-foreground" title={w.url}>{w.url}</div>
+                  <div className="text-muted-foreground/70 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <span>events: {w.eventTypes.join(", ")}</span>
+                    <span>registered {new Date(w.createdAt).toLocaleString()}</span>
+                    <span>last delivery: {w.lastDeliveredAt ? new Date(w.lastDeliveredAt).toLocaleString() : "never"}</span>
+                    <span className={w.failureCount > 0 ? "text-red-400" : ""}>
+                      failures: {w.failureCount}
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDelete(w.id)}
+                  disabled={deleteMutation.isPending}
+                  data-testid={`webhook-delete-${w.id}`}
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function HoldoutEvalSection() {
   const { data, isLoading, isError } = useGetHoldoutEval({
     query: {
@@ -18656,6 +18816,8 @@ export default function FeedbackAnalytics() {
       </div>
 
       <HoldoutEvalSection />
+
+      <WebhooksSection />
 
       <CalibrationSection />
 

@@ -893,6 +893,92 @@ VULNRAP_API_BASE_URL=https://my-vulnrap.example pnpm --filter @workspace/mcp-ser
         </Card>
       </div>
 
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
+          <Plug className="w-5 h-5 text-primary" />
+          Webhooks (reviewer-only)
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Register a destination URL to receive a signed POST whenever a report is scored.
+          Registration, listing, and deletion are gated by <code className="font-mono text-xs text-foreground">CALIBRATION_TOKEN</code>;
+          v1 emits a single event: <code className="font-mono text-xs text-foreground">report.scored</code>.
+          Each delivery includes an HMAC SHA-256 signature header derived from the per-webhook
+          signing secret returned exactly once at registration time, and is retried with
+          exponential backoff up to 5 attempts before the failure counter is incremented.
+        </p>
+
+        <Card className="glass-card rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Register a webhook</CardTitle>
+            <CardDescription className="mt-1">
+              The response includes a <code className="font-mono text-xs text-foreground">secret</code>{" "}
+              field — capture it now, only the SHA-256 hash is persisted on the server.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CopyBlock language="bash" code={`curl -X POST https://vulnrap.com/api/webhooks \\
+  -H "X-Calibration-Token: $CALIBRATION_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"url": "https://example.com/hooks/vulnrap", "eventTypes": ["report.scored"]}'`} />
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Delivery payload &amp; signature</CardTitle>
+            <CardDescription className="mt-1">
+              Each delivery is a JSON POST. Verify the{" "}
+              <code className="font-mono text-xs text-foreground">X-VulnRap-Signature</code>{" "}
+              header against the raw request body using your stored secret before trusting it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <CopyBlock language="json" code={`POST /your-hook
+X-VulnRap-Event: report.scored
+X-VulnRap-Signature: sha256=<hex>
+X-VulnRap-Webhook-Id: 42
+X-VulnRap-Delivery-Attempt: 1
+Content-Type: application/json
+
+{
+  "event": "report.scored",
+  "reportId": 1234,
+  "slopScore": 78,
+  "slopTier": "likely_slop",
+  "compositeScore": 81,
+  "label": "AI-generated",
+  "createdAt": "2026-05-03T17:00:00.000Z"
+}`} />
+            <CopyBlock language="javascript" code={`import crypto from "node:crypto";
+
+export function verify(rawBody, signatureHeader, secret) {
+  const expected = "sha256=" + crypto
+    .createHmac("sha256", secret)
+    .update(rawBody, "utf8")
+    .digest("hex");
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signatureHeader ?? "");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}`} />
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">List &amp; delete</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CopyBlock language="bash" code={`# List registered webhooks
+curl https://vulnrap.com/api/webhooks \\
+  -H "X-Calibration-Token: $CALIBRATION_TOKEN"
+
+# Delete one by id
+curl -X DELETE https://vulnrap.com/api/webhooks/42 \\
+  -H "X-Calibration-Token: $CALIBRATION_TOKEN"`} />
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="text-center text-xs text-muted-foreground/50 pb-4">
         <button type="button" onClick={() => { setSwaggerOpen(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="hover:text-primary transition-colors">
           Full OpenAPI spec available at /api/docs

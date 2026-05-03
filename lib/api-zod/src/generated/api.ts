@@ -8,6 +8,68 @@
 import * as zod from "zod";
 
 /**
+ * Returns every registered webhook with its destination URL,
+subscribed events, registration timestamp, last successful
+delivery, and current consecutive-failure count. Reviewer-only —
+the destination URLs and failure counters are operational data we
+do not expose publicly.
+
+ * @summary List registered webhooks (reviewer-only)
+ */
+export const ListWebhooksResponse = zod.object({
+  webhooks: zod.array(
+    zod
+      .object({
+        id: zod.number(),
+        url: zod.string(),
+        eventTypes: zod.array(zod.enum(["report.scored"])),
+        createdAt: zod.coerce.date(),
+        lastDeliveredAt: zod.coerce.date().nullable(),
+        failureCount: zod.number(),
+      })
+      .describe(
+        "A reviewer-registered webhook subscription. The plaintext signing\nsecret is never returned by this schema — it is shown exactly\nonce on the WebhookCreateResponse at registration time.\n",
+      ),
+  ),
+});
+
+/**
+ * Registers a destination URL that will receive a signed POST
+whenever a subscribed event fires. v1 only emits the
+`report.scored` event after a successful POST /reports.
+
+The response body includes a freshly-generated `secret` exactly
+once — only its SHA-256 hash is persisted on the server, so the
+caller MUST capture this value to verify incoming HMAC
+signatures. Re-register the webhook to receive a new secret if
+it is lost.
+
+ * @summary Register a new webhook (reviewer-only)
+ */
+export const CreateWebhookBody = zod.object({
+  url: zod
+    .string()
+    .describe("Destination URL (http or https) up to 1000 characters."),
+  eventTypes: zod
+    .array(zod.enum(["report.scored"]))
+    .optional()
+    .describe(
+      "Subset of supported events to subscribe to. Defaults to\n`[report.scored]` when omitted. v1 only supports\n`report.scored`.\n",
+    ),
+});
+
+/**
+ * @summary Delete a registered webhook (reviewer-only)
+ */
+export const DeleteWebhookParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteWebhookResponse = zod.object({
+  id: zod.number(),
+});
+
+/**
  * Returns server health status
  * @summary Health check
  */

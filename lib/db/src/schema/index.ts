@@ -15,3 +15,4 @@ export * from "./report_rescore_log";
 export * from "./phrase_suggestions";
 export * from "./report_shadow_scores";
 export * from "./audit_log";
+export * from "./webhooks";

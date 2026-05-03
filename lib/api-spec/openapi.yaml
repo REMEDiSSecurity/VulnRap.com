@@ -34,7 +34,110 @@ tags:
     description: Curated sample-report gallery for new users
   - name: embed
     description: Embeddable public assets (badges, snippets) for third-party triage tools
+  - name: webhooks
+    description: Reviewer-managed webhook subscriptions (Task #673)
 paths:
+  /webhooks:
+    get:
+      operationId: listWebhooks
+      tags: [webhooks]
+      summary: List registered webhooks (reviewer-only)
+      description: |
+        Returns every registered webhook with its destination URL,
+        subscribed events, registration timestamp, last successful
+        delivery, and current consecutive-failure count. Reviewer-only —
+        the destination URLs and failure counters are operational data we
+        do not expose publicly.
+      responses:
+        "200":
+          description: Webhook list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookList"
+        "401":
+          description: Missing or invalid reviewer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createWebhook
+      tags: [webhooks]
+      summary: Register a new webhook (reviewer-only)
+      description: |
+        Registers a destination URL that will receive a signed POST
+        whenever a subscribed event fires. v1 only emits the
+        `report.scored` event after a successful POST /reports.
+
+        The response body includes a freshly-generated `secret` exactly
+        once — only its SHA-256 hash is persisted on the server, so the
+        caller MUST capture this value to verify incoming HMAC
+        signatures. Re-register the webhook to receive a new secret if
+        it is lost.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookCreateBody"
+      responses:
+        "201":
+          description: Webhook registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookCreateResponse"
+        "400":
+          description: Invalid URL or unsupported event type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid reviewer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /webhooks/{id}:
+    delete:
+      operationId: deleteWebhook
+      tags: [webhooks]
+      summary: Delete a registered webhook (reviewer-only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Webhook deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookDeleteResponse"
+        "400":
+          description: Invalid webhook id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid reviewer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /healthz:
     get:
       operationId: healthCheck
@@ -7044,3 +7147,78 @@ components:
           type: string
           enum: [approved, rejected]
       required: [ok, id, status]
+
+    Webhook:
+      type: object
+      description: |
+        A reviewer-registered webhook subscription. The plaintext signing
+        secret is never returned by this schema — it is shown exactly
+        once on the WebhookCreateResponse at registration time.
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        eventTypes:
+          type: array
+          items:
+            type: string
+            enum: [report.scored]
+        createdAt:
+          type: string
+          format: date-time
+        lastDeliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        failureCount:
+          type: integer
+      required: [id, url, eventTypes, createdAt, lastDeliveredAt, failureCount]
+
+    WebhookList:
+      type: object
+      properties:
+        webhooks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Webhook"
+      required: [webhooks]
+
+    WebhookCreateBody:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Destination URL (http or https) up to 1000 characters.
+        eventTypes:
+          type: array
+          description: |
+            Subset of supported events to subscribe to. Defaults to
+            `[report.scored]` when omitted. v1 only supports
+            `report.scored`.
+          items:
+            type: string
+            enum: [report.scored]
+      required: [url]
+
+    WebhookCreateResponse:
+      allOf:
+        - $ref: "#/components/schemas/Webhook"
+        - type: object
+          properties:
+            secret:
+              type: string
+              description: |
+                Per-webhook HMAC SHA-256 signing secret. Returned exactly
+                once at registration time — only the SHA-256 hash is
+                persisted server-side, so the caller must capture this
+                value to verify incoming `X-VulnRap-Signature` headers.
+                Re-register the webhook to receive a new secret.
+          required: [secret]
+
+    WebhookDeleteResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+      required: [id]

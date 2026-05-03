@@ -224,6 +224,28 @@ const ADDITIVE_MIGRATIONS: AdditiveMigration[] = [
          WHERE is_holdout <> ((abs(hashtext(id::text)) % 5) = 0)`,
     ],
   },
+  {
+    // Task #673 — Reviewer-managed webhook subscriptions. Created in dev
+    // too so route + UI tests can exercise the surface against a live
+    // Postgres. `event_types` is a text[] so adding new event types later
+    // does not require an ALTER. `secret_hash` stores the SHA-256 of the
+    // per-webhook signing secret; the raw secret is returned exactly once
+    // at creation time and never persisted plaintext.
+    id: "2026-05-03-add-webhooks",
+    description: "Add webhooks table for reviewer-managed event delivery (Task #673)",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS webhooks (
+         id serial PRIMARY KEY,
+         url varchar(1000) NOT NULL,
+         secret_hash varchar(64) NOT NULL,
+         event_types text[] NOT NULL,
+         created_at timestamptz NOT NULL DEFAULT now(),
+         last_delivered_at timestamptz,
+         failure_count integer NOT NULL DEFAULT 0
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_webhooks_created_at ON webhooks (created_at)`,
+    ],
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

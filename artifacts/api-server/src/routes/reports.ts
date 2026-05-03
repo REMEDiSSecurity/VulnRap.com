@@ -56,6 +56,7 @@ import {
 } from "../lib/engines";
 import { analysisTracesTable } from "@workspace/db";
 import { runShadowScore, isShadowScoringEnabled } from "../lib/scoring-shadow";
+import { dispatchReportScoredEvent } from "../lib/webhook-delivery";
 import {
   generateTriageRecommendation,
   computeTemporalSignals,
@@ -1152,6 +1153,20 @@ router.post("/reports", async (req, res): Promise<void> => {
   });
 
   res.status(201).json(response);
+
+  // Task #673 — Webhook delivery. Fire-and-forget after the response so a
+  // slow / failing destination can never degrade the user-facing submit
+  // path. Each subscribed webhook is signed with its per-webhook secret
+  // and retried with exponential backoff (5 attempts) by the worker.
+  void dispatchReportScoredEvent({
+    event: "report.scored",
+    reportId: report.id,
+    slopScore: report.slopScore,
+    slopTier: report.slopTier,
+    compositeScore: vulnrapComposite ? vulnrapComposite.overallScore : null,
+    label: vulnrapComposite ? vulnrapComposite.label : null,
+    createdAt: report.createdAt.toISOString(),
+  });
 
   // Task #639 — Shadow scoring mode. Fire-and-forget after the response so
   // the user-facing submit path is never slowed down (or broken) by the
