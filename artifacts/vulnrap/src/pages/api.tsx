@@ -1,4 +1,4 @@
-import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check, ChevronDown, ChevronUp, Plug, Bot } from "lucide-react";
+import { Code, ExternalLink, FileText, Search, Shield, Activity, MessageSquare, Heart, Terminal, Copy, Check, ChevronDown, ChevronUp, Plug, Bot, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -353,6 +353,55 @@ func main() {
               Read the Go SDK docs
               <ExternalLink className="w-3 h-3" />
             </a>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
+          <Download className="w-5 h-5 text-primary" />
+          Postman Collection
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Prefer clicking through endpoints to writing curl? Import the auto-generated Postman v2.1 collection. Insomnia, Bruno, and Hoppscotch accept the same file.
+        </p>
+
+        <Card className="glass-card rounded-xl" data-testid="card-postman">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Badge variant="outline" className="border-orange-500 text-orange-500 text-[10px] font-mono uppercase">Postman</Badge>
+              <code className="text-primary font-mono text-xs">vulnrap.postman_collection.json</code>
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Every public endpoint, folded into folders by tag, with a single{" "}
+              <code className="font-mono text-xs text-foreground">{"{{baseUrl}}"}</code> variable
+              defaulting to <code className="font-mono text-xs text-foreground">https://vulnrap.com/api</code>.
+              Regenerated from the OpenAPI spec — never hand-edited.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Button asChild className="glow-button gap-2" data-testid="button-download-postman">
+                <a href="/vulnrap.postman_collection.json" download="vulnrap.postman_collection.json">
+                  <Download className="w-3.5 h-3.5" />
+                  Download Postman collection
+                </a>
+              </Button>
+              <Button asChild variant="outline" className="gap-2" data-testid="link-postman-readme">
+                <a
+                  href="https://github.com/vulnrap/vulnrap/blob/main/sdks/postman/README.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Import instructions
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground/60 italic">
+              Repo path: <code className="font-mono">sdks/postman/vulnrap.postman_collection.json</code> — regenerate with <code className="font-mono">pnpm --filter @workspace/scripts run generate:postman</code>.
+            </p>
           </CardContent>
         </Card>
       </div>

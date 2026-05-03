@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "generate:postman": "node ./generate-postman.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && node check-artifact-paths.test.mjs",
     "test": "node check-artifact-paths.test.mjs"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "openapi-to-postmanv2": "^6.0.1",
     "tsx": "catalog:"
   }
 }
