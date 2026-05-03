@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "updatedAt": "2026-05-03",
+  "posts": [
+    {
+      "id": "update13-mcp-launch",
+      "title": "VulnRap Now Speaks MCP: Triage From Inside Your Agent",
+      "date": "2026-05-15",
+      "summary": "Update #13 — VulnRap exposes its scoring, similarity, and diagnostics tooling over the Model Context Protocol so agents like Claude Desktop can triage reports without leaving the chat."
+    },
+    {
+      "id": "sprint14-rigor",
+      "title": "Three Ways Slop Hid This Sprint (And How the Audit Caught Them)",
+      "date": "2026-05-02",
+      "summary": "Sprint 14 — Three classes of slop slipped past the scorer this sprint. Here is how the disagreement-floor audit, response-body strip-and-retest, and ARM64 register-dump detector pulled them back into the red zone."
+    },
+    {
+      "id": "substance-gate-sprint12",
+      "title": "Closing the Slop Gap: Engine 3 Now Cross-Checks Engine 2 Before It Votes",
+      "date": "2026-04-25",
+      "summary": "Sprint 12 — The substance LLM now refuses to outvote the heuristic on evidence-free reports. A six-condition AND-gate, an evidence-free cap, and a calibration audit that drops llmHigherCount on slop by 83%."
+    },
+    {
+      "id": "avri-sprint11",
+      "title": "AVRI: One Rubric Wasn't Enough — Why v3.7.0 Scores Memory Bugs and XSS Slop on Different Yardsticks",
+      "date": "2026-04-18",
+      "summary": "Sprint 11 — The Adversarial Vulnerability Report Index splits scoring by family so a memory-corruption report and an XSS report no longer share the same gold-signal yardstick."
+    },
+    {
+      "id": "field-test-v350",
+      "title": "v3.5.0 Field Test: Three Engines, Seven Reports, and a Ceiling We Didn't Expect",
+      "date": "2026-04-11",
+      "summary": "Field test of v3.5.0 across seven real-world reports surfaced a scoring ceiling we did not predict. What the three engines agreed on, where they disagreed, and what the next sprint changes."
+    },
+    {
+      "id": "zero-detection",
+      "title": "460K Vulnerability Reports, 56 Sources, and a 0% Detection Rate",
+      "date": "2026-04-04",
+      "summary": "The week we built the most diverse vulnerability report dataset we could find, ran our scoring system against it, and watched it score AI slop and real CVEs identically. Plus: what the data taught us about evidence over style, and the eleven-engine architecture replacing the formula."
+    },
+    {
+      "id": "the-data-is-there",
+      "title": "The Data Is There, the Score Isn't Listening",
+      "date": "2026-03-28",
+      "summary": "Sprint 8 results: the pipeline finally works, substance detection is live, and the scoring formula mathematically cannot use it. Plus: prompt injection defense, the LLM blind spot, and why we keep getting our own system wrong."
+    },
+    {
+      "id": "grading-ai-with-ai",
+      "title": "Grading AI with AI: What We Learned When Our Detection Model Met the Real World",
+      "date": "2026-03-21",
+      "summary": "Six development sprints, a 20% real-world detection rate, and the fundamental rethinking that led us from style detection to substance verification."
+    },
+    {
+      "id": "building-vulnrap",
+      "title": "Building VulnRap: How We're Making Vulnerability Report Validation Actually Work for PSIRT Teams",
+      "date": "2026-03-14",
+      "summary": "A detailed walkthrough of four development sprints, what we built, what we learned, what works, and what's coming next."
+    },
+    {
+      "id": "first-post",
+      "title": "We Built the Tool We Wished Existed",
+      "date": "2026-03-07",
+      "summary": "Why we created VulnRap, how it helps with triage, and why you should feel comfortable using it."
+    }
+  ]
+}

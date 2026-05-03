@@ -10,6 +10,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import router from "./routes";
+import blogRouter from "./routes/blog";
 import { logger } from "./lib/logger";
 import { buildPublicUrl, validatePublicUrlEnv } from "./lib/public-url";
 
@@ -221,6 +222,11 @@ app.get("/.well-known/security.txt", (req, res) => {
 app.get("/security.txt", (req, res) => {
   res.type("text/plain").send(buildSecurityTxt(req));
 });
+
+// Task #712 — Blog Atom feed at /blog/feed.xml. Mounted at the root
+// (not under /api) because feed readers and the auto-discovery <link>
+// in blog.tsx point at the unprefixed path.
+app.use(blogRouter);
 
 app.use("/api", router);
 

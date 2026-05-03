@@ -1,4 +1,5 @@
-import { BookOpen, Calendar, ArrowRight, Users, Zap, Shield, Bug, Heart } from "lucide-react";
+import { BookOpen, Calendar, ArrowRight, Users, Zap, Shield, Bug, Heart, Rss } from "lucide-react";
+import { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -148,6 +149,28 @@ function FirstPost() {
 }
 
 export default function Blog() {
+  // Task #712 — auto-discovery <link> for the Atom feed at /blog/feed.xml.
+  // Mutates document.head directly (no react-helmet) to match the pattern
+  // used by results.tsx for OG tags. Cleans up on unmount so other pages
+  // do not advertise a feed they do not own.
+  useEffect(() => {
+    const selector = 'link[rel="alternate"][type="application/atom+xml"][data-blog-feed="1"]';
+    let el = document.head.querySelector<HTMLLinkElement>(selector);
+    if (!el) {
+      el = document.createElement("link");
+      el.rel = "alternate";
+      el.type = "application/atom+xml";
+      el.setAttribute("data-blog-feed", "1");
+      document.head.appendChild(el);
+    }
+    el.title = "VulnRap Blog";
+    el.href = "/blog/feed.xml";
+    return () => {
+      const existing = document.head.querySelector<HTMLLinkElement>(selector);
+      if (existing) existing.remove();
+    };
+  }, []);
+
   return (
     <div className="max-w-3xl mx-auto space-y-10">
       <div className="border-b border-border pb-6">
@@ -157,6 +180,12 @@ export default function Blog() {
         </h1>
         <p className="text-muted-foreground mt-2 max-w-3xl leading-relaxed">
           Updates, technical deep-dives, and the occasional rant about vulnerability report quality.
+        </p>
+        <p className="text-xs text-muted-foreground mt-3">
+          <a href="/blog/feed.xml" className="inline-flex items-center gap-1.5 text-primary hover:underline">
+            <Rss className="w-3.5 h-3.5" />
+            Subscribe via Atom feed
+          </a>
         </p>
       </div>
 
