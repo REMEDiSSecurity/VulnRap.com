@@ -139,8 +139,137 @@
   --destructive-border: hsl(var(--destructive));
 }
 
+/* ======= LIGHT THEME ======= */
+/* Applied when <html> has class="light". A small bootstrap script in
+   index.html sets this class before render based on localStorage and
+   prefers-color-scheme so there's no flash. */
+.light {
+  --button-outline: rgba(0,0,0, .10);
+  --badge-outline: rgba(0,0,0, .05);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(0,0,0, .04);
+  --elevate-2: rgba(0,0,0, .09);
+
+  --background: 210 40% 98%;
+  --foreground: 220 30% 10%;
+
+  --border: 220 15% 88%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 220 30% 10%;
+  --card-border: 220 15% 88%;
+
+  --sidebar: 210 40% 98%;
+  --sidebar-foreground: 220 30% 10%;
+  --sidebar-border: 220 15% 88%;
+  --sidebar-primary: 185 90% 32%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 15% 92%;
+  --sidebar-accent-foreground: 220 30% 10%;
+  --sidebar-ring: 185 90% 32%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 220 30% 10%;
+  --popover-border: 220 15% 88%;
+
+  --primary: 185 90% 32%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 270 70% 50%;
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 220 15% 94%;
+  --muted-foreground: 220 15% 38%;
+
+  --accent: 220 15% 92%;
+  --accent-foreground: 220 30% 10%;
+
+  --destructive: 0 75% 48%;
+  --destructive-foreground: 0 0% 100%;
+
+  --input: 220 15% 88%;
+  --ring: 185 90% 32%;
+
+  --chart-1: 185 90% 35%;
+  --chart-2: 270 70% 50%;
+  --chart-3: 0 75% 48%;
+  --chart-4: 35 95% 45%;
+  --chart-5: 140 70% 35%;
+}
+
+/* When light mode is active, override the dark-coded custom utilities.
+   The site has many one-off rgba()s baked into class definitions; rather
+   than rewrite each, we override the few high-impact surfaces here. */
+.light body {
+  color-scheme: light;
+}
+html.light { color-scheme: light; }
+
+.light .cyber-grid {
+  background-image:
+    linear-gradient(rgba(0, 80, 120, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 80, 120, 0.05) 1px, transparent 1px);
+}
+
+.light .glass-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(245, 248, 252, 0.75) 100%);
+  border: 1px solid rgba(0, 80, 120, 0.12);
+  box-shadow:
+    0 0 0 1px rgba(0, 80, 120, 0.04) inset,
+    0 4px 16px rgba(15, 23, 42, 0.06),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.light .glass-card:hover {
+  border-color: rgba(0, 80, 120, 0.22);
+  box-shadow:
+    0 0 0 1px rgba(0, 80, 120, 0.06) inset,
+    0 6px 20px rgba(15, 23, 42, 0.08),
+    0 0 16px rgba(0, 200, 220, 0.06);
+}
+.light .glass-card-accent {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 248, 252, 0.8) 100%);
+  border: 1px solid rgba(0, 80, 120, 0.2);
+  box-shadow:
+    0 0 0 1px rgba(0, 80, 120, 0.06) inset,
+    0 4px 16px rgba(15, 23, 42, 0.06),
+    0 0 20px rgba(0, 200, 220, 0.05);
+}
+.light .nav-glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(245, 248, 252, 0.8) 100%);
+  border-bottom: 1px solid rgba(0, 80, 120, 0.1);
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
+}
+.light .footer-gradient {
+  background: linear-gradient(180deg, transparent 0%, rgba(0, 80, 120, 0.04) 100%);
+  border-top: 1px solid rgba(0, 80, 120, 0.1);
+}
+.light .glow-text { text-shadow: none; }
+.light .glow-text-sm { text-shadow: none; }
+.light .glow-border {
+  box-shadow: 0 0 8px rgba(0, 150, 180, 0.08);
+}
+.light .glow-button {
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 0 12px rgba(0, 150, 180, 0.1);
+}
+.light .glow-button:hover {
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16), 0 0 18px rgba(0, 150, 180, 0.18);
+}
+.light .pull-quote {
+  background: linear-gradient(90deg, hsl(var(--primary) / 0.06) 0%, transparent 70%);
+}
+
+/* Hide laser/scan ambient effects in light mode — they were tuned for
+   a dark canvas and look like artifacts on a white background. */
+.light .laser-beams-container,
+.light .laser-flashes,
+.light .scan-line,
+.light .logo-beams {
+  display: none;
+}
+
 .dark {
-  /* It's always dark anyway, but copy variables for compatibility */
+  /* Explicit dark vars (kept identical to :root so toggling between
+     :root defaults and .dark always lands on the same palette). */
   --background: 220 30% 6%;
   --foreground: 210 40% 98%;
   --border: 220 20% 14%;
@@ -795,4 +924,58 @@
   .logo-beams {
     display: none;
   }
+}
+
+/* ======= PRINT STYLESHEET — force light theme ======= */
+@media print {
+  :root, .dark, .light {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --border: 0 0% 80%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --card-border: 0 0% 80%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+    --popover-border: 0 0% 80%;
+    --primary: 185 90% 28%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 270 70% 40%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 30%;
+    --accent: 0 0% 94%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 75% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --input: 0 0% 90%;
+    --ring: 185 90% 28%;
+    color-scheme: light;
+  }
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .cyber-grid,
+  .laser-beams-container,
+  .laser-flashes,
+  .scan-line,
+  .logo-beams,
+  .nav-glass,
+  header.nav-glass,
+  footer.footer-gradient {
+    display: none !important;
+  }
+  .glass-card,
+  .glass-card-accent {
+    background: #fff !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+  .glow-text, .glow-text-sm, .glow-border, .glow-button, .logo-glow {
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+  .print\:hidden { display: none !important; }
 }

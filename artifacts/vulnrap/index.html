@@ -79,6 +79,21 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Bootstrap theme class before render to prevent FOUC.
+      (function () {
+        try {
+          var t = localStorage.getItem("vulnrap:theme") || "system";
+          var resolved = t === "light" || t === "dark"
+            ? t
+            : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+          document.documentElement.classList.add(resolved);
+          document.documentElement.style.colorScheme = resolved;
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

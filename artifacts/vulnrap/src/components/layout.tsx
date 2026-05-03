@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
 import { LaserEffects } from "@/components/laser-effects";
 import { CursorBugs } from "@/components/cursor-bugs";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { CURRENT_VERSION, RELEASE_DATE } from "@/pages/changelog";
 import { resetOnboardingTour } from "@/components/onboarding-tour";
 import { t } from "@/lib/i18n";
@@ -268,15 +269,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          <button
-            type="button"
-            className="lg:hidden p-2 -mr-2 text-muted-foreground hover:text-primary transition-colors shrink-0"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileMenuOpen}
-          >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <ThemeToggle />
+            <button
+              type="button"
+              className="lg:hidden p-2 -mr-2 text-muted-foreground hover:text-primary transition-colors shrink-0"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -292,7 +296,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           />
           <nav
             className="relative border-b border-primary/15 max-h-[calc(100vh-3.5rem)] overflow-y-auto"
-            style={{ backgroundColor: "hsl(220, 30%, 6%)" }}
+            style={{ backgroundColor: "hsl(var(--background))" }}
           >
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-1">
               {NAV.map((entry) => {
@@ -318,7 +322,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                               "flex items-center gap-3 px-7 py-3 rounded-lg text-base font-medium transition-all",
                               itemActive
                                 ? "text-primary bg-primary/15 glow-text-sm"
-                                : "text-white/85 hover:text-primary hover:bg-primary/5"
+                                : "text-foreground/85 hover:text-primary hover:bg-primary/5"
                             )}
                           >
                             <span className="w-4 flex items-center justify-center">{item.icon}</span>
@@ -339,7 +343,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       "flex items-center gap-3 px-4 py-3.5 rounded-lg text-base font-semibold transition-all",
                       active
                         ? "text-primary bg-primary/15 glow-text-sm"
-                        : "text-white/90 hover:text-primary hover:bg-primary/5"
+                        : "text-foreground/90 hover:text-primary hover:bg-primary/5"
                     )}
                   >
                     <span className="w-5 flex items-center justify-center">{entry.icon}</span>
