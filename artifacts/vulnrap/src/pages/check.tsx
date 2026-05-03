@@ -17,6 +17,7 @@ import { AnalysisStepper } from "@/components/analysis-stepper";
 import { CustomRedactionPanel } from "@/components/custom-redaction-panel";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { QualityPreviewSidebar } from "@/components/quality-preview-sidebar";
+import { EngineTogglePanel } from "@/components/engine-toggle-panel";
 import { ImpossibleHttpMarkers } from "@/components/impossible-http-markers";
 import { STRUCTURAL_MARKER_LABELS } from "@/components/diagnostics-panel";
 import {
@@ -149,11 +150,13 @@ function AdvancedSignalControl({
   adjustments,
   onChange,
   baselineScore,
+  breakdown,
 }: {
   evidence: NonNullable<CheckResultData["evidence"]>;
   adjustments: SignalAdjustments;
   onChange: (next: SignalAdjustments) => void;
   baselineScore: number;
+  breakdown?: CheckResultData["breakdown"];
 }) {
   const hasOverrides = Object.keys(adjustments).length > 0;
   const [open, setOpen] = useState(hasOverrides);
@@ -186,11 +189,11 @@ function AdvancedSignalControl({
           </span>
         </CardTitle>
         <CardDescription className="text-xs">
-          Per-signal mute / boost. State is encoded in the URL — copy the link to share.
+          Per-signal mute / boost (URL-shareable) and a diagnostic per-engine on/off recalculator.
         </CardDescription>
       </CardHeader>
       {open && (
-        <CardContent>
+        <CardContent className="space-y-5">
           <SignalMuteBoostPanel
             evidence={evidence}
             adjustments={adjustments}
@@ -199,6 +202,12 @@ function AdvancedSignalControl({
             adjustedScore={adjustedScore}
             signalLabels={EVIDENCE_TYPE_LABELS}
           />
+          {breakdown && (
+            <>
+              <Separator className="bg-border/30" />
+              <EngineTogglePanel breakdown={breakdown} canonicalScore={baselineScore} />
+            </>
+          )}
         </CardContent>
       )}
     </Card>
@@ -811,12 +820,13 @@ export default function Check() {
             </Card>
           </div>
 
-          {result.evidence && result.evidence.length > 0 && (
+          {((result.evidence && result.evidence.length > 0) || result.breakdown) && (
             <AdvancedSignalControl
-              evidence={result.evidence}
+              evidence={result.evidence ?? []}
               adjustments={signalAdjustments}
               onChange={handleSignalAdjustmentsChange}
               baselineScore={result.slopScore}
+              breakdown={result.breakdown}
             />
           )}
 
