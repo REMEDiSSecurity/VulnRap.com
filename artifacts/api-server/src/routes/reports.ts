@@ -2058,6 +2058,58 @@ router.post("/reports/check", async (req, res): Promise<void> => {
   res.json(response);
 });
 
+let cachedFusionVersions: { versions: string[]; expiresAt: number } | null =
+  null;
+
+router.get(
+  "/reports/feed/engine-versions",
+  async (_req, res): Promise<void> => {
+    const now = Date.now();
+    if (cachedFusionVersions && cachedFusionVersions.expiresAt > now) {
+      res.set(
+        "Cache-Control",
+        "public, max-age=60, stale-while-revalidate=120",
+      );
+      res.json({ versions: cachedFusionVersions.versions });
+      return;
+    }
+
+    const rows = await db
+      .select({
+        version: sql<string>`${reportsTable.engineVersions}->>'fusion'`,
+      })
+      .from(reportsTable)
+      .where(
+        and(
+          eq(reportsTable.showInFeed, true),
+          sql`${reportsTable.engineVersions}->>'fusion' IS NOT NULL`,
+        ),
+      )
+      .groupBy(sql`${reportsTable.engineVersions}->>'fusion'`);
+
+    const versions = rows
+      .map((r) => r.version)
+      .filter(Boolean)
+      .sort((a, b) => {
+        const pa = a.split(".").map(Number);
+        const pb = b.split(".").map(Number);
+        for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+          const diff = (pb[i] ?? 0) - (pa[i] ?? 0);
+          if (diff !== 0) return diff;
+        }
+        return 0;
+      });
+
+    cachedFusionVersions = { versions, expiresAt: now + 60_000 };
+
+    res.set(
+      "Cache-Control",
+      "public, max-age=60, stale-while-revalidate=120",
+    );
+    res.json({ versions });
+  },
+);
+
 router.get("/reports/feed", async (req, res): Promise<void> => {
   const limitParam = parseInt(String(req.query.limit || "10"), 10);
   const limit = Math.max(1, Math.min(50, isNaN(limitParam) ? 10 : limitParam));
@@ -2103,6 +2155,15 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       ? rawFabricatedEvidence
       : null;
 
+  const rawFusionVersion = req.query.fusionVersion
+    ? String(req.query.fusionVersion)
+    : null;
+  const SEMVER_LIKE = /^\d+\.\d+\.\d+$/;
+  const fusionVersionFilter =
+    rawFusionVersion && SEMVER_LIKE.test(rawFusionVersion)
+      ? rawFusionVersion
+      : null;
+
   const conditions = [eq(reportsTable.showInFeed, true)];
   if (tierFilter) {
     conditions.push(eq(reportsTable.slopTier, tierFilter));
@@ -2142,6 +2203,11 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   if (fabricatedEvidenceCondition) {
     conditions.push(fabricatedEvidenceCondition);
   }
+  if (fusionVersionFilter) {
+    conditions.push(
+      sql`${reportsTable.engineVersions}->>'fusion' = ${fusionVersionFilter}`,
+    );
+  }
   const whereClause = and(...conditions)!;
 
   // Summary counts include the fabricated-evidence filter (so the cards
@@ -2150,6 +2216,11 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   const summaryConditions = [eq(reportsTable.showInFeed, true)];
   if (fabricatedEvidenceCondition) {
     summaryConditions.push(fabricatedEvidenceCondition);
+  }
+  if (fusionVersionFilter) {
+    summaryConditions.push(
+      sql`${reportsTable.engineVersions}->>'fusion' = ${fusionVersionFilter}`,
+    );
   }
   const summaryWhere = and(...summaryConditions)!;
 

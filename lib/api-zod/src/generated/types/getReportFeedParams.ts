@@ -36,5 +36,12 @@ fakeRawHttp / strippedCrashTrace booleans surfaced on each feed row.
 
  */
   fabricatedEvidence?: GetReportFeedFabricatedEvidence;
+  /**
+ * Filter by fusion engine version (exact match against engine_versions->>'fusion').
+For example `3.10.0`. Use GET /reports/feed/engine-versions
+to discover available values.
+
+ */
+  fusionVersion?: string;
   sort?: GetReportFeedSort;
 };

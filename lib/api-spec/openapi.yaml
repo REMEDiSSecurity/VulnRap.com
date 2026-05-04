@@ -692,6 +692,15 @@ paths:
             `stripped_trace` keeps only rows where signalBreakdown.avri.crashTrace.isStripped
             is true, and `either` keeps rows that match either flag. Mirrors the
             fakeRawHttp / strippedCrashTrace booleans surfaced on each feed row.
+        - name: fusionVersion
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Filter by fusion engine version (exact match against engine_versions->>'fusion').
+            For example `3.10.0`. Use GET /reports/feed/engine-versions
+            to discover available values.
         - name: sort
           in: query
           required: false
@@ -706,6 +715,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReportFeed"
+
+  /reports/feed/engine-versions:
+    get:
+      operationId: getReportFeedEngineVersions
+      tags: [reports]
+      summary: List distinct engine versions in the public feed
+      description: |
+        Returns the distinct fusion engine version strings present across all
+        public feed reports, sorted in descending semver order. The result is
+        briefly cached (60 s) so the dropdown stays cheap.
+      responses:
+        "200":
+          description: Distinct engine versions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedEngineVersions"
 
   /newsletter/challenge:
     get:
@@ -3775,6 +3801,17 @@ components:
         - total
         - hasMore
         - summary
+
+    FeedEngineVersions:
+      type: object
+      properties:
+        versions:
+          type: array
+          items:
+            type: string
+          description: Distinct fusion engine version strings present in the public feed, sorted in descending semver order.
+      required:
+        - versions
 
     CohortBaseline:
       type: object

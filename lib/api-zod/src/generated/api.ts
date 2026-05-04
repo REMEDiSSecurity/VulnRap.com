@@ -2518,6 +2518,12 @@ export const GetReportFeedQueryParams = zod.object({
     .describe(
       "Filter the feed to AVRI Engine 2 fabricated-evidence cohorts. `fake_raw_http`\nkeeps only rows where signalBreakdown.avri.rawHttp.isFake is true,\n`stripped_trace` keeps only rows where signalBreakdown.avri.crashTrace.isStripped\nis true, and `either` keeps rows that match either flag. Mirrors the\nfakeRawHttp \/ strippedCrashTrace booleans surfaced on each feed row.\n",
     ),
+  fusionVersion: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Filter by fusion engine version (exact match against engine_versions->>'fusion').\nFor example `3.10.0`. Use GET \/reports\/feed\/engine-versions\nto discover available values.\n",
+    ),
   sort: zod
     .enum(["newest", "oldest", "score_asc", "score_desc"])
     .default(getReportFeedQuerySortDefault),
@@ -2580,6 +2586,21 @@ export const GetReportFeedResponse = zod.object({
         'Per-AVRI-family counts of public reports (mirrors tierCounts). Keys are AVRI family ids (e.g. INJECTION, MEMORY_CORRUPTION); rows with null avri_family are bucketed under \"FLAT\".',
       ),
   }),
+});
+
+/**
+ * Returns the distinct fusion engine version strings present across all
+public feed reports, sorted in descending semver order. The result is
+briefly cached (60 s) so the dropdown stays cheap.
+
+ * @summary List distinct engine versions in the public feed
+ */
+export const GetReportFeedEngineVersionsResponse = zod.object({
+  versions: zod
+    .array(zod.string())
+    .describe(
+      "Distinct fusion engine version strings present in the public feed, sorted in descending semver order.",
+    ),
 });
 
 /**

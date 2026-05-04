@@ -43,6 +43,7 @@ import type {
   DryRunBatchBody,
   DryRunBatchResult,
   ErrorResponse,
+  FeedEngineVersions,
   FeedbackAnalytics,
   FeedbackChallenge,
   FeedbackResponse,
@@ -1787,6 +1788,87 @@ export function useGetReportFeed<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetReportFeedQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns the distinct fusion engine version strings present across all
+public feed reports, sorted in descending semver order. The result is
+briefly cached (60 s) so the dropdown stays cheap.
+
+ * @summary List distinct engine versions in the public feed
+ */
+export const getGetReportFeedEngineVersionsUrl = () => {
+  return `/api/reports/feed/engine-versions`;
+};
+
+export const getReportFeedEngineVersions = async (
+  options?: RequestInit,
+): Promise<FeedEngineVersions> => {
+  return customFetch<FeedEngineVersions>(getGetReportFeedEngineVersionsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetReportFeedEngineVersionsQueryKey = () => {
+  return [`/api/reports/feed/engine-versions`] as const;
+};
+
+export const getGetReportFeedEngineVersionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getReportFeedEngineVersions>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getReportFeedEngineVersions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetReportFeedEngineVersionsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getReportFeedEngineVersions>>
+  > = ({ signal }) =>
+    getReportFeedEngineVersions({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getReportFeedEngineVersions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetReportFeedEngineVersionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getReportFeedEngineVersions>>
+>;
+export type GetReportFeedEngineVersionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List distinct engine versions in the public feed
+ */
+
+export function useGetReportFeedEngineVersions<
+  TData = Awaited<ReturnType<typeof getReportFeedEngineVersions>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getReportFeedEngineVersions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetReportFeedEngineVersionsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

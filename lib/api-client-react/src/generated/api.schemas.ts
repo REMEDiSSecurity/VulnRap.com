@@ -1591,6 +1591,11 @@ export interface ReportFeed {
   summary: ReportFeedSummary;
 }
 
+export interface FeedEngineVersions {
+  /** Distinct fusion engine version strings present in the public feed, sorted in descending semver order. */
+  versions: string[];
+}
+
 export type CohortBaselineBinsItem = {
   /** Inclusive lower bound of the bucket (0-100). */
   min: number;
@@ -4657,6 +4662,13 @@ fakeRawHttp / strippedCrashTrace booleans surfaced on each feed row.
 
  */
   fabricatedEvidence?: GetReportFeedFabricatedEvidence;
+  /**
+ * Filter by fusion engine version (exact match against engine_versions->>'fusion').
+For example `3.10.0`. Use GET /reports/feed/engine-versions
+to discover available values.
+
+ */
+  fusionVersion?: string;
   sort?: GetReportFeedSort;
 };
 

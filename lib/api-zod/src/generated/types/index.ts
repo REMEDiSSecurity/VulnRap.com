@@ -100,6 +100,7 @@ export * from "./feedbackAnalyticsScoreCorrelationItem";
 export * from "./feedbackAnalyticsSummary";
 export * from "./feedbackChallenge";
 export * from "./feedbackResponse";
+export * from "./feedEngineVersions";
 export * from "./galleryResponse";
 export * from "./gallerySample";
 export * from "./gallerySampleLabel";
