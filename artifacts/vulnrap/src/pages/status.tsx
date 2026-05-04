@@ -1,6 +1,10 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   useGetPublicStatus,
   getGetPublicStatusQueryKey,
+  useGetPublicStatusIncidents,
+  getGetPublicStatusIncidentsQueryKey,
 } from "@workspace/api-client-react";
 import {
   Activity,
@@ -10,6 +14,11 @@ import {
   HelpCircle,
   Timer,
   Gauge,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Shield,
+  ExternalLink,
 } from "lucide-react";
 import {
   Card,
@@ -103,6 +112,26 @@ function formatRelative(iso: string | null): string {
   return `${Math.round(diff / (24 * 60 * 60_000))}d ago`;
 }
 
+function formatDuration(ms: number | null): string {
+  if (ms === null) return "ongoing";
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 60 * 60_000) return `${Math.round(ms / 60_000)}m`;
+  const hours = Math.floor(ms / (60 * 60_000));
+  const mins = Math.round((ms % (60 * 60_000)) / 60_000);
+  if (mins === 0) return `${hours}h`;
+  return `${hours}h ${mins}m`;
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
 export default function Status() {
   const { data, isLoading } = useGetPublicStatus({
     query: {
@@ -110,6 +139,16 @@ export default function Status() {
       refetchInterval: 60_000,
     },
   });
+
+  const { data: incidentsData, isLoading: incidentsLoading } =
+    useGetPublicStatusIncidents({
+      query: {
+        queryKey: getGetPublicStatusIncidentsQueryKey(),
+        refetchInterval: 60_000,
+      },
+    });
+
+  const [expandedIncident, setExpandedIncident] = useState<string | null>(null);
 
   const banner = data ? OVERALL_BANNER[data.overallStatus] : null;
 
@@ -296,13 +335,179 @@ export default function Status() {
         </CardContent>
       </Card>
 
+      <Card className="glass-card rounded-xl" data-testid="incidents-section">
+        <CardHeader>
+          <CardTitle className="text-base uppercase tracking-wide flex items-center gap-2">
+            <Clock className="w-4 h-4 text-primary" />
+            Recent Incidents
+          </CardTitle>
+          <CardDescription>
+            Detected degradations and outages from the last 30 days, derived
+            from pipeline telemetry gaps.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {incidentsLoading ? (
+            <>
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
+            </>
+          ) : !incidentsData || incidentsData.incidents.length === 0 ? (
+            <div className="flex items-center gap-3 px-4 py-6 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-center justify-center">
+              <Shield className="w-5 h-5 text-emerald-400" />
+              <span className="text-sm text-muted-foreground">
+                No incidents detected in the last{" "}
+                {incidentsData?.windowDays ?? 30} days
+              </span>
+            </div>
+          ) : (
+            incidentsData.incidents.map((incident) => {
+              const isExpanded = expandedIncident === incident.id;
+              const isOngoing = incident.endedAt === null;
+              const severityMeta =
+                incident.severity === "outage"
+                  ? {
+                      color: "text-red-400",
+                      bg: "bg-red-500/10",
+                      ring: "border-red-500/30",
+                      icon: <XCircle className="w-4 h-4" />,
+                      label: "Outage",
+                    }
+                  : {
+                      color: "text-yellow-400",
+                      bg: "bg-yellow-500/10",
+                      ring: "border-yellow-500/30",
+                      icon: <AlertTriangle className="w-4 h-4" />,
+                      label: "Degraded",
+                    };
+
+              return (
+                <div key={incident.id} className="rounded-lg border overflow-hidden">
+                  <button
+                    type="button"
+                    className={cn(
+                      "w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30",
+                      severityMeta.ring,
+                      severityMeta.bg,
+                    )}
+                    onClick={() =>
+                      setExpandedIncident(isExpanded ? null : incident.id)
+                    }
+                    data-testid={`incident-row-${incident.id}`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className={severityMeta.color}>
+                        {severityMeta.icon}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">
+                            {formatDateTime(incident.startedAt)}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "uppercase font-mono text-[10px] tracking-wider",
+                              severityMeta.color,
+                              severityMeta.ring,
+                            )}
+                          >
+                            {severityMeta.label}
+                          </Badge>
+                          {isOngoing && (
+                            <Badge
+                              variant="outline"
+                              className="uppercase font-mono text-[10px] tracking-wider text-red-400 border-red-500/40 animate-pulse"
+                            >
+                              Ongoing
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                          Duration: {formatDuration(incident.durationMs)} ·{" "}
+                          {incident.affectedEngines.length} engine
+                          {incident.affectedEngines.length === 1 ? "" : "s"}{" "}
+                          affected
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-muted-foreground shrink-0">
+                      {isExpanded ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </button>
+
+                  {isExpanded && (
+                    <div
+                      className="px-4 py-3 border-t border-border/40 bg-muted/10 space-y-3"
+                      data-testid={`incident-detail-${incident.id}`}
+                    >
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <div className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider mb-1">
+                            Started
+                          </div>
+                          <div className="font-mono text-sm">
+                            {formatDateTime(incident.startedAt)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider mb-1">
+                            Recovered
+                          </div>
+                          <div className="font-mono text-sm">
+                            {incident.endedAt
+                              ? formatDateTime(incident.endedAt)
+                              : "Not yet recovered"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-end justify-between gap-4">
+                        <div>
+                          <div className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider mb-2">
+                            Affected Engines
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {incident.affectedEngines.map((eng) => (
+                              <Badge
+                                key={eng.id}
+                                variant="outline"
+                                className="text-xs font-mono"
+                              >
+                                {eng.label}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                        <Link
+                          to={`/status/incidents/${incident.id}`}
+                          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline shrink-0"
+                          data-testid={`incident-link-${incident.id}`}
+                        >
+                          View details
+                          <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+
       <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
         Status is derived from the platform's own scoring telemetry. An engine
         is "operational" if its pipeline stage was seen in the last hour,
         "degraded" if seen in the last six hours but not the last hour, "down"
         if older than six hours but seen in the last 30 days, and "no data" if
-        never observed. Incident history is intentionally out of scope for this
-        page.
+        never observed. Incidents are auto-detected from contiguous gaps of
+        more than one hour in pipeline telemetry.
       </p>
     </div>
   );

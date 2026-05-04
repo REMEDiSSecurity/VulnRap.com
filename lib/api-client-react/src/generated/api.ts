@@ -105,6 +105,7 @@ import type {
   PlatformStats,
   PresetLibrary,
   PublicDriftSummary,
+  PublicStatusIncidentsResponse,
   PublicStatusSnapshot,
   RecentActivity,
   ReportAnalysis,
@@ -7386,6 +7387,92 @@ export function useGetPublicStatus<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetPublicStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #1055 — Returns detected incidents (degradations / outages)
+derived from analysis_traces telemetry for the last 30 days.
+A contiguous window where an engine's pipeline stage was missing
+for more than one hour becomes an incident. Each incident carries
+a start time, end time, duration, severity, and the list of
+affected engines.
+
+ * @summary Recent incident history
+ */
+export const getGetPublicStatusIncidentsUrl = () => {
+  return `/api/public/status/incidents`;
+};
+
+export const getPublicStatusIncidents = async (
+  options?: RequestInit,
+): Promise<PublicStatusIncidentsResponse> => {
+  return customFetch<PublicStatusIncidentsResponse>(
+    getGetPublicStatusIncidentsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetPublicStatusIncidentsQueryKey = () => {
+  return [`/api/public/status/incidents`] as const;
+};
+
+export const getGetPublicStatusIncidentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPublicStatusIncidents>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicStatusIncidents>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPublicStatusIncidentsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPublicStatusIncidents>>
+  > = ({ signal }) => getPublicStatusIncidents({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicStatusIncidents>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPublicStatusIncidentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPublicStatusIncidents>>
+>;
+export type GetPublicStatusIncidentsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Recent incident history
+ */
+
+export function useGetPublicStatusIncidents<
+  TData = Awaited<ReturnType<typeof getPublicStatusIncidents>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicStatusIncidents>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPublicStatusIncidentsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

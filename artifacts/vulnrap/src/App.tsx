@@ -77,6 +77,7 @@ const Roadmap = lazyRetry(() => import("@/pages/roadmap"));
 const Status = lazyRetry(() => import("@/pages/status"));
 const Incidents = lazyRetry(() => import("@/pages/incidents"));
 const AdminIncidents = lazyRetry(() => import("@/pages/admin-incidents"));
+const IncidentDetail = lazyRetry(() => import("@/pages/incident-detail"));
 const Showcase = lazyRetry(() => import("@/pages/showcase"));
 const Glossary = lazyRetry(() => import("@/pages/glossary"));
 const Press = lazyRetry(() => import("@/pages/press"));
@@ -154,6 +155,7 @@ function AppRoutes() {
             <Route path="/status" element={<Status />} />
             <Route path="/incidents" element={<Incidents />} />
             <Route path="/admin/incidents" element={<AdminIncidents />} />
+            <Route path="/status/incidents/:id" element={<IncidentDetail />} />
             <Route path="/showcase" element={<Showcase />} />
             <Route path="/glossary" element={<Glossary />} />
             <Route path="/press" element={<Press />} />

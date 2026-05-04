@@ -6,8 +6,12 @@
 //     gate) based on how recently each pipeline stage was last seen.
 import { Router, type IRouter } from "express";
 import { gte } from "drizzle-orm";
+import { createHash } from "crypto";
 import { db, analysisTracesTable, type PipelineTrace } from "@workspace/db";
-import { GetPublicStatusResponse } from "@workspace/api-zod";
+import {
+  GetPublicStatusResponse,
+  GetPublicStatusIncidentsResponse,
+} from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -172,6 +176,162 @@ router.get("/public/status", async (_req, res): Promise<void> => {
       p95Ms,
     },
     engines,
+  });
+
+  res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+  res.json(response);
+});
+
+const INCIDENT_GAP_MS = 60 * 60 * 1000; // 1h — gap threshold for incident detection
+
+interface IncidentWindow {
+  startMs: number;
+  endMs: number | null;
+  affectedEngineIds: Set<string>;
+}
+
+function buildIncidentId(startMs: number, engineIds: string[]): string {
+  const raw = `${startMs}:${[...engineIds].sort().join(",")}`;
+  return createHash("sha256").update(raw).digest("hex").slice(0, 12);
+}
+
+router.get("/public/status/incidents", async (_req, res): Promise<void> => {
+  const now = Date.now();
+  const since = new Date(now - UPTIME_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      createdAt: analysisTracesTable.createdAt,
+      trace: analysisTracesTable.trace,
+    })
+    .from(analysisTracesTable)
+    .where(gte(analysisTracesTable.createdAt, since));
+
+  const stageToEngine = new Map<string, { id: string; label: string }>();
+  for (const def of ENGINE_DEFINITIONS) {
+    for (const stage of def.stages) {
+      stageToEngine.set(stage, { id: def.id, label: def.label });
+    }
+  }
+
+  const tracesByEngine = new Map<string, number[]>();
+  for (const def of ENGINE_DEFINITIONS) {
+    tracesByEngine.set(def.id, []);
+  }
+
+  for (const row of rows) {
+    const trace = row.trace as PipelineTrace | null;
+    if (!trace || !Array.isArray(trace.stages)) continue;
+    const ts = row.createdAt.getTime();
+    const seenEngines = new Set<string>();
+    for (const stage of trace.stages) {
+      if (!stage || typeof stage.stage !== "string") continue;
+      const eng = stageToEngine.get(stage.stage);
+      if (eng && !seenEngines.has(eng.id)) {
+        seenEngines.add(eng.id);
+        tracesByEngine.get(eng.id)!.push(ts);
+      }
+    }
+  }
+
+  for (const timestamps of tracesByEngine.values()) {
+    timestamps.sort((a, b) => a - b);
+  }
+
+  const gapsByEngine = new Map<string, Array<{ startMs: number; endMs: number | null }>>();
+
+  for (const def of ENGINE_DEFINITIONS) {
+    const timestamps = tracesByEngine.get(def.id)!;
+    const gaps: Array<{ startMs: number; endMs: number | null }> = [];
+
+    if (timestamps.length === 0) {
+      continue;
+    }
+
+    for (let i = 1; i < timestamps.length; i++) {
+      const gap = timestamps[i] - timestamps[i - 1];
+      if (gap > INCIDENT_GAP_MS) {
+        gaps.push({
+          startMs: timestamps[i - 1],
+          endMs: timestamps[i],
+        });
+      }
+    }
+
+    const lastTrace = timestamps[timestamps.length - 1];
+    if (now - lastTrace > INCIDENT_GAP_MS) {
+      gaps.push({
+        startMs: lastTrace,
+        endMs: null,
+      });
+    }
+
+    if (gaps.length > 0) {
+      gapsByEngine.set(def.id, gaps);
+    }
+  }
+
+  const allGaps: Array<{ startMs: number; endMs: number | null; engineId: string }> = [];
+  for (const [engineId, gaps] of gapsByEngine) {
+    for (const gap of gaps) {
+      allGaps.push({ ...gap, engineId });
+    }
+  }
+
+  allGaps.sort((a, b) => a.startMs - b.startMs);
+
+  const incidentWindows: IncidentWindow[] = [];
+  for (const gap of allGaps) {
+    const gapEnd = gap.endMs ?? now;
+    if (incidentWindows.length > 0) {
+      const last = incidentWindows[incidentWindows.length - 1];
+      const lastEnd = last.endMs ?? now;
+      if (gap.startMs <= lastEnd) {
+        last.startMs = Math.min(last.startMs, gap.startMs);
+        last.endMs =
+          last.endMs === null || gap.endMs === null
+            ? null
+            : Math.max(last.endMs, gapEnd);
+        last.affectedEngineIds.add(gap.engineId);
+        continue;
+      }
+    }
+    incidentWindows.push({
+      startMs: gap.startMs,
+      endMs: gap.endMs,
+      affectedEngineIds: new Set([gap.engineId]),
+    });
+  }
+
+  incidentWindows.sort((a, b) => b.startMs - a.startMs);
+
+  const engineLabelMap = new Map<string, string>();
+  for (const def of ENGINE_DEFINITIONS) {
+    engineLabelMap.set(def.id, def.label);
+  }
+
+  const incidents = incidentWindows.map((w) => {
+    const engineIds = [...w.affectedEngineIds].sort();
+    const severity: "degraded" | "outage" =
+      engineIds.length >= ENGINE_DEFINITIONS.length ? "outage" : "degraded";
+
+    return {
+      id: buildIncidentId(w.startMs, engineIds),
+      severity,
+      startedAt: new Date(w.startMs).toISOString(),
+      endedAt: w.endMs !== null ? new Date(w.endMs).toISOString() : null,
+      durationMs: w.endMs !== null ? w.endMs - w.startMs : null,
+      affectedEngines: engineIds.map((id) => ({
+        id,
+        label: engineLabelMap.get(id) ?? id,
+      })),
+    };
+  });
+
+  const response = GetPublicStatusIncidentsResponse.parse({
+    generatedAt: new Date(now).toISOString(),
+    windowDays: UPTIME_WINDOW_DAYS,
+    incidents,
   });
 
   res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");

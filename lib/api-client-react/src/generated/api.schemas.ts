@@ -4099,6 +4099,46 @@ export interface PublicStatusSnapshot {
   engines: PublicStatusEngine[];
 }
 
+/**
+ * degraded if some engines were affected, outage if all engines were affected.
+ */
+export type PublicStatusIncidentSeverity =
+  (typeof PublicStatusIncidentSeverity)[keyof typeof PublicStatusIncidentSeverity];
+
+export const PublicStatusIncidentSeverity = {
+  degraded: "degraded",
+  outage: "outage",
+} as const;
+
+export type PublicStatusIncidentAffectedEnginesItem = {
+  id: string;
+  label: string;
+};
+
+/**
+ * A single detected incident — a contiguous window where one or more
+engine pipeline stages were missing for longer than one hour.
+
+ */
+export interface PublicStatusIncident {
+  /** Stable identifier for this incident (hash of startedAt + engines). */
+  id: string;
+  /** degraded if some engines were affected, outage if all engines were affected. */
+  severity: PublicStatusIncidentSeverity;
+  startedAt: string;
+  /** Recovery timestamp, or null if the incident is still ongoing. */
+  endedAt: null | string;
+  /** Duration in milliseconds, or null if still ongoing. */
+  durationMs: null | number;
+  affectedEngines: PublicStatusIncidentAffectedEnginesItem[];
+}
+
+export interface PublicStatusIncidentsResponse {
+  generatedAt: string;
+  windowDays: number;
+  incidents: PublicStatusIncident[];
+}
+
 export interface TrendsData {
   days: number;
   totalReports: number;

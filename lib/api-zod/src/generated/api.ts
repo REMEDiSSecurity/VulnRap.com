@@ -13452,6 +13452,54 @@ export const GetPublicStatusResponse = zod.object({
 });
 
 /**
+ * Task #1055 — Returns detected incidents (degradations / outages)
+derived from analysis_traces telemetry for the last 30 days.
+A contiguous window where an engine's pipeline stage was missing
+for more than one hour becomes an incident. Each incident carries
+a start time, end time, duration, severity, and the list of
+affected engines.
+
+ * @summary Recent incident history
+ */
+export const GetPublicStatusIncidentsResponse = zod.object({
+  generatedAt: zod.coerce.date(),
+  windowDays: zod.number(),
+  incidents: zod.array(
+    zod
+      .object({
+        id: zod
+          .string()
+          .describe(
+            "Stable identifier for this incident (hash of startedAt + engines).",
+          ),
+        severity: zod
+          .enum(["degraded", "outage"])
+          .describe(
+            "degraded if some engines were affected, outage if all engines were affected.",
+          ),
+        startedAt: zod.coerce.date(),
+        endedAt: zod
+          .union([zod.null(), zod.coerce.date()])
+          .describe(
+            "Recovery timestamp, or null if the incident is still ongoing.",
+          ),
+        durationMs: zod
+          .union([zod.null(), zod.number()])
+          .describe("Duration in milliseconds, or null if still ongoing."),
+        affectedEngines: zod.array(
+          zod.object({
+            id: zod.string(),
+            label: zod.string(),
+          }),
+        ),
+      })
+      .describe(
+        "A single detected incident — a contiguous window where one or more\nengine pipeline stages were missing for longer than one hour.\n",
+      ),
+  ),
+});
+
+/**
  * Returns daily report volume, tier breakdown, average score, and feedback trends for the specified time window
  * @summary Get trend data over time
  */

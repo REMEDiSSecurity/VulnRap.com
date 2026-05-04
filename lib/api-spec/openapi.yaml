@@ -2622,6 +2622,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/PublicStatusSnapshot"
 
+  /public/status/incidents:
+    get:
+      operationId: getPublicStatusIncidents
+      tags: [stats]
+      summary: Recent incident history
+      description: |
+        Task #1055 — Returns detected incidents (degradations / outages)
+        derived from analysis_traces telemetry for the last 30 days.
+        A contiguous window where an engine's pipeline stage was missing
+        for more than one hour becomes an incident. Each incident carries
+        a start time, end time, duration, severity, and the list of
+        affected engines.
+      responses:
+        "200":
+          description: Incident history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicStatusIncidentsResponse"
+
   /stats/trends:
     get:
       operationId: getTrends
@@ -8477,6 +8497,59 @@ components:
           items:
             $ref: "#/components/schemas/PublicStatusEngine"
       required: [generatedAt, overallStatus, uptime, latency, engines]
+
+    PublicStatusIncident:
+      type: object
+      description: |
+        A single detected incident — a contiguous window where one or more
+        engine pipeline stages were missing for longer than one hour.
+      properties:
+        id:
+          type: string
+          description: Stable identifier for this incident (hash of startedAt + engines).
+        severity:
+          type: string
+          enum: [degraded, outage]
+          description: degraded if some engines were affected, outage if all engines were affected.
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          oneOf:
+            - type: "null"
+            - type: string
+              format: date-time
+          description: Recovery timestamp, or null if the incident is still ongoing.
+        durationMs:
+          oneOf:
+            - type: "null"
+            - type: number
+          description: Duration in milliseconds, or null if still ongoing.
+        affectedEngines:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+            required: [id, label]
+      required: [id, severity, startedAt, endedAt, durationMs, affectedEngines]
+
+    PublicStatusIncidentsResponse:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        windowDays:
+          type: integer
+        incidents:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicStatusIncident"
+      required: [generatedAt, windowDays, incidents]
 
     TrendsData:
       type: object
