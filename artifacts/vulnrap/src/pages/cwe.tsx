@@ -144,9 +144,9 @@ function CweEntryRow({ entry }: { entry: CweCatalogEntry }) {
         <Link
           to={entry.reportsLink}
           className="ml-auto inline-flex items-center gap-1 text-primary/80 hover:text-primary transition-colors"
-          title="Browse public reports filtered to this family"
+          title={`Browse public reports where the engine inferred ${entry.cweId}`}
         >
-          View family reports
+          View reports
           <ArrowRight className="w-3 h-3" />
         </Link>
       </div>

@@ -4797,6 +4797,15 @@ fakeRawHttp / strippedCrashTrace booleans surfaced on each feed row.
  */
   fabricatedEvidence?: GetReportFeedFabricatedEvidence;
   /**
+ * Filter by soft-citation inferred CWE id (e.g. `CWE-79`). Only reports
+where the CWE Coherence Checker engine inferred a matching CWE are
+returned. The value is derived from the vulnrap_engine_results JSONB
+blob at query time (signalBreakdown.avri.softCitation.inferredCwe or
+signalBreakdown.softCitation.inferredCwe).
+
+ */
+  inferredCwe?: string;
+  /**
  * Filter by fusion engine version (exact match against engine_versions->>'fusion').
 For example `3.10.0`. Use GET /reports/feed/engine-versions
 to discover available values.

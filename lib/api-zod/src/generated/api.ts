@@ -2522,6 +2522,12 @@ export const GetReportFeedQueryParams = zod.object({
     .describe(
       "Filter the feed to AVRI Engine 2 fabricated-evidence cohorts. `fake_raw_http`\nkeeps only rows where signalBreakdown.avri.rawHttp.isFake is true,\n`stripped_trace` keeps only rows where signalBreakdown.avri.crashTrace.isStripped\nis true, and `either` keeps rows that match either flag. Mirrors the\nfakeRawHttp \/ strippedCrashTrace booleans surfaced on each feed row.\n",
     ),
+  inferredCwe: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Filter by soft-citation inferred CWE id (e.g. `CWE-79`). Only reports\nwhere the CWE Coherence Checker engine inferred a matching CWE are\nreturned. The value is derived from the vulnrap_engine_results JSONB\nblob at query time (signalBreakdown.avri.softCitation.inferredCwe or\nsignalBreakdown.softCitation.inferredCwe).\n",
+    ),
   fusionVersion: zod.coerce
     .string()
     .optional()

@@ -176,6 +176,11 @@ export default function Reports() {
   const fabricatedFilter = VALID_FABRICATED.has(rawFabricated)
     ? rawFabricated
     : "All";
+  const rawInferredCwe = searchParams.get("inferredCwe") ?? "All";
+  const inferredCweFilter =
+    rawInferredCwe === "All" || /^CWE-\d{1,4}$/.test(rawInferredCwe)
+      ? rawInferredCwe
+      : "All";
   const fusionVersionFilter = searchParams.get("fusionVersion") ?? "All";
   const rawOffset = parseInt(searchParams.get("offset") ?? "0", 10);
   const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
@@ -210,6 +215,8 @@ export default function Reports() {
     updateParams({ avriFamily: value, offset: "0" });
   const setFabricatedFilter = (value: string) =>
     updateParams({ fabricatedEvidence: value, offset: "0" });
+  const setInferredCweFilter = (value: string) =>
+    updateParams({ inferredCwe: value, offset: "0" });
   const setFusionVersionFilter = (value: string) =>
     updateParams({ fusionVersion: value, offset: "0" });
   const setOffset = (value: number) => updateParams({ offset: String(value) });
@@ -221,6 +228,7 @@ export default function Reports() {
     tierFilter !== "All" ||
     familyFilter !== "All" ||
     fabricatedFilter !== "All" ||
+    inferredCweFilter !== "All" ||
     fusionVersionFilter !== "All" ||
     sort !== "newest";
   const clearAllFilters = () =>
@@ -228,6 +236,7 @@ export default function Reports() {
       tier: null,
       avriFamily: null,
       fabricatedEvidence: null,
+      inferredCwe: null,
       fusionVersion: null,
       sort: null,
       offset: null,
@@ -237,6 +246,7 @@ export default function Reports() {
   const [showTierMenu, setShowTierMenu] = useState(false);
   const [showFamilyMenu, setShowFamilyMenu] = useState(false);
   const [showFabricatedMenu, setShowFabricatedMenu] = useState(false);
+  const [showInferredCweMenu, setShowInferredCweMenu] = useState(false);
   const [showFusionVersionMenu, setShowFusionVersionMenu] = useState(false);
 
   const feedParams = {
@@ -267,6 +277,9 @@ export default function Reports() {
             | "stripped_trace"
             | "either",
         }
+      : {}),
+    ...(inferredCweFilter !== "All"
+      ? { inferredCwe: inferredCweFilter }
       : {}),
     ...(fusionVersionFilter !== "All"
       ? { fusionVersion: fusionVersionFilter }
@@ -400,6 +413,7 @@ export default function Reports() {
                 setShowSortMenu(false);
                 setShowFamilyMenu(false);
                 setShowFabricatedMenu(false);
+                setShowInferredCweMenu(false);
                 setShowFusionVersionMenu(false);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
@@ -444,6 +458,7 @@ export default function Reports() {
                 setShowTierMenu(false);
                 setShowSortMenu(false);
                 setShowFabricatedMenu(false);
+                setShowInferredCweMenu(false);
                 setShowFusionVersionMenu(false);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
@@ -510,6 +525,7 @@ export default function Reports() {
                 setShowTierMenu(false);
                 setShowFamilyMenu(false);
                 setShowSortMenu(false);
+                setShowInferredCweMenu(false);
                 setShowFusionVersionMenu(false);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
@@ -545,6 +561,45 @@ export default function Reports() {
             )}
           </div>
 
+          {inferredCweFilter !== "All" && (
+            <div className="relative">
+              <button
+                type="button"
+                data-testid="inferred-cwe-trigger"
+                onClick={() => {
+                  setShowInferredCweMenu(!showInferredCweMenu);
+                  setShowTierMenu(false);
+                  setShowFamilyMenu(false);
+                  setShowFabricatedMenu(false);
+                  setShowSortMenu(false);
+                  setShowFusionVersionMenu(false);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
+              >
+                <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="font-mono">{inferredCweFilter}</span>
+                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+              </button>
+              {showInferredCweMenu && (
+                <div
+                  data-testid="inferred-cwe-menu"
+                  className="absolute top-full mt-1 left-0 z-50 glass-card rounded-lg border border-border/50 shadow-xl py-1 min-w-[160px]"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInferredCweFilter("All");
+                      setShowInferredCweMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors"
+                  >
+                    All CWEs
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {availableFusionVersions.length > 0 && (
             <div className="relative">
               <button
@@ -554,6 +609,7 @@ export default function Reports() {
                   setShowTierMenu(false);
                   setShowFamilyMenu(false);
                   setShowFabricatedMenu(false);
+                  setShowInferredCweMenu(false);
                   setShowSortMenu(false);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
@@ -612,6 +668,7 @@ export default function Reports() {
                 setShowTierMenu(false);
                 setShowFamilyMenu(false);
                 setShowFabricatedMenu(false);
+                setShowInferredCweMenu(false);
                 setShowFusionVersionMenu(false);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
@@ -707,6 +764,21 @@ export default function Reports() {
               <span className="text-muted-foreground">Evidence:</span>
               <span className="text-foreground">
                 {fabricatedEvidenceShort(fabricatedFilter)}
+              </span>
+              <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
+            </button>
+          )}
+          {inferredCweFilter !== "All" && (
+            <button
+              type="button"
+              data-testid="inferred-cwe-chip"
+              onClick={() => setInferredCweFilter("All")}
+              aria-label={`Remove CWE filter: ${inferredCweFilter}`}
+              className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full glass-card text-xs font-medium border border-border/50 hover:border-primary/40 transition-all group"
+            >
+              <span className="text-muted-foreground">CWE:</span>
+              <span className="text-foreground font-mono">
+                {inferredCweFilter}
               </span>
               <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
             </button>

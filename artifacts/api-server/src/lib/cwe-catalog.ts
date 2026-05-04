@@ -178,8 +178,7 @@ export async function buildCweCatalog(): Promise<CweCatalogResponse> {
       reportCount: stat?.count ?? 0,
       avgCompositeScore:
         stat?.avgScore !== undefined ? (stat?.avgScore ?? null) : null,
-      reportsLink:
-        familyId === "FLAT" ? "/reports" : `/reports?avriFamily=${familyId}`,
+      reportsLink: `/reports?inferredCwe=${encodeURIComponent(cweId)}`,
     };
 
     const existing = grouped.get(familyId) ?? [];

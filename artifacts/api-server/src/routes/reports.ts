@@ -2155,6 +2155,13 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       ? rawFabricatedEvidence
       : null;
 
+  const CWE_ID_RE = /^CWE-\d{1,4}$/;
+  const rawInferredCwe = req.query.inferredCwe
+    ? String(req.query.inferredCwe)
+    : null;
+  const inferredCweFilter =
+    rawInferredCwe && CWE_ID_RE.test(rawInferredCwe) ? rawInferredCwe : null;
+
   const rawFusionVersion = req.query.fusionVersion
     ? String(req.query.fusionVersion)
     : null;
@@ -2203,6 +2210,19 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   if (fabricatedEvidenceCondition) {
     conditions.push(fabricatedEvidenceCondition);
   }
+  if (inferredCweFilter) {
+    conditions.push(
+      sql`EXISTS (
+        SELECT 1 FROM jsonb_array_elements(
+          COALESCE(${reportsTable.vulnrapEngineResults}->'engines', '[]'::jsonb)
+        ) AS elem
+        WHERE COALESCE(
+          elem->'signalBreakdown'->'avri'->'softCitation'->>'inferredCwe',
+          elem->'signalBreakdown'->'softCitation'->>'inferredCwe'
+        ) = ${inferredCweFilter}
+      )`,
+    );
+  }
   if (fusionVersionFilter) {
     conditions.push(
       sql`${reportsTable.engineVersions}->>'fusion' = ${fusionVersionFilter}`,
@@ -2216,6 +2236,19 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   const summaryConditions = [eq(reportsTable.showInFeed, true)];
   if (fabricatedEvidenceCondition) {
     summaryConditions.push(fabricatedEvidenceCondition);
+  }
+  if (inferredCweFilter) {
+    summaryConditions.push(
+      sql`EXISTS (
+        SELECT 1 FROM jsonb_array_elements(
+          COALESCE(${reportsTable.vulnrapEngineResults}->'engines', '[]'::jsonb)
+        ) AS elem
+        WHERE COALESCE(
+          elem->'signalBreakdown'->'avri'->'softCitation'->>'inferredCwe',
+          elem->'signalBreakdown'->'softCitation'->>'inferredCwe'
+        ) = ${inferredCweFilter}
+      )`,
+    );
   }
   if (fusionVersionFilter) {
     summaryConditions.push(
