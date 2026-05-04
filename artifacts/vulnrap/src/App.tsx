@@ -54,6 +54,7 @@ const Transparency = lazyRetry(() => import("@/pages/transparency"));
 const Community = lazyRetry(() => import("@/pages/community"));
 const Architecture = lazyRetry(() => import("@/pages/architecture"));
 const Engines = lazyRetry(() => import("@/pages/engines"));
+const EnginesAuthorship = lazyRetry(() => import("@/pages/engines-authorship"));
 const EnginesSubstance = lazyRetry(() => import("@/pages/engines-substance"));
 const EnginesCwe = lazyRetry(() => import("@/pages/engines-cwe"));
 const EnginesAvri = lazyRetry(() => import("@/pages/engines-avri"));
@@ -127,7 +128,9 @@ function AppRoutes() {
             <Route path="/community" element={<Community />} />
             <Route path="/architecture" element={<Architecture />} />
             <Route path="/engines" element={<Engines />} />
+            <Route path="/engines/ai-authorship" element={<EnginesAuthorship />} />
             <Route path="/engines/substance" element={<EnginesSubstance />} />
+            <Route path="/engines/technical-substance" element={<EnginesSubstance />} />
             <Route path="/engines/cwe-coherence" element={<EnginesCwe />} />
             <Route path="/engines/avri" element={<EnginesAvri />} />
             <Route path="/presets" element={<Presets />} />

@@ -327,20 +327,20 @@ const ENGINE_AXIS_META: Record<
 > = {
   "AI Authorship Detector": {
     axis: "Engine 1",
-    href: "/changelog#ai-authorship-detector",
+    href: "/engines/ai-authorship",
     description:
       "Engine 1 — AI Authorship Detector. Plotted as 100 − raw score so higher = more human-written.",
     invert: true,
   },
   "Technical Substance Analyzer": {
     axis: "Engine 2",
-    href: "/changelog#technical-substance-analyzer",
+    href: "/engines/substance",
     description:
       "Engine 2 — Technical Substance Analyzer. Higher = more concrete evidence, code, and reproduction detail.",
   },
   "CWE Coherence Checker": {
     axis: "Engine 3",
-    href: "/changelog#cwe-coherence-checker",
+    href: "/engines/cwe-coherence",
     description:
       "Engine 3 — CWE Coherence Checker. Higher = the claimed CWE matches the described behavior.",
   },
@@ -487,7 +487,7 @@ export function EngineRadarSection({
     {
       axis: "AVRI",
       meaning: "Adversarial Validity Rubric (Engine 2 sub-signal).",
-      href: "/changelog#avri-family-rubric",
+      href: "/engines/avri",
       value: avriScore,
     },
     {

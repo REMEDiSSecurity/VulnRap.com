@@ -72,7 +72,7 @@ const ENGINES: EngineSummary[] = [
       score: "78 → contributes (100 − 78) × 0.05 = 1.1 to composite",
       verdict: "RED",
     },
-    deepDive: undefined,
+    deepDive: "/engines/ai-authorship",
   },
   {
     id: "substance",
