@@ -43,6 +43,50 @@ describe("EngineTogglePanel", () => {
     expect(baseline.score).toBe(53);
   });
 
+  // Task #959 — parity test: when the server returns its canonical
+  // fusionWeights and all engines are enabled, the recalculator must
+  // produce the same number as the all-on baseline (delta = 0). This
+  // documents the contract between `breakdown.fusionWeights` from the
+  // /reports/check response and the EngineTogglePanel; if calibration
+  // changes on the server the panel updates without a client release.
+  it("recalc with server fusionWeights and all engines on has delta 0 vs baseline", () => {
+    const serverWeights = {
+      linguistic: 0.3,
+      factual: 0.3,
+      template: 0.15,
+      llm: 0.25,
+    };
+    const baseline = refuseEngines(BREAKDOWN, ALL_ENGINES_ON, serverWeights);
+    const recalc = refuseEngines(BREAKDOWN, ALL_ENGINES_ON, serverWeights);
+    expect(recalc.score - baseline.score).toBe(0);
+    expect(baseline.score).toBe(53);
+  });
+
+  it("uses server-provided fusionWeights instead of hard-coded defaults", async () => {
+    // Server reports an alternate calibration that flips emphasis to LLM.
+    // With BREAKDOWN values 80/60/40/20 and weights .10/.10/.10/.70 the
+    // all-on recalc is 80*.10 + 60*.10 + 40*.10 + 20*.70 = 32.
+    const serverWeights = {
+      linguistic: 0.1,
+      factual: 0.1,
+      template: 0.1,
+      llm: 0.7,
+    };
+    render(
+      <EngineTogglePanel
+        breakdown={BREAKDOWN}
+        canonicalScore={55}
+        fusionWeights={serverWeights}
+      />,
+    );
+    await userEvent.click(screen.getByTestId("engine-toggle-llm"));
+    // Disabling LLM renormalizes (0.10/0.30) across the remaining three:
+    // (80*.10 + 60*.10 + 40*.10) / 0.30 = 60 -> delta +28 vs 32.
+    const recalc = screen.getByTestId("engine-toggle-recalc-score");
+    expect(recalc.textContent).toContain("60");
+    expect(recalc.textContent).toContain("+28");
+  });
+
   it("renders one stacked contribution segment per enabled engine", async () => {
     render(<EngineTogglePanel breakdown={BREAKDOWN} canonicalScore={55} />);
     const stack = screen.getByTestId("engine-contribution-stack");

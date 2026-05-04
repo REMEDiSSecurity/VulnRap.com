@@ -287,6 +287,7 @@ export * from "./roadmapItemColumn";
 export * from "./roadmapItemStatus";
 export * from "./roadmapResponse";
 export * from "./scoreBreakdown";
+export * from "./scoreBreakdownFusionWeights";
 export * from "./scoreHistoryEntry";
 export * from "./scoreHistoryEntryEnginesItem";
 export * from "./scoreHistoryEntryMode";

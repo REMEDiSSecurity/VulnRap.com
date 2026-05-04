@@ -5,6 +5,7 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { ScoreBreakdownFusionWeights } from "./scoreBreakdownFusionWeights";
 
 export interface ScoreBreakdown {
   /** Linguistic AI fingerprinting score (0-100) */
@@ -45,4 +46,13 @@ export interface ScoreBreakdown {
    * @nullable
    */
   domainCoherence?: number | null;
+  /** Task #959: Per-engine weights actually used by the diagnostic on/off
+recalculator on the results page. Keys are engine identifiers
+(currently `linguistic`, `factual`, `template`, `llm`); values are
+the linear weights that sum to 1.0. The server is the single source
+of truth — the EngineTogglePanel consumes these instead of
+hard-coded defaults so calibration changes propagate to the UI
+without a client release.
+ */
+  fusionWeights?: ScoreBreakdownFusionWeights;
 }

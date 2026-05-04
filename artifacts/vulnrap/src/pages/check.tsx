@@ -358,6 +358,7 @@ function AdvancedSignalControl({
               <EngineTogglePanel
                 breakdown={breakdown}
                 canonicalScore={baselineScore}
+                fusionWeights={breakdown.fusionWeights ?? null}
               />
             </>
           )}
@@ -581,6 +582,9 @@ interface CheckResultData {
     template?: number;
     llm?: number | null;
     quality?: number;
+    // Task #959 — server-canonical per-engine weights consumed by
+    // EngineTogglePanel.
+    fusionWeights?: Record<string, number> | null;
   };
   evidence?: Array<{
     type: string;

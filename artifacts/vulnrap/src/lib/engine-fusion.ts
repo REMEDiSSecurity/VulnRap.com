@@ -17,12 +17,37 @@ export interface EngineBreakdown {
   llm?: number | null;
 }
 
+// Fallback weights used only when the server response does not carry a
+// `breakdown.fusionWeights` block (older reports cached before Task #959,
+// or test fixtures that build a breakdown by hand). The server is the
+// authoritative source — see `FUSION_WEIGHTS` in
+// `artifacts/api-server/src/lib/score-fusion.ts`. Keep these in lockstep
+// with the server constant so the UI degrades gracefully on stale data.
 export const ENGINE_FUSION_WEIGHTS: Record<EngineKey, number> = {
   linguistic: 0.3,
   factual: 0.3,
   template: 0.15,
   llm: 0.25,
 };
+
+/**
+ * Resolve per-engine weights, preferring server-provided values from
+ * `breakdown.fusionWeights` and falling back to `ENGINE_FUSION_WEIGHTS`
+ * for any missing key. Unknown keys in the server payload are ignored.
+ */
+export function resolveFusionWeights(
+  serverWeights?: Record<string, number> | null,
+): Record<EngineKey, number> {
+  const out: Record<EngineKey, number> = { ...ENGINE_FUSION_WEIGHTS };
+  if (!serverWeights) return out;
+  for (const key of ENGINE_ORDER) {
+    const v = serverWeights[key];
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
+      out[key] = v;
+    }
+  }
+  return out;
+}
 
 export const ENGINE_ORDER: EngineKey[] = [
   "linguistic",
@@ -57,7 +82,9 @@ export interface RefuseResult {
 export function refuseEngines(
   breakdown: EngineBreakdown,
   enabled: Record<EngineKey, boolean>,
+  fusionWeights?: Record<string, number> | null,
 ): RefuseResult {
+  const weights = resolveFusionWeights(fusionWeights);
   const states = ENGINE_ORDER.map((key) => {
     const value = breakdown[key];
     const available = value != null;
@@ -66,7 +93,7 @@ export function refuseEngines(
       available,
       enabled: available && enabled[key],
       rawScore: available ? Number(value) : 0,
-      baseWeight: ENGINE_FUSION_WEIGHTS[key],
+      baseWeight: weights[key],
     };
   });
   const totalWeight = states

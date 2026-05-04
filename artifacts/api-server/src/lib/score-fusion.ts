@@ -42,7 +42,29 @@ export interface ScoreBreakdown {
   pocValidity?: number | null;
   domainCoherence?: number | null;
   substanceAxis?: number;
+  // Task #959 — Per-engine weights used by the diagnostic on/off
+  // recalculator on the results page. Keep the server as the single
+  // source of truth so the UI cannot drift out of sync with calibration
+  // changes. Today the server's full fusion path
+  // (`computeAuthenticityScore` + `computeSubstanceAxis`) does not do a
+  // straight weighted blend across these four engine axes — it takes
+  // `Math.max(styleDriven, substanceDriven)`. The values returned here
+  // are the linear weights the *educational* recalculator panel applies
+  // when isolating "what would the score be without engine X". When the
+  // server changes calibration the panel updates automatically.
+  fusionWeights?: Record<string, number>;
 }
+
+// Task #959 — Canonical per-engine fusion weights surfaced to the
+// diagnostic on/off recalculator. Update this constant (not the UI) when
+// calibration changes; the value is forwarded through the
+// check/report endpoints' `breakdown.fusionWeights`. Sums to 1.0.
+export const FUSION_WEIGHTS = Object.freeze({
+  linguistic: 0.3,
+  factual: 0.3,
+  template: 0.15,
+  llm: 0.25,
+} as const);
 
 export interface EvidenceItem {
   type: string;
@@ -686,6 +708,7 @@ export function fuseScores(
     pocValidity: llm?.llmSubstance?.pocValidity ?? null,
     domainCoherence: llm?.llmSubstance?.domainCoherence ?? null,
     substanceAxis,
+    fusionWeights: { ...FUSION_WEIGHTS },
   };
 
   const analysisMode: AnalysisMode = llm ? "llm_enhanced" : "heuristic_only";

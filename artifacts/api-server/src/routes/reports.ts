@@ -197,6 +197,7 @@ function safeBreakdown(bd: unknown): {
   hallucinationDetector?: number;
   claimSpecificity?: number;
   internalConsistency?: number;
+  fusionWeights?: Record<string, number>;
 } {
   const raw = (bd && typeof bd === "object" ? bd : {}) as Record<
     string,
@@ -235,6 +236,23 @@ function safeBreakdown(bd: unknown): {
     ...(raw.pocValidity != null ? { pocValidity: raw.pocValidity } : {}),
     ...(raw.domainCoherence != null
       ? { domainCoherence: raw.domainCoherence }
+      : {}),
+    // Task #959 — Forward the canonical per-engine fusion weights set by
+    // `fuseScores` so the EngineTogglePanel on /check + /reports/:id uses
+    // the server's source of truth instead of its hard-coded defaults.
+    // We accept any record-of-numbers shape rather than gating on the
+    // exact engine keys so a future calibration change that adds a 5th
+    // engine surfaces cleanly without a schema migration.
+    ...(raw.fusionWeights &&
+    typeof raw.fusionWeights === "object" &&
+    !Array.isArray(raw.fusionWeights)
+      ? {
+          fusionWeights: Object.fromEntries(
+            Object.entries(raw.fusionWeights as Record<string, unknown>).filter(
+              ([, v]) => typeof v === "number" && Number.isFinite(v),
+            ),
+          ) as Record<string, number>,
+        }
       : {}),
   };
 }

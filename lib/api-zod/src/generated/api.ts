@@ -233,6 +233,12 @@ export const GetReportResponse = zod.object({
       .number()
       .nullish()
       .describe("LLM domain coherence score (0-100). Null when LLM not used."),
+    fusionWeights: zod
+      .record(zod.string(), zod.number())
+      .optional()
+      .describe(
+        "Task #959: Per-engine weights actually used by the diagnostic on\/off\nrecalculator on the results page. Keys are engine identifiers\n(currently `linguistic`, `factual`, `template`, `llm`); values are\nthe linear weights that sum to 1.0. The server is the single source\nof truth — the EngineTogglePanel consumes these instead of\nhard-coded defaults so calibration changes propagate to the UI\nwithout a client release.\n",
+      ),
   }),
   evidence: zod
     .array(
@@ -1571,6 +1577,12 @@ export const CheckReportResponse = zod.object({
       .number()
       .nullish()
       .describe("LLM domain coherence score (0-100). Null when LLM not used."),
+    fusionWeights: zod
+      .record(zod.string(), zod.number())
+      .optional()
+      .describe(
+        "Task #959: Per-engine weights actually used by the diagnostic on\/off\nrecalculator on the results page. Keys are engine identifiers\n(currently `linguistic`, `factual`, `template`, `llm`); values are\nthe linear weights that sum to 1.0. The server is the single source\nof truth — the EngineTogglePanel consumes these instead of\nhard-coded defaults so calibration changes propagate to the UI\nwithout a client release.\n",
+      ),
   }),
   evidence: zod.array(
     zod.object({

@@ -50,12 +50,21 @@ interface EngineTogglePanelProps {
    * server-vs-client model gap.
    */
   canonicalScore: number;
+  /**
+   * Task #959 — server-provided per-engine fusion weights from
+   * `breakdown.fusionWeights`. When supplied the recalculator uses these
+   * values instead of `ENGINE_FUSION_WEIGHTS` defaults so calibration
+   * changes on the server propagate without a client release. Optional
+   * for backward compatibility with older cached reports.
+   */
+  fusionWeights?: Record<string, number> | null;
   className?: string;
 }
 
 export function EngineTogglePanel({
   breakdown,
   canonicalScore,
+  fusionWeights,
   className,
 }: EngineTogglePanelProps) {
   const [enabled, setEnabled] = useState<Record<EngineKey, boolean>>({
@@ -63,12 +72,12 @@ export function EngineTogglePanel({
   });
 
   const baseline = useMemo(
-    () => refuseEngines(breakdown, ALL_ENGINES_ON),
-    [breakdown],
+    () => refuseEngines(breakdown, ALL_ENGINES_ON, fusionWeights),
+    [breakdown, fusionWeights],
   );
   const { score, contributions } = useMemo(
-    () => refuseEngines(breakdown, enabled),
-    [breakdown, enabled],
+    () => refuseEngines(breakdown, enabled, fusionWeights),
+    [breakdown, enabled, fusionWeights],
   );
 
   const allOn = ENGINE_ORDER.every((k) => enabled[k] || breakdown[k] == null);
