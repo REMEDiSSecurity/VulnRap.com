@@ -36,6 +36,12 @@ export interface PipelineTrace {
     claimEvidenceRatio: number;
     claimedCwes: string[];
   } | null;
+  engines?: {
+    engine: string;
+    score: number;
+    verdict: string;
+    confidence: string;
+  }[];
   featureFlags: Record<string, boolean | string>;
   notes: string[];
   /**

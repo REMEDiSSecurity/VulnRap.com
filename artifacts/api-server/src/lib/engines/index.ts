@@ -155,6 +155,12 @@ export function analyzeWithEnginesTraced(
       totalDurationMs,
       stages,
       enginesUsed: avriComposite.engineResults.map((r) => r.engine),
+      engines: avriComposite.engineResults.map((r) => ({
+        engine: r.engine,
+        score: r.score,
+        verdict: r.verdict,
+        confidence: r.confidence,
+      })),
       composite: {
         overallScore: avriComposite.overallScore,
         label: avriComposite.label,
@@ -250,6 +256,12 @@ export function analyzeWithEnginesTraced(
     totalDurationMs,
     stages,
     enginesUsed: composite.engineResults.map((r) => r.engine),
+    engines: composite.engineResults.map((r) => ({
+      engine: r.engine,
+      score: r.score,
+      verdict: r.verdict,
+      confidence: r.confidence,
+    })),
     composite: {
       overallScore: composite.overallScore,
       label: composite.label,

@@ -33,6 +33,7 @@ export type Cond =
   | { __op: "desc"; col: unknown }
   | { __op: "gte"; col: unknown; val: unknown }
   | { __op: "isNotNull"; col: unknown }
+  | { __op: "inArray"; col: unknown; vals: unknown[] }
   | { __op: "sql_fragment" }
   | null
   | undefined;
@@ -49,6 +50,7 @@ export const drizzleOrmOverrides = {
   desc: (col: unknown) => ({ __op: "desc", col }),
   gte: (col: unknown, val: unknown) => ({ __op: "gte", col, val }),
   isNotNull: (col: unknown) => ({ __op: "isNotNull", col }),
+  inArray: (col: unknown, vals: unknown[]) => ({ __op: "inArray", col, vals }),
   sql: Object.assign(
     (_strings: TemplateStringsArray) => ({ __op: "sql_fragment" }),
     { mapWith: () => ({ __op: "sql_mapped" }) },
@@ -195,6 +197,12 @@ export function createInMemoryDb(options: InMemoryDbOptions): InMemoryDb {
         (acc, sub) => applyCond(acc, sub, table),
         rows,
       );
+    }
+    if (op === "inArray") {
+      const c = cond as { col: unknown; vals: unknown[] };
+      const colName = findColName(table, c.col);
+      if (colName === "__unknown__") return rows;
+      return rows.filter((r) => c.vals.includes(r[colName]));
     }
     // `gte`, `isNotNull`, `sql_fragment` and unknown ops fall through as
     // "no-op filter" — keeps the chain compatible with routes that emit

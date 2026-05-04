@@ -395,6 +395,87 @@ describe("GET /api/reports/:id/score-history", () => {
     });
   });
 
+  it("hydrates per-engine sub-scores from analysis traces for past entries", async () => {
+    const createdAt = new Date("2026-01-01T00:00:00.000Z");
+    const report = seedReport({
+      createdAt,
+      vulnrapCompositeScore: 75,
+      vulnrapCompositeLabel: "REASONABLE",
+      vulnrapCorrelationId: "cid-current",
+      vulnrapEngineResults: {
+        engines: [
+          {
+            engine: "Engine 1",
+            score: 25,
+            verdict: "GREEN",
+            confidence: "HIGH",
+          },
+        ],
+        rescoreHistory: [
+          {
+            source: "backfill-rescore",
+            mode: "engine",
+            rescoredAt: "2026-02-01T00:00:00.000Z",
+            priorCompositeScore: 60,
+            priorCompositeLabel: "NEEDS REVIEW",
+            priorCorrelationId: "cid-old",
+            newCompositeScore: 75,
+            newCompositeLabel: "REASONABLE",
+            newCorrelationId: "cid-current",
+          },
+        ],
+      },
+    });
+
+    seedTrace({
+      correlationId: "cid-old",
+      reportId: report.id as number,
+      trace: {
+        correlationId: "cid-old",
+        composite: {
+          overallScore: 60,
+          label: "NEEDS REVIEW",
+          overridesApplied: [],
+          warnings: [],
+        },
+        enginesUsed: ["Engine 1", "Engine 2"],
+        engines: [
+          { engine: "Engine 1", score: 35, verdict: "YELLOW", confidence: "MEDIUM" },
+          { engine: "Engine 2", score: 70, verdict: "GREEN", confidence: "HIGH" },
+        ],
+        featureFlags: { VULNRAP_USE_NEW_COMPOSITE: true },
+      },
+    });
+
+    const res = await fetch(
+      `${baseUrl}/api/reports/${report.id}/score-history`,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      entries: Array<Record<string, unknown>>;
+    };
+    expect(body.entries).toHaveLength(2);
+
+    expect(body.entries[0]).toMatchObject({
+      compositeScore: 60,
+      source: "original",
+      correlationId: "cid-old",
+    });
+    expect(body.entries[0].engines).toEqual([
+      { engine: "Engine 1", score: 35, verdict: "YELLOW", confidence: "MEDIUM" },
+      { engine: "Engine 2", score: 70, verdict: "GREEN", confidence: "HIGH" },
+    ]);
+
+    expect(body.entries[1]).toMatchObject({
+      compositeScore: 75,
+      source: "backfill-rescore",
+      correlationId: "cid-current",
+    });
+    expect(body.entries[1].engines).toEqual([
+      { engine: "Engine 1", score: 25, verdict: "GREEN", confidence: "HIGH" },
+    ]);
+  });
+
   it("returns an empty entries list when the report has no vulnrap composite yet", async () => {
     const report = seedReport({
       vulnrapCompositeScore: null,

@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { Router, type IRouter, type Request } from "express";
 import multer from "multer";
-import { and, eq, or, sql, desc } from "drizzle-orm";
+import { and, eq, or, sql, desc, inArray } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   reportsTable,
@@ -3069,6 +3069,27 @@ router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
 
   const currentEngines = Array.isArray(stored.engines) ? stored.engines : [];
 
+  const correlationIds = raw
+    .map((e) => e.correlationId)
+    .filter((id): id is string => id != null);
+
+  const traceRows =
+    correlationIds.length > 0
+      ? await db
+          .select()
+          .from(analysisTracesTable)
+          .where(
+            and(
+              eq(analysisTracesTable.reportId, report.id),
+              inArray(analysisTracesTable.correlationId, correlationIds),
+            ),
+          )
+      : [];
+
+  const traceByCorrelation = new Map(
+    traceRows.map((r) => [r.correlationId, r.trace as PipelineTrace]),
+  );
+
   const entries = raw.map((e, idx) => {
     const isCurrent = idx === raw.length - 1;
     let engines: Array<{
@@ -3078,12 +3099,6 @@ router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
       confidence: string | null;
     }> | null = null;
 
-    // Only the current entry has authentic per-engine numeric sub-scores
-    // (read from vulnrap_engine_results.engines on the row). Historical
-    // analysis_traces persist enginesUsed + composite but NOT each engine's
-    // numeric score — synthesizing one would mislead reviewers, so we
-    // explicitly leave engines = null for past entries until the trace
-    // schema gains a typed per-engine field (see follow-up task #950).
     if (isCurrent && currentEngines.length > 0) {
       engines = currentEngines.map((eng) => ({
         engine: eng.engine,
@@ -3091,6 +3106,16 @@ router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
         verdict: eng.verdict ?? null,
         confidence: eng.confidence ?? null,
       }));
+    } else if (e.correlationId) {
+      const trace = traceByCorrelation.get(e.correlationId);
+      if (trace?.engines && trace.engines.length > 0) {
+        engines = trace.engines.map((eng) => ({
+          engine: eng.engine,
+          score: eng.score,
+          verdict: eng.verdict ?? null,
+          confidence: eng.confidence ?? null,
+        }));
+      }
     }
 
     // Code version is intentionally null until a real scoring engine version

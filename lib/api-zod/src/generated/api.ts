@@ -1370,10 +1370,10 @@ export const CompareReportsResponse = zod.object({
  * Returns every recorded composite score for this report — the original
 analysis plus each subsequent backfill rescore. Each entry carries the
 composite score + tier + timestamp + correlation id. Per-engine
-sub-scores are included only for the current scoring event (where
-authentic engine numbers are persisted on the row); past entries
-return `engines: null` because today's analysis_traces schema does
-not persist per-engine numeric scores. `codeVersion` is reserved for
+sub-scores are included for the current scoring event (from the row's
+engines blob) and for past entries whose analysis trace carries the
+`engines` field (task #950). Old traces that predate the field still
+fall back to `engines: null`. `codeVersion` is reserved for
 a future scorer-version field and is currently always null. When the
 score-stability-monitor task lands a dedicated `report_rescore_log`
 table this endpoint will switch to reading from it; today the
