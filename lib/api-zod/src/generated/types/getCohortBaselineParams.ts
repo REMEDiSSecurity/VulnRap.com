@@ -5,6 +5,7 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
+import type { GetCohortBaselineMetric } from "./getCohortBaselineMetric";
 
 export type GetCohortBaselineParams = {
   /**
@@ -14,4 +15,15 @@ through to the platform-wide cohort.
 
  */
   cwe?: string;
+  /**
+ * Which per-report score axis to bucket the cohort against.
+`composite` (default) uses the VulnRap composite score shown in
+the results page header. `slop` uses the legacy AI Detection
+("slop") score that still appears further down the results page,
+so the same baseline ribbon UI can contextualise that legacy
+number too. When `metric=slop` the engineMedians block is null
+(engine medians are only meaningful for the composite cohort).
+
+ */
+  metric?: GetCohortBaselineMetric;
 };

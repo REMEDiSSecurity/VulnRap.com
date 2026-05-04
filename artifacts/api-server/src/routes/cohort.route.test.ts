@@ -263,7 +263,7 @@ describe("GET /cohort/baseline", () => {
     expect(r.body.totalReports).toBe(5);
   });
 
-  it("bins against vulnrap_composite_score (the metric shown in the results header), not slop_score", async () => {
+  it("bins against vulnrap_composite_score (the metric shown in the results header), not slop_score, by default", async () => {
     // Regression for task #615: the ribbon's marker is positioned by the
     // displayed composite score, so the cohort histogram MUST be built from
     // the same column or the percentile label is meaningless.
@@ -274,6 +274,47 @@ describe("GET /cohort/baseline", () => {
     const chunks = args.bucket.queryChunks;
     expect(chunks).toContain(schema.reportsTable.vulnrapCompositeScore);
     expect(chunks).not.toContain(schema.reportsTable.slopScore);
+  });
+
+  it("bins against slop_score when metric=slop is requested (task #933)", async () => {
+    // The legacy AI Detection Score card on /results/:id reuses the same
+    // baseline ribbon UI; the marker there is positioned by the slop score
+    // so the cohort histogram MUST switch to slop_score for that mode.
+    selectQueue.push([{ bucket: 6, count: 4 }]);
+    const r = await request<CohortBaselineResponse>(
+      "/cohort/baseline?metric=slop",
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.totalReports).toBe(4);
+    const schema = await import("@workspace/db/schema");
+    const args = selectArgsLog[0] as { bucket: { queryChunks: unknown[] } };
+    const chunks = args.bucket.queryChunks;
+    expect(chunks).toContain(schema.reportsTable.slopScore);
+    expect(chunks).not.toContain(schema.reportsTable.vulnrapCompositeScore);
+  });
+
+  it("skips the engine-medians follow-up query for metric=slop", async () => {
+    // Engine medians only make sense against the composite cohort. For the
+    // slop cohort we should never issue the second select on
+    // vulnrap_engine_results / quality_score — the response carries
+    // engineMedians:null instead.
+    selectQueue.push([{ bucket: 5, count: 1 }]);
+    const r = await request<
+      CohortBaselineResponse & { engineMedians: unknown }
+    >("/cohort/baseline?metric=slop");
+    expect(r.status).toBe(200);
+    expect(r.body.engineMedians).toBeNull();
+    // Only the histogram select should have been issued.
+    expect(selectArgsLog).toHaveLength(1);
+  });
+
+  it("falls back to the composite cohort when metric is unknown", async () => {
+    selectQueue.push([]);
+    await request<CohortBaselineResponse>("/cohort/baseline?metric=bogus");
+    const schema = await import("@workspace/db/schema");
+    const args = selectArgsLog[0] as { bucket: { queryChunks: unknown[] } };
+    const chunks = args.bucket.queryChunks;
+    expect(chunks).toContain(schema.reportsTable.vulnrapCompositeScore);
   });
 
   it("falls back to the platform cohort (cwe=null) when an unknown family is requested", async () => {

@@ -119,18 +119,32 @@ router.get("/cohort/baseline", async (req, res): Promise<void> => {
   // returns 400.
   const cweFilter = rawCwe && COHORT_CWE_FAMILY_IDS.has(rawCwe) ? rawCwe : null;
 
+  // Task #933 — same baseline ribbon UI is also used to contextualise the
+  // legacy AI Detection ("slop") score that still sits further down the
+  // results page. `metric=slop` swaps the column the histogram is bucketed
+  // against; everything else (window, cwe filter, percentile math) stays
+  // identical so the server stays the single source of truth.
+  const rawMetric = req.query.metric ? String(req.query.metric) : "composite";
+  const metric: "composite" | "slop" =
+    rawMetric === "slop" ? "slop" : "composite";
+  const scoreColumn =
+    metric === "slop"
+      ? reportsTable.slopScore
+      : reportsTable.vulnrapCompositeScore;
+
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - WINDOW_DAYS);
 
-  // Bin against `vulnrap_composite_score` so the histogram and median match
-  // the metric the results page actually shows users (the big composite
-  // number above the engine breakdown). Legacy rows that pre-date the
-  // multi-engine consensus have NULL here and are excluded — those reports
-  // also have no composite to plot a marker against, so leaving them out
-  // keeps the cohort honest.
+  // Bin against the chosen score column so the histogram and median match
+  // the metric the results page actually shows users. For the composite
+  // cohort, legacy rows that pre-date the multi-engine consensus have NULL
+  // here and are excluded — those reports also have no composite to plot a
+  // marker against, so leaving them out keeps the cohort honest. The slop
+  // column is NOT NULL by schema, so the isNotNull guard is a no-op for
+  // metric=slop but kept for parity.
   const conditions = [
     gte(reportsTable.createdAt, cutoff),
-    isNotNull(reportsTable.vulnrapCompositeScore),
+    isNotNull(scoreColumn),
   ];
   if (cweFilter) {
     if (cweFilter === "FLAT") {
@@ -147,12 +161,12 @@ router.get("/cohort/baseline", async (req, res): Promise<void> => {
 
   const rows = await db
     .select({
-      bucket: sql<number>`(least(${reportsTable.vulnrapCompositeScore}, 99) / 10)::int`,
+      bucket: sql<number>`(least(${scoreColumn}, 99) / 10)::int`,
       count: sql<number>`count(*)::int`,
     })
     .from(reportsTable)
     .where(and(...conditions))
-    .groupBy(sql`(least(${reportsTable.vulnrapCompositeScore}, 99) / 10)::int`);
+    .groupBy(sql`(least(${scoreColumn}, 99) / 10)::int`);
 
   const bins = buildEmptyBins();
   for (const row of rows) {
@@ -180,7 +194,7 @@ router.get("/cohort/baseline", async (req, res): Promise<void> => {
     avri: number | null;
     quality: number | null;
   } | null = null;
-  if (totalReports > 0) {
+  if (totalReports > 0 && metric === "composite") {
     const engineRows = await db
       .select({
         engineResults: reportsTable.vulnrapEngineResults,

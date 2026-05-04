@@ -43,7 +43,9 @@ platform cohort is returned instead.
 per-engine radar overlay on the results page. Each value is
 0..100 and uses the same orientation as the on-page radar
 (engine1 = AI Authorship raw score; the UI inverts it to plot
-"humanness"). Null when totalReports is 0.
+"humanness"). Null when totalReports is 0 or when the request
+specified metric=slop (engine medians are only meaningful for
+the composite cohort).
  */
   engineMedians: CohortBaselineEngineMedians;
 }

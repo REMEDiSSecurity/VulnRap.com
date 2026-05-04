@@ -110,6 +110,7 @@ export * from "./getAuditLogMethod";
 export * from "./getAuditLogParams";
 export * from "./getAvriDriftReportParams";
 export * from "./getCalibrationAuthBruteForceAlertsParams";
+export * from "./getCohortBaselineMetric";
 export * from "./getCohortBaselineParams";
 export * from "./getEmbedBadgeSvgParams";
 export * from "./getEmbedBadgeSvgStyle";

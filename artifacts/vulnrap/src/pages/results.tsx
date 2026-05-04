@@ -3815,6 +3815,21 @@ export default function Results() {
               />
             </div>
 
+            {/* Task #933 — same baseline ribbon UI used for the composite
+                score, but bound to the legacy AI Detection ("slop") score so
+                users who still anchor on the older number get the same
+                "where does this sit in the last 7d?" context. We pin to the
+                canonical slop score (not the sensitivity-adjusted display
+                score) so the percentile is comparable across users
+                regardless of which preset they have selected. */}
+            <div className="w-full max-w-md mt-4">
+              <CohortBaselineRibbon
+                score={report.slopScore}
+                metric="slop"
+                compact
+              />
+            </div>
+
             <p className="mt-5 text-xs text-muted-foreground text-center max-w-md leading-relaxed">
               {getSlopExplainer(displayScore)}
             </p>

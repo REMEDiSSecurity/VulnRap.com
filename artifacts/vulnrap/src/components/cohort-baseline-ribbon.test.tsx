@@ -19,8 +19,10 @@ const useGetCohortBaselineMock = vi.fn();
 vi.mock("@workspace/api-client-react", () => ({
   useGetCohortBaseline: (params: unknown, opts: unknown) =>
     useGetCohortBaselineMock(params, opts),
-  getGetCohortBaselineQueryKey: (params?: { cwe?: string }) =>
-    ["/api/cohort/baseline", params ?? {}] as const,
+  getGetCohortBaselineQueryKey: (params?: {
+    cwe?: string;
+    metric?: string;
+  }) => ["/api/cohort/baseline", params ?? {}] as const,
 }));
 
 interface QueryReturn {
@@ -93,7 +95,7 @@ describe("CohortBaselineRibbon", () => {
     expect(screen.getByTestId("cohort-baseline-ribbon")).toBeTruthy();
     expect(
       screen.getByTestId("cohort-baseline-ribbon-percentile-label").textContent,
-    ).toMatch(/No platform baseline yet/i);
+    ).toMatch(/No cohort baseline yet/i);
     expect(screen.queryByTestId("cohort-baseline-ribbon-marker")).toBeNull();
   });
 
@@ -160,5 +162,51 @@ describe("CohortBaselineRibbon", () => {
     expect(family.textContent).toMatch(/median/);
     expect(family.textContent).toMatch(/42/);
     expect(family.textContent).toMatch(/n=12/);
+  });
+
+  // Task #933 — the same ribbon UI is reused on the legacy AI Detection
+  // Score card with metric="slop". The fetch must include metric=slop, the
+  // CWE family overlay must NOT render (composite-only), and the testid
+  // suffix changes so both ribbons can coexist on the same results page.
+  it("fetches the slop cohort and renders a slop-flavoured label when metric=slop", () => {
+    const seenParams: Array<unknown> = [];
+    useGetCohortBaselineMock.mockReset();
+    useGetCohortBaselineMock.mockImplementation((params: unknown) => {
+      seenParams.push(params);
+      return {
+        data: {
+          cwe: null,
+          windowDays: 7,
+          totalReports: 80,
+          median: 48,
+          bins: makeBins([20, 10, 10, 10, 10, 10, 5, 3, 1, 1]),
+        },
+        isLoading: false,
+        isError: false,
+      };
+    });
+    render(
+      <CohortBaselineRibbon
+        score={62}
+        cwe="INJECTION"
+        metric="slop"
+        compact
+      />,
+    );
+    expect(seenParams.some((p) => (p as { metric?: string })?.metric === "slop")).toBe(
+      true,
+    );
+    // Family overlay is composite-only — never request the per-CWE cohort
+    // when metric=slop.
+    expect(seenParams.some((p) => (p as { cwe?: string })?.cwe)).toBe(false);
+    expect(screen.getByTestId("cohort-baseline-ribbon-slop")).toBeTruthy();
+    expect(screen.queryByTestId("cohort-baseline-ribbon")).toBeNull();
+    expect(screen.queryByTestId("cohort-baseline-ribbon-family")).toBeNull();
+    expect(
+      screen.getByTestId("cohort-baseline-ribbon-percentile-label").textContent,
+    ).toMatch(/AI-likelihood/i);
+    expect(
+      screen.getByTestId("cohort-baseline-ribbon-slop-window").textContent,
+    ).toMatch(/7d median 48/);
   });
 });

@@ -31,6 +31,18 @@ import { BarChart3 } from "lucide-react";
 export interface CohortBaselineRibbonProps {
   score: number;
   cwe?: string | null;
+  // Task #933 — which per-report axis the marker score is from. Defaults to
+  // "composite" so existing call sites keep their behaviour unchanged. When
+  // "slop" is passed, the ribbon fetches the slop-score cohort baseline so
+  // the legacy AI Detection Score card on /results/:id can show the same
+  // "62 out of 100, where does that sit?" context the composite ribbon
+  // does. The CWE family overlay and engine-medians block are
+  // composite-only and are hidden in slop mode.
+  metric?: "composite" | "slop";
+  // Compact mode trims the ribbon down for use as a sub-card indicator
+  // (smaller header label, no per-CWE family line) so it can sit inside an
+  // existing card without dominating it.
+  compact?: boolean;
 }
 
 // Pure helper exported for the unit test: mid-rank percentile of `score`
@@ -72,10 +84,14 @@ function markerLeftPercent(score: number): number {
 export function CohortBaselineRibbon({
   score,
   cwe,
+  metric = "composite",
+  compact = false,
 }: CohortBaselineRibbonProps) {
-  const platformQuery = useGetCohortBaseline(undefined, {
+  const platformParams =
+    metric === "slop" ? { metric: "slop" as const } : undefined;
+  const platformQuery = useGetCohortBaseline(platformParams, {
     query: {
-      queryKey: getGetCohortBaselineQueryKey(),
+      queryKey: getGetCohortBaselineQueryKey(platformParams),
       // 1h server cache + 5min client gc keeps this from being a per-render
       // flicker while still letting a session-long visitor pick up the
       // hourly refresh.
@@ -83,11 +99,15 @@ export function CohortBaselineRibbon({
       retry: false,
     },
   });
-  const familyParams = cwe ? { cwe } : undefined;
+  // The per-CWE family overlay is composite-only — the legacy slop score
+  // doesn't have a meaningful per-family interpretation, so we skip the
+  // second fetch entirely in slop mode.
+  const familyParams =
+    cwe && metric === "composite" ? { cwe } : undefined;
   const familyQuery = useGetCohortBaseline(familyParams, {
     query: {
       queryKey: getGetCohortBaselineQueryKey(familyParams),
-      enabled: Boolean(cwe),
+      enabled: Boolean(familyParams),
       staleTime: 5 * 60 * 1000,
       retry: false,
     },
@@ -122,33 +142,63 @@ export function CohortBaselineRibbon({
   if (!platform || platformQuery.isError) return null;
 
   const platformEmpty = platform.totalReports === 0;
+  const metricLabel = metric === "slop" ? "AI Detection" : "Cohort";
+  const headerLabel =
+    metric === "slop" ? "AI-likelihood baseline" : "Cohort baseline";
   const percentileLabel = platformEmpty
-    ? "No platform baseline yet — be the first scored this week."
-    : `Higher than ${percentile}% of reports scored this week`;
+    ? `No ${metricLabel.toLowerCase()} baseline yet — be the first scored this week.`
+    : metric === "slop"
+      ? `Higher than ${percentile}% of AI-likelihood scores this week`
+      : `Higher than ${percentile}% of reports scored this week`;
+  const medianLine =
+    !platformEmpty && platform.median != null
+      ? `7d median ${platform.median}`
+      : null;
 
   return (
     <div
-      data-testid="cohort-baseline-ribbon"
-      className="rounded-xl border border-cyan-500/15 bg-muted/5 px-4 py-3"
+      data-testid={
+        metric === "slop"
+          ? "cohort-baseline-ribbon-slop"
+          : "cohort-baseline-ribbon"
+      }
+      className={
+        compact
+          ? "rounded-lg border border-cyan-500/15 bg-muted/5 px-3 py-2"
+          : "rounded-xl border border-cyan-500/15 bg-muted/5 px-4 py-3"
+      }
     >
-      <div className="flex items-center gap-2 mb-2">
+      <div
+        className={
+          compact ? "flex items-center gap-2 mb-1.5" : "flex items-center gap-2 mb-2"
+        }
+      >
         <BarChart3 className="w-3.5 h-3.5 text-primary" />
         <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-          Cohort baseline
+          {headerLabel}
         </span>
         <span
           className="text-[10px] text-muted-foreground/70 font-mono"
-          data-testid="cohort-baseline-ribbon-window"
+          data-testid={
+            metric === "slop"
+              ? "cohort-baseline-ribbon-slop-window"
+              : "cohort-baseline-ribbon-window"
+          }
         >
           last {platform.windowDays}d · n={platform.totalReports}
+          {medianLine ? ` · ${medianLine}` : ""}
         </span>
       </div>
 
       <div className="flex items-center gap-3">
         <div
-          className="relative flex-1 h-8 flex items-end gap-[2px]"
-          data-testid="cohort-baseline-ribbon-sparkline"
-          aria-label="Slop score distribution sparkline (last 7 days)"
+          className={`relative flex-1 ${compact ? "h-6" : "h-8"} flex items-end gap-[2px]`}
+          data-testid={
+            metric === "slop"
+              ? "cohort-baseline-ribbon-slop-sparkline"
+              : "cohort-baseline-ribbon-sparkline"
+          }
+          aria-label={`${metricLabel} score distribution sparkline (last 7 days)`}
         >
           {platform.bins.map((bin, i) => (
             <div
@@ -182,7 +232,7 @@ export function CohortBaselineRibbon({
         </div>
       </div>
 
-      {cwe && family && (
+      {metric === "composite" && !compact && cwe && family && (
         <div
           className="mt-2 pt-2 border-t border-border/20 text-[11px] text-muted-foreground flex items-center gap-2 flex-wrap"
           data-testid="cohort-baseline-ribbon-family"

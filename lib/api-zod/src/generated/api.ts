@@ -12668,12 +12668,20 @@ before the multi-engine consensus) are excluded from the cohort.
 
  * @summary Get cohort baseline distribution
  */
+export const getCohortBaselineQueryMetricDefault = `composite`;
+
 export const GetCohortBaselineQueryParams = zod.object({
   cwe: zod.coerce
     .string()
     .optional()
     .describe(
       "Optional cached AVRI rubric family id (e.g. INJECTION,\nMEMORY_CORRUPTION) to restrict the cohort. Unknown values fall\nthrough to the platform-wide cohort.\n",
+    ),
+  metric: zod
+    .enum(["composite", "slop"])
+    .default(getCohortBaselineQueryMetricDefault)
+    .describe(
+      'Which per-report score axis to bucket the cohort against.\n`composite` (default) uses the VulnRap composite score shown in\nthe results page header. `slop` uses the legacy AI Detection\n(\"slop\") score that still appears further down the results page,\nso the same baseline ribbon UI can contextualise that legacy\nnumber too. When `metric=slop` the engineMedians block is null\n(engine medians are only meaningful for the composite cohort).\n',
     ),
 });
 
@@ -12749,7 +12757,7 @@ export const GetCohortBaselineResponse = zod
       })
       .nullable()
       .describe(
-        'Median per-axis sub-scores across the same cohort, used by the\nper-engine radar overlay on the results page. Each value is\n0..100 and uses the same orientation as the on-page radar\n(engine1 = AI Authorship raw score; the UI inverts it to plot\n\"humanness\"). Null when totalReports is 0.\n',
+        'Median per-axis sub-scores across the same cohort, used by the\nper-engine radar overlay on the results page. Each value is\n0..100 and uses the same orientation as the on-page radar\n(engine1 = AI Authorship raw score; the UI inverts it to plot\n\"humanness\"). Null when totalReports is 0 or when the request\nspecified metric=slop (engine medians are only meaningful for\nthe composite cohort).\n',
       ),
   })
   .describe(

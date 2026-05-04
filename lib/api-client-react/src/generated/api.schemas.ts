@@ -1605,7 +1605,9 @@ export type CohortBaselineBinsItem = {
 per-engine radar overlay on the results page. Each value is
 0..100 and uses the same orientation as the on-page radar
 (engine1 = AI Authorship raw score; the UI inverts it to plot
-"humanness"). Null when totalReports is 0.
+"humanness"). Null when totalReports is 0 or when the request
+specified metric=slop (engine medians are only meaningful for
+the composite cohort).
 
  */
 export type CohortBaselineEngineMedians = {
@@ -1656,7 +1658,9 @@ platform cohort is returned instead.
 per-engine radar overlay on the results page. Each value is
 0..100 and uses the same orientation as the on-page radar
 (engine1 = AI Authorship raw score; the UI inverts it to plot
-"humanness"). Null when totalReports is 0.
+"humanness"). Null when totalReports is 0 or when the request
+specified metric=slop (engine medians are only meaningful for
+the composite cohort).
  */
   engineMedians: CohortBaselineEngineMedians;
 }
@@ -4779,7 +4783,26 @@ through to the platform-wide cohort.
 
  */
   cwe?: string;
+  /**
+ * Which per-report score axis to bucket the cohort against.
+`composite` (default) uses the VulnRap composite score shown in
+the results page header. `slop` uses the legacy AI Detection
+("slop") score that still appears further down the results page,
+so the same baseline ribbon UI can contextualise that legacy
+number too. When `metric=slop` the engineMedians block is null
+(engine medians are only meaningful for the composite cohort).
+
+ */
+  metric?: GetCohortBaselineMetric;
 };
+
+export type GetCohortBaselineMetric =
+  (typeof GetCohortBaselineMetric)[keyof typeof GetCohortBaselineMetric];
+
+export const GetCohortBaselineMetric = {
+  composite: "composite",
+  slop: "slop",
+} as const;
 
 export type GetTrendsParams = {
   /**
