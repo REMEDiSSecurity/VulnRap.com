@@ -1,0 +1,243 @@
+import { useCallback, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  listShowcaseNominations,
+  getListShowcaseNominationsQueryKey,
+  updateShowcaseNominationStatus,
+  ApiError,
+  type ShowcaseNomination,
+} from "@workspace/api-client-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  XCircle,
+  Sparkles,
+  Inbox,
+  Clock,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+
+export interface ShowcaseNominationsQueueProps {
+  mutationsAllowed: boolean;
+}
+
+function timeAgo(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso;
+  const diff = Date.now() - t;
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+export default function ShowcaseNominationsQueue({
+  mutationsAllowed,
+}: ShowcaseNominationsQueueProps) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(true);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const queryKey = getListShowcaseNominationsQueryKey({ status: "pending" });
+  const { data, isLoading, isError } = useQuery({
+    queryKey,
+    queryFn: ({ signal }) =>
+      listShowcaseNominations({ status: "pending" }, { signal }),
+    refetchInterval: 60_000,
+  });
+
+  const refetch = useCallback(() => {
+    qc.invalidateQueries({ queryKey });
+  }, [qc, queryKey]);
+
+  const handleApprove = useCallback(
+    async (n: ShowcaseNomination) => {
+      if (!mutationsAllowed) return;
+      setBusyId(n.id);
+      try {
+        await updateShowcaseNominationStatus(n.id, { status: "approved" });
+        toast({
+          title: "Nomination approved",
+          description: `Report #${n.reportId} approved for the showcase.`,
+        });
+        refetch();
+      } catch (err) {
+        const description =
+          err instanceof ApiError && err.status === 401
+            ? "Reviewer token rejected — see the calibration auth banner."
+            : "Failed to approve. Try again.";
+        toast({
+          title: "Approval failed",
+          description,
+          variant: "destructive",
+        });
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [mutationsAllowed, toast, refetch],
+  );
+
+  const handleReject = useCallback(
+    async (n: ShowcaseNomination) => {
+      if (!mutationsAllowed) return;
+      setBusyId(n.id);
+      try {
+        await updateShowcaseNominationStatus(n.id, { status: "rejected" });
+        toast({
+          title: "Nomination rejected",
+          description: "Removed from the queue.",
+        });
+        refetch();
+      } catch (err) {
+        const description =
+          err instanceof ApiError && err.status === 401
+            ? "Reviewer token rejected — see the calibration auth banner."
+            : "Failed to reject. Try again.";
+        toast({
+          title: "Rejection failed",
+          description,
+          variant: "destructive",
+        });
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [mutationsAllowed, toast, refetch],
+  );
+
+  const nominations = data?.nominations ?? [];
+  const total = nominations.length;
+
+  return (
+    <Card
+      className="glass-card rounded-xl"
+      data-testid="showcase-nominations-queue"
+    >
+      <CardHeader className="pb-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-2 text-left"
+          data-testid="showcase-nominations-queue-toggle"
+          aria-expanded={open}
+        >
+          <div className="flex items-center gap-2">
+            {open ? (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            )}
+            <Sparkles className="w-4 h-4 text-primary" />
+            <CardTitle className="text-base">Showcase Nominations</CardTitle>
+            {total > 0 && (
+              <Badge variant="outline" className="ml-1 tabular-nums">
+                {total} pending
+              </Badge>
+            )}
+          </div>
+          <CardDescription className="m-0 text-xs hidden sm:block">
+            User-submitted showcase nominations · queued for triage
+          </CardDescription>
+        </button>
+      </CardHeader>
+      {open && (
+        <CardContent className="space-y-3">
+          {isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : isError ? (
+            <div className="text-sm text-muted-foreground">
+              Failed to load the nomination queue.
+            </div>
+          ) : nominations.length === 0 ? (
+            <div
+              className="flex flex-col items-center justify-center py-8 text-muted-foreground/70 text-sm"
+              data-testid="showcase-nominations-queue-empty"
+            >
+              <Inbox className="w-8 h-8 mb-2 opacity-50" />
+              No pending nominations right now.
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {nominations.map((n) => (
+                <li
+                  key={n.id}
+                  className="rounded-lg border border-border/40 p-3 space-y-2"
+                  data-testid={`showcase-nomination-row-${n.id}`}
+                >
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-mono text-primary mb-1">
+                        Report #{n.reportId}
+                      </div>
+                      <div className="text-sm break-words">{n.reason}</div>
+                      {n.email && (
+                        <div className="text-xs text-muted-foreground mt-1 italic">
+                          Contact: {n.email}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> {timeAgo(n.createdAt)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      data-testid={`showcase-nomination-reject-${n.id}`}
+                      onClick={() => handleReject(n)}
+                      disabled={!mutationsAllowed || busyId === n.id}
+                      title={
+                        !mutationsAllowed
+                          ? "Reviewer token missing/invalid — see the calibration auth banner."
+                          : undefined
+                      }
+                    >
+                      <XCircle className="w-3.5 h-3.5" /> Reject
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="gap-1"
+                      data-testid={`showcase-nomination-approve-${n.id}`}
+                      onClick={() => handleApprove(n)}
+                      disabled={!mutationsAllowed || busyId === n.id}
+                      title={
+                        !mutationsAllowed
+                          ? "Reviewer token missing/invalid — see the calibration auth banner."
+                          : undefined
+                      }
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}

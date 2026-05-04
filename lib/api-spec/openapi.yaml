@@ -34,6 +34,8 @@ tags:
     description: Curated sample-report gallery for new users
   - name: showcase
     description: Curator-picked "interesting reports" — high-confidence catches, edge cases, surprising agreements
+  - name: showcase-nominations
+    description: User-submitted showcase nominations for reviewer triage (Task #1048)
   - name: embed
     description: Embeddable public assets (badges, snippets) for third-party triage tools
   - name: webhooks
@@ -1575,6 +1577,135 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ShowcaseResponse"
+
+  /public/showcase-nominations:
+    post:
+      operationId: submitShowcaseNomination
+      tags: [showcase-nominations]
+      summary: Nominate a report for the showcase
+      description: |
+        Task #1048 — Public endpoint that lets anonymous users nominate a
+        report for the curated showcase. Submissions are queued
+        (status="pending") and never auto-published. Rate-limited to 5
+        successful submissions per IP per 24 hours; same-IP duplicates
+        for the same reportId in the last 24h return 200 with
+        `duplicate: true`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShowcaseNominationSubmitBody"
+      responses:
+        "200":
+          description: Duplicate nomination (already queued in the last 24h)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowcaseNominationSubmitResponse"
+        "201":
+          description: Nomination accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowcaseNominationSubmitResponse"
+        "400":
+          description: Invalid submission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Daily limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowcaseNominationRateLimited"
+
+  /feedback/calibration/showcase-nominations:
+    get:
+      operationId: listShowcaseNominations
+      tags: [showcase-nominations]
+      summary: List queued showcase nominations (reviewer-only)
+      description: |
+        Task #1048 — Returns the nomination queue for reviewer triage.
+        Defaults to status=pending. Requires the calibration token.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+            default: pending
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: Nominations list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowcaseNominationList"
+        "401":
+          description: Missing or invalid calibration token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /feedback/calibration/showcase-nominations/{id}:
+    patch:
+      operationId: updateShowcaseNominationStatus
+      tags: [showcase-nominations]
+      summary: Mark a nomination approved or rejected (reviewer-only)
+      description: |
+        Task #1048 — Updates the status of a queued showcase nomination.
+        Approval adds the report to the curated showcase; rejection
+        discards the nomination.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShowcaseNominationPatchBody"
+      responses:
+        "200":
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShowcaseNominationPatchResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid calibration token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Nomination not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /public/drift-summary:
     get:
@@ -8693,6 +8824,107 @@ components:
           items:
             $ref: "#/components/schemas/PresetEntry"
       required: [version, presets]
+
+    ShowcaseNominationSubmitBody:
+      type: object
+      description: |
+        Task #1048 — Public submission body for showcase nominations.
+      properties:
+        reportId:
+          type: integer
+          description: The ID of the report being nominated.
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 1000
+          description: One-paragraph explanation of why this report is interesting.
+        email:
+          type: string
+          maxLength: 320
+          description: Optional contact email for follow-up.
+      required: [reportId, reason]
+
+    ShowcaseNominationSubmitResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        duplicate:
+          type: boolean
+          description: True when the same submitter already nominated this report in the last 24h.
+        id:
+          type: integer
+          description: Newly assigned nomination id (omitted on duplicate responses).
+        message:
+          type: string
+      required: [ok, duplicate, message]
+
+    ShowcaseNominationRateLimited:
+      type: object
+      properties:
+        error:
+          type: string
+        dailyLimit:
+          type: integer
+        retryAfterHours:
+          type: integer
+      required: [error]
+
+    ShowcaseNomination:
+      type: object
+      properties:
+        id:
+          type: integer
+        reportId:
+          type: integer
+        reason:
+          type: string
+        email:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, reportId, reason, email, status, createdAt]
+
+    ShowcaseNominationList:
+      type: object
+      properties:
+        nominations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShowcaseNomination"
+        total:
+          type: integer
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+      required: [nominations, total, status]
+
+    ShowcaseNominationPatchBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected]
+      required: [status]
+
+    ShowcaseNominationPatchResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        id:
+          type: integer
+        reportId:
+          type: integer
+        status:
+          type: string
+          enum: [approved, rejected]
+      required: [ok, id, reportId, status]
 
     PhraseSuggestionSubmitBody:
       type: object

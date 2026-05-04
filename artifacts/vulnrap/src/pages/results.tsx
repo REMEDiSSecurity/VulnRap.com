@@ -90,6 +90,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import FeedbackForm from "@/components/feedback-form";
+import ShowcaseNominationForm from "@/components/showcase-nomination-form";
 import {
   OnboardingTour,
   hasSeenPageTour,
@@ -4902,6 +4903,10 @@ export default function Results() {
 
       <div data-print-hide>
         <FeedbackForm reportId={id} />
+      </div>
+
+      <div data-print-hide>
+        <ShowcaseNominationForm reportId={id} />
       </div>
 
       <Card className="glass-card rounded-xl" data-print-hide>

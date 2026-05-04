@@ -4336,6 +4336,109 @@ export const ListShowcaseResponse = zod
   );
 
 /**
+ * Task #1048 — Public endpoint that lets anonymous users nominate a
+report for the curated showcase. Submissions are queued
+(status="pending") and never auto-published. Rate-limited to 5
+successful submissions per IP per 24 hours; same-IP duplicates
+for the same reportId in the last 24h return 200 with
+`duplicate: true`.
+
+ * @summary Nominate a report for the showcase
+ */
+export const submitShowcaseNominationBodyReasonMin = 10;
+export const submitShowcaseNominationBodyReasonMax = 1000;
+
+export const submitShowcaseNominationBodyEmailMax = 320;
+
+export const SubmitShowcaseNominationBody = zod
+  .object({
+    reportId: zod.number().describe("The ID of the report being nominated."),
+    reason: zod
+      .string()
+      .min(submitShowcaseNominationBodyReasonMin)
+      .max(submitShowcaseNominationBodyReasonMax)
+      .describe("One-paragraph explanation of why this report is interesting."),
+    email: zod
+      .string()
+      .max(submitShowcaseNominationBodyEmailMax)
+      .optional()
+      .describe("Optional contact email for follow-up."),
+  })
+  .describe("Task #1048 — Public submission body for showcase nominations.\n");
+
+export const SubmitShowcaseNominationResponse = zod.object({
+  ok: zod.boolean(),
+  duplicate: zod
+    .boolean()
+    .describe(
+      "True when the same submitter already nominated this report in the last 24h.",
+    ),
+  id: zod
+    .number()
+    .optional()
+    .describe("Newly assigned nomination id (omitted on duplicate responses)."),
+  message: zod.string(),
+});
+
+/**
+ * Task #1048 — Returns the nomination queue for reviewer triage.
+Defaults to status=pending. Requires the calibration token.
+
+ * @summary List queued showcase nominations (reviewer-only)
+ */
+export const listShowcaseNominationsQueryStatusDefault = `pending`;
+export const listShowcaseNominationsQueryLimitDefault = 100;
+export const listShowcaseNominationsQueryLimitMax = 500;
+
+export const ListShowcaseNominationsQueryParams = zod.object({
+  status: zod
+    .enum(["pending", "approved", "rejected"])
+    .default(listShowcaseNominationsQueryStatusDefault),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(listShowcaseNominationsQueryLimitMax)
+    .default(listShowcaseNominationsQueryLimitDefault),
+});
+
+export const ListShowcaseNominationsResponse = zod.object({
+  nominations: zod.array(
+    zod.object({
+      id: zod.number(),
+      reportId: zod.number(),
+      reason: zod.string(),
+      email: zod.string().nullable(),
+      status: zod.enum(["pending", "approved", "rejected"]),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
+  status: zod.enum(["pending", "approved", "rejected"]),
+});
+
+/**
+ * Task #1048 — Updates the status of a queued showcase nomination.
+Approval adds the report to the curated showcase; rejection
+discards the nomination.
+
+ * @summary Mark a nomination approved or rejected (reviewer-only)
+ */
+export const UpdateShowcaseNominationStatusParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateShowcaseNominationStatusBody = zod.object({
+  status: zod.enum(["approved", "rejected"]),
+});
+
+export const UpdateShowcaseNominationStatusResponse = zod.object({
+  ok: zod.boolean(),
+  id: zod.number(),
+  reportId: zod.number(),
+  status: zod.enum(["approved", "rejected"]),
+});
+
+/**
  * Task #617 — Public, read-only summary of the rolling weekly
 T1-vs-T3 mean composite spread. Wraps the internal AVRI drift
 compute and strips every reviewer-only field (cohort sample IDs,

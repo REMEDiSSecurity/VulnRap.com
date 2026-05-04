@@ -89,6 +89,7 @@ import type {
   LatencySnapshot,
   ListHandwavyPhraseRemovalBatchesParams,
   ListPhraseSuggestionsParams,
+  ListShowcaseNominationsParams,
   NewsletterChallenge,
   NewsletterConfirmResponse,
   NewsletterSubscribeBody,
@@ -117,6 +118,12 @@ import type {
   ScoringConfigResponse,
   ScoringGateRunHistory,
   ShadowDriftReport,
+  ShowcaseNominationList,
+  ShowcaseNominationPatchBody,
+  ShowcaseNominationPatchResponse,
+  ShowcaseNominationRateLimited,
+  ShowcaseNominationSubmitBody,
+  ShowcaseNominationSubmitResponse,
   ShowcaseResponse,
   SlopDistribution,
   SubmitFeedbackWithChallenge,
@@ -4450,6 +4457,310 @@ export function useListShowcase<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Task #1048 — Public endpoint that lets anonymous users nominate a
+report for the curated showcase. Submissions are queued
+(status="pending") and never auto-published. Rate-limited to 5
+successful submissions per IP per 24 hours; same-IP duplicates
+for the same reportId in the last 24h return 200 with
+`duplicate: true`.
+
+ * @summary Nominate a report for the showcase
+ */
+export const getSubmitShowcaseNominationUrl = () => {
+  return `/api/public/showcase-nominations`;
+};
+
+export const submitShowcaseNomination = async (
+  showcaseNominationSubmitBody: ShowcaseNominationSubmitBody,
+  options?: RequestInit,
+): Promise<ShowcaseNominationSubmitResponse> => {
+  return customFetch<ShowcaseNominationSubmitResponse>(
+    getSubmitShowcaseNominationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(showcaseNominationSubmitBody),
+    },
+  );
+};
+
+export const getSubmitShowcaseNominationMutationOptions = <
+  TError = ErrorType<ErrorResponse | ShowcaseNominationRateLimited>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitShowcaseNomination>>,
+    TError,
+    { data: BodyType<ShowcaseNominationSubmitBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitShowcaseNomination>>,
+  TError,
+  { data: BodyType<ShowcaseNominationSubmitBody> },
+  TContext
+> => {
+  const mutationKey = ["submitShowcaseNomination"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitShowcaseNomination>>,
+    { data: BodyType<ShowcaseNominationSubmitBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return submitShowcaseNomination(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitShowcaseNominationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitShowcaseNomination>>
+>;
+export type SubmitShowcaseNominationMutationBody =
+  BodyType<ShowcaseNominationSubmitBody>;
+export type SubmitShowcaseNominationMutationError = ErrorType<
+  ErrorResponse | ShowcaseNominationRateLimited
+>;
+
+/**
+ * @summary Nominate a report for the showcase
+ */
+export const useSubmitShowcaseNomination = <
+  TError = ErrorType<ErrorResponse | ShowcaseNominationRateLimited>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitShowcaseNomination>>,
+    TError,
+    { data: BodyType<ShowcaseNominationSubmitBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitShowcaseNomination>>,
+  TError,
+  { data: BodyType<ShowcaseNominationSubmitBody> },
+  TContext
+> => {
+  return useMutation(getSubmitShowcaseNominationMutationOptions(options));
+};
+
+/**
+ * Task #1048 — Returns the nomination queue for reviewer triage.
+Defaults to status=pending. Requires the calibration token.
+
+ * @summary List queued showcase nominations (reviewer-only)
+ */
+export const getListShowcaseNominationsUrl = (
+  params?: ListShowcaseNominationsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/feedback/calibration/showcase-nominations?${stringifiedParams}`
+    : `/api/feedback/calibration/showcase-nominations`;
+};
+
+export const listShowcaseNominations = async (
+  params?: ListShowcaseNominationsParams,
+  options?: RequestInit,
+): Promise<ShowcaseNominationList> => {
+  return customFetch<ShowcaseNominationList>(
+    getListShowcaseNominationsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListShowcaseNominationsQueryKey = (
+  params?: ListShowcaseNominationsParams,
+) => {
+  return [
+    `/api/feedback/calibration/showcase-nominations`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListShowcaseNominationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listShowcaseNominations>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: ListShowcaseNominationsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listShowcaseNominations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListShowcaseNominationsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listShowcaseNominations>>
+  > = ({ signal }) =>
+    listShowcaseNominations(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listShowcaseNominations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListShowcaseNominationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listShowcaseNominations>>
+>;
+export type ListShowcaseNominationsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List queued showcase nominations (reviewer-only)
+ */
+
+export function useListShowcaseNominations<
+  TData = Awaited<ReturnType<typeof listShowcaseNominations>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: ListShowcaseNominationsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listShowcaseNominations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListShowcaseNominationsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Task #1048 — Updates the status of a queued showcase nomination.
+Approval adds the report to the curated showcase; rejection
+discards the nomination.
+
+ * @summary Mark a nomination approved or rejected (reviewer-only)
+ */
+export const getUpdateShowcaseNominationStatusUrl = (id: number) => {
+  return `/api/feedback/calibration/showcase-nominations/${id}`;
+};
+
+export const updateShowcaseNominationStatus = async (
+  id: number,
+  showcaseNominationPatchBody: ShowcaseNominationPatchBody,
+  options?: RequestInit,
+): Promise<ShowcaseNominationPatchResponse> => {
+  return customFetch<ShowcaseNominationPatchResponse>(
+    getUpdateShowcaseNominationStatusUrl(id),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(showcaseNominationPatchBody),
+    },
+  );
+};
+
+export const getUpdateShowcaseNominationStatusMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateShowcaseNominationStatus>>,
+    TError,
+    { id: number; data: BodyType<ShowcaseNominationPatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateShowcaseNominationStatus>>,
+  TError,
+  { id: number; data: BodyType<ShowcaseNominationPatchBody> },
+  TContext
+> => {
+  const mutationKey = ["updateShowcaseNominationStatus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateShowcaseNominationStatus>>,
+    { id: number; data: BodyType<ShowcaseNominationPatchBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateShowcaseNominationStatus(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateShowcaseNominationStatusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateShowcaseNominationStatus>>
+>;
+export type UpdateShowcaseNominationStatusMutationBody =
+  BodyType<ShowcaseNominationPatchBody>;
+export type UpdateShowcaseNominationStatusMutationError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary Mark a nomination approved or rejected (reviewer-only)
+ */
+export const useUpdateShowcaseNominationStatus = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateShowcaseNominationStatus>>,
+    TError,
+    { id: number; data: BodyType<ShowcaseNominationPatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateShowcaseNominationStatus>>,
+  TError,
+  { id: number; data: BodyType<ShowcaseNominationPatchBody> },
+  TContext
+> => {
+  return useMutation(getUpdateShowcaseNominationStatusMutationOptions(options));
+};
 
 /**
  * Task #617 — Public, read-only summary of the rolling weekly

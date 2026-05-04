@@ -50,6 +50,13 @@
       "when": 1777858952153,
       "tag": "0006_fine_iron_lad",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777870095163,
+      "tag": "0007_tired_rick_jones",
+      "breakpoints": true
     }
   ]
 }

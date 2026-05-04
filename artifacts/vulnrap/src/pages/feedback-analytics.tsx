@@ -204,6 +204,7 @@ import {
   type ArchetypeHistorySnapshot,
 } from "@/lib/archetype-history";
 import PhraseSuggestionsQueue from "@/components/phrase-suggestions-queue";
+import ShowcaseNominationsQueue from "@/components/showcase-nominations-queue";
 
 function StatCard({
   title,
@@ -1464,6 +1465,8 @@ function CalibrationSection() {
       <HandwavyPhrasesAdmin mutationsAllowed={authState.mutationsAllowed} />
 
       <PhraseSuggestionsQueue mutationsAllowed={authState.mutationsAllowed} />
+
+      <ShowcaseNominationsQueue mutationsAllowed={authState.mutationsAllowed} />
 
       {configData && configData.history.length > 1 && (
         <Card className="glass-card rounded-xl">

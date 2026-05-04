@@ -4465,6 +4465,101 @@ export interface PresetLibrary {
 }
 
 /**
+ * Task #1048 — Public submission body for showcase nominations.
+
+ */
+export interface ShowcaseNominationSubmitBody {
+  /** The ID of the report being nominated. */
+  reportId: number;
+  /**
+   * One-paragraph explanation of why this report is interesting.
+   * @minLength 10
+   * @maxLength 1000
+   */
+  reason: string;
+  /**
+   * Optional contact email for follow-up.
+   * @maxLength 320
+   */
+  email?: string;
+}
+
+export interface ShowcaseNominationSubmitResponse {
+  ok: boolean;
+  /** True when the same submitter already nominated this report in the last 24h. */
+  duplicate: boolean;
+  /** Newly assigned nomination id (omitted on duplicate responses). */
+  id?: number;
+  message: string;
+}
+
+export interface ShowcaseNominationRateLimited {
+  error: string;
+  dailyLimit?: number;
+  retryAfterHours?: number;
+}
+
+export type ShowcaseNominationStatus =
+  (typeof ShowcaseNominationStatus)[keyof typeof ShowcaseNominationStatus];
+
+export const ShowcaseNominationStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface ShowcaseNomination {
+  id: number;
+  reportId: number;
+  reason: string;
+  email: string | null;
+  status: ShowcaseNominationStatus;
+  createdAt: string;
+}
+
+export type ShowcaseNominationListStatus =
+  (typeof ShowcaseNominationListStatus)[keyof typeof ShowcaseNominationListStatus];
+
+export const ShowcaseNominationListStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface ShowcaseNominationList {
+  nominations: ShowcaseNomination[];
+  total: number;
+  status: ShowcaseNominationListStatus;
+}
+
+export type ShowcaseNominationPatchBodyStatus =
+  (typeof ShowcaseNominationPatchBodyStatus)[keyof typeof ShowcaseNominationPatchBodyStatus];
+
+export const ShowcaseNominationPatchBodyStatus = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface ShowcaseNominationPatchBody {
+  status: ShowcaseNominationPatchBodyStatus;
+}
+
+export type ShowcaseNominationPatchResponseStatus =
+  (typeof ShowcaseNominationPatchResponseStatus)[keyof typeof ShowcaseNominationPatchResponseStatus];
+
+export const ShowcaseNominationPatchResponseStatus = {
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface ShowcaseNominationPatchResponse {
+  ok: boolean;
+  id: number;
+  reportId: number;
+  status: ShowcaseNominationPatchResponseStatus;
+}
+
+/**
  * Which curated list the suggestion targets.
  */
 export type PhraseSuggestionSubmitBodyCategory =
@@ -5015,6 +5110,24 @@ export type GetScoringGateRunsParams = {
 export type ClearScoringGateRuns200 = {
   cleared: boolean;
 };
+
+export type ListShowcaseNominationsParams = {
+  status?: ListShowcaseNominationsStatus;
+  /**
+   * @minimum 1
+   * @maximum 500
+   */
+  limit?: number;
+};
+
+export type ListShowcaseNominationsStatus =
+  (typeof ListShowcaseNominationsStatus)[keyof typeof ListShowcaseNominationsStatus];
+
+export const ListShowcaseNominationsStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;
 
 export type GetCalibrationAuthBruteForceAlertsParams = {
   /**
