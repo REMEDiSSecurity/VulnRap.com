@@ -4053,10 +4053,16 @@ export const ListRoadmapResponse = zod
               "Opaque slug for the roadmap item (stable across curator edits).",
             ),
           column: zod
-            .enum(["now", "next", "later"])
+            .enum(["now", "next", "later", "shipped"])
             .describe("Which roadmap column the card renders in."),
           status: zod
-            .enum(["in_progress", "shipping_soon", "planned", "research"])
+            .enum([
+              "in_progress",
+              "shipping_soon",
+              "planned",
+              "research",
+              "shipped",
+            ])
             .describe("Status badge shown on the card."),
           title: zod.string().describe("Card title."),
           description: zod
@@ -4068,12 +4074,71 @@ export const ListRoadmapResponse = zod
             .describe(
               'Optional fuzzy ETA (e.g. \"Q2 2026\"). Illustrative only.',
             ),
+          shippedAt: zod
+            .string()
+            .optional()
+            .describe(
+              'ISO date when the item shipped (e.g. \"2026-05-03\"). Present only for shipped items.',
+            ),
+          changelogUrl: zod
+            .string()
+            .optional()
+            .describe(
+              'Relative URL to the changelog entry or release notes for this shipped item (e.g. \"\/changelog#v3.12.0\").',
+            ),
         })
         .describe("A single public roadmap entry shown on `\/roadmap`."),
     ),
+    shipped: zod
+      .array(
+        zod
+          .object({
+            id: zod
+              .string()
+              .describe(
+                "Opaque slug for the roadmap item (stable across curator edits).",
+              ),
+            column: zod
+              .enum(["now", "next", "later", "shipped"])
+              .describe("Which roadmap column the card renders in."),
+            status: zod
+              .enum([
+                "in_progress",
+                "shipping_soon",
+                "planned",
+                "research",
+                "shipped",
+              ])
+              .describe("Status badge shown on the card."),
+            title: zod.string().describe("Card title."),
+            description: zod
+              .string()
+              .describe("One-line description of the item."),
+            eta: zod
+              .string()
+              .optional()
+              .describe(
+                'Optional fuzzy ETA (e.g. \"Q2 2026\"). Illustrative only.',
+              ),
+            shippedAt: zod
+              .string()
+              .optional()
+              .describe(
+                'ISO date when the item shipped (e.g. \"2026-05-03\"). Present only for shipped items.',
+              ),
+            changelogUrl: zod
+              .string()
+              .optional()
+              .describe(
+                'Relative URL to the changelog entry or release notes for this shipped item (e.g. \"\/changelog#v3.12.0\").',
+              ),
+          })
+          .describe("A single public roadmap entry shown on `\/roadmap`."),
+      )
+      .optional(),
   })
   .describe(
-    "Public roadmap returned by `GET \/api\/roadmap`. The `version`\nstring lets clients cache-bust when curators ship a new\nrevision of `roadmap.json`. `updatedAt` is a free-form ISO\ndate string surfaced in the page footer.\n",
+    "Public roadmap returned by `GET \/api\/roadmap`. The `version`\nstring lets clients cache-bust when curators ship a new\nrevision of `roadmap.json`. `updatedAt` is a free-form ISO\ndate string surfaced in the page footer. `shipped` carries\nitems delivered in the last 90 days.\n",
   );
 
 /**

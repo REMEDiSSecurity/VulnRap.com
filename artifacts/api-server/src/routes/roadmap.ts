@@ -40,6 +40,7 @@ function loadRoadmap() {
     version: raw.version,
     updatedAt: raw.updatedAt,
     items: raw.items,
+    shipped: raw.shipped,
   });
 }
 

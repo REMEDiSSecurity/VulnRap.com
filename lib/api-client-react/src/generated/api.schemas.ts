@@ -4220,6 +4220,7 @@ export const RoadmapItemColumn = {
   now: "now",
   next: "next",
   later: "later",
+  shipped: "shipped",
 } as const;
 
 /**
@@ -4233,6 +4234,7 @@ export const RoadmapItemStatus = {
   shipping_soon: "shipping_soon",
   planned: "planned",
   research: "research",
+  shipped: "shipped",
 } as const;
 
 /**
@@ -4251,19 +4253,25 @@ export interface RoadmapItem {
   description: string;
   /** Optional fuzzy ETA (e.g. "Q2 2026"). Illustrative only. */
   eta?: string;
+  /** ISO date when the item shipped (e.g. "2026-05-03"). Present only for shipped items. */
+  shippedAt?: string;
+  /** Relative URL to the changelog entry or release notes for this shipped item (e.g. "/changelog#v3.12.0"). */
+  changelogUrl?: string;
 }
 
 /**
  * Public roadmap returned by `GET /api/roadmap`. The `version`
 string lets clients cache-bust when curators ship a new
 revision of `roadmap.json`. `updatedAt` is a free-form ISO
-date string surfaced in the page footer.
+date string surfaced in the page footer. `shipped` carries
+items delivered in the last 90 days.
 
  */
 export interface RoadmapResponse {
   version: string;
   updatedAt?: string;
   items: RoadmapItem[];
+  shipped?: RoadmapItem[];
 }
 
 /**

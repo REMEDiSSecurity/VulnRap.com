@@ -24,4 +24,8 @@ export interface RoadmapItem {
   description: string;
   /** Optional fuzzy ETA (e.g. "Q2 2026"). Illustrative only. */
   eta?: string;
+  /** ISO date when the item shipped (e.g. "2026-05-03"). Present only for shipped items. */
+  shippedAt?: string;
+  /** Relative URL to the changelog entry or release notes for this shipped item (e.g. "/changelog#v3.12.0"). */
+  changelogUrl?: string;
 }

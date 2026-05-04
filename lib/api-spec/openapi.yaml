@@ -8642,11 +8642,11 @@ components:
           description: Opaque slug for the roadmap item (stable across curator edits).
         column:
           type: string
-          enum: [now, next, later]
+          enum: [now, next, later, shipped]
           description: Which roadmap column the card renders in.
         status:
           type: string
-          enum: [in_progress, shipping_soon, planned, research]
+          enum: [in_progress, shipping_soon, planned, research, shipped]
           description: Status badge shown on the card.
         title:
           type: string
@@ -8657,6 +8657,12 @@ components:
         eta:
           type: string
           description: Optional fuzzy ETA (e.g. "Q2 2026"). Illustrative only.
+        shippedAt:
+          type: string
+          description: ISO date when the item shipped (e.g. "2026-05-03"). Present only for shipped items.
+        changelogUrl:
+          type: string
+          description: Relative URL to the changelog entry or release notes for this shipped item (e.g. "/changelog#v3.12.0").
       required: [id, column, status, title, description]
 
     RoadmapResponse:
@@ -8665,13 +8671,18 @@ components:
         Public roadmap returned by `GET /api/roadmap`. The `version`
         string lets clients cache-bust when curators ship a new
         revision of `roadmap.json`. `updatedAt` is a free-form ISO
-        date string surfaced in the page footer.
+        date string surfaced in the page footer. `shipped` carries
+        items delivered in the last 90 days.
       properties:
         version:
           type: string
         updatedAt:
           type: string
         items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoadmapItem"
+        shipped:
           type: array
           items:
             $ref: "#/components/schemas/RoadmapItem"

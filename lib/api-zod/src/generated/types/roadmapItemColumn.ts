@@ -16,4 +16,5 @@ export const RoadmapItemColumn = {
   now: "now",
   next: "next",
   later: "later",
+  shipped: "shipped",
 } as const;

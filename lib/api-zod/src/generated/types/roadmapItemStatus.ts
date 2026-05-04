@@ -17,4 +17,5 @@ export const RoadmapItemStatus = {
   shipping_soon: "shipping_soon",
   planned: "planned",
   research: "research",
+  shipped: "shipped",
 } as const;

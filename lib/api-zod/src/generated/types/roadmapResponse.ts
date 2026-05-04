@@ -11,11 +11,13 @@ import type { RoadmapItem } from "./roadmapItem";
  * Public roadmap returned by `GET /api/roadmap`. The `version`
 string lets clients cache-bust when curators ship a new
 revision of `roadmap.json`. `updatedAt` is a free-form ISO
-date string surfaced in the page footer.
+date string surfaced in the page footer. `shipped` carries
+items delivered in the last 90 days.
 
  */
 export interface RoadmapResponse {
   version: string;
   updatedAt?: string;
   items: RoadmapItem[];
+  shipped?: RoadmapItem[];
 }

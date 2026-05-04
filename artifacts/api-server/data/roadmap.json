@@ -94,5 +94,79 @@
       "title": "Jira integration recipe",
       "description": "Reference automation that scores newly-filed Jira issues and posts the badge as a comment."
     }
+  ],
+  "shipped": [
+    {
+      "id": "embeddable-score-badge",
+      "column": "shipped",
+      "status": "shipped",
+      "title": "Embeddable score badge",
+      "description": "Shields-style SVG badge via GET /api/embed/badge.svg?id=VR-XXXX with flat, plastic, social, and square variants.",
+      "shippedAt": "2026-05-03",
+      "changelogUrl": "/changelog#v3.12.0"
+    },
+    {
+      "id": "python-sdk",
+      "column": "shipped",
+      "status": "shipped",
+      "title": "Python SDK",
+      "description": "Dependency-light client wrapping the public API, type-hinted, with docstrings on every method. pip install vulnrap.",
+      "shippedAt": "2026-05-03",
+      "changelogUrl": "/changelog#v3.12.0"
+    },
+    {
+      "id": "go-sdk",
+      "column": "shipped",
+      "status": "shipped",
+      "title": "Go SDK",
+      "description": "First-class Go client for cloud-native scanners and CI gates, covering the full public API surface.",
+      "shippedAt": "2026-05-03",
+      "changelogUrl": "/changelog#v3.12.0"
+    },
+    {
+      "id": "mcp-server",
+      "column": "shipped",
+      "status": "shipped",
+      "title": "Public MCP server",
+      "description": "Every public capability (score, look up, query stats) exposed as MCP tools for Claude Desktop, Cursor, and agent stacks.",
+      "shippedAt": "2026-05-03",
+      "changelogUrl": "/changelog#v3.12.0"
+    },
+    {
+      "id": "sample-report-gallery",
+      "column": "shipped",
+      "status": "shipped",
+      "title": "Sample report gallery",
+      "description": "12 hand-picked pre-scored examples at /gallery — Obvious slop, Subtle slop, Borderline, Clean — so new users can explore without submitting their own data.",
+      "shippedAt": "2026-05-03",
+      "changelogUrl": "/changelog#v3.11.0"
+    },
+    {
+      "id": "how-it-works-explainer",
+      "column": "shipped",
+      "status": "shipped",
+      "title": "Interactive how-it-works explainer",
+      "description": "Paste a slop sample and watch each pipeline step (Redact → Linguistic → Substance → CWE → AVRI → Fusion) light up with what fired.",
+      "shippedAt": "2026-05-03",
+      "changelogUrl": "/changelog#v3.11.0"
+    },
+    {
+      "id": "custom-sensitivity-slider",
+      "column": "shipped",
+      "status": "shipped",
+      "title": "Custom sensitivity slider",
+      "description": "Continuous 0.0–1.0 slider with per-engine weight tweaks on /check. State serializes into the URL for shareable configs.",
+      "shippedAt": "2026-05-03",
+      "changelogUrl": "/changelog#v3.11.0"
+    },
+    {
+      "id": "llm-gate-composite-driven",
+      "column": "shipped",
+      "status": "shipped",
+      "title": "LLM gate driven by composite score",
+      "description": "evaluateLlmGate now uses the composite score alongside the heuristic, catching 16 borderline fixtures the heuristic-only path missed.",
+      "shippedAt": "2026-05-02",
+      "changelogUrl": "/changelog#v3.10.0"
+    }
   ]
 }

@@ -1,12 +1,16 @@
 // Task #693 — Public roadmap page.
+// Task #1046 — "Recently shipped" section below the Now/Next/Later grid.
 //
 // Renders three columns (Now / Next / Later) of roadmap items pulled
-// from `GET /api/roadmap`. Items are curator-edited in
+// from `GET /api/roadmap`, plus a "Recently Shipped" strip showing
+// items delivered in the last 90 days. Items are curator-edited in
 // `artifacts/api-server/data/roadmap.json` so updates ship without a
 // redeploy. Each card carries a status badge and an optional fuzzy
-// ETA. The page header reminds visitors that the roadmap is
-// illustrative — not a contractual commitment.
+// ETA. Shipped cards link to the relevant changelog entry. The page
+// header reminds visitors that the roadmap is illustrative — not a
+// contractual commitment.
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import {
   Map as MapIcon,
   Loader2,
@@ -19,6 +23,8 @@ import {
   Sparkles,
   ListChecks,
   FlaskConical,
+  CheckCircle2,
+  ExternalLink,
 } from "lucide-react";
 import {
   useListRoadmap,
@@ -44,7 +50,7 @@ interface ColumnMeta {
   icon: React.ReactNode;
 }
 
-const COLUMN_META: Record<RoadmapItemColumn, ColumnMeta> = {
+const COLUMN_META: Record<Exclude<RoadmapItemColumn, "shipped">, ColumnMeta> = {
   now: {
     label: "Now",
     blurb: "Actively being built — expect to see these land soon.",
@@ -65,7 +71,11 @@ const COLUMN_META: Record<RoadmapItemColumn, ColumnMeta> = {
   },
 };
 
-const COLUMN_ORDER: RoadmapItemColumn[] = ["now", "next", "later"];
+const COLUMN_ORDER: Exclude<RoadmapItemColumn, "shipped">[] = [
+  "now",
+  "next",
+  "later",
+];
 
 interface StatusMeta {
   label: string;
@@ -93,6 +103,11 @@ const STATUS_META: Record<RoadmapItemStatus, StatusMeta> = {
     label: "Research",
     tone: "border-muted-foreground/40 text-muted-foreground bg-muted/20",
     icon: <FlaskConical className="w-3 h-3" />,
+  },
+  shipped: {
+    label: "Shipped",
+    tone: "border-emerald-500/40 text-emerald-300 bg-emerald-500/5",
+    icon: <CheckCircle2 className="w-3 h-3" />,
   },
 };
 
@@ -136,11 +151,70 @@ function RoadmapCard({ item }: { item: RoadmapItem }) {
   );
 }
 
+function ShippedCard({ item }: { item: RoadmapItem }) {
+  const meta = STATUS_META.shipped;
+  const inner = (
+    <Card
+      className={cn(
+        "glass-card rounded-xl flex flex-col h-full transition-colors",
+        item.changelogUrl && "hover:border-emerald-500/40 cursor-pointer",
+      )}
+      data-testid={`roadmap-card-${item.id}`}
+    >
+      <CardHeader className="pb-3 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="text-sm sm:text-base leading-tight">
+            {item.title}
+          </CardTitle>
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[9px] uppercase tracking-wider shrink-0 inline-flex items-center gap-1",
+              meta.tone,
+            )}
+            data-testid={`roadmap-status-${item.id}`}
+          >
+            {meta.icon}
+            {meta.label}
+          </Badge>
+        </div>
+        <CardDescription className="text-xs leading-relaxed">
+          {item.description}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0 mt-auto flex items-center gap-3">
+        {item.shippedAt && (
+          <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground/80 inline-flex items-center gap-1.5">
+            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+            Shipped{" "}
+            <span className="text-foreground/85">{item.shippedAt}</span>
+          </div>
+        )}
+        {item.changelogUrl && (
+          <div className="text-[10px] text-emerald-400/70 inline-flex items-center gap-1 ml-auto">
+            <ExternalLink className="w-2.5 h-2.5" />
+            Release notes
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  if (item.changelogUrl) {
+    return (
+      <Link to={item.changelogUrl} className="no-underline">
+        {inner}
+      </Link>
+    );
+  }
+  return inner;
+}
+
 function RoadmapColumn({
   column,
   items,
 }: {
-  column: RoadmapItemColumn;
+  column: Exclude<RoadmapItemColumn, "shipped">;
   items: RoadmapItem[];
 }) {
   const meta = COLUMN_META[column];
@@ -186,19 +260,57 @@ function RoadmapColumn({
   );
 }
 
+function ShippedSection({ items }: { items: RoadmapItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div
+      className="space-y-4 sm:space-y-5"
+      data-testid="roadmap-shipped-section"
+    >
+      <div className="h-px bg-gradient-to-r from-emerald-500/30 via-emerald-500/10 to-transparent" />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-emerald-300 uppercase">
+            Recently Shipped
+          </h2>
+        </div>
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-background/60 text-muted-foreground">
+          {items.length}
+        </span>
+      </div>
+      <p className="text-[11px] text-muted-foreground/80 leading-snug px-1">
+        Delivered in the last 90 days. Each card links to the full release notes.
+      </p>
+      <div
+        className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        data-testid="roadmap-shipped-grid"
+      >
+        {items.map((item) => (
+          <ShippedCard key={item.id} item={item} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Roadmap() {
   const { data, isLoading, isError, error, refetch } = useListRoadmap();
 
   const grouped = useMemo(() => {
-    const out: Record<RoadmapItemColumn, RoadmapItem[]> = {
+    const out: Record<Exclude<RoadmapItemColumn, "shipped">, RoadmapItem[]> = {
       now: [],
       next: [],
       later: [],
     };
     if (!data) return out;
-    for (const item of data.items) out[item.column].push(item);
+    for (const item of data.items) {
+      if (item.column !== "shipped") out[item.column].push(item);
+    }
     return out;
   }, [data]);
+
+  const shippedItems = data?.shipped ?? [];
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
@@ -258,22 +370,26 @@ export default function Roadmap() {
         </Card>
       )}
 
-      {data && data.items.length === 0 && (
+      {data && data.items.length === 0 && shippedItems.length === 0 && (
         <div className="text-sm text-muted-foreground text-center py-12">
           No roadmap items configured yet.
         </div>
       )}
 
-      {data && data.items.length > 0 && (
+      {data && (data.items.length > 0 || shippedItems.length > 0) && (
         <>
-          <div
-            className="grid gap-4 sm:gap-5 grid-cols-1 lg:grid-cols-3 items-start"
-            data-testid="roadmap-grid"
-          >
-            {COLUMN_ORDER.map((col) => (
-              <RoadmapColumn key={col} column={col} items={grouped[col]} />
-            ))}
-          </div>
+          {data.items.length > 0 && (
+            <div
+              className="grid gap-4 sm:gap-5 grid-cols-1 lg:grid-cols-3 items-start"
+              data-testid="roadmap-grid"
+            >
+              {COLUMN_ORDER.map((col) => (
+                <RoadmapColumn key={col} column={col} items={grouped[col]} />
+              ))}
+            </div>
+          )}
+
+          <ShippedSection items={shippedItems} />
 
           <div className="text-[10px] text-muted-foreground/60 font-mono text-right">
             roadmap v{data.version}
