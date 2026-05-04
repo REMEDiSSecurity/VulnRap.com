@@ -8,8 +8,15 @@ import {
 import {
   getCurrentConfig,
   getConfigHistory,
+  getConfigByVersion,
   applyNewConfig,
 } from "../lib/scoring-config";
+import { checkCalibrationDrift } from "../lib/calibration-drift-guard";
+import {
+  snapshotCalibrationChange,
+  getCalibrationSnapshots,
+  getCalibrationSnapshotById,
+} from "../lib/calibration-rollback-log";
 import { generateAvriDriftReport } from "../lib/avri-drift";
 import {
   notifyDriftFlagsIfNew,
@@ -1867,18 +1874,101 @@ router.post(
         filteredChanges.tierThresholds = cleaned;
       }
 
+      const currentConfig = getCurrentConfig();
+      const driftCheck = checkCalibrationDrift(currentConfig, filteredChanges);
+
+      const confirmDrift = req.body.confirmDrift === true;
+      if (driftCheck.driftDetected && !confirmDrift) {
+        res.status(409).json({
+          error: "Calibration change exceeds drift threshold. A second reviewer confirmation is required.",
+          driftDetected: true,
+          threshold: driftCheck.threshold,
+          drifts: driftCheck.drifts,
+          hint: "Resend the request with confirmDrift: true to confirm this change.",
+        });
+        return;
+      }
+
+      const configBefore = { ...currentConfig };
       const newConfig = applyNewConfig(
         filteredChanges as Parameters<typeof applyNewConfig>[0],
         description,
       );
 
+      snapshotCalibrationChange("apply", description, configBefore, newConfig);
+
       res.status(201).json({
         message: "Scoring configuration updated successfully.",
         config: newConfig,
+        driftCheck: driftCheck.driftDetected
+          ? { confirmed: true, drifts: driftCheck.drifts }
+          : null,
       });
     } catch (err) {
       req.log?.error(err, "Failed to apply calibration changes");
       res.status(500).json({ error: "Failed to apply calibration changes." });
+    }
+  },
+);
+
+router.get(
+  "/feedback/calibration/rollback-log",
+  requireCalibrationAuthStrict,
+  (_req, res) => {
+    try {
+      const snapshots = getCalibrationSnapshots();
+      res.json({ snapshots, total: snapshots.length });
+    } catch (err) {
+      _req.log?.error(err, "Failed to read calibration rollback log");
+      res
+        .status(500)
+        .json({ error: "Failed to read calibration rollback log." });
+    }
+  },
+);
+
+router.post(
+  "/feedback/calibration/rollback",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const { snapshotId } = req.body;
+      if (!snapshotId || typeof snapshotId !== "string") {
+        res.status(400).json({ error: "snapshotId string is required." });
+        return;
+      }
+      const snapshot = getCalibrationSnapshotById(snapshotId);
+      if (!snapshot) {
+        res.status(404).json({ error: `Snapshot '${snapshotId}' not found.` });
+        return;
+      }
+      const currentConfig = getCurrentConfig();
+      const target = snapshot.configBefore;
+      const rolledBack = applyNewConfig(
+        {
+          prior: target.prior,
+          floor: target.floor,
+          ceiling: target.ceiling,
+          axisThresholds: target.axisThresholds,
+          tierThresholds: target.tierThresholds,
+          fabricationBoost: target.fabricationBoost,
+        },
+        `Rollback to pre-${snapshotId} state (was ${currentConfig.version})`,
+      );
+      snapshotCalibrationChange(
+        "rollback",
+        `Rolled back from ${currentConfig.version} to pre-${snapshotId} config`,
+        currentConfig,
+        rolledBack,
+      );
+      res.status(200).json({
+        message: "Calibration rolled back successfully.",
+        config: rolledBack,
+        rolledBackFrom: currentConfig.version,
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to rollback calibration");
+      res.status(500).json({ error: "Failed to rollback calibration." });
     }
   },
 );

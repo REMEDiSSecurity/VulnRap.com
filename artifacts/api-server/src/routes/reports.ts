@@ -86,6 +86,7 @@ import {
   detectBinaryContent,
 } from "../lib/sanitize";
 import { extractTextFromPdf } from "../lib/pdf";
+import { recordCorpusSubmission, releaseCorpusSubmission } from "../lib/corpus-submission-cap";
 import { logger } from "../lib/logger";
 import { buildPublicUrl } from "../lib/public-url";
 import {
@@ -976,6 +977,13 @@ router.post("/reports", async (req, res): Promise<void> => {
   const skipRedaction = parseBoolParam(req.body.skipRedaction);
   const skipLlm = parseBoolParam(req.body.skipLlm) || skipRedaction;
 
+  const corpusVisitorHash = showInFeed
+    ? visitorHash({
+        ip: req.ip ?? req.socket.remoteAddress ?? null,
+        userAgent: req.headers["user-agent"] ?? null,
+      })
+    : null;
+
   let text: string;
   let safeFileName: string | null = null;
   let rawFileSize: number;
@@ -1038,6 +1046,23 @@ router.post("/reports", async (req, res): Promise<void> => {
       .json({ error: "Content is empty or contains no readable text." });
     return;
   }
+
+  let corpusReservedAt: number | null = null;
+  if (showInFeed) {
+    const capResult = recordCorpusSubmission(corpusVisitorHash);
+    if (!capResult.allowed) {
+      res.status(429).json({
+        error: `Per-source corpus submission limit reached (${capResult.cap}/day). Try again tomorrow or submit without corpus eligibility (showInFeed=false).`,
+        cap: capResult.cap,
+        submissionCount: capResult.submissionCount,
+        remaining: 0,
+      });
+      return;
+    }
+    corpusReservedAt = capResult.reservedAt;
+  }
+
+  try {
 
   const redactionApplied = !skipRedaction;
   const { redactedText, summary: redactionSummary } = skipRedaction
@@ -1554,6 +1579,13 @@ router.post("/reports", async (req, res): Promise<void> => {
   // background timer started from src/index.ts, so report submissions no
   // longer pay the drift-scan cost (and the cadence keeps firing on quiet
   // days too).
+
+  } catch (submissionErr) {
+    if (corpusReservedAt !== null && corpusVisitorHash) {
+      releaseCorpusSubmission(corpusVisitorHash, corpusReservedAt);
+    }
+    throw submissionErr;
+  }
 });
 
 function anonymizeId(id: number): string {
