@@ -5,7 +5,7 @@
  * VulnRap.com API — Vulnerability Report Validation Platform
  * OpenAPI spec version: 3.0.0
  */
-import type { PublicStatusIncident } from "./publicStatusIncident";
+import type { PublicStatusIncident } from './publicStatusIncident';
 
 export interface PublicStatusIncidentsResponse {
   generatedAt: Date;
