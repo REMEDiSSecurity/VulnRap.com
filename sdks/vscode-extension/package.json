@@ -56,6 +56,11 @@
           "type": "boolean",
           "default": false,
           "description": "If true, score using only local heuristic / statistical engines (no LLM call)."
+        },
+        "vulnrap.inlineDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, evidence snippets are highlighted inline in the editor as diagnostics (squiggles) after scoring."
         }
       }
     }

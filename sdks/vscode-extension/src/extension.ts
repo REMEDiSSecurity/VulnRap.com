@@ -24,8 +24,15 @@ type CheckResult = {
 
 const PANEL_VIEW_TYPE = "vulnrap.scorePanel";
 
+let diagnosticCollection: vscode.DiagnosticCollection;
+let scoredDocumentUri: vscode.Uri | undefined;
+let currentPanel: vscode.WebviewPanel | undefined;
+
 export function activate(context: vscode.ExtensionContext): void {
+  diagnosticCollection =
+    vscode.languages.createDiagnosticCollection("vulnrap");
   context.subscriptions.push(
+    diagnosticCollection,
     vscode.commands.registerCommand("vulnrap.scoreSelection", () =>
       runScore(context, "selection"),
     ),
@@ -85,8 +92,22 @@ async function runScore(
     },
     async () => {
       try {
+        diagnosticCollection.clear();
+        const selectionSnapshot = mode === "selection" ? editor.selection : undefined;
+        const documentUri = editor.document.uri;
         const result = await scoreText(baseUrl, trimmed, skipLlm);
         showResultPanel(context, result, baseUrl);
+
+        const inlineDiagnostics = Boolean(
+          config.get("inlineDiagnostics") ?? true,
+        );
+        const targetDoc = vscode.workspace.textDocuments.find(
+          (d) => d.uri.toString() === documentUri.toString(),
+        );
+        if (inlineDiagnostics && targetDoc) {
+          applyDiagnostics(targetDoc, result, selectionSnapshot);
+          scoredDocumentUri = documentUri;
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`VulnRap: ${msg}`);
@@ -124,11 +145,73 @@ async function scoreText(
   return (await res.json()) as CheckResult;
 }
 
+function applyDiagnostics(
+  document: vscode.TextDocument,
+  result: CheckResult,
+  selection?: vscode.Selection,
+): void {
+  const evidence = result.evidence ?? [];
+  if (evidence.length === 0) return;
+
+  const searchOffset = selection && !selection.isEmpty
+    ? document.offsetAt(selection.start)
+    : 0;
+  const searchText = selection && !selection.isEmpty
+    ? document.getText(selection)
+    : document.getText();
+
+  const diagnostics: vscode.Diagnostic[] = [];
+  let nextSearchFrom = 0;
+
+  for (const ev of evidence) {
+    const snippet = ev.snippet;
+    if (!snippet || snippet.length === 0) continue;
+
+    let idx = searchText.indexOf(snippet, nextSearchFrom);
+    if (idx === -1) {
+      idx = searchText.indexOf(snippet);
+    }
+    if (idx === -1) continue;
+
+    nextSearchFrom = idx + snippet.length;
+    const absoluteOffset = searchOffset + idx;
+    const startPos = document.positionAt(absoluteOffset);
+    const endPos = document.positionAt(absoluteOffset + snippet.length);
+    const range = new vscode.Range(startPos, endPos);
+
+    const severity = ev.severity === "high"
+      ? vscode.DiagnosticSeverity.Warning
+      : vscode.DiagnosticSeverity.Information;
+
+    const weight = typeof ev.weight === "number"
+      ? ` (weight: +${ev.weight.toFixed(1)})`
+      : "";
+    const label = ev.label ?? "signal";
+    const desc = ev.description ? ` — ${ev.description}` : "";
+
+    const diagnostic = new vscode.Diagnostic(
+      range,
+      `${label}${weight}${desc}`,
+      severity,
+    );
+    diagnostic.source = "VulnRap";
+    diagnostics.push(diagnostic);
+  }
+
+  diagnosticCollection.set(document.uri, diagnostics);
+}
+
 function showResultPanel(
-  context: vscode.ExtensionContext,
+  _context: vscode.ExtensionContext,
   result: CheckResult,
   baseUrl: string,
 ): void {
+  if (currentPanel) {
+    currentPanel.webview.html = renderHtml(result, baseUrl);
+    currentPanel.reveal(vscode.ViewColumn.Beside);
+    return;
+  }
+
   const panel = vscode.window.createWebviewPanel(
     PANEL_VIEW_TYPE,
     "VulnRap Score",
@@ -136,7 +219,16 @@ function showResultPanel(
     { enableScripts: false, retainContextWhenHidden: false },
   );
   panel.webview.html = renderHtml(result, baseUrl);
-  context.subscriptions.push(panel);
+  panel.onDidDispose(() => {
+    currentPanel = undefined;
+    if (scoredDocumentUri) {
+      diagnosticCollection.delete(scoredDocumentUri);
+      scoredDocumentUri = undefined;
+    } else {
+      diagnosticCollection.clear();
+    }
+  });
+  currentPanel = panel;
 }
 
 function renderHtml(r: CheckResult, baseUrl: string): string {

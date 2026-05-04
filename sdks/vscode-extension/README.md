@@ -17,6 +17,12 @@ VS Code-compatible editor).
 - **Right-click → "VulnRap: Score current file"** — same thing, but for the whole
   active document. Handy when you've drafted the full report in a single
   Markdown file.
+- **Inline diagnostics** — after scoring, evidence items that carry a text
+  snippet are highlighted directly in your document as VS Code diagnostics
+  (warning squiggles for high-severity signals, info squiggles for everything
+  else). Hover over a squiggle to see the signal name, weight, and description.
+  Diagnostics clear automatically when you re-run the score command or close the
+  score panel. Disable this with `vulnrap.inlineDiagnostics: false`.
 - All scoring goes through `POST /api/reports/check`, which is the
   **non-storing** endpoint — your draft is never persisted to VulnRap.
 
@@ -34,13 +40,14 @@ glance.
 
 ## Settings
 
-| Setting              | Default                   | Description                                                                                |
-| -------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
-| `vulnrap.apiBaseUrl` | `https://vulnrap.com/api` | Base URL of the VulnRap API. Override this when self-hosting or pointing at staging.       |
-| `vulnrap.skipLlm`    | `false`                   | If `true`, scores using only local heuristic / statistical engines (no external LLM call). |
+| Setting                    | Default                   | Description                                                                                        |
+| -------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------- |
+| `vulnrap.apiBaseUrl`       | `https://vulnrap.com/api` | Base URL of the VulnRap API. Override this when self-hosting or pointing at staging.               |
+| `vulnrap.skipLlm`          | `false`                   | If `true`, scores using only local heuristic / statistical engines (no external LLM call).         |
+| `vulnrap.inlineDiagnostics`| `true`                    | If `true`, evidence snippets are highlighted inline as diagnostics (squiggles) after scoring.      |
 
 Open the settings UI (`Ctrl+,` / `Cmd+,`) and search for "VulnRap" to edit
-either of these.
+any of these.
 
 ## Build the extension
 
