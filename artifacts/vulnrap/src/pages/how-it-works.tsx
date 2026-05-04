@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   BookOpen,
@@ -14,8 +14,12 @@ import {
   Layers,
   ArrowRight,
   Sparkles,
+  Loader2,
+  AlertCircle,
+  Type,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCheckReport } from "@workspace/api-client-react";
 
 type StepId = "redact" | "linguistic" | "substance" | "cwe" | "avri" | "fusion";
 
@@ -36,8 +40,10 @@ interface SampleStepResult {
   score?: number;
 }
 
+type SampleId = "slop" | "legit" | "custom";
+
 interface Sample {
-  id: "slop" | "legit";
+  id: SampleId;
   label: string;
   blurb: string;
   text: string;
@@ -45,6 +51,127 @@ interface Sample {
   finalLabel: string;
   finalTier: "rejected" | "needs-review" | "accept";
   finalScore: number;
+}
+
+function mapTier(slopTier: string): Sample["finalTier"] {
+  const t = slopTier.toLowerCase();
+  if (t.includes("reject") || t.includes("ai") || t.includes("slop"))
+    return "rejected";
+  if (
+    t.includes("review") ||
+    t.includes("question") ||
+    t.includes("borderline")
+  )
+    return "needs-review";
+  return "accept";
+}
+
+function mapTierLabel(tier: Sample["finalTier"], score: number): string {
+  if (tier === "rejected") return score < 25 ? "Likely AI slop" : "Suspicious";
+  if (tier === "needs-review") return "Needs review";
+  return "Looks real";
+}
+
+function buildRedactDetail(redactionSummary: {
+  totalRedactions: number;
+  categories: Record<string, number>;
+}): string {
+  const { totalRedactions, categories } = redactionSummary;
+  if (totalRedactions === 0) return "0 PII tokens, 0 secrets — text passes through clean.";
+  const parts = Object.entries(categories)
+    .map(([cat, count]) => `${count} ${cat}`)
+    .join(", ");
+  return `${totalRedactions} redaction${totalRedactions !== 1 ? "s" : ""} (${parts}) — structure preserved.`;
+}
+
+function buildCustomSample(data: {
+  slopScore: number;
+  slopTier: string;
+  breakdown: {
+    linguistic: number;
+    factual: number;
+    template: number;
+    quality: number;
+    substanceScore?: number | null;
+    coherenceScore?: number | null;
+    pocValidity?: number | null;
+    domainCoherence?: number | null;
+  };
+  redactionSummary: { totalRedactions: number; categories: Record<string, number> };
+  text: string;
+}): Sample {
+  const { slopScore, slopTier, breakdown, redactionSummary, text } = data;
+  const tier = mapTier(slopTier);
+
+  const linguisticNorm = breakdown.linguistic / 100;
+  const substanceRaw =
+    breakdown.substanceScore != null
+      ? breakdown.substanceScore / 100
+      : breakdown.factual / 100;
+  const cweRaw =
+    breakdown.coherenceScore != null
+      ? breakdown.coherenceScore / 100
+      : breakdown.domainCoherence != null
+        ? breakdown.domainCoherence / 100
+        : breakdown.quality / 100;
+  const avriRaw =
+    breakdown.pocValidity != null
+      ? breakdown.pocValidity / 100
+      : 1 - breakdown.template / 100;
+
+  const qualityScore = 100 - slopScore;
+
+  return {
+    id: "custom",
+    label: "Your report",
+    blurb: `${text.length} characters · scored live`,
+    text,
+    steps: {
+      redact: {
+        fired: redactionSummary.totalRedactions > 0,
+        detail: buildRedactDetail(redactionSummary),
+      },
+      linguistic: {
+        fired: breakdown.linguistic > 40,
+        detail: `Linguistic AI-cadence score ${(breakdown.linguistic / 100).toFixed(2)}`,
+        score: linguisticNorm,
+      },
+      substance: {
+        fired: substanceRaw < 0.35,
+        detail:
+          breakdown.substanceScore != null
+            ? `LLM substance score ${breakdown.substanceScore}/100 · factual density ${(breakdown.factual / 100).toFixed(2)}`
+            : `Factual density ${(breakdown.factual / 100).toFixed(2)}`,
+        score: substanceRaw,
+      },
+      cwe: {
+        fired: cweRaw < 0.5,
+        detail:
+          breakdown.coherenceScore != null
+            ? `Coherence score ${breakdown.coherenceScore}/100`
+            : breakdown.domainCoherence != null
+              ? `Domain coherence ${breakdown.domainCoherence}/100`
+              : `Quality-based coherence estimate ${breakdown.quality}/100`,
+        score: cweRaw,
+      },
+      avri: {
+        fired: avriRaw < 0.5,
+        detail:
+          breakdown.pocValidity != null
+            ? `PoC validity ${breakdown.pocValidity}/100 · template score ${breakdown.template}/100`
+            : `Template pattern score ${breakdown.template}/100 — claim-vs-repro gap estimated`,
+        score: avriRaw,
+      },
+      fusion: {
+        fired: qualityScore < 50,
+        detail: `Weighted fusion → ${qualityScore}/100 · tier: ${tier}.`,
+        score: qualityScore,
+      },
+    },
+    finalLabel: mapTierLabel(tier, qualityScore),
+    finalTier: tier,
+    finalScore: qualityScore,
+  };
 }
 
 const SAMPLES: Sample[] = [
@@ -319,15 +446,68 @@ function tierStyle(tier: Sample["finalTier"]) {
 const ANIM_STEP_MS = 700;
 
 export default function HowItWorks() {
-  const [sampleId, setSampleId] = useState<Sample["id"]>("slop");
+  const [sampleId, setSampleId] = useState<SampleId>("slop");
   const [activeIdx, setActiveIdx] = useState<number>(-1);
   const [playing, setPlaying] = useState(false);
   const [openId, setOpenId] = useState<StepId | null>("redact");
 
-  const sample = useMemo(
-    () => SAMPLES.find((s) => s.id === sampleId)!,
-    [sampleId],
-  );
+  const [customText, setCustomText] = useState("");
+  const [customSample, setCustomSample] = useState<Sample | null>(null);
+  const [customError, setCustomError] = useState<string | null>(null);
+
+  const checkMutation = useCheckReport({
+    mutation: {
+      onSuccess: (data, variables) => {
+        const built = buildCustomSample({
+          slopScore: data.slopScore,
+          slopTier: data.slopTier,
+          breakdown: data.breakdown,
+          redactionSummary: data.redactionSummary,
+          text: (variables.data.rawText ?? "").trim(),
+        });
+        setCustomSample(built);
+        setCustomError(null);
+        setActiveIdx(-1);
+        setTimeout(() => {
+          setActiveIdx(0);
+          setPlaying(true);
+        }, 150);
+      },
+      onError: (err: unknown) => {
+        let msg = "Scoring unavailable — try again later or use a pre-built sample.";
+        if (err && typeof err === "object") {
+          const e = err as Record<string, unknown>;
+          if (
+            "data" in e &&
+            e.data &&
+            typeof e.data === "object" &&
+            "error" in (e.data as Record<string, unknown>)
+          ) {
+            msg = String((e.data as Record<string, unknown>).error);
+          } else if ("message" in e && typeof e.message === "string") {
+            msg = e.message;
+          }
+        }
+        setCustomError(msg);
+      },
+    },
+  });
+
+  const handleCustomSubmit = useCallback(() => {
+    const trimmed = customText.trim();
+    if (trimmed.length === 0) return;
+    setCustomError(null);
+    setPlaying(false);
+    setActiveIdx(-1);
+    setCustomSample(null);
+    checkMutation.mutate({ data: { rawText: trimmed } });
+  }, [customText, checkMutation]);
+
+  const isCustomMode = sampleId === "custom";
+  const sample = useMemo(() => {
+    if (isCustomMode && customSample) return customSample;
+    return SAMPLES.find((s) => s.id === sampleId) ?? SAMPLES[0];
+  }, [sampleId, customSample, isCustomMode]);
 
   useEffect(() => {
     if (!playing) return;
@@ -340,6 +520,7 @@ export default function HowItWorks() {
   }, [playing, activeIdx]);
 
   function handlePlay() {
+    if (isCustomMode && !customSample) return;
     if (activeIdx >= STEPS.length - 1) setActiveIdx(-1);
     setPlaying(true);
     if (activeIdx < 0) setActiveIdx(0);
@@ -351,12 +532,13 @@ export default function HowItWorks() {
     setPlaying(false);
     setActiveIdx(-1);
   }
-  function handleSwitchSample(id: Sample["id"]) {
+  function handleSwitchSample(id: SampleId) {
     setSampleId(id);
     setPlaying(false);
     setActiveIdx(-1);
   }
 
+  const showPipeline = !isCustomMode || customSample != null;
   const tier = tierStyle(sample.finalTier);
 
   return (
@@ -401,56 +583,159 @@ export default function HowItWorks() {
                 {s.label}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => handleSwitchSample("custom")}
+              className={cn(
+                "px-2.5 py-1 text-xs rounded-md font-medium transition-colors inline-flex items-center gap-1",
+                sampleId === "custom"
+                  ? "bg-primary/15 text-primary border border-primary/40"
+                  : "text-muted-foreground hover:text-primary border border-transparent",
+              )}
+            >
+              <Type className="w-3 h-3" />
+              Try your own
+            </button>
           </div>
         </div>
 
         <div className="p-4 sm:p-5 space-y-4">
-          <div className="text-xs text-muted-foreground">{sample.blurb}</div>
-          <pre className="text-xs sm:text-[13px] leading-relaxed font-mono whitespace-pre-wrap break-words rounded-lg border border-primary/15 bg-black/40 p-3 sm:p-4 text-foreground/90">
-            {sample.text}
-          </pre>
+          {isCustomMode ? (
+            <>
+              <div className="text-xs text-muted-foreground">
+                Paste a vulnerability report below and hit <strong>Score &amp; animate</strong> to watch the pipeline light up with real scores.
+              </div>
+              <textarea
+                value={customText}
+                onChange={(e) => setCustomText(e.target.value)}
+                placeholder={"Paste your vulnerability report here…\n\ne.g. \"POST /api/v2/reset accepts an external redirect_uri without allow-listing…\""}
+                className="w-full min-h-[140px] max-h-[320px] text-xs sm:text-[13px] leading-relaxed font-mono whitespace-pre-wrap rounded-lg border border-primary/15 bg-black/40 p-3 sm:p-4 text-foreground/90 placeholder:text-muted-foreground/40 resize-y focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-colors"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCustomSubmit}
+                  disabled={customText.trim().length === 0 || checkMutation.isPending}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors",
+                    customText.trim().length === 0 || checkMutation.isPending
+                      ? "bg-muted/20 text-muted-foreground/50 border-border/30 cursor-not-allowed"
+                      : "bg-primary/15 text-primary border-primary/40 hover:bg-primary/25",
+                  )}
+                >
+                  {checkMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Scoring…
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5" />
+                      Score &amp; animate
+                    </>
+                  )}
+                </button>
+                {customSample && (
+                  <>
+                    {!playing ? (
+                      <button
+                        type="button"
+                        onClick={handlePlay}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-muted-foreground hover:text-primary border border-transparent transition-colors"
+                      >
+                        <Play className="w-3.5 h-3.5" />
+                        {activeIdx >= STEPS.length - 1 ? "Replay" : "Resume"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handlePause}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-muted-foreground hover:text-primary border border-transparent transition-colors"
+                      >
+                        <Pause className="w-3.5 h-3.5" />
+                        Pause
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-muted-foreground hover:text-primary border border-transparent transition-colors"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Reset
+                    </button>
+                  </>
+                )}
+                <span className="text-[11px] text-muted-foreground/70 ml-auto font-mono">
+                  {checkMutation.isPending
+                    ? "analyzing…"
+                    : customSample
+                      ? activeIdx < 0
+                        ? "ready"
+                        : `step ${Math.min(activeIdx + 1, STEPS.length)} / ${STEPS.length}`
+                      : "paste & score"}
+                </span>
+              </div>
+              {customError && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 flex items-start gap-2 text-xs text-red-300">
+                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>{customError}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="text-xs text-muted-foreground">{sample.blurb}</div>
+              <pre className="text-xs sm:text-[13px] leading-relaxed font-mono whitespace-pre-wrap break-words rounded-lg border border-primary/15 bg-black/40 p-3 sm:p-4 text-foreground/90">
+                {sample.text}
+              </pre>
 
-          {/* Controls */}
-          <div className="flex flex-wrap items-center gap-2">
-            {!playing ? (
-              <button
-                type="button"
-                onClick={handlePlay}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary/15 text-primary border border-primary/40 hover:bg-primary/25 transition-colors"
-              >
-                <Play className="w-3.5 h-3.5" />
-                {activeIdx >= STEPS.length - 1
-                  ? "Replay"
-                  : activeIdx < 0
-                    ? "Play pipeline"
-                    : "Resume"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handlePause}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-muted/40 text-foreground/80 border border-border hover:bg-muted/60 transition-colors"
-              >
-                <Pause className="w-3.5 h-3.5" />
-                Pause
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleReset}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-muted-foreground hover:text-primary border border-transparent transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Reset
-            </button>
-            <span className="text-[11px] text-muted-foreground/70 ml-auto font-mono">
-              {activeIdx < 0
-                ? "idle"
-                : `step ${Math.min(activeIdx + 1, STEPS.length)} / ${STEPS.length}`}
-            </span>
-          </div>
+              {/* Controls */}
+              <div className="flex flex-wrap items-center gap-2">
+                {!playing ? (
+                  <button
+                    type="button"
+                    onClick={handlePlay}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary/15 text-primary border border-primary/40 hover:bg-primary/25 transition-colors"
+                  >
+                    <Play className="w-3.5 h-3.5" />
+                    {activeIdx >= STEPS.length - 1
+                      ? "Replay"
+                      : activeIdx < 0
+                        ? "Play pipeline"
+                        : "Resume"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handlePause}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-muted/40 text-foreground/80 border border-border hover:bg-muted/60 transition-colors"
+                  >
+                    <Pause className="w-3.5 h-3.5" />
+                    Pause
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-muted-foreground hover:text-primary border border-transparent transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Reset
+                </button>
+                <span className="text-[11px] text-muted-foreground/70 ml-auto font-mono">
+                  {activeIdx < 0
+                    ? "idle"
+                    : `step ${Math.min(activeIdx + 1, STEPS.length)} / ${STEPS.length}`}
+                </span>
+              </div>
+            </>
+          )}
 
           {/* Step lights */}
+          {showPipeline && (
+            <>
+          {/* Step light cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             {STEPS.map((step, i) => {
               const lit = activeIdx >= i;
@@ -553,6 +838,8 @@ export default function HowItWorks() {
               </span>
             </div>
           </div>
+            </>
+          )}
         </div>
       </section>
 
