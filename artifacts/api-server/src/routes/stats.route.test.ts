@@ -635,6 +635,95 @@ describe("GET /stats/trends", () => {
   });
 });
 
+const CORPUS_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=600";
+
+describe("GET /public/corpus-stats", () => {
+  it("returns the documented shape with stubbed data and the corpus cache header", async () => {
+    selectQueue.push([{ total: 25 }]);
+    selectQueue.push([
+      { tier: "Clean", count: 10 },
+      { tier: "Slop", count: 8 },
+      { tier: "Questionable", count: 7 },
+    ]);
+    selectQueue.push([
+      { family: "INJECTION", count: 5 },
+      { family: "MEMORY_CORRUPTION", count: 3 },
+    ]);
+    (
+      executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void }
+    ).mockImplementation(async () => ({
+      rows: [
+        { signal: "hedge_phrase", count: 12 },
+        { signal: "filler_sentence", count: 9 },
+      ],
+    }));
+    selectQueue.push([
+      { date: "2026-04-28", count: 4 },
+      { date: "2026-04-29", count: 6 },
+    ]);
+
+    const r = await request<{
+      totalReports: number;
+      generatedAt: string;
+      tierBreakdown: Array<{ tier: string; count: number }>;
+      topSignals: Array<{ signal: string; count: number }>;
+      topCweFamilies: Array<{ family: string; count: number }>;
+      volumeTimeSeries: Array<{ date: string; count: number }>;
+    }>("GET", "/public/corpus-stats");
+
+    expect(r.status).toBe(200);
+    expect(r.headers["cache-control"]).toBe(CORPUS_CACHE_CONTROL);
+    expect(r.body.totalReports).toBe(25);
+    expect(typeof r.body.generatedAt).toBe("string");
+    expect(new Date(r.body.generatedAt).getTime()).not.toBeNaN();
+    expect(r.body.tierBreakdown).toEqual([
+      { tier: "Clean", count: 10 },
+      { tier: "Slop", count: 8 },
+      { tier: "Questionable", count: 7 },
+    ]);
+    expect(r.body.topSignals).toEqual([
+      { signal: "hedge_phrase", count: 12 },
+      { signal: "filler_sentence", count: 9 },
+    ]);
+    expect(r.body.topCweFamilies).toEqual([
+      { family: "INJECTION", count: 5 },
+      { family: "MEMORY_CORRUPTION", count: 3 },
+    ]);
+    expect(r.body.volumeTimeSeries).toEqual([
+      { date: "2026-04-28", count: 4 },
+      { date: "2026-04-29", count: 6 },
+    ]);
+  });
+
+  it("returns an empty-but-valid response when the corpus is empty", async () => {
+    selectQueue.push([{ total: 0 }]);
+    selectQueue.push([]);
+    selectQueue.push([]);
+    (
+      executeMock as unknown as { mockImplementation: (fn: ExecuteFn) => void }
+    ).mockImplementation(async () => ({ rows: [] }));
+    selectQueue.push([]);
+
+    const r = await request<{
+      totalReports: number;
+      generatedAt: string;
+      tierBreakdown: unknown[];
+      topSignals: unknown[];
+      topCweFamilies: unknown[];
+      volumeTimeSeries: unknown[];
+    }>("GET", "/public/corpus-stats");
+
+    expect(r.status).toBe(200);
+    expect(r.headers["cache-control"]).toBe(CORPUS_CACHE_CONTROL);
+    expect(r.body.totalReports).toBe(0);
+    expect(typeof r.body.generatedAt).toBe("string");
+    expect(r.body.tierBreakdown).toEqual([]);
+    expect(r.body.topSignals).toEqual([]);
+    expect(r.body.topCweFamilies).toEqual([]);
+    expect(r.body.volumeTimeSeries).toEqual([]);
+  });
+});
+
 // Task #726 — Query budget tests. Each /stats* endpoint MUST stay under a
 // hard ceiling of round-trips so a future "let me just add one more
 // `db.select` to enrich the response" doesn't silently quadruple the
