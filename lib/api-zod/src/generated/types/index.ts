@@ -209,6 +209,8 @@ export * from "./newsletterSubscribeBody";
 export * from "./newsletterSubscribeResponse";
 export * from "./newsletterUnsubscribeBody";
 export * from "./newsletterUnsubscribeResponse";
+export * from "./perLanguageAgreementEntry";
+export * from "./perLanguageAgreementReport";
 export * from "./phraseSuggestion";
 export * from "./phraseSuggestionCategory";
 export * from "./phraseSuggestionList";

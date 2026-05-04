@@ -2597,6 +2597,24 @@ persisted heartbeat.
   ticksCompleted: number;
 }
 
+export interface PerLanguageAgreementEntry {
+  language: string;
+  legitTier: string;
+  slopTier: string;
+  legitTierDelta: number;
+  slopTierDelta: number;
+  legitAgrees: boolean;
+  slopAgrees: boolean;
+}
+
+export interface PerLanguageAgreementReport {
+  englishLegitTier: string;
+  englishSlopTier: string;
+  perLanguage: PerLanguageAgreementEntry[];
+  agreementRate: number;
+  fixtureCount: number;
+}
+
 export type CalibrationReportOverallHealth =
   (typeof CalibrationReportOverallHealth)[keyof typeof CalibrationReportOverallHealth];
 
@@ -2613,6 +2631,8 @@ export interface CalibrationReport {
   suggestions: CalibrationSuggestion[];
   overallHealth: CalibrationReportOverallHealth;
   minFeedbackThreshold: number;
+  perLanguageAgreementRate: number;
+  perLanguageAgreement: PerLanguageAgreementReport;
 }
 
 /**

@@ -8,6 +8,7 @@
 import type { BucketAnalysis } from "./bucketAnalysis";
 import type { CalibrationReportOverallHealth } from "./calibrationReportOverallHealth";
 import type { CalibrationSuggestion } from "./calibrationSuggestion";
+import type { PerLanguageAgreementReport } from "./perLanguageAgreementReport";
 import type { ScoringConfigItem } from "./scoringConfigItem";
 
 export interface CalibrationReport {
@@ -17,4 +18,6 @@ export interface CalibrationReport {
   suggestions: CalibrationSuggestion[];
   overallHealth: CalibrationReportOverallHealth;
   minFeedbackThreshold: number;
+  perLanguageAgreementRate: number;
+  perLanguageAgreement: PerLanguageAgreementReport;
 }

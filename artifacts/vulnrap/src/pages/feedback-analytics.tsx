@@ -88,6 +88,8 @@ import {
   type FeedbackAnalyticsRecentFeedbackItem,
   type CalibrationSuggestion,
   type BucketAnalysis,
+  type PerLanguageAgreementEntry,
+  type PerLanguageAgreementReport,
   type AvriDriftReport,
   type AvriDriftWeekBucket,
   type AvriDriftFlag,
@@ -145,6 +147,7 @@ import {
   RefreshCw,
   Download,
   Plug,
+  Globe,
 } from "lucide-react";
 import {
   Card,
@@ -1126,6 +1129,154 @@ function CalibrationTokenRejectedBanner({
   );
 }
 
+function MultilingualAgreementCard({
+  rate,
+  report,
+}: {
+  rate: number;
+  report: PerLanguageAgreementReport;
+}) {
+  const rateColor =
+    rate >= 90
+      ? "text-green-400"
+      : rate >= 70
+        ? "text-yellow-400"
+        : "text-red-400";
+  const rateBg =
+    rate >= 90
+      ? "bg-green-400/10"
+      : rate >= 70
+        ? "bg-yellow-400/10"
+        : "bg-red-400/10";
+
+  const hasData = report.perLanguage.length > 0;
+
+  return (
+    <Card className="glass-card rounded-xl border-primary/10">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Globe className="w-4 h-4 text-primary" />
+            Multilingual Agreement
+          </CardTitle>
+          <Badge variant="outline" className={cn("text-[10px] gap-1", rateColor, rateBg)}>
+            {Number.isInteger(rate) ? rate : rate.toFixed(1)}% agreement
+          </Badge>
+        </div>
+        <CardDescription>
+          Compares non-English fixture classifications against the English
+          baseline. A high agreement rate means the engine treats translated
+          reports consistently. This metric is informational and does not block
+          scoring.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!hasData ? (
+          <p className="text-xs text-muted-foreground/50 py-4 text-center">
+            No multilingual fixture data available.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground pb-2 border-b border-border/20">
+              <span>
+                English baseline: <Badge variant="outline" className="text-[10px] ml-1">{report.englishLegitTier}</Badge>{" "}
+                (legit) · <Badge variant="outline" className="text-[10px] ml-1">{report.englishSlopTier}</Badge>{" "}
+                (slop)
+              </span>
+              <span className="ml-auto tabular-nums">{report.fixtureCount} fixtures</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-muted-foreground/70 border-b border-border/20">
+                    <th className="text-left py-2 pr-3 font-medium">Language</th>
+                    <th className="text-center py-2 px-2 font-medium">Legit Tier</th>
+                    <th className="text-center py-2 px-2 font-medium">Delta</th>
+                    <th className="text-center py-2 px-2 font-medium">Slop Tier</th>
+                    <th className="text-center py-2 px-2 font-medium">Delta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.perLanguage.map((entry: PerLanguageAgreementEntry) => {
+                    const legitDeltaWarning = Math.abs(entry.legitTierDelta) > 1;
+                    const slopDeltaWarning = Math.abs(entry.slopTierDelta) > 1;
+                    return (
+                      <tr
+                        key={entry.language}
+                        className="border-b border-border/10 last:border-0"
+                      >
+                        <td className="py-2 pr-3 font-medium text-foreground">
+                          {entry.language}
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px]",
+                              entry.legitAgrees
+                                ? "text-green-400 bg-green-400/10"
+                                : "text-red-400 bg-red-400/10",
+                            )}
+                          >
+                            {entry.legitTier}
+                          </Badge>
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          <span
+                            className={cn(
+                              "tabular-nums text-[11px] font-mono font-bold",
+                              entry.legitTierDelta === 0
+                                ? "text-muted-foreground/40"
+                                : legitDeltaWarning
+                                  ? "text-red-400"
+                                  : "text-yellow-400",
+                            )}
+                          >
+                            {entry.legitTierDelta > 0 ? "+" : ""}
+                            {entry.legitTierDelta}
+                          </span>
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px]",
+                              entry.slopAgrees
+                                ? "text-green-400 bg-green-400/10"
+                                : "text-red-400 bg-red-400/10",
+                            )}
+                          >
+                            {entry.slopTier}
+                          </Badge>
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          <span
+                            className={cn(
+                              "tabular-nums text-[11px] font-mono font-bold",
+                              entry.slopTierDelta === 0
+                                ? "text-muted-foreground/40"
+                                : slopDeltaWarning
+                                  ? "text-red-400"
+                                  : "text-yellow-400",
+                            )}
+                          >
+                            {entry.slopTierDelta > 0 ? "+" : ""}
+                            {entry.slopTierDelta}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function CalibrationSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1271,6 +1422,11 @@ function CalibrationSection() {
           ))}
         </CardContent>
       </Card>
+
+      <MultilingualAgreementCard
+        rate={calibration.perLanguageAgreementRate}
+        report={calibration.perLanguageAgreement}
+      />
 
       {calibration.suggestions.length > 0 && (
         <Card className="glass-card rounded-xl border-primary/20">

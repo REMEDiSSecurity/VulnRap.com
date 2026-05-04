@@ -6233,6 +6233,44 @@ components:
         - nextTickAt
         - ticksCompleted
 
+    PerLanguageAgreementEntry:
+      type: object
+      properties:
+        language:
+          type: string
+        legitTier:
+          type: string
+        slopTier:
+          type: string
+        legitTierDelta:
+          type: integer
+        slopTierDelta:
+          type: integer
+        legitAgrees:
+          type: boolean
+        slopAgrees:
+          type: boolean
+      required:
+        [language, legitTier, slopTier, legitTierDelta, slopTierDelta, legitAgrees, slopAgrees]
+
+    PerLanguageAgreementReport:
+      type: object
+      properties:
+        englishLegitTier:
+          type: string
+        englishSlopTier:
+          type: string
+        perLanguage:
+          type: array
+          items:
+            $ref: "#/components/schemas/PerLanguageAgreementEntry"
+        agreementRate:
+          type: number
+        fixtureCount:
+          type: integer
+      required:
+        [englishLegitTier, englishSlopTier, perLanguage, agreementRate, fixtureCount]
+
     CalibrationReport:
       type: object
       properties:
@@ -6253,6 +6291,10 @@ components:
           enum: [good, needs-attention, needs-tuning]
         minFeedbackThreshold:
           type: integer
+        perLanguageAgreementRate:
+          type: number
+        perLanguageAgreement:
+          $ref: "#/components/schemas/PerLanguageAgreementReport"
       required:
         [
           currentConfig,
@@ -6261,6 +6303,8 @@ components:
           suggestions,
           overallHealth,
           minFeedbackThreshold,
+          perLanguageAgreementRate,
+          perLanguageAgreement,
         ]
 
     ShadowDriftRow:

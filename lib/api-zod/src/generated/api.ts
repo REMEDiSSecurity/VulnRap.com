@@ -3079,6 +3079,24 @@ export const GetCalibrationReportResponse = zod.object({
   ),
   overallHealth: zod.enum(["good", "needs-attention", "needs-tuning"]),
   minFeedbackThreshold: zod.number(),
+  perLanguageAgreementRate: zod.number(),
+  perLanguageAgreement: zod.object({
+    englishLegitTier: zod.string(),
+    englishSlopTier: zod.string(),
+    perLanguage: zod.array(
+      zod.object({
+        language: zod.string(),
+        legitTier: zod.string(),
+        slopTier: zod.string(),
+        legitTierDelta: zod.number(),
+        slopTierDelta: zod.number(),
+        legitAgrees: zod.boolean(),
+        slopAgrees: zod.boolean(),
+      }),
+    ),
+    agreementRate: zod.number(),
+    fixtureCount: zod.number(),
+  }),
 });
 
 /**
