@@ -22,6 +22,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 type EngineKey = "linguistic" | "factual" | "template" | "llm";
@@ -519,6 +525,33 @@ function buildDefaultWeights(
   return next;
 }
 
+function DeltaBadge({ delta, className }: { delta: number; className?: string }) {
+  if (delta === 0) return null;
+  const sign = delta > 0 ? "+" : "";
+  const color = delta > 0 ? "text-red-400" : "text-green-400";
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            data-testid="delta-badge"
+            className={cn(
+              "font-mono text-xs font-semibold cursor-default tabular-nums",
+              color,
+              className,
+            )}
+          >
+            {sign}{delta} vs default
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-60 text-center">
+          Difference from baseline: all signals on, engine weights at their defaults
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export default function PlaygroundPage() {
   const [exampleId, setExampleId] = useState<string>(EXAMPLES[0].id);
   const example = useMemo(
@@ -545,9 +578,26 @@ export default function PlaygroundPage() {
     setWeights(buildDefaultWeights(example));
   }
 
-  // Per-engine recompute: average of enabled signals' scores. Engines with
-  // zero enabled signals contribute nothing (and their weight is dropped
-  // from the denominator) so toggling everything off doesn't divide by 0.
+  const { baselineEngineScores, baselineScore } = useMemo(() => {
+    const perEngine: Partial<Record<EngineKey, number>> = {};
+    let weightedSum = 0;
+    let weightTotal = 0;
+    example.engines.forEach((engine) => {
+      const avg =
+        engine.signals.reduce((acc, s) => acc + s.score, 0) /
+        engine.signals.length;
+      perEngine[engine.key] = avg;
+      const w = engine.defaultWeight;
+      weightedSum += avg * w;
+      weightTotal += w;
+    });
+    const final = weightTotal === 0 ? 0 : weightedSum / weightTotal;
+    return {
+      baselineEngineScores: perEngine,
+      baselineScore: Math.round(final),
+    };
+  }, [example]);
+
   const { engineScores, finalScore } = useMemo(() => {
     const perEngine: Partial<Record<EngineKey, number | null>> = {};
     let weightedSum = 0;
@@ -571,6 +621,7 @@ export default function PlaygroundPage() {
   }, [example, enabled, weights]);
 
   const tier = tierFor(finalScore);
+  const overallDelta = finalScore - baselineScore;
 
   return (
     <div className="space-y-6">
@@ -641,6 +692,7 @@ export default function PlaygroundPage() {
                   {finalScore}
                 </span>
                 <span className="text-sm text-muted-foreground">/ 100</span>
+                <DeltaBadge delta={overallDelta} className="text-sm" />
               </div>
             </div>
             <Badge
@@ -674,8 +726,16 @@ export default function PlaygroundPage() {
                   <div className="text-[9px] uppercase tracking-wider font-mono text-muted-foreground/80">
                     {engine.label}
                   </div>
-                  <div className="font-mono text-base font-bold text-foreground mt-0.5 tabular-nums">
-                    {display}
+                  <div className="flex items-baseline gap-1.5">
+                    <div className="font-mono text-base font-bold text-foreground mt-0.5 tabular-nums">
+                      {display}
+                    </div>
+                    {raw != null && baselineEngineScores[key] != null && (
+                      <DeltaBadge
+                        delta={Math.round(raw) - Math.round(baselineEngineScores[key]!)}
+                        className="text-[10px]"
+                      />
+                    )}
                   </div>
                   <div className="text-[10px] text-muted-foreground/70 font-mono mt-0.5">
                     weight {weights[key].toFixed(2)}
