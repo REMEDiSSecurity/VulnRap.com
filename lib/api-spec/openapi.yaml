@@ -1277,6 +1277,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /feedback/calibration/score-stability/flips:
+    get:
+      operationId: getScoreStabilityFlips
+      tags: [feedback]
+      summary: List individual tier flips for a specific day (Task #944)
+      description: |
+        Reviewer-only drilldown listing the individual reports whose tier
+        flipped on a given day, with old/new tier, old/new score, flip
+        direction, and report ID for deep-linking to the report detail
+        view. Backs the "investigate" flow on the score-stability chart.
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+          description: ISO date `YYYY-MM-DD` (UTC) to list flips for.
+      responses:
+        "200":
+          description: Day flip listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreStabilityDayFlips"
+        "400":
+          description: Missing or invalid date parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Reviewer token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /feedback/calibration/score-stability/scheduler-status:
     get:
       operationId: getScoreStabilitySchedulerStatus
@@ -6321,6 +6359,46 @@ components:
               flipRate,
             ]
       required: [generatedAt, lookbackDays, alertThreshold, daily, totals]
+
+    ScoreStabilityFlipDetail:
+      type: object
+      description: |
+        A single report whose tier changed during re-scoring on a given
+        day. Carries the old/new tier and score plus the flip direction
+        so reviewers can assess the regression at a glance before
+        clicking through to the report detail view.
+      properties:
+        reportId:
+          type: integer
+          description: Primary key of the report in `reports`.
+        oldTier:
+          type: string
+        newTier:
+          type: string
+        oldScore:
+          type: integer
+        newScore:
+          type: integer
+        direction:
+          type: string
+          enum: [legit_to_slop, slop_to_legit, tightened, loosened, lateral]
+      required: [reportId, oldTier, newTier, oldScore, newScore, direction]
+
+    ScoreStabilityDayFlips:
+      type: object
+      description: |
+        Listing of individual tier flips for a single UTC day. Returned
+        by the `/score-stability/flips?date=YYYY-MM-DD` drilldown
+        endpoint so reviewers can investigate which reports regressed.
+      properties:
+        date:
+          type: string
+          description: The requested ISO date.
+        flips:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreStabilityFlipDetail"
+      required: [date, flips]
 
     ScoreStabilitySchedulerStatus:
       type: object

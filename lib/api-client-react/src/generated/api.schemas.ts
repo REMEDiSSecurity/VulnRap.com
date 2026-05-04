@@ -2722,6 +2722,46 @@ export interface ScoreStabilitySummary {
   totals: ScoreStabilitySummaryTotals;
 }
 
+export type ScoreStabilityFlipDetailDirection =
+  (typeof ScoreStabilityFlipDetailDirection)[keyof typeof ScoreStabilityFlipDetailDirection];
+
+export const ScoreStabilityFlipDetailDirection = {
+  legit_to_slop: "legit_to_slop",
+  slop_to_legit: "slop_to_legit",
+  tightened: "tightened",
+  loosened: "loosened",
+  lateral: "lateral",
+} as const;
+
+/**
+ * A single report whose tier changed during re-scoring on a given
+day. Carries the old/new tier and score plus the flip direction
+so reviewers can assess the regression at a glance before
+clicking through to the report detail view.
+
+ */
+export interface ScoreStabilityFlipDetail {
+  /** Primary key of the report in `reports`. */
+  reportId: number;
+  oldTier: string;
+  newTier: string;
+  oldScore: number;
+  newScore: number;
+  direction: ScoreStabilityFlipDetailDirection;
+}
+
+/**
+ * Listing of individual tier flips for a single UTC day. Returned
+by the `/score-stability/flips?date=YYYY-MM-DD` drilldown
+endpoint so reviewers can investigate which reports regressed.
+
+ */
+export interface ScoreStabilityDayFlips {
+  /** The requested ISO date. */
+  date: string;
+  flips: ScoreStabilityFlipDetail[];
+}
+
 /**
  * Per-replica heartbeat for the in-process score-stability
 scheduler. Mirrors `AvriDriftSchedulerStatus` shape (booleans /
@@ -4784,6 +4824,14 @@ export type GetShadowDriftParams = {
    * @maximum 500
    */
   limit?: number;
+};
+
+export type GetScoreStabilityFlipsParams = {
+  /**
+   * ISO date `YYYY-MM-DD` (UTC) to list flips for.
+   * @pattern ^\d{4}-\d{2}-\d{2}$
+   */
+  date: string;
 };
 
 export type GetCalibrationAuthBruteForceAlertsParams = {

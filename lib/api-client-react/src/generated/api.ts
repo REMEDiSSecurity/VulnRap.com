@@ -54,6 +54,7 @@ import type {
   GetCohortBaselineParams,
   GetEmbedBadgeSvgParams,
   GetReportFeedParams,
+  GetScoreStabilityFlipsParams,
   GetShadowDriftParams,
   GetTrendsParams,
   HandwavyPhraseBatchRemoveBody,
@@ -104,6 +105,7 @@ import type {
   ReportFeed,
   RoadmapResponse,
   ScoreHistoryResponse,
+  ScoreStabilityDayFlips,
   ScoreStabilitySchedulerStatus,
   ScoreStabilitySummary,
   ScoringConfigResponse,
@@ -3443,6 +3445,117 @@ export function useGetScoreStabilitySummary<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetScoreStabilitySummaryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Reviewer-only drilldown listing the individual reports whose tier
+flipped on a given day, with old/new tier, old/new score, flip
+direction, and report ID for deep-linking to the report detail
+view. Backs the "investigate" flow on the score-stability chart.
+
+ * @summary List individual tier flips for a specific day (Task
+ */
+export const getGetScoreStabilityFlipsUrl = (
+  params: GetScoreStabilityFlipsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/feedback/calibration/score-stability/flips?${stringifiedParams}`
+    : `/api/feedback/calibration/score-stability/flips`;
+};
+
+export const getScoreStabilityFlips = async (
+  params: GetScoreStabilityFlipsParams,
+  options?: RequestInit,
+): Promise<ScoreStabilityDayFlips> => {
+  return customFetch<ScoreStabilityDayFlips>(
+    getGetScoreStabilityFlipsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetScoreStabilityFlipsQueryKey = (
+  params?: GetScoreStabilityFlipsParams,
+) => {
+  return [
+    `/api/feedback/calibration/score-stability/flips`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetScoreStabilityFlipsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getScoreStabilityFlips>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetScoreStabilityFlipsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getScoreStabilityFlips>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetScoreStabilityFlipsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getScoreStabilityFlips>>
+  > = ({ signal }) =>
+    getScoreStabilityFlips(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getScoreStabilityFlips>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetScoreStabilityFlipsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getScoreStabilityFlips>>
+>;
+export type GetScoreStabilityFlipsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List individual tier flips for a specific day (Task
+ */
+
+export function useGetScoreStabilityFlips<
+  TData = Awaited<ReturnType<typeof getScoreStabilityFlips>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetScoreStabilityFlipsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getScoreStabilityFlips>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetScoreStabilityFlipsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

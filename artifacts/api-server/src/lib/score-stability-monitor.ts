@@ -528,6 +528,60 @@ export async function computeScoreStabilitySummary(
   };
 }
 
+export interface FlipDetail {
+  reportId: number;
+  oldTier: string;
+  newTier: string;
+  oldScore: number;
+  newScore: number;
+  direction: FlipDirection;
+}
+
+export interface DayFlipsResult {
+  date: string;
+  flips: FlipDetail[];
+}
+
+export async function listFlipsForDay(
+  date: string,
+): Promise<DayFlipsResult> {
+  const dayStart = new Date(`${date}T00:00:00.000Z`);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      reportId: reportRescoreLogTable.reportId,
+      oldTier: reportRescoreLogTable.oldTier,
+      newTier: reportRescoreLogTable.newTier,
+      oldScore: reportRescoreLogTable.oldScore,
+      newScore: reportRescoreLogTable.newScore,
+    })
+    .from(reportRescoreLogTable)
+    .where(
+      and(
+        gte(reportRescoreLogTable.scoredAt, dayStart),
+        lt(reportRescoreLogTable.scoredAt, dayEnd),
+      ),
+    )
+    .orderBy(desc(reportRescoreLogTable.id));
+
+  const flips: FlipDetail[] = [];
+  for (const row of rows) {
+    const dir = flipDirection(row.oldTier, row.newTier);
+    if (dir === "none") continue;
+    flips.push({
+      reportId: row.reportId,
+      oldTier: row.oldTier,
+      newTier: row.newTier,
+      oldScore: row.oldScore,
+      newScore: row.newScore,
+      direction: dir,
+    });
+  }
+
+  return { date, flips };
+}
+
 function readFlipRateThreshold(fallback: number): number {
   const raw = (process.env.SCORE_STABILITY_FLIP_RATE_THRESHOLD ?? "").trim();
   if (raw.length === 0) return fallback;

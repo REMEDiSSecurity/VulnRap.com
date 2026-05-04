@@ -27,8 +27,11 @@ import {
   getGetAvriDriftRearmHistoryQueryKey,
   useGetScoreStabilitySummary,
   getGetScoreStabilitySummaryQueryKey,
+  useGetScoreStabilityFlips,
+  getGetScoreStabilityFlipsQueryKey,
   type ScoreStabilitySummary,
   type ScoreStabilityDailyBucket,
+  type ScoreStabilityFlipDetail,
   useGetShadowDrift,
   getGetShadowDriftQueryKey,
   type ShadowDriftReport,
@@ -15349,45 +15352,200 @@ function ScoreStabilityDailyTable({
   days: ScoreStabilityDailyBucket[];
   threshold: number;
 }) {
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+
   return (
-    <table
-      className="w-full mt-2 text-[10px] border-collapse"
-      data-testid="score-stability-daily-table"
+    <div className="mt-2" data-testid="score-stability-daily-table">
+      <table className="w-full text-[10px] border-collapse">
+        <thead>
+          <tr className="text-muted-foreground/70 uppercase tracking-wider">
+            <th className="text-left font-normal py-1">Day</th>
+            <th className="text-right font-normal py-1">Total</th>
+            <th className="text-right font-normal py-1">Flips</th>
+            <th className="text-right font-normal py-1">L→S</th>
+            <th className="text-right font-normal py-1">S→L</th>
+            <th className="text-right font-normal py-1">Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...days].reverse().map((d) => {
+            const exceeded = d.total > 0 && d.flipRate > threshold;
+            const isExpanded = expandedDate === d.date;
+            return (
+              <tr
+                key={d.date}
+                className={
+                  "border-t border-border/20 " +
+                  (exceeded ? "text-red-400/90" : "text-foreground/80")
+                }
+              >
+                <td className="py-1">{d.date}</td>
+                <td className="text-right tabular-nums">{d.total}</td>
+                <td className="text-right tabular-nums">
+                  {d.flips > 0 ? (
+                    <button
+                      type="button"
+                      className="underline decoration-dotted underline-offset-2 hover:text-primary transition-colors cursor-pointer"
+                      onClick={() =>
+                        setExpandedDate(isExpanded ? null : d.date)
+                      }
+                      aria-expanded={isExpanded}
+                      data-testid={`flip-drilldown-toggle-${d.date}`}
+                    >
+                      {d.flips}
+                    </button>
+                  ) : (
+                    d.flips
+                  )}
+                </td>
+                <td className="text-right tabular-nums">{d.legitToSlop}</td>
+                <td className="text-right tabular-nums">{d.slopToLegit}</td>
+                <td className="text-right tabular-nums">
+                  {(d.flipRate * 100).toFixed(2)}%
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {expandedDate && (
+        <ScoreStabilityFlipDrilldown
+          date={expandedDate}
+          onClose={() => setExpandedDate(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ScoreStabilityFlipDrilldown({
+  date,
+  onClose,
+}: {
+  date: string;
+  onClose: () => void;
+}) {
+  const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const params = { date };
+  const queryKey = getGetScoreStabilityFlipsQueryKey(params);
+  const { data, isLoading, isError } = useGetScoreStabilityFlips(params, {
+    query: { queryKey, retry: 1 },
+  });
+
+  const directionLabel = (dir: string) => {
+    switch (dir) {
+      case "legit_to_slop":
+        return "legit → slop";
+      case "slop_to_legit":
+        return "slop → legit";
+      case "tightened":
+        return "tightened";
+      case "loosened":
+        return "loosened";
+      case "lateral":
+        return "lateral";
+      default:
+        return dir;
+    }
+  };
+
+  const directionColor = (dir: string) => {
+    switch (dir) {
+      case "legit_to_slop":
+        return "text-red-400";
+      case "slop_to_legit":
+        return "text-orange-400";
+      case "tightened":
+        return "text-yellow-400";
+      case "loosened":
+        return "text-green-400";
+      default:
+        return "text-muted-foreground";
+    }
+  };
+
+  return (
+    <div
+      className="mt-2 rounded-md border border-border/40 bg-muted/10 p-3"
+      data-testid="flip-drilldown-panel"
     >
-      <thead>
-        <tr className="text-muted-foreground/70 uppercase tracking-wider">
-          <th className="text-left font-normal py-1">Day</th>
-          <th className="text-right font-normal py-1">Total</th>
-          <th className="text-right font-normal py-1">Flips</th>
-          <th className="text-right font-normal py-1">L→S</th>
-          <th className="text-right font-normal py-1">S→L</th>
-          <th className="text-right font-normal py-1">Rate</th>
-        </tr>
-      </thead>
-      <tbody>
-        {[...days].reverse().map((d) => {
-          const exceeded = d.total > 0 && d.flipRate > threshold;
-          return (
-            <tr
-              key={d.date}
-              className={
-                "border-t border-border/20 " +
-                (exceeded ? "text-red-400/90" : "text-foreground/80")
-              }
-            >
-              <td className="py-1">{d.date}</td>
-              <td className="text-right tabular-nums">{d.total}</td>
-              <td className="text-right tabular-nums">{d.flips}</td>
-              <td className="text-right tabular-nums">{d.legitToSlop}</td>
-              <td className="text-right tabular-nums">{d.slopToLegit}</td>
-              <td className="text-right tabular-nums">
-                {(d.flipRate * 100).toFixed(2)}%
-              </td>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[11px] font-medium text-foreground/90">
+          Tier flips on {date}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Close drilldown"
+        >
+          <XIcon className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {isLoading && (
+        <Skeleton className="h-12 rounded-md" />
+      )}
+      {isError && (
+        <div className="text-[11px] text-red-400/80 italic">
+          Could not load flip details.
+        </div>
+      )}
+      {data && data.flips.length === 0 && (
+        <div className="text-[11px] text-muted-foreground/60 italic">
+          No tier flips recorded for this day.
+        </div>
+      )}
+      {data && data.flips.length > 0 && (
+        <table className="w-full text-[10px] border-collapse">
+          <thead>
+            <tr className="text-muted-foreground/70 uppercase tracking-wider">
+              <th className="text-left font-normal py-1">Report</th>
+              <th className="text-left font-normal py-1">Old tier</th>
+              <th className="text-left font-normal py-1">New tier</th>
+              <th className="text-right font-normal py-1">Δ Score</th>
+              <th className="text-left font-normal py-1">Direction</th>
             </tr>
-          );
-        })}
-      </tbody>
-    </table>
+          </thead>
+          <tbody>
+            {data.flips.map((f: ScoreStabilityFlipDetail, idx: number) => (
+              <tr
+                key={`${f.reportId}-${idx}`}
+                className="border-t border-border/20 text-foreground/80"
+              >
+                <td className="py-1">
+                  <a
+                    href={`${baseUrl}/verify/${encodeURIComponent(f.reportId)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2 hover:text-primary/80 inline-flex items-center gap-1"
+                    data-testid={`flip-investigate-link-${f.reportId}`}
+                  >
+                    #{f.reportId}
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                </td>
+                <td className="py-1">
+                  <Badge variant="outline" className="text-[9px]">
+                    {f.oldTier}
+                  </Badge>
+                </td>
+                <td className="py-1">
+                  <Badge variant="outline" className="text-[9px]">
+                    {f.newTier}
+                  </Badge>
+                </td>
+                <td className="text-right tabular-nums py-1">
+                  {f.oldScore} → {f.newScore}
+                </td>
+                <td className={cn("py-1", directionColor(f.direction))}>
+                  {directionLabel(f.direction)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 

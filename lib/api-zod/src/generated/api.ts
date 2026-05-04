@@ -3684,6 +3684,55 @@ export const GetScoreStabilitySummaryResponse = zod
   );
 
 /**
+ * Reviewer-only drilldown listing the individual reports whose tier
+flipped on a given day, with old/new tier, old/new score, flip
+direction, and report ID for deep-linking to the report detail
+view. Backs the "investigate" flow on the score-stability chart.
+
+ * @summary List individual tier flips for a specific day (Task
+ */
+export const getScoreStabilityFlipsQueryDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
+export const GetScoreStabilityFlipsQueryParams = zod.object({
+  date: zod.coerce
+    .string()
+    .regex(getScoreStabilityFlipsQueryDateRegExp)
+    .describe("ISO date `YYYY-MM-DD` (UTC) to list flips for."),
+});
+
+export const GetScoreStabilityFlipsResponse = zod
+  .object({
+    date: zod.string().describe("The requested ISO date."),
+    flips: zod.array(
+      zod
+        .object({
+          reportId: zod
+            .number()
+            .describe("Primary key of the report in `reports`."),
+          oldTier: zod.string(),
+          newTier: zod.string(),
+          oldScore: zod.number(),
+          newScore: zod.number(),
+          direction: zod.enum([
+            "legit_to_slop",
+            "slop_to_legit",
+            "tightened",
+            "loosened",
+            "lateral",
+          ]),
+        })
+        .describe(
+          "A single report whose tier changed during re-scoring on a given\nday. Carries the old\/new tier and score plus the flip direction\nso reviewers can assess the regression at a glance before\nclicking through to the report detail view.\n",
+        ),
+    ),
+  })
+  .describe(
+    "Listing of individual tier flips for a single UTC day. Returned\nby the `\/score-stability\/flips?date=YYYY-MM-DD` drilldown\nendpoint so reviewers can investigate which reports regressed.\n",
+  );
+
+/**
  * Operator-visible status of the in-process score-stability
 scheduler for the responding replica. Mirrors the AVRI drift /
 rescore-backfill scheduler-status endpoints: timestamps +

@@ -23,6 +23,7 @@ import { getScoreStabilitySchedulerStatus } from "../lib/score-stability-schedul
 import {
   computeScoreStabilitySummary,
   DEFAULT_LOOKBACK_DAYS,
+  listFlipsForDay,
 } from "../lib/score-stability-monitor";
 import {
   getHandwavyPhrases,
@@ -1434,6 +1435,34 @@ router.get(
       res
         .status(500)
         .json({ error: "Failed to compute score stability summary." });
+    }
+  },
+);
+
+router.get(
+  "/feedback/calibration/score-stability/flips",
+  requireCalibrationAuthStrict,
+  async (req, res) => {
+    try {
+      const date = req.query.date;
+      if (
+        typeof date !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+        isNaN(new Date(`${date}T00:00:00.000Z`).getTime())
+      ) {
+        res.status(400).json({
+          error:
+            "Missing or invalid `date` query parameter. Expected YYYY-MM-DD.",
+        });
+        return;
+      }
+      const result = await listFlipsForDay(date);
+      res.json(result);
+    } catch (err) {
+      req.log?.error(err, "Failed to list score stability flips for day");
+      res
+        .status(500)
+        .json({ error: "Failed to list score stability flips." });
     }
   },
 );
