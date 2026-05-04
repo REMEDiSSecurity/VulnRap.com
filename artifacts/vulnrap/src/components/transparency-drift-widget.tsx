@@ -40,6 +40,53 @@ function formatWeek(weekStart: string): string {
   });
 }
 
+export interface TrendHintInput {
+  weeks: Array<{ spread: number | null }>;
+}
+
+export function computeTrendHint(input: TrendHintInput): string {
+  const spreads = input.weeks
+    .map((w) => w.spread)
+    .filter((s): s is number => s != null);
+
+  if (spreads.length === 0) {
+    return "Not enough data to determine a trend yet.";
+  }
+  if (spreads.length === 1) {
+    return "Only one week of data so far — trend will appear once more weeks come in.";
+  }
+
+  const recent = spreads.slice(-4);
+
+  const deltas = recent.slice(1).map((v, i) => v - recent[i]);
+
+  const steadyThreshold = 1.5;
+  const allSteady = deltas.every((d) => Math.abs(d) <= steadyThreshold);
+
+  if (allSteady) {
+    const streakLen = recent.length;
+    return `The gap has held steady for ${streakLen} week${streakLen === 1 ? "" : "s"}.`;
+  }
+
+  const avgDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+
+  if (avgDelta > 0) {
+    if (avgDelta > 3) {
+      return "Spread widened noticeably over recent weeks — the engine is separating tiers more strongly.";
+    }
+    return "Spread has been gradually widening — the engine is pulling tiers further apart.";
+  }
+
+  if (avgDelta < 0) {
+    if (avgDelta < -3) {
+      return "Spread narrowed noticeably over recent weeks — the tiers are closer together than before.";
+    }
+    return "Spread narrowed slightly over recent weeks.";
+  }
+
+  return "The gap has held steady over recent weeks.";
+}
+
 function DeltaBadge({ delta }: { delta: number | null }) {
   if (delta == null) {
     return (
@@ -167,14 +214,28 @@ export function TransparencyDriftWidget() {
           </div>
         ) : !hasData ? (
           <div
-            className="h-40 flex items-center justify-center text-center text-muted-foreground text-sm px-4"
+            className="h-40 flex flex-col items-center justify-center text-center text-muted-foreground text-sm px-4 gap-2"
             data-testid="empty-drift-widget"
           >
-            This week's drift aggregate hasn't been computed yet — check back
-            once enough reports have come in to compare cohorts.
+            <span>
+              This week's drift aggregate hasn't been computed yet — check back
+              once enough reports have come in to compare cohorts.
+            </span>
+            <p
+              className="text-sm text-muted-foreground italic"
+              data-testid="text-drift-trend-hint"
+            >
+              {computeTrendHint({ weeks: data?.weeks ?? [] })}
+            </p>
           </div>
         ) : (
           <div className="space-y-4" data-testid="populated-drift-widget">
+            <p
+              className="text-sm text-muted-foreground italic"
+              data-testid="text-drift-trend-hint"
+            >
+              {computeTrendHint({ weeks: data?.weeks ?? [] })}
+            </p>
             <div className="flex items-baseline gap-6 flex-wrap">
               <div>
                 <div className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider">

@@ -6,7 +6,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TransparencyDriftWidget } from "./transparency-drift-widget";
+import {
+  TransparencyDriftWidget,
+  computeTrendHint,
+} from "./transparency-drift-widget";
 
 const EMPTY_SUMMARY = {
   generatedAt: "2026-04-30T12:00:00.000Z",
@@ -77,6 +80,12 @@ describe("TransparencyDriftWidget", () => {
     expect(empty).toBeInTheDocument();
     expect(empty.textContent).toMatch(/hasn't been computed yet/i);
 
+    const hint = screen.getByTestId("text-drift-trend-hint");
+    expect(hint).toBeInTheDocument();
+    expect(hint.textContent).toBe(
+      "Not enough data to determine a trend yet.",
+    );
+
     expect(
       screen.queryByTestId("populated-drift-widget"),
     ).not.toBeInTheDocument();
@@ -120,5 +129,111 @@ describe("TransparencyDriftWidget", () => {
     ).not.toBeInTheDocument();
     // Plain-English caption (no jargon) must be present.
     expect(screen.getByText(/strongest reports/i)).toBeInTheDocument();
+
+    // Trend hint should render in the populated state.
+    const hint = screen.getByTestId("text-drift-trend-hint");
+    expect(hint).toBeInTheDocument();
+    expect(hint.textContent!.length).toBeGreaterThan(0);
+  });
+});
+
+describe("computeTrendHint", () => {
+  it("returns a neutral message when no weeks are available", () => {
+    const hint = computeTrendHint({ weeks: [] });
+    expect(hint).toBe("Not enough data to determine a trend yet.");
+  });
+
+  it("returns a single-week message when only 1 data point exists", () => {
+    const hint = computeTrendHint({ weeks: [{ spread: 50 }] });
+    expect(hint).toBe(
+      "Only one week of data so far — trend will appear once more weeks come in.",
+    );
+  });
+
+  it('returns a "steady" hint when spreads are flat', () => {
+    const hint = computeTrendHint({
+      weeks: [
+        { spread: 50 },
+        { spread: 51 },
+        { spread: 50 },
+        { spread: 50.5 },
+      ],
+    });
+    expect(hint).toBe("The gap has held steady for 4 weeks.");
+  });
+
+  it('returns a "widening" hint when spreads trend upward', () => {
+    const hint = computeTrendHint({
+      weeks: [
+        { spread: 40 },
+        { spread: 44 },
+        { spread: 48 },
+        { spread: 52 },
+      ],
+    });
+    expect(hint).toBe(
+      "Spread widened noticeably over recent weeks — the engine is separating tiers more strongly.",
+    );
+  });
+
+  it('returns a "narrowing noticeably" hint when spreads drop sharply', () => {
+    const hint = computeTrendHint({
+      weeks: [
+        { spread: 55 },
+        { spread: 50 },
+        { spread: 45 },
+        { spread: 40 },
+      ],
+    });
+    expect(hint).toBe(
+      "Spread narrowed noticeably over recent weeks — the tiers are closer together than before.",
+    );
+  });
+
+  it('returns a "narrowing slightly" hint when spreads trend down moderately', () => {
+    const hint = computeTrendHint({
+      weeks: [
+        { spread: 50 },
+        { spread: 49 },
+        { spread: 47 },
+        { spread: 46 },
+      ],
+    });
+    expect(hint).toBe("Spread narrowed slightly over recent weeks.");
+  });
+
+  it('returns a "gradually widening" hint when spreads trend up moderately', () => {
+    const hint = computeTrendHint({
+      weeks: [
+        { spread: 46 },
+        { spread: 47 },
+        { spread: 49 },
+        { spread: 50 },
+      ],
+    });
+    expect(hint).toBe(
+      "Spread has been gradually widening — the engine is pulling tiers further apart.",
+    );
+  });
+
+  it("skips null spreads when computing the trend", () => {
+    const hint = computeTrendHint({
+      weeks: [
+        { spread: 50 },
+        { spread: null },
+        { spread: 51 },
+        { spread: 50 },
+      ],
+    });
+    expect(hint).toBe("The gap has held steady for 3 weeks.");
+  });
+
+  it("handles exactly 2 weeks (widening)", () => {
+    const hint = computeTrendHint({
+      weeks: [{ spread: 40 }, { spread: 50 }],
+    });
+    expect(hint).toBe(
+      "Spread widened noticeably over recent weeks — the engine is separating tiers more strongly.",
+    );
   });
 });
