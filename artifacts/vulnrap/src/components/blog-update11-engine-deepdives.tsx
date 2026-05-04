@@ -29,7 +29,7 @@ export function BlogUpdateEngineDeepDives() {
         </h2>
         <p className="text-xs text-muted-foreground/80">
           Update #11 in the VulnRap Sprint Series &mdash; Previous:{" "}
-          <a href="#byo-fixtures" className="text-primary hover:underline">Update #10</a>
+          <Link to="/blog/byo-fixtures" className="text-primary hover:underline">Update #10</Link>
         </p>
       </div>
 

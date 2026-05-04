@@ -1,4 +1,5 @@
 import { Calendar } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import heroImg from "@/assets/blog-avri-hero.png";
@@ -65,9 +66,9 @@ export function BlogAvriSprint11() {
         </h2>
         <p className="text-xs text-muted-foreground/80">
           Update #6 in the VulnRap Sprint Series — Previous:{" "}
-          <a href="#field-test-v350" className="text-primary hover:underline">
+          <Link to="/blog/field-test-v350" className="text-primary hover:underline">
             v3.5.0 Field Test
-          </a>
+          </Link>
         </p>
       </div>
 

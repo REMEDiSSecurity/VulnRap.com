@@ -40,9 +40,9 @@ export function BlogFieldTestV350() {
         </h2>
         <p className="text-xs text-muted-foreground/80">
           Update #5 in the VulnRap Sprint Series — Previous:{" "}
-          <a href="#zero-detection" className="text-primary hover:underline">
+          <Link to="/blog/zero-detection" className="text-primary hover:underline">
             460K Reports and a 0% Detection Rate
-          </a>
+          </Link>
         </p>
       </div>
 
@@ -84,9 +84,9 @@ export function BlogFieldTestV350() {
           The old VulnRap ran a single scoring pipeline: linguistic analysis,
           template detection, spectral features, and an LLM pass, all blended
           into one number. In{" "}
-          <a href="#zero-detection" className="text-primary hover:underline">
+          <Link to="/blog/zero-detection" className="text-primary hover:underline">
             Update #4
-          </a>
+          </Link>
           , we showed why that couldn't work &mdash; every curl report scored
           between 8 and 18 regardless of whether it was a confirmed CVE or
           confirmed AI slop.

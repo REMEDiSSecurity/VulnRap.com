@@ -1,4 +1,5 @@
 import { Calendar } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
@@ -37,9 +38,9 @@ export function BlogUpdate10ByoFixtures() {
         </h2>
         <p className="text-xs text-muted-foreground/80">
           Update #10 in the VulnRap Sprint Series &mdash; Previous:{" "}
-          <a href="#show-our-work" className="text-primary hover:underline">
+          <Link to="/blog/show-our-work" className="text-primary hover:underline">
             Showing Our Work
-          </a>
+          </Link>
         </p>
       </div>
 

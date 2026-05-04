@@ -43,6 +43,7 @@ const Security = lazyRetry(() => import("@/pages/security"));
 const UseCases = lazyRetry(() => import("@/pages/use-cases"));
 const Terms = lazyRetry(() => import("@/pages/terms"));
 const Blog = lazyRetry(() => import("@/pages/blog"));
+const BlogPost = lazyRetry(() => import("@/pages/blog-post"));
 const Changelog = lazyRetry(() => import("@/pages/changelog"));
 const History = lazyRetry(() => import("@/pages/history"));
 const Compare = lazyRetry(() => import("@/pages/compare"));
@@ -119,6 +120,7 @@ function AppRoutes() {
             <Route path="/use-cases" element={<UseCases />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/blog" element={<Blog />} />
+            <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/changelog" element={<Changelog />} />
             <Route path="/history" element={<History />} />

@@ -3,6 +3,24 @@
   "updatedAt": "2026-05-03",
   "posts": [
     {
+      "id": "engine-deep-dives",
+      "title": "Under the Hood: Introducing the VulnRap Engine Deep-Dive Series",
+      "date": "2026-05-10",
+      "summary": "Update #11 — A guided tour through each scoring engine: what it measures, how it votes, and where the boundaries are."
+    },
+    {
+      "id": "byo-fixtures",
+      "title": "Bring Your Own Fixtures: Validating VulnRap Against Your Corpus",
+      "date": "2026-05-08",
+      "summary": "Update #10 — Run VulnRap's scoring pipeline against your own labelled reports and compare precision/recall on your data."
+    },
+    {
+      "id": "show-our-work",
+      "title": "Showing Our Work: Per-Signal Precision/Recall in the UI",
+      "date": "2026-05-06",
+      "summary": "Update #9 — Every signal now surfaces its own precision and recall numbers so you can see exactly which detectors pull their weight."
+    },
+    {
       "id": "update13-mcp-launch",
       "title": "VulnRap Now Speaks MCP: Triage From Inside Your Agent",
       "date": "2026-05-15",

@@ -98,7 +98,7 @@ export function buildBlogAtomFeed(
 
   const entries = sorted
     .map((post) => {
-      const postUrl = `${blogUrl}#${post.id}`;
+      const postUrl = `${blogUrl}/${post.id}`;
       const isoDate = toIsoDate(post.date);
       // Tag URI per RFC 4151 — stable, opaque, does not require the URL
       // to resolve. Uses the host of the configured public URL.

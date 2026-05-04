@@ -1,4 +1,5 @@
 import { Calendar } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
@@ -38,9 +39,9 @@ export function BlogSubstanceGate() {
         </h2>
         <p className="text-xs text-muted-foreground/80">
           Update #7 in the VulnRap Sprint Series &mdash; Previous:{" "}
-          <a href="#avri-sprint11" className="text-primary hover:underline">
+          <Link to="/blog/avri-sprint11" className="text-primary hover:underline">
             AVRI Sprint 11
-          </a>
+          </Link>
         </p>
       </div>
 

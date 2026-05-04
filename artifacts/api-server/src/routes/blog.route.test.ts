@@ -62,12 +62,12 @@ describe("GET /blog/feed.xml", () => {
     expect((res.body.match(/<summary>/g) || []).length).toBe(entryCount);
   });
 
-  it("links each entry to /blog#<id> on the public site", async () => {
+  it("links each entry to /blog/<id> on the public site", async () => {
     const res = await fetchText("/blog/feed.xml");
     expect(res.body).toMatch(
-      /href="https:\/\/vulnrap\.com\/blog#update13-mcp-launch"/,
+      /href="https:\/\/vulnrap\.com\/blog\/update13-mcp-launch"/,
     );
-    expect(res.body).toMatch(/href="https:\/\/vulnrap\.com\/blog#first-post"/);
+    expect(res.body).toMatch(/href="https:\/\/vulnrap\.com\/blog\/first-post"/);
   });
 
   it("escapes XML-special characters in titles and summaries", () => {

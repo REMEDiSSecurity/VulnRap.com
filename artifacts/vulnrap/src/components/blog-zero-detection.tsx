@@ -1,4 +1,5 @@
 import { Calendar } from "lucide-react";
+import { Link } from "react-router-dom";
 import heroSrc from "@assets/generated_images/blog-zero-detection-hero.png";
 import scoreDistributionSrc from "@assets/blog_chart_score_distribution_1776565915390.png";
 import specVsRealitySrc from "@assets/blog_chart_spec_vs_reality_1776565915390.png";
@@ -146,20 +147,20 @@ export function BlogZeroDetection() {
         </p>
         <p className="text-xs text-muted-foreground/80">
           Update #4 in the VulnRap Sprint Series — Previous:{" "}
-          <a href="#building-vulnrap" className="text-primary hover:underline">
+          <Link to="/blog/building-vulnrap" className="text-primary hover:underline">
             Building VulnRap
-          </a>
+          </Link>
           {" · "}
-          <a
-            href="#grading-ai-with-ai"
+          <Link
+            to="/blog/grading-ai-with-ai"
             className="text-primary hover:underline"
           >
             Grading AI With AI
-          </a>
+          </Link>
           {" · "}
-          <a href="#the-data-is-there" className="text-primary hover:underline">
+          <Link to="/blog/the-data-is-there" className="text-primary hover:underline">
             The Data Is There, the Score Isn't Listening
-          </a>
+          </Link>
         </p>
       </div>
 
@@ -222,9 +223,9 @@ export function BlogZeroDetection() {
 
         <P>
           We predicted this ceiling mathematically in{" "}
-          <a href="#the-data-is-there" className="text-primary hover:underline">
+          <Link to="/blog/the-data-is-there" className="text-primary hover:underline">
             Update #3
-          </a>
+          </Link>
           . The scoring formula is built from linguistic analysis (40%),
           template detection (35%), and spectral analysis (25%). Substance
           signals &mdash; fabricated functions, wrong PoC targets &mdash; are

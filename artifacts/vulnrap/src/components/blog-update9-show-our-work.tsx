@@ -38,9 +38,9 @@ export function BlogUpdate9ShowOurWork() {
         </h2>
         <p className="text-xs text-muted-foreground/80">
           Update #9 in the VulnRap Sprint Series &mdash; Previous:{" "}
-          <a href="#sprint14-rigor" className="text-primary hover:underline">
+          <Link to="/blog/sprint14-rigor" className="text-primary hover:underline">
             Three Ways Slop Hid This Sprint
-          </a>
+          </Link>
         </p>
       </div>
 

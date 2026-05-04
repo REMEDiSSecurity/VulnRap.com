@@ -11,25 +11,157 @@ import {
 } from "lucide-react";
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import logoSrc from "@/assets/logo.png";
 import firstPostHeroImg from "@/assets/blog-first-post-hero.png";
-import { BlogBuildingVulnrap } from "@/components/blog-building-vulnrap";
-import { BlogGradingAi } from "@/components/blog-grading-ai";
-import { BlogDataIsThere } from "@/components/blog-data-is-there";
-import { BlogZeroDetection } from "@/components/blog-zero-detection";
-import { BlogFieldTestV350 } from "@/components/blog-field-test-v350";
-import { BlogAvriSprint11 } from "@/components/blog-avri-sprint11";
-import { BlogSubstanceGate } from "@/components/blog-substance-gate";
-import { BlogUpdateEngineDeepDives } from "@/components/blog-update11-engine-deepdives";
-import { BlogSprint14Rigor } from "@/components/blog-sprint14-rigor";
-import { BlogUpdate9ShowOurWork } from "@/components/blog-update9-show-our-work";
-import { BlogUpdate10ByoFixtures } from "@/components/blog-update10-byo-fixtures";
-import { BlogUpdate13McpLaunch } from "@/components/blog-update13-mcp-launch";
 
-function FirstPost() {
+interface BlogIndexEntry {
+  slug: string;
+  title: string;
+  date: string;
+  summary: string;
+  badge?: string;
+  badgeClass?: string;
+}
+
+const posts: BlogIndexEntry[] = [
+  {
+    slug: "update13-mcp-launch",
+    title: "VulnRap Now Speaks MCP: Triage From Inside Your Agent",
+    date: "2026-05-15",
+    summary:
+      "Update #13 — VulnRap exposes its scoring, similarity, and diagnostics tooling over the Model Context Protocol so agents like Claude Desktop can triage reports without leaving the chat.",
+    badge: "Update #13",
+    badgeClass: "border-emerald-500/30 text-emerald-300",
+  },
+  {
+    slug: "engine-deep-dives",
+    title: "Under the Hood: Introducing the VulnRap Engine Deep-Dive Series",
+    date: "2026-05-10",
+    summary:
+      "Update #11 — A guided tour through each scoring engine: what it measures, how it votes, and where the boundaries are.",
+    badge: "Update #11",
+    badgeClass: "border-amber-500/30 text-amber-300",
+  },
+  {
+    slug: "byo-fixtures",
+    title: "Bring Your Own Fixtures: Validating VulnRap Against Your Corpus",
+    date: "2026-05-08",
+    summary:
+      "Update #10 — Run VulnRap's scoring pipeline against your own labelled reports and compare precision/recall on your data.",
+    badge: "Update #10",
+    badgeClass: "border-violet-500/30 text-violet-300",
+  },
+  {
+    slug: "show-our-work",
+    title: "Showing Our Work: Per-Signal Precision/Recall in the UI",
+    date: "2026-05-06",
+    summary:
+      "Update #9 — Every signal now surfaces its own precision and recall numbers so you can see exactly which detectors pull their weight.",
+    badge: "Update #9",
+    badgeClass: "border-violet-500/30 text-violet-300",
+  },
+  {
+    slug: "sprint14-rigor",
+    title: "Three Ways Slop Hid This Sprint (And How the Audit Caught Them)",
+    date: "2026-05-02",
+    summary:
+      "Sprint 14 — Three classes of slop slipped past the scorer this sprint. Here is how the disagreement-floor audit, response-body strip-and-retest, and ARM64 register-dump detector pulled them back into the red zone.",
+    badge: "Sprint 14",
+    badgeClass: "border-sky-500/30 text-sky-300",
+  },
+  {
+    slug: "substance-gate-sprint12",
+    title:
+      "Closing the Slop Gap: Engine 3 Now Cross-Checks Engine 2 Before It Votes",
+    date: "2026-04-25",
+    summary:
+      "Sprint 12 — The substance LLM now refuses to outvote the heuristic on evidence-free reports.",
+    badge: "Sprint 12",
+    badgeClass: "border-sky-500/30 text-sky-300",
+  },
+  {
+    slug: "avri-sprint11",
+    title:
+      "AVRI: One Rubric Wasn't Enough — Why v3.7.0 Scores Memory Bugs and XSS Slop on Different Yardsticks",
+    date: "2026-04-18",
+    summary:
+      "Sprint 11 — The Adversarial Vulnerability Report Index splits scoring by family so a memory-corruption report and an XSS report no longer share the same gold-signal yardstick.",
+    badge: "Sprint 11",
+    badgeClass: "border-sky-500/30 text-sky-300",
+  },
+  {
+    slug: "field-test-v350",
+    title:
+      "v3.5.0 Field Test: Three Engines, Seven Reports, and a Ceiling We Didn't Expect",
+    date: "2026-04-11",
+    summary:
+      "Field test of v3.5.0 across seven real-world reports surfaced a scoring ceiling we did not predict. What the three engines agreed on, where they disagreed, and what the next sprint changes.",
+    badge: "Field Test",
+    badgeClass: "border-orange-500/30 text-orange-300",
+  },
+  {
+    slug: "zero-detection",
+    title: "460K Vulnerability Reports, 56 Sources, and a 0% Detection Rate",
+    date: "2026-04-04",
+    summary:
+      "The week we built the most diverse vulnerability report dataset we could find, ran our scoring system against it, and watched it score AI slop and real CVEs identically.",
+    badge: "Deep Dive",
+    badgeClass: "border-rose-500/30 text-rose-300",
+  },
+  {
+    slug: "the-data-is-there",
+    title: "The Data Is There, the Score Isn't Listening",
+    date: "2026-03-28",
+    summary:
+      "Sprint 8 results: the pipeline finally works, substance detection is live, and the scoring formula mathematically cannot use it.",
+    badge: "Sprint 8",
+    badgeClass: "border-sky-500/30 text-sky-300",
+  },
+  {
+    slug: "grading-ai-with-ai",
+    title:
+      "Grading AI with AI: What We Learned When Our Detection Model Met the Real World",
+    date: "2026-03-21",
+    summary:
+      "Six development sprints, a 20% real-world detection rate, and the fundamental rethinking that led us from style detection to substance verification.",
+    badge: "Deep Dive",
+    badgeClass: "border-rose-500/30 text-rose-300",
+  },
+  {
+    slug: "building-vulnrap",
+    title:
+      "Building VulnRap: How We're Making Vulnerability Report Validation Actually Work for PSIRT Teams",
+    date: "2026-03-14",
+    summary:
+      "A detailed walkthrough of four development sprints, what we built, what we learned, what works, and what's coming next.",
+    badge: "Deep Dive",
+    badgeClass: "border-rose-500/30 text-rose-300",
+  },
+  {
+    slug: "first-post",
+    title: "We Built the Tool We Wished Existed",
+    date: "2026-03-07",
+    summary:
+      "Why we created VulnRap, how it helps with triage, and why you should feel comfortable using it.",
+    badge: "Launch",
+    badgeClass: "border-primary/30 text-primary",
+  },
+];
+
+function formatDate(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+export function FirstPost() {
   return (
     <article className="space-y-8">
       <div className="space-y-3">
@@ -309,10 +441,6 @@ function FirstPost() {
 }
 
 export default function Blog() {
-  // Task #712 — auto-discovery <link> for the Atom feed at /blog/feed.xml.
-  // Mutates document.head directly (no react-helmet) to match the pattern
-  // used by results.tsx for OG tags. Cleans up on unmount so other pages
-  // do not advertise a feed they do not own.
   useEffect(() => {
     const selector =
       'link[rel="alternate"][type="application/atom+xml"][data-blog-feed="1"]';
@@ -354,83 +482,41 @@ export default function Blog() {
         </p>
       </div>
 
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogUpdate13McpLaunch />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogUpdateEngineDeepDives />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogUpdate10ByoFixtures />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogUpdate9ShowOurWork />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogSprint14Rigor />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogSubstanceGate />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogAvriSprint11 />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogFieldTestV350 />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogZeroDetection />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogDataIsThere />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogGradingAi />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <BlogBuildingVulnrap />
-        </CardContent>
-      </Card>
-
-      <Card className="glass-card rounded-xl">
-        <CardContent className="p-8">
-          <FirstPost />
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        {posts.map((post) => (
+          <Link key={post.slug} to={`/blog/${post.slug}`} className="block group">
+            <Card className="glass-card rounded-xl transition-colors group-hover:border-primary/40">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-2 min-w-0">
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                      {post.badge && (
+                        <Badge
+                          variant="outline"
+                          className={`${post.badgeClass} text-[10px]`}
+                        >
+                          {post.badge}
+                        </Badge>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {formatDate(post.date)}
+                      </span>
+                    </div>
+                    <h2 className="text-lg font-bold tracking-tight group-hover:text-primary transition-colors">
+                      {post.title}
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
+                      {post.summary}
+                    </p>
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0 mt-6" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
 
       <div className="text-center text-xs text-muted-foreground/50 pb-4">
         <p>
