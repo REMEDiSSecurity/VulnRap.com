@@ -123,7 +123,7 @@ import {
   type TriageAssistantResult,
 } from "../lib/triage-assistant";
 import { deriveFabricatedEvidenceFlags } from "../lib/fabricated-evidence-flags";
-import { getCurrentEngineVersions } from "../lib/engine-versions";
+import { getCurrentEngineVersions, formatEngineVersionsLabel } from "../lib/engine-versions";
 import { deriveInferredCwe } from "../lib/inferred-cwe";
 import type { VerificationMode } from "../lib/engines/avri/families";
 
@@ -2999,6 +2999,7 @@ router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
     newCompositeScore: number;
     newCompositeLabel: string;
     newCorrelationId: string;
+    scoringEngineVersion?: string;
   };
 
   const stored = (report.vulnrapEngineResults ?? {}) as {
@@ -3022,6 +3023,7 @@ router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
     correlationId: string | null;
     source: "original" | "backfill-rescore";
     mode: "original" | "engine" | "reconstruction";
+    scoringEngineVersion?: string;
   };
 
   const raw: RawEntry[] = [];
@@ -3047,6 +3049,7 @@ router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
           correlationId: entry.newCorrelationId,
           source: "backfill-rescore",
           mode: entry.mode,
+          scoringEngineVersion: entry.scoringEngineVersion,
         });
       }
     } else {
@@ -3069,6 +3072,9 @@ router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
 
   const currentEngines = Array.isArray(stored.engines) ? stored.engines : [];
 
+  // Batch-fetch analysis traces for all correlation ids so we can resolve
+  // both per-engine sub-scores (Task #950) and scoringEngineVersion
+  // (Task #949) from the trace JSONB for every timeline entry.
   const correlationIds = raw
     .map((e) => e.correlationId)
     .filter((id): id is string => id != null);
@@ -3118,11 +3124,24 @@ router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
       }
     }
 
-    // Code version is intentionally null until a real scoring engine version
-    // is persisted on each trace / rescore entry (see follow-up task #949).
-    // Surfacing a heuristic flag-derived label here would create the false
-    // impression of version provenance.
-    const codeVersion: string | null = null;
+    // Resolve scoring engine version. Priority:
+    // 1. Current entry: report.engineVersions (authoritative, persisted at write time)
+    // 2. Analysis trace: trace.scoringEngineVersion (populated since task #949)
+    // 3. Rescore audit entry: rescoreHistory[].scoringEngineVersion
+    // 4. null for legacy rows that predate version pinning
+    let codeVersion: string | null = null;
+    if (isCurrent) {
+      codeVersion = formatEngineVersionsLabel(
+        report.engineVersions as Parameters<typeof formatEngineVersionsLabel>[0],
+      );
+    }
+    if (!codeVersion && e.correlationId) {
+      const trace = traceByCorrelation.get(e.correlationId);
+      codeVersion = trace?.scoringEngineVersion ?? null;
+    }
+    if (!codeVersion && e.scoringEngineVersion) {
+      codeVersion = e.scoringEngineVersion;
+    }
 
     return {
       compositeScore: e.compositeScore,

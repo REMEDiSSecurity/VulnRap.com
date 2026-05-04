@@ -30,3 +30,20 @@ export const ENGINE_VERSIONS: EngineVersions = {
 export function getCurrentEngineVersions(): EngineVersions {
   return { ...ENGINE_VERSIONS };
 }
+
+export function getScoringEngineVersion(): string {
+  const vals = Object.values(ENGINE_VERSIONS);
+  const unique = [...new Set(vals)];
+  if (unique.length === 1) return unique[0];
+  return `${ENGINE_VERSIONS.substance}+mixed`;
+}
+
+export function formatEngineVersionsLabel(
+  ev: EngineVersions | null | undefined,
+): string | null {
+  if (!ev) return null;
+  const vals = Object.values(ev);
+  const unique = [...new Set(vals)];
+  if (unique.length === 1) return unique[0];
+  return `${ev.substance}+mixed`;
+}

@@ -130,7 +130,7 @@ export interface ScoreHistoryEntry {
   source: ScoreHistoryEntrySource;
   /** For rescore entries, which branch produced the new score (live engine re-run vs. reconstruction from cached signals). Always `original` for the first entry. */
   mode: ScoreHistoryEntryMode;
-  /** Best-effort scoring code-version label derived from the trace's feature flags (e.g. "AVRI", "Legacy"). Null when no matching trace is on file. */
+  /** Semver-style scoring engine version that produced this score (e.g. "3.10.0"). Read from the persisted engine_versions for the current entry, or from the rescore audit entry for historical scores. Null for legacy rows that predate version pinning. */
   codeVersion?: string | null;
   /** Per-engine sub-scores captured at this point. Sourced from the engines blob for the current entry, or from the matching analysis trace for past entries. Null when no per-engine data is available for that scoring event. */
   engines?: ScoreHistoryEntryEnginesItem[] | null;

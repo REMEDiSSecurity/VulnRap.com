@@ -1137,13 +1137,17 @@ composite score + tier + timestamp + correlation id. Per-engine
 sub-scores are included only for the current scoring event (where
 authentic engine numbers are persisted on the row); past entries
 return `engines: null` because today's analysis_traces schema does
-not persist per-engine numeric scores. `codeVersion` is reserved for
-a future scorer-version field and is currently always null. When the
-score-stability-monitor task lands a dedicated `report_rescore_log`
-table this endpoint will switch to reading from it; today the
-canonical per-row audit trail is the `rescoreHistory` array on the
-engines blob. Hidden from the UI when only a single entry exists
-(no rescores have happened) so fresh reports stay quiet.
+not persist per-engine numeric scores. `codeVersion` carries the
+semver-style scoring engine version that produced each entry — read
+from the persisted `engine_versions` column for the current score
+and from the `scoringEngineVersion` field on each rescore audit
+entry for historical scores. Null for legacy rows that predate
+version pinning. When the score-stability-monitor task lands a
+dedicated `report_rescore_log` table this endpoint will switch to
+reading from it; today the canonical per-row audit trail is the
+`rescoreHistory` array on the engines blob. Hidden from the UI
+when only a single entry exists (no rescores have happened) so
+fresh reports stay quiet.
 
  * @summary Get the chronological score evolution timeline for a report
  */

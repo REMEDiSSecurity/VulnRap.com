@@ -15,6 +15,7 @@ import { computePerplexity, type PerplexityResult } from "./perplexity";
 import { runAvriComposite, type AvriCompositeResult } from "./avri";
 import type { PipelineTrace, PipelineStageTiming } from "@workspace/db";
 import crypto from "crypto";
+import { getScoringEngineVersion } from "../engine-versions";
 
 export type {
   EngineResult,
@@ -179,6 +180,7 @@ export function analyzeWithEnginesTraced(
         VULNRAP_USE_NEW_COMPOSITE: FEATURE_USE_NEW_COMPOSITE(),
         VULNRAP_USE_AVRI: true,
       },
+      scoringEngineVersion: getScoringEngineVersion(),
       notes: [
         `AVRI family=${avriComposite.avri.family} (${avriComposite.avri.classification.confidence})`,
         `AVRI gold-hit-count=${avriComposite.avri.goldHitCount}`,
@@ -279,6 +281,7 @@ export function analyzeWithEnginesTraced(
     featureFlags: {
       VULNRAP_USE_NEW_COMPOSITE: FEATURE_USE_NEW_COMPOSITE(),
     },
+    scoringEngineVersion: getScoringEngineVersion(),
     notes: [],
   };
 

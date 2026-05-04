@@ -43,6 +43,7 @@ export interface PipelineTrace {
     confidence: string;
   }[];
   featureFlags: Record<string, boolean | string>;
+  scoringEngineVersion?: string;
   notes: string[];
   /**
    * AVRI substance-engine breakdown captured for post-flip calibration work.

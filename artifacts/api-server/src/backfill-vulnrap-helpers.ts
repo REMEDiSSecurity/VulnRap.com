@@ -157,6 +157,7 @@ export interface BackfillRescoreAuditEntry {
   newCompositeScore: number;
   newCompositeLabel: string;
   newCorrelationId: string;
+  scoringEngineVersion?: string;
 }
 
 // Build an audit entry for a single rescored row. `now` is injectable so
@@ -169,6 +170,7 @@ export function buildBackfillRescoreAuditEntry(args: {
   newCompositeScore: number;
   newCompositeLabel: string;
   newCorrelationId: string;
+  scoringEngineVersion?: string;
   now?: Date;
 }): BackfillRescoreAuditEntry {
   const ts = (args.now ?? new Date()).toISOString();
@@ -182,6 +184,9 @@ export function buildBackfillRescoreAuditEntry(args: {
     newCompositeScore: args.newCompositeScore,
     newCompositeLabel: args.newCompositeLabel,
     newCorrelationId: args.newCorrelationId,
+    ...(args.scoringEngineVersion
+      ? { scoringEngineVersion: args.scoringEngineVersion }
+      : {}),
   };
 }
 

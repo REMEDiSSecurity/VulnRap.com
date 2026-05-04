@@ -65,7 +65,7 @@ import {
   type BackfillStats,
   type ConcurrencyGuard,
 } from "./backfill-vulnrap-helpers";
-import { getCurrentEngineVersions } from "./lib/engine-versions";
+import { getCurrentEngineVersions, getScoringEngineVersion } from "./lib/engine-versions";
 import type { SQL } from "drizzle-orm";
 
 // Evidence types that count as "strong" for the v3.6.0 triage matrix's
@@ -401,6 +401,7 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
                 newCompositeScore: composite.overallScore,
                 newCompositeLabel: composite.label,
                 newCorrelationId: correlationId,
+                scoringEngineVersion: getScoringEngineVersion(),
               }),
             )
           : undefined;
@@ -489,6 +490,7 @@ export async function backfill(opts: CliOpts): Promise<BackfillStats> {
                 newCompositeScore: composite.overallScore,
                 newCompositeLabel: composite.label,
                 newCorrelationId: trace.correlationId,
+                scoringEngineVersion: getScoringEngineVersion(),
               }),
             )
           : undefined;
