@@ -38,6 +38,8 @@ import type {
   CohortBaseline,
   ConfirmNewsletterParams,
   CorpusStats,
+  CreateIncidentBody,
+  CreateIncidentResponse,
   CweCatalogResponse,
   DeleteReportBody,
   DeleteReportResponse,
@@ -4271,6 +4273,99 @@ export function useListIncidents<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Task #1057 — Reviewer-gated endpoint that appends a new
+incident postmortem to the incident log. Requires the
+`CALIBRATION_TOKEN` via `X-Calibration-Token` header or
+`Authorization: Bearer <token>`. Validates the body against
+the `IncidentEntry` schema, auto-bumps the `version` patch
+number, and records an audit-log entry.
+
+ * @summary Publish a new incident postmortem (reviewer-only)
+ */
+export const getCreateIncidentUrl = () => {
+  return `/api/incidents`;
+};
+
+export const createIncident = async (
+  createIncidentBody: CreateIncidentBody,
+  options?: RequestInit,
+): Promise<CreateIncidentResponse> => {
+  return customFetch<CreateIncidentResponse>(getCreateIncidentUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createIncidentBody),
+  });
+};
+
+export const getCreateIncidentMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createIncident>>,
+    TError,
+    { data: BodyType<CreateIncidentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createIncident>>,
+  TError,
+  { data: BodyType<CreateIncidentBody> },
+  TContext
+> => {
+  const mutationKey = ["createIncident"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createIncident>>,
+    { data: BodyType<CreateIncidentBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createIncident(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateIncidentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createIncident>>
+>;
+export type CreateIncidentMutationBody = BodyType<CreateIncidentBody>;
+export type CreateIncidentMutationError = ErrorType<void>;
+
+/**
+ * @summary Publish a new incident postmortem (reviewer-only)
+ */
+export const useCreateIncident = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createIncident>>,
+    TError,
+    { data: BodyType<CreateIncidentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createIncident>>,
+  TError,
+  { data: BodyType<CreateIncidentBody> },
+  TContext
+> => {
+  return useMutation(getCreateIncidentMutationOptions(options));
+};
 
 /**
  * Task #694 — Returns the hand-curated "interesting reports"

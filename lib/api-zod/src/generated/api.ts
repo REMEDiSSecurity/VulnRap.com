@@ -4196,6 +4196,58 @@ export const ListIncidentsResponse = zod
   );
 
 /**
+ * Task #1057 — Reviewer-gated endpoint that appends a new
+incident postmortem to the incident log. Requires the
+`CALIBRATION_TOKEN` via `X-Calibration-Token` header or
+`Authorization: Bearer <token>`. Validates the body against
+the `IncidentEntry` schema, auto-bumps the `version` patch
+number, and records an audit-log entry.
+
+ * @summary Publish a new incident postmortem (reviewer-only)
+ */
+export const CreateIncidentHeader = zod.object({
+  "X-Calibration-Token": zod.string().describe("Reviewer calibration token."),
+});
+
+export const CreateIncidentBody = zod
+  .object({
+    id: zod
+      .string()
+      .describe("Opaque slug for the incident (stable across curator edits)."),
+    date: zod.coerce
+      .date()
+      .describe("ISO date the incident started (YYYY-MM-DD)."),
+    duration: zod
+      .string()
+      .describe(
+        'Human-readable incident duration (e.g. \"42 minutes\", \"3 hours\").',
+      ),
+    severity: zod
+      .enum(["low", "medium", "high", "critical"])
+      .describe("Curator-assigned severity tier."),
+    summary: zod
+      .string()
+      .describe("One-sentence description of what happened."),
+    rootCause: zod.string().describe("Plain-language root cause analysis."),
+    remediation: zod
+      .string()
+      .describe("What we changed to prevent recurrence."),
+    changelogAnchor: zod
+      .string()
+      .optional()
+      .describe(
+        "Optional `\/changelog#anchor` fragment linking to the related release notes.",
+      ),
+    reviewer: zod
+      .string()
+      .optional()
+      .describe("Reviewer identity for the audit log."),
+  })
+  .describe(
+    "Task #1057 — Request body for `POST \/api\/incidents`. All\nfields from `IncidentEntry` are required except\n`changelogAnchor` which is optional. A `reviewer` field\nidentifies the actor for the audit log.\n",
+  );
+
+/**
  * Task #694 — Returns the hand-curated "interesting reports"
 rendered on `/showcase`: high-confidence catches, edge cases,
 and surprising engine agreements. Sourced from a static JSON

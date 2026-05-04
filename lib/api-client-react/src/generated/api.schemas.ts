@@ -4322,6 +4322,58 @@ export interface IncidentLog {
 }
 
 /**
+ * Curator-assigned severity tier.
+ */
+export type CreateIncidentBodySeverity =
+  (typeof CreateIncidentBodySeverity)[keyof typeof CreateIncidentBodySeverity];
+
+export const CreateIncidentBodySeverity = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
+} as const;
+
+/**
+ * Task #1057 — Request body for `POST /api/incidents`. All
+fields from `IncidentEntry` are required except
+`changelogAnchor` which is optional. A `reviewer` field
+identifies the actor for the audit log.
+
+ */
+export interface CreateIncidentBody {
+  /** Opaque slug for the incident (stable across curator edits). */
+  id: string;
+  /** ISO date the incident started (YYYY-MM-DD). */
+  date: string;
+  /** Human-readable incident duration (e.g. "42 minutes", "3 hours"). */
+  duration: string;
+  /** Curator-assigned severity tier. */
+  severity: CreateIncidentBodySeverity;
+  /** One-sentence description of what happened. */
+  summary: string;
+  /** Plain-language root cause analysis. */
+  rootCause: string;
+  /** What we changed to prevent recurrence. */
+  remediation: string;
+  /** Optional `/changelog#anchor` fragment linking to the related release notes. */
+  changelogAnchor?: string;
+  /** Reviewer identity for the audit log. */
+  reviewer?: string;
+}
+
+/**
+ * Task #1057 — Response from `POST /api/incidents` confirming
+the new incident was appended and the version was bumped.
+
+ */
+export interface CreateIncidentResponse {
+  ok: boolean;
+  version: string;
+  incident: IncidentEntry;
+}
+
+/**
  * Curated sample-report gallery returned by `GET /api/gallery`. The
 `version` string lets clients cache-bust when curators ship a new
 revision of `gallery.json`.
