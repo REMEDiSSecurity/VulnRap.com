@@ -32,6 +32,7 @@ export type Cond =
   | { __op: "and"; conds: Cond[] }
   | { __op: "desc"; col: unknown }
   | { __op: "gte"; col: unknown; val: unknown }
+  | { __op: "lt"; col: unknown; val: unknown }
   | { __op: "isNotNull"; col: unknown }
   | { __op: "inArray"; col: unknown; vals: unknown[] }
   | { __op: "sql_fragment" }
@@ -49,6 +50,7 @@ export const drizzleOrmOverrides = {
   and: (...conds: unknown[]) => ({ __op: "and", conds }),
   desc: (col: unknown) => ({ __op: "desc", col }),
   gte: (col: unknown, val: unknown) => ({ __op: "gte", col, val }),
+  lt: (col: unknown, val: unknown) => ({ __op: "lt", col, val }),
   isNotNull: (col: unknown) => ({ __op: "isNotNull", col }),
   inArray: (col: unknown, vals: unknown[]) => ({ __op: "inArray", col, vals }),
   sql: Object.assign(
@@ -204,9 +206,41 @@ export function createInMemoryDb(options: InMemoryDbOptions): InMemoryDb {
       if (colName === "__unknown__") return rows;
       return rows.filter((r) => c.vals.includes(r[colName]));
     }
-    // `gte`, `isNotNull`, `sql_fragment` and unknown ops fall through as
-    // "no-op filter" — keeps the chain compatible with routes that emit
-    // such conditions without forcing every test to model them.
+    if (op === "gte") {
+      const c = cond as { col: unknown; val: unknown };
+      const colName = findColName(table, c.col);
+      if (colName === "__unknown__") return rows;
+      return rows.filter((r) => {
+        const rv = r[colName];
+        const cv = c.val;
+        if (rv instanceof Date && cv instanceof Date) return rv.getTime() >= cv.getTime();
+        if (typeof rv === "number" && typeof cv === "number") return rv >= cv;
+        if (typeof rv === "string" && typeof cv === "string") return rv >= cv;
+        return true;
+      });
+    }
+    if (op === "lt") {
+      const c = cond as { col: unknown; val: unknown };
+      const colName = findColName(table, c.col);
+      if (colName === "__unknown__") return rows;
+      return rows.filter((r) => {
+        const rv = r[colName];
+        const cv = c.val;
+        if (rv instanceof Date && cv instanceof Date) return rv.getTime() < cv.getTime();
+        if (typeof rv === "number" && typeof cv === "number") return rv < cv;
+        if (typeof rv === "string" && typeof cv === "string") return rv < cv;
+        return true;
+      });
+    }
+    if (op === "isNotNull") {
+      const c = cond as { col: unknown };
+      const colName = findColName(table, c.col);
+      if (colName === "__unknown__") return rows;
+      return rows.filter((r) => r[colName] != null);
+    }
+    // `sql_fragment` and unknown ops fall through as "no-op filter" —
+    // keeps the chain compatible with routes that emit such conditions
+    // without forcing every test to model them.
     return rows;
   }
 
@@ -379,11 +413,35 @@ export function createInMemoryDb(options: InMemoryDbOptions): InMemoryDb {
                   reject: (err: unknown) => void,
                 ) {
                   try {
-                    // For stats-style upserts the registered TableSpec.insert
-                    // handles "increment on conflict" — we just call it
-                    // again. For other tables this collapses to a plain
-                    // insert, which matches how the routes use the chain in
-                    // tests.
+                    doInsert(table, inputs);
+                    resolve(undefined);
+                  } catch (e) {
+                    reject(e);
+                  }
+                },
+              };
+            },
+            onConflictDoNothing() {
+              return {
+                returning(_proj?: unknown) {
+                  return {
+                    then(
+                      resolve: (rows: FakeRow[]) => void,
+                      reject: (err: unknown) => void,
+                    ) {
+                      try {
+                        resolve(doInsert(table, inputs));
+                      } catch (e) {
+                        reject(e);
+                      }
+                    },
+                  };
+                },
+                then(
+                  resolve: (v: undefined) => void,
+                  reject: (err: unknown) => void,
+                ) {
+                  try {
                     doInsert(table, inputs);
                     resolve(undefined);
                   } catch (e) {
