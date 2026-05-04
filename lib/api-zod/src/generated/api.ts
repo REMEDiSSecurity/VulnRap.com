@@ -2580,13 +2580,13 @@ export const GetReportFeedResponse = zod.object({
         .string()
         .nullish()
         .describe(
-          'Human-readable label of the most-likely AI agent that authored this report (e.g. \"Claude\", \"GPT-4 / ChatGPT\"). Null when the detector verdict is \"unknown\".\n',
+          'Human-readable label of the most-likely AI agent that authored this\nreport (e.g. \"Claude\", \"GPT-4 \/ ChatGPT\"). Null when the detector\nverdict is \"unknown\" — i.e. too little stylistic evidence to classify.\nSourced from the same heuristic fingerprint detector used on the\ndiagnostics panel (detectAgentFingerprint), computed inline at feed\ntime over the persisted report body.\n',
         ),
       agentFingerprintConfidence: zod
         .number()
         .nullish()
         .describe(
-          'Confidence (0\\u20131) in the agentFingerprintLabel verdict. Null when agentFingerprintLabel is null. Capped at 0.95 by the detector.\n',
+          'Confidence (0–1) in the agentFingerprintLabel verdict. Null when\nagentFingerprintLabel is null. Displayed as a percentage on the feed\nrow pill (e.g. \"64%\"). Capped at 0.95 by the detector.\n',
         ),
     }),
   ),

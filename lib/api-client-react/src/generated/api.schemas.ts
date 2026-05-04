@@ -1568,14 +1568,21 @@ the diagnostics panel.
    */
   inferredCweName?: string | null;
   /**
-   * Human-readable label of the most-likely AI agent that authored this report
-   * (e.g. "Claude", "GPT-4 / ChatGPT"). Null when the detector verdict is "unknown".
+   * Human-readable label of the most-likely AI agent that authored this
+report (e.g. "Claude", "GPT-4 / ChatGPT"). Null when the detector
+verdict is "unknown" — i.e. too little stylistic evidence to classify.
+Sourced from the same heuristic fingerprint detector used on the
+diagnostics panel (detectAgentFingerprint), computed inline at feed
+time over the persisted report body.
+
    * @nullable
    */
   agentFingerprintLabel?: string | null;
   /**
    * Confidence (0–1) in the agentFingerprintLabel verdict. Null when
-   * agentFingerprintLabel is null. Capped at 0.95 by the detector.
+agentFingerprintLabel is null. Displayed as a percentage on the feed
+row pill (e.g. "64%"). Capped at 0.95 by the detector.
+
    * @nullable
    */
   agentFingerprintConfidence?: number | null;
