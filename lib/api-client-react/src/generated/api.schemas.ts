@@ -2794,6 +2794,43 @@ export interface ScoreStabilitySchedulerStatus {
 }
 
 /**
+ * A single report's tier/score diff from a scoring-gate replay run.
+ */
+export interface ScoringGateRunDiff {
+  id: number;
+  storedTier: string;
+  recomputedTier: string;
+  storedScore: number;
+  recomputedScore: number;
+  scoreDelta: number;
+}
+
+/**
+ * A single scoring-gate replay run record. Persisted each time
+`scripts/scoring-gate.sh` executes the replay test so the
+calibration dashboard can render a trend line of flip rates.
+
+ */
+export interface ScoringGateRun {
+  id: number;
+  timestamp: string;
+  commit: string;
+  totalReports: number;
+  flipCount: number;
+  flipRate: number;
+  topDiffs: ScoringGateRunDiff[];
+}
+
+/**
+ * Wrapper for the scoring-gate run history list. Runs are returned
+in chronological order (oldest first).
+
+ */
+export interface ScoringGateRunHistory {
+  runs: ScoringGateRun[];
+}
+
+/**
  * Object with scoring config changes (prior, floor, ceiling, axisThresholds, tierThresholds, fabricationBoost)
  */
 export type ApplyCalibrationBodyChanges = { [key: string]: unknown };
@@ -4850,6 +4887,19 @@ export type GetScoreStabilityFlipsParams = {
    * @pattern ^\d{4}-\d{2}-\d{2}$
    */
   date: string;
+};
+
+export type GetScoringGateRunsParams = {
+  /**
+   * Number of most recent runs to return (default 30, max 100).
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+};
+
+export type ClearScoringGateRuns200 = {
+  cleared: boolean;
 };
 
 export type GetCalibrationAuthBruteForceAlertsParams = {

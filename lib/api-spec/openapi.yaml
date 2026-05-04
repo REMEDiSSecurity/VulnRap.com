@@ -1339,6 +1339,65 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScoreStabilitySchedulerStatus"
 
+  /feedback/calibration/scoring-gate-runs:
+    get:
+      operationId: getScoringGateRuns
+      tags: [feedback]
+      summary: Scoring-gate flip-rate history (reviewer-only, Task #974)
+      description: |
+        Returns the last N scoring-gate replay runs, each with its
+        timestamp, commit, total reports, flip count, flip rate, and the
+        top per-fixture diffs. Backs a sparkline + table on the
+        calibration dashboard so reviewers can spot calibration drift
+        over time.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 30
+          description: Number of most recent runs to return (default 30, max 100).
+      responses:
+        "200":
+          description: Scoring gate run history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoringGateRunHistory"
+        "401":
+          description: Reviewer token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: clearScoringGateRuns
+      tags: [feedback]
+      summary: Clear scoring-gate run history (reviewer-only, Task #974)
+      description: |
+        Deletes all stored scoring-gate replay run records. Use after
+        an intentional re-baselining to reset the trend line.
+      responses:
+        "200":
+          description: History cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cleared:
+                    type: boolean
+                required: [cleared]
+        "401":
+          description: Reviewer token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /feedback/calibration/avri-drift/notifications/rearm-history:
     get:
       operationId: getAvriDriftRearmHistory
@@ -6513,6 +6572,62 @@ components:
           nextTickAt,
           ticksCompleted,
         ]
+
+    ScoringGateRunDiff:
+      type: object
+      description: A single report's tier/score diff from a scoring-gate replay run.
+      properties:
+        id:
+          type: integer
+        storedTier:
+          type: string
+        recomputedTier:
+          type: string
+        storedScore:
+          type: number
+        recomputedScore:
+          type: number
+        scoreDelta:
+          type: number
+      required: [id, storedTier, recomputedTier, storedScore, recomputedScore, scoreDelta]
+
+    ScoringGateRun:
+      type: object
+      description: |
+        A single scoring-gate replay run record. Persisted each time
+        `scripts/scoring-gate.sh` executes the replay test so the
+        calibration dashboard can render a trend line of flip rates.
+      properties:
+        id:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        commit:
+          type: string
+        totalReports:
+          type: integer
+        flipCount:
+          type: integer
+        flipRate:
+          type: number
+        topDiffs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoringGateRunDiff"
+      required: [id, timestamp, commit, totalReports, flipCount, flipRate, topDiffs]
+
+    ScoringGateRunHistory:
+      type: object
+      description: |
+        Wrapper for the scoring-gate run history list. Runs are returned
+        in chronological order (oldest first).
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoringGateRun"
+      required: [runs]
 
     ApplyCalibrationBody:
       type: object

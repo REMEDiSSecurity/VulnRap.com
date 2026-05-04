@@ -78,6 +78,10 @@ import {
   type HandwavyEditEntry,
   type HandwavyCategory,
   applyCalibration,
+  useGetScoringGateRuns,
+  getGetScoringGateRunsQueryKey,
+  useClearScoringGateRuns,
+  type ScoringGateRunHistory,
   type FeedbackAnalyticsDailyTrendItem,
   type FeedbackAnalyticsScoreCorrelationItem,
   type FeedbackAnalyticsOutliersItem,
@@ -20543,6 +20547,8 @@ function AvriDriftSection() {
             active scoring regression. */}
           <ScoreStabilityPanel authState={authState} />
 
+          <ScoringGateRunsPanel authState={authState} />
+
           {/* Task #639 — Reviewer-only shadow scoring drift listing.
             When SHADOW_SCORING_ENABLED=1 on the API server every
             production submission is also scored through the in-flight
@@ -20565,6 +20571,263 @@ function AvriDriftSection() {
         </CardContent>
       </Card>
     </>
+  );
+}
+
+function ScoringGateRunsPanel({
+  authState,
+}: {
+  authState: CalibrationAuthState;
+}) {
+  const enabled = authState.kind === "valid";
+  const queryClient = useQueryClient();
+  const queryKey = getGetScoringGateRunsQueryKey();
+  const { data, isLoading, isError } = useGetScoringGateRuns(undefined, {
+    query: { queryKey, enabled, refetchInterval: 60_000, retry: 1 },
+  });
+  const clearMutation = useClearScoringGateRuns();
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  if (!enabled) {
+    return (
+      <div data-testid="scoring-gate-runs-panel-locked">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+          <BarChart3 className="w-3 h-3" />
+          <span>Scoring gate — flip rate over time</span>
+        </div>
+        <div className="text-[11px] text-muted-foreground/70 italic px-3 py-2 rounded-md border border-dashed border-border/40">
+          Reviewer token required to load the scoring-gate run history.
+        </div>
+      </div>
+    );
+  }
+  if (isLoading) {
+    return <Skeleton className="h-32 rounded-md" />;
+  }
+  if (isError || !data) {
+    return (
+      <div
+        data-testid="scoring-gate-runs-panel-error"
+        className="text-[11px] text-red-400/80 italic"
+      >
+        Could not load scoring-gate run history.
+      </div>
+    );
+  }
+
+  const runs = data.runs ?? [];
+
+  const W = 360;
+  const H = 100;
+  const PAD_L = 28;
+  const PAD_R = 8;
+  const PAD_T = 8;
+  const PAD_B = 18;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  const maxRate = Math.max(0.01, ...runs.map((r) => r.flipRate));
+  const barW = runs.length > 0 ? innerW / runs.length : innerW;
+
+  function yFor(rate: number): number {
+    return PAD_T + innerH - (rate * innerH) / maxRate;
+  }
+
+  const thresholdRate = 0.005;
+  const thresholdY = yFor(Math.min(thresholdRate, maxRate));
+
+  const points = runs
+    .map((r, i) => {
+      const x = PAD_L + i * barW + barW / 2;
+      const y = yFor(r.flipRate);
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const latestRun = runs.length > 0 ? runs[runs.length - 1] : null;
+  const latestDiffs = latestRun?.topDiffs ?? [];
+
+  return (
+    <div data-testid="scoring-gate-runs-panel">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2 flex-wrap">
+        <BarChart3 className="w-3 h-3" />
+        <span>Scoring gate — flip rate over time</span>
+        {latestRun && (
+          <span className="normal-case font-normal italic text-muted-foreground/40">
+            {runs.length} run{runs.length !== 1 ? "s" : ""} — latest{" "}
+            {(latestRun.flipRate * 100).toFixed(2)}% ({latestRun.flipCount}/
+            {latestRun.totalReports})
+          </span>
+        )}
+      </div>
+      {runs.length === 0 ? (
+        <div className="text-[11px] text-muted-foreground/60 italic px-3 py-2 rounded-md border border-dashed border-border/40">
+          No scoring-gate runs recorded yet. Run{" "}
+          <code className="text-[10px]">scripts/scoring-gate-replay.mjs</code>{" "}
+          to populate.
+        </div>
+      ) : (
+        <>
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="w-full"
+            style={{ maxHeight: "140px" }}
+            role="img"
+            aria-label={`Scoring gate flip rate sparkline for ${runs.length} runs`}
+          >
+            <line
+              x1={PAD_L}
+              x2={W - PAD_R}
+              y1={thresholdY}
+              y2={thresholdY}
+              stroke="currentColor"
+              strokeOpacity={0.35}
+              strokeDasharray="3 3"
+              strokeWidth={1}
+            />
+            <text
+              x={PAD_L - 4}
+              y={Math.max(PAD_T + 8, thresholdY + 3)}
+              textAnchor="end"
+              className="fill-muted-foreground"
+              style={{ fontSize: "8px" }}
+            >
+              {(thresholdRate * 100).toFixed(1)}%
+            </text>
+            {runs.map((r, i) => {
+              const x = PAD_L + i * barW + barW * 0.15;
+              const w = barW * 0.7;
+              const y = yFor(r.flipRate);
+              const h = PAD_T + innerH - y;
+              const exceeded = r.flipRate > thresholdRate;
+              return (
+                <rect
+                  key={r.id}
+                  x={x}
+                  y={y}
+                  width={w}
+                  height={Math.max(1, h)}
+                  rx={1}
+                  className={exceeded ? "fill-red-400/70" : "fill-primary/40"}
+                >
+                  <title>
+                    {new Date(r.timestamp).toLocaleDateString()} — {r.commit}
+                    {"\n"}
+                    {(r.flipRate * 100).toFixed(2)}% ({r.flipCount}/{r.totalReports})
+                  </title>
+                </rect>
+              );
+            })}
+            {runs.length > 1 && (
+              <polyline
+                points={points}
+                fill="none"
+                stroke="currentColor"
+                strokeOpacity={0.5}
+                strokeWidth={1}
+              />
+            )}
+            {runs.map((r, i) => {
+              const x = PAD_L + i * barW + barW / 2;
+              if (i === 0 || i === runs.length - 1 || i % Math.max(1, Math.floor(runs.length / 5)) === 0) {
+                return (
+                  <text
+                    key={`label-${r.id}`}
+                    x={x}
+                    y={H - 2}
+                    textAnchor="middle"
+                    className="fill-muted-foreground"
+                    style={{ fontSize: "7px" }}
+                  >
+                    {r.commit.slice(0, 7)}
+                  </text>
+                );
+              }
+              return null;
+            })}
+          </svg>
+          {latestDiffs.length > 0 && (
+            <div className="mt-2">
+              <div className="text-[10px] text-muted-foreground/60 mb-1">
+                Most recent per-fixture diffs (run {latestRun!.commit.slice(0, 7)}):
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[10px] tabular-nums">
+                  <thead>
+                    <tr className="text-muted-foreground/50">
+                      <th className="text-left px-1 py-0.5">Report</th>
+                      <th className="text-left px-1 py-0.5">Stored</th>
+                      <th className="text-left px-1 py-0.5">Recomputed</th>
+                      <th className="text-right px-1 py-0.5">Delta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {latestDiffs.map((d) => {
+                      const flipped = d.storedTier !== d.recomputedTier;
+                      return (
+                        <tr
+                          key={d.id}
+                          className={
+                            flipped
+                              ? "text-red-400/80"
+                              : "text-muted-foreground/70"
+                          }
+                        >
+                          <td className="px-1 py-0.5">#{d.id}</td>
+                          <td className="px-1 py-0.5">
+                            {d.storedTier} ({d.storedScore})
+                          </td>
+                          <td className="px-1 py-0.5">
+                            {d.recomputedTier} ({d.recomputedScore})
+                          </td>
+                          <td className="text-right px-1 py-0.5">
+                            {d.scoreDelta >= 0 ? "+" : ""}
+                            {d.scoreDelta}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          <div className="mt-2 flex justify-end">
+            {confirmClear ? (
+              <div className="flex items-center gap-2 text-[10px]">
+                <span className="text-muted-foreground/60">Clear all history?</span>
+                <button
+                  className="text-red-400 hover:text-red-300 underline"
+                  onClick={() => {
+                    clearMutation.mutate(undefined, {
+                      onSuccess: () => {
+                        queryClient.invalidateQueries({ queryKey });
+                        setConfirmClear(false);
+                      },
+                    });
+                  }}
+                >
+                  Confirm
+                </button>
+                <button
+                  className="text-muted-foreground/50 hover:text-muted-foreground underline"
+                  onClick={() => setConfirmClear(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                className="text-[10px] text-muted-foreground/40 hover:text-muted-foreground/70 underline"
+                onClick={() => setConfirmClear(true)}
+              >
+                Reset history (after re-baselining)
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

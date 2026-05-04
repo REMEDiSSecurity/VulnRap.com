@@ -193,6 +193,54 @@ describe("Pre-merge scoring gate: replay last 100 production reports", () => {
       }
     }
 
+    const topDiffs = [
+      ...flips,
+      ...largeScoreDeltas.filter(
+        (d) => !flips.some((f) => f.id === d.id),
+      ),
+    ].slice(0, 20);
+
+    try {
+      const { scoringGateRunsTable } = await import("@workspace/db");
+      let commit = "unknown";
+      try {
+        const { execSync } = await import("node:child_process");
+        commit = execSync("git rev-parse --short HEAD", {
+          encoding: "utf-8",
+        }).trim();
+      } catch {
+        commit = process.env.COMMIT_SHA?.slice(0, 12) ?? "unknown";
+      }
+      await db.execute(
+        sql`CREATE TABLE IF NOT EXISTS scoring_gate_runs (
+          id serial PRIMARY KEY,
+          "timestamp" timestamptz NOT NULL DEFAULT now(),
+          commit varchar(64) NOT NULL DEFAULT 'unknown',
+          total_reports integer NOT NULL,
+          flip_count integer NOT NULL,
+          flip_rate real NOT NULL,
+          top_diffs jsonb NOT NULL
+        )`,
+      );
+      await db
+        .insert(scoringGateRunsTable)
+        .values({
+          commit,
+          totalReports: total,
+          flipCount: flips.length,
+          flipRate,
+          topDiffs,
+        });
+      console.log("[scoring-gate] persisted run record to scoring_gate_runs");
+    } catch (persistErr) {
+      console.error(
+        `[scoring-gate] PERSIST FAILED — run record was NOT saved to ` +
+          `scoring_gate_runs. The gate result is still valid, but the ` +
+          `trend line on the calibration dashboard will be missing this ` +
+          `data point. Error: ${(persistErr as Error).message}`,
+      );
+    }
+
     if (flipRate > FLIP_RATE_THRESHOLD) {
       throw new Error(
         `[scoring-gate] FAIL: tier-flip rate ${(flipRate * 100).toFixed(

@@ -485,6 +485,38 @@ When you bypass:
 output (`[scoring-gate] BYPASS=1 — skipping golden corpus + replay`)
 so the bypass is visible in any log review.
 
+#### Scoring-gate flip-rate trend (Task #974)
+
+Every scoring-gate replay run now persists a JSON record to the
+`scoring_gate_runs` table (`{timestamp, commit, totalReports,
+flipCount, flipRate, topDiffs}`). The calibration dashboard
+(`/feedback-analytics`) renders the last ~30 runs as a sparkline plus
+a table of the most recent per-fixture diffs, so reviewers can spot
+slow calibration drift that individual 0.5 % passes cannot surface.
+
+**Inspecting the trend:**
+
+- Open the calibration dashboard and authenticate with your reviewer
+  token. The "Scoring gate — flip rate over time" panel shows the
+  sparkline and diff table.
+- Alternatively, hit the API directly:
+  ```bash
+  curl -H "x-calibration-token: $TOKEN" \
+    $REPLIT_DEV_DOMAIN/api/feedback/calibration/scoring-gate-runs
+  ```
+
+**Clearing / resetting after re-baselining:**
+
+After an intentional calibration change (bypass + snapshot update),
+reset the trend so the new baseline starts clean:
+
+```bash
+curl -X DELETE -H "x-calibration-token: $TOKEN" \
+  $REPLIT_DEV_DOMAIN/api/feedback/calibration/scoring-gate-runs
+```
+
+Or click "Reset history (after re-baselining)" in the dashboard panel.
+
 ## Performance
 
 The project ships with measured performance budgets enforced in CI.

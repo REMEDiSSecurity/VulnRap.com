@@ -17,3 +17,4 @@ export * from "./report_shadow_scores";
 export * from "./audit_log";
 export * from "./webhooks";
 export * from "./scheduler_runs";
+export * from "./scoring_gate_runs";

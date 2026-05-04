@@ -34,6 +34,7 @@ import type {
   CalibrationReport,
   CheckReportBody,
   CheckResult,
+  ClearScoringGateRuns200,
   CohortBaseline,
   ConfirmNewsletterParams,
   CorpusStats,
@@ -56,6 +57,7 @@ import type {
   GetLatencyHistoryParams,
   GetReportFeedParams,
   GetScoreStabilityFlipsParams,
+  GetScoringGateRunsParams,
   GetShadowDriftParams,
   GetTrendsParams,
   HandwavyPhraseBatchRemoveBody,
@@ -111,6 +113,7 @@ import type {
   ScoreStabilitySchedulerStatus,
   ScoreStabilitySummary,
   ScoringConfigResponse,
+  ScoringGateRunHistory,
   ShadowDriftReport,
   ShowcaseResponse,
   SlopDistribution,
@@ -3658,6 +3661,196 @@ export function useGetScoreStabilitySchedulerStatus<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Returns the last N scoring-gate replay runs, each with its
+timestamp, commit, total reports, flip count, flip rate, and the
+top per-fixture diffs. Backs a sparkline + table on the
+calibration dashboard so reviewers can spot calibration drift
+over time.
+
+ * @summary Scoring-gate flip-rate history (reviewer-only, Task
+ */
+export const getGetScoringGateRunsUrl = (params?: GetScoringGateRunsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/feedback/calibration/scoring-gate-runs?${stringifiedParams}`
+    : `/api/feedback/calibration/scoring-gate-runs`;
+};
+
+export const getScoringGateRuns = async (
+  params?: GetScoringGateRunsParams,
+  options?: RequestInit,
+): Promise<ScoringGateRunHistory> => {
+  return customFetch<ScoringGateRunHistory>(getGetScoringGateRunsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetScoringGateRunsQueryKey = (
+  params?: GetScoringGateRunsParams,
+) => {
+  return [
+    `/api/feedback/calibration/scoring-gate-runs`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetScoringGateRunsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getScoringGateRuns>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: GetScoringGateRunsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getScoringGateRuns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetScoringGateRunsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getScoringGateRuns>>
+  > = ({ signal }) => getScoringGateRuns(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getScoringGateRuns>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetScoringGateRunsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getScoringGateRuns>>
+>;
+export type GetScoringGateRunsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Scoring-gate flip-rate history (reviewer-only, Task
+ */
+
+export function useGetScoringGateRuns<
+  TData = Awaited<ReturnType<typeof getScoringGateRuns>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: GetScoringGateRunsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getScoringGateRuns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetScoringGateRunsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Deletes all stored scoring-gate replay run records. Use after
+an intentional re-baselining to reset the trend line.
+
+ * @summary Clear scoring-gate run history (reviewer-only, Task
+ */
+export const getClearScoringGateRunsUrl = () => {
+  return `/api/feedback/calibration/scoring-gate-runs`;
+};
+
+export const clearScoringGateRuns = async (
+  options?: RequestInit,
+): Promise<ClearScoringGateRuns200> => {
+  return customFetch<ClearScoringGateRuns200>(getClearScoringGateRunsUrl(), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getClearScoringGateRunsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof clearScoringGateRuns>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof clearScoringGateRuns>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["clearScoringGateRuns"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof clearScoringGateRuns>>,
+    void
+  > = () => {
+    return clearScoringGateRuns(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ClearScoringGateRunsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof clearScoringGateRuns>>
+>;
+
+export type ClearScoringGateRunsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Clear scoring-gate run history (reviewer-only, Task
+ */
+export const useClearScoringGateRuns = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof clearScoringGateRuns>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof clearScoringGateRuns>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getClearScoringGateRunsMutationOptions(options));
+};
 
 /**
  * Returns the bounded audit log of every reviewer-driven re-arm

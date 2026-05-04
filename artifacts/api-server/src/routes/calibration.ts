@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, reportsTable } from "@workspace/db";
-import { and, isNotNull, sql } from "drizzle-orm";
+import { db, reportsTable, scoringGateRunsTable } from "@workspace/db";
+import { and, isNotNull, sql, desc } from "drizzle-orm";
 import {
   generateCalibrationReport,
   type BucketAnalysis,
@@ -3424,6 +3424,59 @@ router.delete(
       res
         .status(500)
         .json({ error: "Failed to remove AI self-disclosure phrase." });
+    }
+  },
+);
+
+router.get(
+  "/feedback/calibration/scoring-gate-runs",
+  requireCalibrationAuthStrict,
+  async (req, res) => {
+    try {
+      const rawLimit = Number(req.query.limit ?? 30);
+      const limit = Number.isFinite(rawLimit)
+        ? Math.min(Math.max(1, Math.floor(rawLimit)), 100)
+        : 30;
+      const runs = await db
+        .select()
+        .from(scoringGateRunsTable)
+        .orderBy(desc(scoringGateRunsTable.timestamp))
+        .limit(limit);
+      res.json({ runs: runs.reverse() });
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : String(err);
+      if (msg.includes("does not exist") || msg.includes("relation")) {
+        res.json({ runs: [] });
+        return;
+      }
+      req.log?.error(err, "Failed to load scoring gate run history");
+      res
+        .status(500)
+        .json({ error: "Failed to load scoring gate run history." });
+    }
+  },
+);
+
+router.delete(
+  "/feedback/calibration/scoring-gate-runs",
+  requireCalibrationAuthStrict,
+  auditLogMutationMiddleware,
+  async (req, res) => {
+    try {
+      await db.delete(scoringGateRunsTable);
+      res.json({ cleared: true });
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : String(err);
+      if (msg.includes("does not exist") || msg.includes("relation")) {
+        res.json({ cleared: true });
+        return;
+      }
+      req.log?.error(err, "Failed to clear scoring gate run history");
+      res
+        .status(500)
+        .json({ error: "Failed to clear scoring gate run history." });
     }
   },
 );

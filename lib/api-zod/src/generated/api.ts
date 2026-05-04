@@ -3783,6 +3783,72 @@ export const GetScoreStabilitySchedulerStatusResponse = zod
   );
 
 /**
+ * Returns the last N scoring-gate replay runs, each with its
+timestamp, commit, total reports, flip count, flip rate, and the
+top per-fixture diffs. Backs a sparkline + table on the
+calibration dashboard so reviewers can spot calibration drift
+over time.
+
+ * @summary Scoring-gate flip-rate history (reviewer-only, Task
+ */
+export const getScoringGateRunsQueryLimitDefault = 30;
+export const getScoringGateRunsQueryLimitMax = 100;
+
+export const GetScoringGateRunsQueryParams = zod.object({
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(getScoringGateRunsQueryLimitMax)
+    .default(getScoringGateRunsQueryLimitDefault)
+    .describe("Number of most recent runs to return (default 30, max 100)."),
+});
+
+export const GetScoringGateRunsResponse = zod
+  .object({
+    runs: zod.array(
+      zod
+        .object({
+          id: zod.number(),
+          timestamp: zod.coerce.date(),
+          commit: zod.string(),
+          totalReports: zod.number(),
+          flipCount: zod.number(),
+          flipRate: zod.number(),
+          topDiffs: zod.array(
+            zod
+              .object({
+                id: zod.number(),
+                storedTier: zod.string(),
+                recomputedTier: zod.string(),
+                storedScore: zod.number(),
+                recomputedScore: zod.number(),
+                scoreDelta: zod.number(),
+              })
+              .describe(
+                "A single report's tier\/score diff from a scoring-gate replay run.",
+              ),
+          ),
+        })
+        .describe(
+          "A single scoring-gate replay run record. Persisted each time\n`scripts\/scoring-gate.sh` executes the replay test so the\ncalibration dashboard can render a trend line of flip rates.\n",
+        ),
+    ),
+  })
+  .describe(
+    "Wrapper for the scoring-gate run history list. Runs are returned\nin chronological order (oldest first).\n",
+  );
+
+/**
+ * Deletes all stored scoring-gate replay run records. Use after
+an intentional re-baselining to reset the trend line.
+
+ * @summary Clear scoring-gate run history (reviewer-only, Task
+ */
+export const ClearScoringGateRunsResponse = zod.object({
+  cleared: zod.boolean(),
+});
+
+/**
  * Returns the bounded audit log of every reviewer-driven re-arm
 event recorded by
 `POST /feedback/calibration/avri-drift/notifications/rearm`. The
