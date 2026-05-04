@@ -9,6 +9,12 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export type SignalMode = "mute" | "normal" | "boost";
@@ -95,6 +101,32 @@ interface Props {
   signalLabels?: Record<string, string>;
 }
 
+function computeWhatIfScore(
+  baselineScore: number,
+  evidence: SignalMuteBoostEvidence[],
+  currentAdjustments: SignalAdjustments,
+  signalType: string,
+  hypotheticalMode: SignalMode,
+): number {
+  const hypothetical: SignalAdjustments = { ...currentAdjustments };
+  if (hypotheticalMode === "normal") {
+    delete hypothetical[signalType];
+  } else {
+    hypothetical[signalType] = hypotheticalMode;
+  }
+  return applySignalAdjustments(baselineScore, evidence, hypothetical);
+}
+
+function formatWhatIfLabel(
+  currentScore: number,
+  whatIfScore: number,
+  modeLabel: string,
+): string {
+  const delta = whatIfScore - currentScore;
+  const sign = delta > 0 ? "+" : "";
+  return `${modeLabel}: ${currentScore} → ${whatIfScore} (${sign}${delta})`;
+}
+
 export function SignalMuteBoostPanel({
   evidence,
   adjustments,
@@ -123,108 +155,162 @@ export function SignalMuteBoostPanel({
   const delta = adjustedScore - baselineScore;
 
   return (
-    <Card
-      className="glass-card rounded-xl"
-      data-testid="signal-mute-boost-panel"
-    >
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Sliders className="w-4 h-4 text-primary" />
-          Signal Control
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-            {aggregated.length} signal{aggregated.length === 1 ? "" : "s"}
-          </Badge>
+    <TooltipProvider delayDuration={200}>
+      <Card
+        className="glass-card rounded-xl"
+        data-testid="signal-mute-boost-panel"
+      >
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Sliders className="w-4 h-4 text-primary" />
+            Signal Control
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+              {aggregated.length} signal{aggregated.length === 1 ? "" : "s"}
+            </Badge>
+            {hasOverrides && (
+              <span
+                className={cn(
+                  "ml-auto text-[10px] font-mono",
+                  delta > 0
+                    ? "text-destructive"
+                    : delta < 0
+                      ? "text-green-400"
+                      : "text-muted-foreground",
+                )}
+                data-testid="signal-mute-boost-delta"
+              >
+                {baselineScore} → {adjustedScore} ({delta > 0 ? "+" : ""}
+                {delta})
+              </span>
+            )}
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Mute or boost individual signals to test scoring sensitivity. State
+            is shared via URL.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {aggregated.map((sig) => {
+            const mode: SignalMode = adjustments[sig.type] ?? "normal";
+            const label = signalLabels?.[sig.type] ?? sig.type;
+            return (
+              <div
+                key={sig.type}
+                className="flex items-center gap-2 rounded-lg glass-card p-2"
+                data-testid={`signal-mute-boost-row-${sig.type}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground truncate">
+                    {label}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground/80 font-mono">
+                    weight {sig.totalWeight}
+                    {sig.count > 1 && <> · {sig.count}×</>}
+                  </div>
+                </div>
+                <div className="flex rounded-md overflow-hidden border border-border/40 flex-shrink-0">
+                  {(
+                    [
+                      { key: "mute", icon: VolumeX, title: "Mute (0\u00d7)" },
+                      {
+                        key: "normal",
+                        icon: Equal,
+                        title: "Normal (1\u00d7)",
+                      },
+                      {
+                        key: "boost",
+                        icon: Volume2,
+                        title: "Boost (2\u00d7)",
+                      },
+                    ] as const
+                  ).map(({ key, icon: Icon, title }) => {
+                    const isActive = mode === key;
+                    const whatIfScore = computeWhatIfScore(
+                      baselineScore,
+                      evidence,
+                      adjustments,
+                      sig.type,
+                      key,
+                    );
+                    const whatIfLabel = isActive
+                      ? `${title} (active)`
+                      : formatWhatIfLabel(adjustedScore, whatIfScore, title);
+                    return (
+                      <Tooltip key={key}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => setMode(sig.type, key)}
+                            aria-label={whatIfLabel}
+                            aria-pressed={isActive}
+                            data-testid={`signal-mute-boost-${sig.type}-${key}`}
+                            className={cn(
+                              "px-2 py-1 text-[10px] font-medium transition-colors flex items-center gap-1",
+                              isActive
+                                ? key === "mute"
+                                  ? "bg-muted text-muted-foreground"
+                                  : key === "boost"
+                                    ? "bg-destructive/20 text-destructive"
+                                    : "bg-primary text-primary-foreground"
+                                : "text-muted-foreground/60 hover:bg-muted/30",
+                            )}
+                          >
+                            <Icon className="w-3 h-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          className="text-[11px] font-mono"
+                          data-testid={`signal-whatif-tooltip-${sig.type}-${key}`}
+                        >
+                          {isActive ? (
+                            title
+                          ) : (
+                            <>
+                              {title}:{" "}
+                              <span className="opacity-70">
+                                {adjustedScore}
+                              </span>{" "}
+                              →{" "}
+                              <span
+                                className={cn(
+                                  "font-bold",
+                                  whatIfScore < adjustedScore
+                                    ? "text-green-300"
+                                    : whatIfScore > adjustedScore
+                                      ? "text-red-300"
+                                      : "",
+                                )}
+                              >
+                                {whatIfScore}
+                              </span>
+                            </>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
           {hasOverrides && (
-            <span
-              className={cn(
-                "ml-auto text-[10px] font-mono",
-                delta > 0
-                  ? "text-destructive"
-                  : delta < 0
-                    ? "text-green-400"
-                    : "text-muted-foreground",
-              )}
-              data-testid="signal-mute-boost-delta"
-            >
-              {baselineScore} → {adjustedScore} ({delta > 0 ? "+" : ""}
-              {delta})
-            </span>
-          )}
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Mute or boost individual signals to test scoring sensitivity. State is
-          shared via URL.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {aggregated.map((sig) => {
-          const mode: SignalMode = adjustments[sig.type] ?? "normal";
-          const label = signalLabels?.[sig.type] ?? sig.type;
-          return (
-            <div
-              key={sig.type}
-              className="flex items-center gap-2 rounded-lg glass-card p-2"
-              data-testid={`signal-mute-boost-row-${sig.type}`}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground truncate">
-                  {label}
-                </div>
-                <div className="text-[10px] text-muted-foreground/80 font-mono">
-                  weight {sig.totalWeight}
-                  {sig.count > 1 && <> · {sig.count}×</>}
-                </div>
-              </div>
-              <div className="flex rounded-md overflow-hidden border border-border/40 flex-shrink-0">
-                {(
-                  [
-                    { key: "mute", icon: VolumeX, title: "Mute (0×)" },
-                    { key: "normal", icon: Equal, title: "Normal (1×)" },
-                    { key: "boost", icon: Volume2, title: "Boost (2×)" },
-                  ] as const
-                ).map(({ key, icon: Icon, title }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setMode(sig.type, key)}
-                    title={title}
-                    aria-label={title}
-                    aria-pressed={mode === key}
-                    data-testid={`signal-mute-boost-${sig.type}-${key}`}
-                    className={cn(
-                      "px-2 py-1 text-[10px] font-medium transition-colors flex items-center gap-1",
-                      mode === key
-                        ? key === "mute"
-                          ? "bg-muted text-muted-foreground"
-                          : key === "boost"
-                            ? "bg-destructive/20 text-destructive"
-                            : "bg-primary text-primary-foreground"
-                        : "text-muted-foreground/60 hover:bg-muted/30",
-                    )}
-                  >
-                    <Icon className="w-3 h-3" />
-                  </button>
-                ))}
-              </div>
+            <div className="flex justify-end pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={reset}
+                data-testid="signal-mute-boost-reset"
+                className="h-7 text-[10px] gap-1"
+              >
+                <RotateCcw className="w-3 h-3" /> Reset
+              </Button>
             </div>
-          );
-        })}
-        {hasOverrides && (
-          <div className="flex justify-end pt-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={reset}
-              data-testid="signal-mute-boost-reset"
-              className="h-7 text-[10px] gap-1"
-            >
-              <RotateCcw className="w-3 h-3" /> Reset
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          )}
+        </CardContent>
+      </Card>
+    </TooltipProvider>
   );
 }
 

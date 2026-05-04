@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import {
   SignalMuteBoostPanel,
   parseSignalAdjustments,
@@ -236,5 +237,151 @@ describe("SignalMuteBoostPanel", () => {
       />,
     );
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe("SignalMuteBoostPanel what-if tooltips", () => {
+  const evidence = [
+    { type: "ai_phrase", weight: 10 },
+    { type: "template_match", weight: 5 },
+  ];
+
+  it("shows projected score in tooltip when hovering a non-active mute button", async () => {
+    const user = userEvent.setup();
+    render(
+      <SignalMuteBoostPanel
+        evidence={evidence}
+        adjustments={{}}
+        onChange={vi.fn()}
+        baselineScore={50}
+        adjustedScore={50}
+      />,
+    );
+
+    const muteBtn = screen.getByTestId("signal-mute-boost-ai_phrase-mute");
+    await user.hover(muteBtn);
+
+    await waitFor(() => {
+      const tooltip = screen.getByTestId(
+        "signal-whatif-tooltip-ai_phrase-mute",
+      );
+      expect(tooltip).toBeInTheDocument();
+      expect(tooltip.textContent).toContain("→");
+      expect(tooltip.textContent).toContain("40");
+    });
+  });
+
+  it("shows projected score when hovering a non-active boost button", async () => {
+    const user = userEvent.setup();
+    render(
+      <SignalMuteBoostPanel
+        evidence={evidence}
+        adjustments={{}}
+        onChange={vi.fn()}
+        baselineScore={50}
+        adjustedScore={50}
+      />,
+    );
+
+    const boostBtn = screen.getByTestId(
+      "signal-mute-boost-template_match-boost",
+    );
+    await user.hover(boostBtn);
+
+    await waitFor(() => {
+      const tooltip = screen.getByTestId(
+        "signal-whatif-tooltip-template_match-boost",
+      );
+      expect(tooltip).toBeInTheDocument();
+      expect(tooltip.textContent).toContain("55");
+    });
+  });
+
+  it("shows just the mode label for the currently active button", async () => {
+    const user = userEvent.setup();
+    render(
+      <SignalMuteBoostPanel
+        evidence={evidence}
+        adjustments={{}}
+        onChange={vi.fn()}
+        baselineScore={50}
+        adjustedScore={50}
+      />,
+    );
+
+    const normalBtn = screen.getByTestId(
+      "signal-mute-boost-ai_phrase-normal",
+    );
+    await user.hover(normalBtn);
+
+    await waitFor(() => {
+      const tooltip = screen.getByTestId(
+        "signal-whatif-tooltip-ai_phrase-normal",
+      );
+      expect(tooltip).toBeInTheDocument();
+      expect(tooltip.textContent).toMatch(/Normal/);
+      expect(tooltip.textContent).not.toContain("→");
+    });
+  });
+
+  it("computes what-if correctly when there are existing adjustments", async () => {
+    const user = userEvent.setup();
+    const adj: SignalAdjustments = { ai_phrase: "mute" };
+    const adjustedScore = applySignalAdjustments(50, evidence, adj);
+    render(
+      <SignalMuteBoostPanel
+        evidence={evidence}
+        adjustments={adj}
+        onChange={vi.fn()}
+        baselineScore={50}
+        adjustedScore={adjustedScore}
+      />,
+    );
+
+    const boostBtn = screen.getByTestId(
+      "signal-mute-boost-template_match-boost",
+    );
+    await user.hover(boostBtn);
+
+    await waitFor(() => {
+      const tooltip = screen.getByTestId(
+        "signal-whatif-tooltip-template_match-boost",
+      );
+      expect(tooltip).toBeInTheDocument();
+      expect(tooltip.textContent).toContain("45");
+    });
+  });
+
+  it("aria-label includes what-if projection for non-active buttons", () => {
+    render(
+      <SignalMuteBoostPanel
+        evidence={evidence}
+        adjustments={{}}
+        onChange={vi.fn()}
+        baselineScore={50}
+        adjustedScore={50}
+      />,
+    );
+    const muteBtn = screen.getByTestId("signal-mute-boost-ai_phrase-mute");
+    const label = muteBtn.getAttribute("aria-label") ?? "";
+    expect(label).toContain("→");
+    expect(label).toContain("40");
+  });
+
+  it("aria-label shows active state for the current mode button", () => {
+    render(
+      <SignalMuteBoostPanel
+        evidence={evidence}
+        adjustments={{}}
+        onChange={vi.fn()}
+        baselineScore={50}
+        adjustedScore={50}
+      />,
+    );
+    const normalBtn = screen.getByTestId(
+      "signal-mute-boost-ai_phrase-normal",
+    );
+    const label = normalBtn.getAttribute("aria-label") ?? "";
+    expect(label).toContain("active");
   });
 });
