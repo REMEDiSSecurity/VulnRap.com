@@ -58,3 +58,27 @@ pnpm --filter @workspace/mcp-server test
 ```
 
 The tests stub `globalThis.fetch` so the suite is offline-safe.
+
+### Live smoke test
+
+An opt-in end-to-end smoke test spawns the built MCP server over stdio and
+exercises `tools/list` and `score_report` against the real API. It is gated
+behind the `MCP_LIVE` environment variable so the default `pnpm test` stays
+offline-deterministic.
+
+```bash
+pnpm --filter @workspace/mcp-server build
+pnpm --filter @workspace/mcp-server test:live
+```
+
+You can point it at a different deployment by setting `VULNRAP_API_BASE_URL`:
+
+```bash
+VULNRAP_API_BASE_URL=https://staging.vulnrap.com \
+  pnpm --filter @workspace/mcp-server test:live
+```
+
+The live smoke test runs automatically on a nightly schedule via the
+`.github/workflows/nightly-mcp-smoke.yml` workflow. On failure it opens (or
+updates) a tracking issue. It can also be triggered manually from the GitHub
+Actions UI via `workflow_dispatch`.
