@@ -41,6 +41,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { TransparencyDriftWidget } from "@/components/transparency-drift-widget";
 import LatencySnapshotCard from "@/components/LatencySnapshotCard";
+import LatencyHistoryCard from "@/components/LatencyHistoryCard";
 import PhraseSuggestionForm from "@/components/phrase-suggestion-form";
 
 const TIER_COLORS = {
@@ -522,6 +523,8 @@ export default function Transparency() {
       </section>
 
       <LatencySnapshotCard />
+
+      <LatencyHistoryCard />
 
       <section aria-label="User-suggested phrase form">
         <PhraseSuggestionForm />

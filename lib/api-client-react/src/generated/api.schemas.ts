@@ -3934,6 +3934,25 @@ export interface LatencySnapshot {
   worstEngine: LatencyWorstEngine | null;
 }
 
+export interface LatencyHistoryEngine {
+  engine: string;
+  percentiles: LatencyPercentiles;
+}
+
+export interface LatencyHistoryDay {
+  /** ISO date string (YYYY-MM-DD) */
+  date: string;
+  sampleCount: number;
+  pipeline: LatencyPercentiles;
+  engines: LatencyHistoryEngine[];
+}
+
+export interface LatencyHistory {
+  days: number;
+  generatedAt: string;
+  daily: LatencyHistoryDay[];
+}
+
 export type PublicStatusEngineStatus =
   (typeof PublicStatusEngineStatus)[keyof typeof PublicStatusEngineStatus];
 
@@ -4894,6 +4913,14 @@ export const GetCohortBaselineMetric = {
   composite: "composite",
   slop: "slop",
 } as const;
+
+export type GetLatencyHistoryParams = {
+  /**
+   * @minimum 1
+   * @maximum 90
+   */
+  days?: number;
+};
 
 export type GetTrendsParams = {
   /**

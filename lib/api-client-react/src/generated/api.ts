@@ -53,6 +53,7 @@ import type {
   GetCalibrationAuthBruteForceAlertsParams,
   GetCohortBaselineParams,
   GetEmbedBadgeSvgParams,
+  GetLatencyHistoryParams,
   GetReportFeedParams,
   GetScoreStabilityFlipsParams,
   GetShadowDriftParams,
@@ -80,6 +81,7 @@ import type {
   HealthStatus,
   HoldoutEvalResponse,
   IncidentLog,
+  LatencyHistory,
   LatencySnapshot,
   ListHandwavyPhraseRemovalBatchesParams,
   ListPhraseSuggestionsParams,
@@ -6592,6 +6594,107 @@ export function useGetLatencySnapshot<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetLatencySnapshotQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns daily p50/p95/p99 latency for the end-to-end scoring pipeline
+and each engine over the last N days (default 14). Useful for spotting
+latency trends and engine regressions.
+
+ * @summary Get daily p95 latency over time
+ */
+export const getGetLatencyHistoryUrl = (params?: GetLatencyHistoryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/public/latency-history?${stringifiedParams}`
+    : `/api/public/latency-history`;
+};
+
+export const getLatencyHistory = async (
+  params?: GetLatencyHistoryParams,
+  options?: RequestInit,
+): Promise<LatencyHistory> => {
+  return customFetch<LatencyHistory>(getGetLatencyHistoryUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLatencyHistoryQueryKey = (
+  params?: GetLatencyHistoryParams,
+) => {
+  return [`/api/public/latency-history`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetLatencyHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLatencyHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetLatencyHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLatencyHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetLatencyHistoryQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLatencyHistory>>
+  > = ({ signal }) => getLatencyHistory(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLatencyHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLatencyHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLatencyHistory>>
+>;
+export type GetLatencyHistoryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get daily p95 latency over time
+ */
+
+export function useGetLatencyHistory<
+  TData = Awaited<ReturnType<typeof getLatencyHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetLatencyHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLatencyHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLatencyHistoryQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

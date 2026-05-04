@@ -2330,6 +2330,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/LatencySnapshot"
 
+  /public/latency-history:
+    get:
+      operationId: getLatencyHistory
+      tags: [stats]
+      summary: Get daily p95 latency over time
+      description: |
+        Returns daily p50/p95/p99 latency for the end-to-end scoring pipeline
+        and each engine over the last N days (default 14). Useful for spotting
+        latency trends and engine regressions.
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 14
+            minimum: 1
+            maximum: 90
+      responses:
+        "200":
+          description: Daily latency history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LatencyHistory"
+
   /public/status:
     get:
       operationId: getPublicStatus
@@ -7977,6 +8003,45 @@ components:
             - type: "null"
       required:
         [windowHours, generatedAt, sampleCount, pipeline, engines, worstEngine]
+
+    LatencyHistory:
+      type: object
+      properties:
+        days:
+          type: integer
+        generatedAt:
+          type: string
+          format: date-time
+        daily:
+          type: array
+          items:
+            $ref: "#/components/schemas/LatencyHistoryDay"
+      required: [days, generatedAt, daily]
+
+    LatencyHistoryDay:
+      type: object
+      properties:
+        date:
+          type: string
+          description: ISO date string (YYYY-MM-DD)
+        sampleCount:
+          type: integer
+        pipeline:
+          $ref: "#/components/schemas/LatencyPercentiles"
+        engines:
+          type: array
+          items:
+            $ref: "#/components/schemas/LatencyHistoryEngine"
+      required: [date, sampleCount, pipeline, engines]
+
+    LatencyHistoryEngine:
+      type: object
+      properties:
+        engine:
+          type: string
+        percentiles:
+          $ref: "#/components/schemas/LatencyPercentiles"
+      required: [engine, percentiles]
 
     PublicStatusEngine:
       type: object

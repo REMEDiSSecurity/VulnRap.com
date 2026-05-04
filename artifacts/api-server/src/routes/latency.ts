@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { sql, gte } from "drizzle-orm";
 import { db, analysisTracesTable, type PipelineTrace } from "@workspace/db";
-import { GetLatencySnapshotResponse } from "@workspace/api-zod";
+import { GetLatencySnapshotResponse, GetLatencyHistoryResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -121,6 +121,92 @@ router.get("/public/latency-snapshot", async (_req, res): Promise<void> => {
   });
 
   res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+  res.json(response);
+});
+
+const DEFAULT_HISTORY_DAYS = 14;
+const MAX_HISTORY_DAYS = 90;
+
+router.get("/public/latency-history", async (req, res): Promise<void> => {
+  const daysParam = Number(req.query.days) || DEFAULT_HISTORY_DAYS;
+  const days = Math.max(1, Math.min(daysParam, MAX_HISTORY_DAYS));
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      totalDurationMs: analysisTracesTable.totalDurationMs,
+      trace: analysisTracesTable.trace,
+      createdAt: analysisTracesTable.createdAt,
+    })
+    .from(analysisTracesTable)
+    .where(gte(analysisTracesTable.createdAt, since));
+
+  const buckets = new Map<
+    string,
+    { pipeline: number[]; engines: Map<string, number[]> }
+  >();
+
+  for (const row of rows) {
+    const dateKey = row.createdAt.toISOString().slice(0, 10);
+    let bucket = buckets.get(dateKey);
+    if (!bucket) {
+      bucket = { pipeline: [], engines: new Map() };
+      buckets.set(dateKey, bucket);
+    }
+
+    if (typeof row.totalDurationMs === "number" && row.totalDurationMs >= 0) {
+      bucket.pipeline.push(row.totalDurationMs);
+    }
+
+    const trace = row.trace as PipelineTrace | null;
+    if (!trace || !Array.isArray(trace.stages)) continue;
+    for (const stage of trace.stages) {
+      if (!stage || typeof stage.durationMs !== "number") continue;
+      const list = bucket.engines.get(stage.stage) ?? [];
+      list.push(stage.durationMs);
+      bucket.engines.set(stage.stage, list);
+    }
+  }
+
+  const daily = Array.from(buckets.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, bucket]) => {
+      const sortedPipeline = [...bucket.pipeline].sort((a, b) => a - b);
+      const engines = Array.from(bucket.engines.entries())
+        .map(([engine, values]) => {
+          const sorted = [...values].sort((a, b) => a - b);
+          return {
+            engine,
+            percentiles: {
+              p50: Number(percentile(sorted, 50).toFixed(1)),
+              p95: Number(percentile(sorted, 95).toFixed(1)),
+              p99: Number(percentile(sorted, 99).toFixed(1)),
+              sampleCount: sorted.length,
+            },
+          };
+        })
+        .sort((a, b) => a.engine.localeCompare(b.engine));
+
+      return {
+        date,
+        sampleCount: sortedPipeline.length,
+        pipeline: {
+          p50: Number(percentile(sortedPipeline, 50).toFixed(1)),
+          p95: Number(percentile(sortedPipeline, 95).toFixed(1)),
+          p99: Number(percentile(sortedPipeline, 99).toFixed(1)),
+          sampleCount: sortedPipeline.length,
+        },
+        engines,
+      };
+    });
+
+  const response = GetLatencyHistoryResponse.parse({
+    days,
+    generatedAt: new Date().toISOString(),
+    daily,
+  });
+
+  res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
   res.json(response);
 });
 

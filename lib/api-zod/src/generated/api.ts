@@ -13078,6 +13078,52 @@ export const GetLatencySnapshotResponse = zod.object({
 });
 
 /**
+ * Returns daily p50/p95/p99 latency for the end-to-end scoring pipeline
+and each engine over the last N days (default 14). Useful for spotting
+latency trends and engine regressions.
+
+ * @summary Get daily p95 latency over time
+ */
+export const getLatencyHistoryQueryDaysDefault = 14;
+export const getLatencyHistoryQueryDaysMax = 90;
+
+export const GetLatencyHistoryQueryParams = zod.object({
+  days: zod.coerce
+    .number()
+    .min(1)
+    .max(getLatencyHistoryQueryDaysMax)
+    .default(getLatencyHistoryQueryDaysDefault),
+});
+
+export const GetLatencyHistoryResponse = zod.object({
+  days: zod.number(),
+  generatedAt: zod.coerce.date(),
+  daily: zod.array(
+    zod.object({
+      date: zod.string().describe("ISO date string (YYYY-MM-DD)"),
+      sampleCount: zod.number(),
+      pipeline: zod.object({
+        p50: zod.number(),
+        p95: zod.number(),
+        p99: zod.number(),
+        sampleCount: zod.number(),
+      }),
+      engines: zod.array(
+        zod.object({
+          engine: zod.string(),
+          percentiles: zod.object({
+            p50: zod.number(),
+            p95: zod.number(),
+            p99: zod.number(),
+            sampleCount: zod.number(),
+          }),
+        }),
+      ),
+    }),
+  ),
+});
+
+/**
  * Task #706 — Public status page snapshot. Returns:
   * 30-day API uptime % (fraction of last 30 days that recorded
     at least one successful scoring trace).
