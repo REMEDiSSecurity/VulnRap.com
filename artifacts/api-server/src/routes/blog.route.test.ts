@@ -6,6 +6,7 @@
 import http from "node:http";
 import express, { type Express } from "express";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { XMLParser } from "fast-xml-parser";
 import blogRouter, { buildBlogAtomFeed } from "./blog";
 import type { AddressInfo } from "node:net";
 
@@ -95,5 +96,97 @@ describe("GET /blog/feed.xml", () => {
       (a, b) => Date.parse(b) - Date.parse(a),
     );
     expect(updatedMatches).toEqual(sorted);
+  });
+});
+
+const RFC3339 =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+function parseFeed(xml: string) {
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    isArray: (_name: string, jpath: string) => jpath === "feed.entry",
+  });
+  return parser.parse(xml);
+}
+
+describe("Atom 1.0 spec conformance", () => {
+  let feed: Record<string, any>;
+
+  beforeAll(async () => {
+    const res = await fetchText("/blog/feed.xml");
+    feed = parseFeed(res.body).feed;
+  });
+
+  it("has all required feed-level elements (RFC 4287 §4.1.1)", () => {
+    expect(feed.title).toBeDefined();
+    expect(feed.id).toBeDefined();
+    expect(feed.updated).toBeDefined();
+    expect(feed.author).toBeDefined();
+    expect(feed.author.name).toBeDefined();
+  });
+
+  it("has a self link and an alternate link on the feed", () => {
+    const links: Array<Record<string, string>> = Array.isArray(feed.link)
+      ? feed.link
+      : [feed.link];
+    const self = links.find((l) => l["@_rel"] === "self");
+    const alt = links.find((l) => l["@_rel"] === "alternate");
+    expect(self).toBeDefined();
+    expect(self!["@_type"]).toBe("application/atom+xml");
+    expect(self!["@_href"]).toMatch(/^https?:\/\//);
+    expect(alt).toBeDefined();
+    expect(alt!["@_type"]).toBe("text/html");
+    expect(alt!["@_href"]).toMatch(/^https?:\/\//);
+  });
+
+  it("has all required entry-level elements (RFC 4287 §4.1.2)", () => {
+    const entries: Array<Record<string, any>> = feed.entry;
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      expect(entry.title).toBeDefined();
+      expect(entry.id).toBeDefined();
+      expect(entry.updated).toBeDefined();
+      expect(entry.author).toBeDefined();
+      expect(entry.author.name).toBeDefined();
+      const link = Array.isArray(entry.link) ? entry.link[0] : entry.link;
+      expect(link).toBeDefined();
+      expect(link["@_rel"]).toBe("alternate");
+      expect(link["@_href"]).toMatch(/^https?:\/\//);
+    }
+  });
+
+  it("every <id> is unique across the entire feed", () => {
+    const ids: string[] = [
+      feed.id,
+      ...feed.entry.map((e: Record<string, any>) => e.id),
+    ];
+    const unique = new Set(ids);
+    expect(unique.size).toBe(ids.length);
+  });
+
+  it("feed-level <updated> is a valid RFC-3339 timestamp", () => {
+    expect(String(feed.updated)).toMatch(RFC3339);
+  });
+
+  it("every entry <updated> is a valid RFC-3339 timestamp", () => {
+    for (const entry of feed.entry) {
+      expect(String(entry.updated)).toMatch(RFC3339);
+    }
+  });
+
+  it("every entry <published> (if present) is a valid RFC-3339 timestamp", () => {
+    for (const entry of feed.entry) {
+      if (entry.published !== undefined) {
+        expect(String(entry.published)).toMatch(RFC3339);
+      }
+    }
+  });
+
+  it("entry ids use tag: URI scheme (RFC 4151)", () => {
+    for (const entry of feed.entry) {
+      expect(String(entry.id)).toMatch(/^tag:[^,]+,\d{4}-\d{2}-\d{2}:/);
+    }
   });
 });
