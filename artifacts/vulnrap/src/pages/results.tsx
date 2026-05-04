@@ -2673,7 +2673,7 @@ export default function Results() {
   const [expandedCompare, setExpandedCompare] = useState<number | null>(null);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
   const [exporting, setExporting] = useState<
-    "json" | "txt" | "csv" | "md" | null
+    "json" | "txt" | "csv" | "md" | "pdf" | null
   >(null);
   const [sensitivity, setSensitivity] = useState<SensitivityPreset>(
     () => getSettings().sensitivityPreset,
@@ -2902,6 +2902,49 @@ export default function Results() {
       toast({ title: "Copied", description: "Markdown report copied to clipboard." });
     } catch {
       toast({ title: "Copy failed", description: "Could not access clipboard. Try downloading the Markdown file instead.", variant: "destructive" });
+    }
+  };
+
+  const exportPdf = async () => {
+    if (!report || exporting) return;
+    setExporting("pdf");
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const el = document.getElementById("root");
+      if (!el) {
+        toast({ title: "Error", description: "Could not find report content." });
+        return;
+      }
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const filename = `vulnrap-report-${anonymizeId(id)}-${dateStr}.pdf`;
+      await html2pdf()
+        .set({
+          margin: [10, 10, 10, 10],
+          filename,
+          image: { type: "jpeg", quality: 0.95 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            onclone: (clonedDoc: Document) => {
+              const style = clonedDoc.createElement("style");
+              style.textContent = PRINT_STYLES.replace(
+                /@media print\s*\{/,
+                "",
+              ).replace(/\}\s*$/, "");
+              clonedDoc.head.appendChild(style);
+            },
+          },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        })
+        .from(el)
+        .save();
+      toast({ title: "Exported", description: "PDF report downloaded." });
+    } catch (err) {
+      console.error("PDF export failed:", err);
+      toast({ title: "Error", description: "PDF export failed. Try the Print button instead." });
+    } finally {
+      setExporting(null);
     }
   };
 
@@ -3396,6 +3439,21 @@ export default function Results() {
           >
             <Printer className="w-4 h-4" />
             Print
+          </Button>
+          <Button
+            variant="outline"
+            onClick={exportPdf}
+            disabled={exporting !== null}
+            className="gap-2 glass-card hover:border-primary/30"
+            data-testid="button-pdf"
+            title="Download a clean PDF of this report — no print dialog needed."
+          >
+            {exporting === "pdf" ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            {exporting === "pdf" ? "Generating..." : "PDF"}
           </Button>
           <Button
             variant="outline"
