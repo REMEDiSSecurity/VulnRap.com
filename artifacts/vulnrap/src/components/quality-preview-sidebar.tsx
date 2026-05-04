@@ -1,4 +1,5 @@
 // Task #637 — Pre-submit quality grader.
+// Task #965 — Side-by-side draft comparison (sessionStorage baseline).
 //
 // Pure-client lightweight checklist that grades the report text *before*
 // it ever reaches the server. The goal is to nudge the user into
@@ -8,10 +9,19 @@
 // score — it is intentionally imperfect; the real scoring still happens
 // on submit.
 //
+// Baseline lifecycle (Task #965):
+// 1. On mount, load any existing baseline from sessionStorage.
+// 2. On unmount (or before-unload), persist the current preview as the
+//    baseline so the *next* editing session shows deltas from where the
+//    user left off — this is the "since last edit" comparison.
+// 3. "Reset baseline" explicitly snapshots the current state as the new
+//    baseline, zeroing out deltas mid-session so the user can start
+//    measuring improvement from "right now."
+//
 // All checks are O(n) over the input text and run synchronously on every
 // keystroke. Anything heavier than a regex sweep should NOT live here.
 
-import { useMemo } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   CheckCircle2,
@@ -20,6 +30,9 @@ import {
   Gauge,
   ListChecks,
   ExternalLink,
+  RotateCcw,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import {
   Card,
@@ -29,6 +42,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 
 export type CheckStatus = "pass" | "warn" | "fail";
 
@@ -74,8 +88,6 @@ export function computeQualityPreview(input: string): QualityPreview {
 
   const letters = (text.match(LETTER_RE) ?? []).length;
   const uppers = (text.match(UPPER_LETTER_RE) ?? []).length;
-  // Only consider all-caps abuse meaningful once there's enough text to
-  // judge — otherwise a 5-letter title like "RCE" trips it.
   const capsRatio = letters >= 40 ? uppers / letters : 0;
 
   const checks: QualityCheck[] = [
@@ -129,10 +141,6 @@ export function computeQualityPreview(input: string): QualityPreview {
     },
   ];
 
-  // Approximation of Engine 2 (substance/quality). Server-side quality
-  // is computed from much richer signals (per-section coverage, factual
-  // density, etc) — this is a deliberately rough proxy meant only to
-  // tell the user "your draft looks roughly good / fair / poor".
   let score = 0;
   if (wordCount >= 150) score += 25;
   else if (wordCount >= 75) score += 12;
@@ -164,12 +172,110 @@ export function computeQualityPreview(input: string): QualityPreview {
   };
 }
 
+export const BASELINE_KEY = "vulnrap_quality_baseline";
+
+export interface StoredBaseline {
+  estimatedScore: number;
+  checkStatuses: Record<string, CheckStatus>;
+}
+
+export function snapshotBaseline(preview: QualityPreview): StoredBaseline {
+  return {
+    estimatedScore: preview.estimatedScore,
+    checkStatuses: Object.fromEntries(
+      preview.checks.map((c) => [c.id, c.status]),
+    ),
+  };
+}
+
+export function loadBaseline(): StoredBaseline | null {
+  try {
+    const raw = sessionStorage.getItem(BASELINE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      typeof parsed.estimatedScore === "number" &&
+      typeof parsed.checkStatuses === "object" &&
+      parsed.checkStatuses !== null &&
+      !Array.isArray(parsed.checkStatuses) &&
+      Object.values(parsed.checkStatuses).every(
+        (v: unknown) => v === "pass" || v === "warn" || v === "fail",
+      )
+    ) {
+      return parsed as StoredBaseline;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveBaseline(baseline: StoredBaseline): void {
+  try {
+    sessionStorage.setItem(BASELINE_KEY, JSON.stringify(baseline));
+  } catch {}
+}
+
+const STATUS_RANK: Record<CheckStatus, number> = {
+  fail: 0,
+  warn: 1,
+  pass: 2,
+};
+
 function StatusIcon({ status }: { status: CheckStatus }) {
   if (status === "pass")
     return <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />;
   if (status === "warn")
     return <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />;
   return <XCircle className="w-4 h-4 text-destructive flex-shrink-0" />;
+}
+
+export function DeltaBadge({ delta }: { delta: number }) {
+  if (delta === 0) return null;
+  const positive = delta > 0;
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 text-[10px] font-mono font-semibold ${
+        positive ? "text-green-400" : "text-destructive"
+      }`}
+      data-testid="quality-delta-score"
+    >
+      {positive ? (
+        <TrendingUp className="w-3 h-3" />
+      ) : (
+        <TrendingDown className="w-3 h-3" />
+      )}
+      {positive ? "+" : ""}
+      {delta}
+    </span>
+  );
+}
+
+export function CheckStatusDelta({
+  current,
+  previous,
+}: {
+  current: CheckStatus;
+  previous: CheckStatus | undefined;
+}) {
+  if (!previous || current === previous) return null;
+  const improved = STATUS_RANK[current] > STATUS_RANK[previous];
+  return (
+    <span
+      className={`text-[10px] font-medium ${
+        improved ? "text-green-400" : "text-destructive"
+      }`}
+      data-testid="quality-delta-check"
+    >
+      {improved ? (
+        <TrendingUp className="w-3 h-3 inline" />
+      ) : (
+        <TrendingDown className="w-3 h-3 inline" />
+      )}
+    </span>
+  );
 }
 
 function scoreColor(score: number): string {
@@ -200,6 +306,39 @@ export function QualityPreviewSidebar({ text, className, compact }: Props) {
   const preview = useMemo(() => computeQualityPreview(text), [text]);
   const empty = preview.wordCount === 0;
 
+  const [baseline, setBaseline] = useState<StoredBaseline | null>(() =>
+    loadBaseline(),
+  );
+
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
+
+  useEffect(() => {
+    const persistOnUnload = () => {
+      if (previewRef.current.wordCount > 0) {
+        saveBaseline(snapshotBaseline(previewRef.current));
+      }
+    };
+    window.addEventListener("beforeunload", persistOnUnload);
+    return () => {
+      window.removeEventListener("beforeunload", persistOnUnload);
+      if (previewRef.current.wordCount > 0) {
+        saveBaseline(snapshotBaseline(previewRef.current));
+      }
+    };
+  }, []);
+
+  const scoreDelta =
+    baseline && !empty ? preview.estimatedScore - baseline.estimatedScore : 0;
+
+  const hasBaseline = baseline !== null;
+
+  const handleResetBaseline = useCallback(() => {
+    const snap = snapshotBaseline(previewRef.current);
+    saveBaseline(snap);
+    setBaseline(snap);
+  }, []);
+
   return (
     <Card
       className={`glass-card rounded-xl ${className ?? ""}`}
@@ -226,11 +365,14 @@ export function QualityPreviewSidebar({ text, className, compact }: Props) {
               <span className="text-muted-foreground uppercase tracking-wide">
                 Estimated quality
               </span>
-              <span
-                className={`font-mono font-bold text-base ${scoreColor(preview.estimatedScore)}`}
-                data-testid="quality-preview-score-value"
-              >
-                {empty ? "—" : preview.estimatedScore}
+              <span className="flex items-center gap-1.5">
+                {scoreDelta !== 0 && <DeltaBadge delta={scoreDelta} />}
+                <span
+                  className={`font-mono font-bold text-base ${scoreColor(preview.estimatedScore)}`}
+                  data-testid="quality-preview-score-value"
+                >
+                  {empty ? "—" : preview.estimatedScore}
+                </span>
               </span>
             </div>
             <Progress
@@ -257,7 +399,15 @@ export function QualityPreviewSidebar({ text, className, compact }: Props) {
             >
               <StatusIcon status={c.status} />
               <div className="min-w-0 flex-1">
-                <div className="font-medium leading-tight">{c.label}</div>
+                <div className="font-medium leading-tight flex items-center gap-1.5">
+                  {c.label}
+                  {hasBaseline && (
+                    <CheckStatusDelta
+                      current={c.status}
+                      previous={baseline.checkStatuses[c.id]}
+                    />
+                  )}
+                </div>
                 <div className="text-muted-foreground leading-tight">
                   {c.detail}
                 </div>
@@ -266,14 +416,29 @@ export function QualityPreviewSidebar({ text, className, compact }: Props) {
           ))}
         </ul>
 
-        <Link
-          to="/docs/good-report"
-          className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-          data-testid="quality-preview-docs-link"
-        >
-          What makes a good report?
-          <ExternalLink className="w-3 h-3" />
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link
+            to="/docs/good-report"
+            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+            data-testid="quality-preview-docs-link"
+          >
+            What makes a good report?
+            <ExternalLink className="w-3 h-3" />
+          </Link>
+
+          {hasBaseline && !empty && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-primary"
+              onClick={handleResetBaseline}
+              data-testid="quality-reset-baseline"
+            >
+              <RotateCcw className="w-3 h-3 mr-1" />
+              Reset baseline
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

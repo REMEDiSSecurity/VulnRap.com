@@ -1,16 +1,23 @@
 // Task #637 — coverage for the pre-submit quality grader.
+// Task #965 — coverage for baseline/delta comparison.
 //
 // Pins both the pure helper (computeQualityPreview) and the rendered
 // component so future tweaks to scoring weights don't silently flip a
 // row from green to red without a test failure.
 
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, beforeEach, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import {
   QualityPreviewSidebar,
   computeQualityPreview,
+  DeltaBadge,
+  CheckStatusDelta,
+  BASELINE_KEY,
+  snapshotBaseline,
+  loadBaseline,
+  saveBaseline,
 } from "./quality-preview-sidebar";
 
 function renderSidebar(text: string) {
@@ -90,6 +97,10 @@ describe("computeQualityPreview", () => {
 });
 
 describe("<QualityPreviewSidebar />", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
   it("renders the score, every checklist row, and the docs link", () => {
     renderSidebar("found a bug");
     expect(screen.getByTestId("quality-preview-sidebar")).toBeTruthy();
@@ -110,5 +121,176 @@ describe("<QualityPreviewSidebar />", () => {
     expect(screen.getByTestId("quality-preview-score-value").textContent).toBe(
       "—",
     );
+  });
+});
+
+describe("snapshotBaseline / loadBaseline / saveBaseline", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it("round-trips a baseline through sessionStorage", () => {
+    const preview = computeQualityPreview("found a bug");
+    const snap = snapshotBaseline(preview);
+    saveBaseline(snap);
+    const loaded = loadBaseline();
+    expect(loaded).toEqual(snap);
+    expect(loaded!.estimatedScore).toBe(preview.estimatedScore);
+  });
+
+  it("returns null when sessionStorage is empty", () => {
+    expect(loadBaseline()).toBeNull();
+  });
+
+  it("returns null for corrupted storage data", () => {
+    sessionStorage.setItem(BASELINE_KEY, "not-json");
+    expect(loadBaseline()).toBeNull();
+  });
+
+  it("returns null when checkStatuses is null", () => {
+    sessionStorage.setItem(
+      BASELINE_KEY,
+      JSON.stringify({ estimatedScore: 42, checkStatuses: null }),
+    );
+    expect(loadBaseline()).toBeNull();
+  });
+
+  it("returns null when checkStatuses contains invalid values", () => {
+    sessionStorage.setItem(
+      BASELINE_KEY,
+      JSON.stringify({
+        estimatedScore: 42,
+        checkStatuses: { "word-count": "bogus" },
+      }),
+    );
+    expect(loadBaseline()).toBeNull();
+  });
+
+  it("returns null when checkStatuses is an array", () => {
+    sessionStorage.setItem(
+      BASELINE_KEY,
+      JSON.stringify({ estimatedScore: 42, checkStatuses: ["pass"] }),
+    );
+    expect(loadBaseline()).toBeNull();
+  });
+});
+
+describe("<DeltaBadge />", () => {
+  it("renders nothing when delta is zero", () => {
+    const { container } = render(<DeltaBadge delta={0} />);
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("renders a positive delta with + prefix", () => {
+    render(<DeltaBadge delta={29} />);
+    const el = screen.getByTestId("quality-delta-score");
+    expect(el.textContent).toContain("+29");
+  });
+
+  it("renders a negative delta without + prefix", () => {
+    render(<DeltaBadge delta={-10} />);
+    const el = screen.getByTestId("quality-delta-score");
+    expect(el.textContent).toContain("-10");
+    expect(el.textContent).not.toContain("+-10");
+  });
+});
+
+describe("<CheckStatusDelta />", () => {
+  it("renders nothing when current equals previous", () => {
+    const { container } = render(
+      <CheckStatusDelta current="pass" previous="pass" />,
+    );
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("renders nothing when previous is undefined", () => {
+    const { container } = render(
+      <CheckStatusDelta current="pass" previous={undefined} />,
+    );
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("renders a green indicator when status improved", () => {
+    render(<CheckStatusDelta current="pass" previous="fail" />);
+    const el = screen.getByTestId("quality-delta-check");
+    expect(el.className).toContain("text-green-400");
+  });
+
+  it("renders a red indicator when status regressed", () => {
+    render(<CheckStatusDelta current="fail" previous="pass" />);
+    const el = screen.getByTestId("quality-delta-check");
+    expect(el.className).toContain("text-destructive");
+  });
+});
+
+describe("baseline lifecycle in <QualityPreviewSidebar />", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it("shows a score delta when a baseline exists in sessionStorage", () => {
+    const lowPreview = computeQualityPreview("found a bug");
+    saveBaseline(snapshotBaseline(lowPreview));
+
+    const goodText =
+      "This is a detailed vulnerability report about a reflected XSS. " +
+      "The bug exists in the search endpoint. See https://example.com " +
+      "and https://nvd.nist.gov. Steps: 1. Open app. 2. Go to /search. " +
+      "3. Enter payload. ```http\nGET /search HTTP/1.1\n```";
+
+    renderSidebar(goodText);
+    const delta = screen.queryByTestId("quality-delta-score");
+    expect(delta).not.toBeNull();
+    expect(delta!.textContent).toContain("+");
+  });
+
+  it("shows no delta when no baseline exists in sessionStorage", () => {
+    renderSidebar("found a bug");
+    const delta = screen.queryByTestId("quality-delta-score");
+    expect(delta).toBeNull();
+  });
+
+  it("resets baseline to current preview on button click", () => {
+    const lowPreview = computeQualityPreview("found a bug");
+    saveBaseline(snapshotBaseline(lowPreview));
+
+    const goodText =
+      "This is a detailed vulnerability report about a reflected XSS. " +
+      "The bug exists in the search endpoint. See https://example.com " +
+      "and https://nvd.nist.gov. Steps: 1. Open app. 2. Go to /search. " +
+      "3. Enter payload. ```http\nGET /search HTTP/1.1\n```";
+
+    renderSidebar(goodText);
+
+    expect(screen.queryByTestId("quality-delta-score")).not.toBeNull();
+
+    const resetBtn = screen.getByTestId("quality-reset-baseline");
+    fireEvent.click(resetBtn);
+
+    expect(screen.queryByTestId("quality-delta-score")).toBeNull();
+
+    const stored = loadBaseline();
+    expect(stored).not.toBeNull();
+    const currentPreview = computeQualityPreview(goodText);
+    expect(stored!.estimatedScore).toBe(currentPreview.estimatedScore);
+  });
+
+  it("persists current preview to sessionStorage on unmount", () => {
+    const { unmount } = renderSidebar("found a bug");
+    expect(sessionStorage.getItem(BASELINE_KEY)).toBeNull();
+    unmount();
+    const stored = loadBaseline();
+    expect(stored).not.toBeNull();
+    expect(stored!.estimatedScore).toBe(
+      computeQualityPreview("found a bug").estimatedScore,
+    );
+  });
+
+  it("does not show the reset button when text is empty", () => {
+    saveBaseline(
+      snapshotBaseline(computeQualityPreview("found a bug")),
+    );
+    renderSidebar("");
+    expect(screen.queryByTestId("quality-reset-baseline")).toBeNull();
   });
 });
