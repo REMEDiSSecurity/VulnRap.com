@@ -510,6 +510,18 @@ export const GetReportResponse = zod.object({
     .describe(
       "Active sensitivity preset used for score adjustment. Null when default (balanced).",
     ),
+  promptInjectionDetected: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the input-side prompt-injection classifier flagged one or more injection patterns in the submitted report text. The report was still scored normally — this is an observation-only signal for reviewer awareness.",
+    ),
+  promptInjectionLabels: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Labels identifying the prompt-injection pattern families that fired (e.g. ignore_previous_instructions, role_flip_you_are_now, system_token_spoof). Empty when promptInjectionDetected is false.",
+    ),
   llmEnhanced: zod
     .boolean()
     .describe(
@@ -1778,6 +1790,18 @@ export const CheckReportResponse = zod.object({
     .nullish()
     .describe(
       "Active sensitivity preset used for score adjustment. Null when default.",
+    ),
+  promptInjectionDetected: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the input-side prompt-injection classifier flagged injection patterns in the submitted report.",
+    ),
+  promptInjectionLabels: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Labels identifying the prompt-injection pattern families that fired. Empty when promptInjectionDetected is false.",
     ),
   llmEnhanced: zod.boolean(),
   llmFailed: zod

@@ -76,6 +76,10 @@ import {
 } from "../lib/agent-fingerprint";
 import { parseSections, findSectionMatches } from "../lib/section-parser";
 import {
+  scanForPromptInjection,
+  type PromptInjectionVerdict,
+} from "../lib/prompt-injection";
+import {
   sanitizeText,
   sanitizeForAnalysis,
   sanitizeFileName,
@@ -271,9 +275,6 @@ export interface AuditTelemetry {
     reason: import("../lib/llm-slop").LlmGateReason;
     heuristicScore: number;
     confidenceUsed: number;
-    // Task #442 — Engine 2 / 3-engine composite score (0–100, higher = more
-    // valid) that was fed into the gate, or `null` for legacy callers / the
-    // degraded fallback path that didn't compute a composite.
     compositeScoreUsed: number | null;
     costGuard: { low: number; high: number; confidence: number };
     userSkipped: boolean;
@@ -281,6 +282,11 @@ export interface AuditTelemetry {
     llmAvailable: boolean;
   };
   validityFusion: import("../lib/score-fusion").ValidityFusionAudit;
+  promptInjection: {
+    detected: boolean;
+    labels: string[];
+    matchCount: number;
+  };
 }
 
 interface AnalysisResult extends FusionResult {
@@ -290,14 +296,10 @@ interface AnalysisResult extends FusionResult {
   triageRecommendation: TriageRecommendation | null;
   triageAssistant: TriageAssistantResult | null;
   diagnostics: AnalysisDiagnostics;
-  // v3.6.0 §4: Composite + trace are computed inside performAnalysis so the
-  // pre-composite triage call site (formerly the legacy single-axis path) can
-  // feed buildV36TriageContextFromComposite. Both POST /reports and
-  // POST /reports/check then reuse this composite instead of re-running the
-  // engines.
   vulnrapComposite: VulnrapComposite | null;
   vulnrapTrace: PipelineTrace | null;
   auditTelemetry: AuditTelemetry;
+  promptInjection: PromptInjectionVerdict;
 }
 
 async function runStage<T>(
@@ -386,6 +388,17 @@ async function performAnalysis(
     );
 
     const heuristicScore = heuristic?.score ?? 50;
+
+    const injectionVerdict = await runStage(
+      "prompt_injection_scan",
+      () => scanForPromptInjection(safeOriginal),
+      diagnostics,
+    );
+    const safeInjection: PromptInjectionVerdict = injectionVerdict ?? {
+      detected: false,
+      labels: [],
+      matches: [],
+    };
 
     // Task #442 — Engine 2 / 3-engine composite must be available BEFORE
     // the LLM cost gate runs so it can drive the gate decision. The
@@ -597,14 +610,7 @@ async function performAnalysis(
         shouldCall: gateDecision.shouldCall,
         reason: gateDecision.reason,
         heuristicScore: gateDecision.heuristicScore,
-        // shouldCallLLM is currently called with confidence=1.0 always; surface
-        // the literal value so a future change to use the real confidence is
-        // self-documenting in the audit payload.
         confidenceUsed: gateDecision.confidence,
-        // Task #442 — surface the composite signal that drove the gate so
-        // reviewers can see whether the new composite path or the legacy
-        // heuristic-only path was used. `null` when the engine layer was
-        // skipped (feature-flag off or pre-engine legacy report).
         compositeScoreUsed: gateDecision.compositeScore,
         costGuard: gateDecision.costGuard,
         userSkipped: userSkippedLlm,
@@ -612,6 +618,11 @@ async function performAnalysis(
         llmAvailable: isLLMAvailable(),
       },
       validityFusion: safeFusion.validityFusion,
+      promptInjection: {
+        detected: safeInjection.detected,
+        labels: safeInjection.labels,
+        matchCount: safeInjection.labels.length,
+      },
     };
 
     // v3.6.0 §4 / Task #442: vulnrapComposite is computed earlier in the
@@ -672,6 +683,7 @@ async function performAnalysis(
       vulnrapComposite,
       vulnrapTrace,
       auditTelemetry,
+      promptInjection: safeInjection,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -769,7 +781,9 @@ async function performAnalysis(
           higherSide: null,
           evidenceFreeCapApplied: false,
         },
+        promptInjection: { detected: false, labels: [], matchCount: 0 },
       },
+      promptInjection: { detected: false, labels: [], matches: [] },
     };
   }
 }
@@ -1492,6 +1506,10 @@ router.post("/reports", async (req, res): Promise<void> => {
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,
+    promptInjectionDetected: analysisResult.promptInjection.detected,
+    promptInjectionLabels: analysisResult.promptInjection.detected
+      ? analysisResult.promptInjection.labels
+      : [],
   });
 
   res.status(201).json(response);
@@ -1945,6 +1963,25 @@ router.post("/reports/check", async (req, res): Promise<void> => {
       triageAssistant: cachedTriageAssistant,
       previouslySubmitted: true,
       existingReportId: cached.id,
+      ...(() => {
+        const stored = (cached.vulnrapEngineResults ?? {}) as {
+          auditTelemetry?: {
+            promptInjection?: {
+              detected?: boolean;
+              labels?: string[];
+              matchCount?: number;
+            };
+          };
+        };
+        const pi = stored?.auditTelemetry?.promptInjection;
+        return {
+          promptInjectionDetected: pi?.detected === true,
+          promptInjectionLabels:
+            pi?.detected === true && Array.isArray(pi?.labels)
+              ? pi.labels
+              : [],
+        };
+      })(),
     });
     res.json(response);
     return;
@@ -2053,6 +2090,10 @@ router.post("/reports/check", async (req, res): Promise<void> => {
     substance: analysisResult.substance ?? null,
     previouslySubmitted: false,
     existingReportId: null,
+    promptInjectionDetected: analysisResult.promptInjection.detected,
+    promptInjectionLabels: analysisResult.promptInjection.detected
+      ? analysisResult.promptInjection.labels
+      : [],
   });
 
   res.json(response);
@@ -2878,6 +2919,23 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     fileName: report.fileName,
     fileSize: report.fileSize,
     createdAt: report.createdAt,
+    ...(() => {
+      const stored = (report.vulnrapEngineResults ?? {}) as {
+        auditTelemetry?: {
+          promptInjection?: {
+            detected?: boolean;
+            labels?: string[];
+            matchCount?: number;
+          };
+        };
+      };
+      const pi = stored?.auditTelemetry?.promptInjection;
+      return {
+        promptInjectionDetected: pi?.detected === true,
+        promptInjectionLabels:
+          pi?.detected === true && Array.isArray(pi?.labels) ? pi.labels : [],
+      };
+    })(),
   });
 
   res.json(response);

@@ -44,6 +44,7 @@ import {
   UserCheck,
   BrainCircuit,
   ShieldOff,
+  ShieldAlert,
   Zap,
   Sliders,
 } from "lucide-react";
@@ -639,6 +640,8 @@ interface CheckResultData {
   verification?: Verification;
   triageRecommendation?: TriageRecommendation;
   triageAssistant?: TriageAssistant;
+  promptInjectionDetected?: boolean;
+  promptInjectionLabels?: string[];
 }
 
 export default function Check() {
@@ -1386,8 +1389,23 @@ export default function Check() {
             </Badge>
           </h2>
 
-          {(result.llmUsed === false || result.redactionApplied === false || (customRedactionAppliedCount != null && customRedactionAppliedCount > 0)) && (
+          {(result.llmUsed === false || result.redactionApplied === false || (customRedactionAppliedCount != null && customRedactionAppliedCount > 0) || result.promptInjectionDetected === true) && (
             <div className="flex flex-col sm:flex-row gap-2">
+              {result.promptInjectionDetected === true && (
+                <div className="flex-1 rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <p className="text-xs text-red-300">
+                    <strong>Prompt-injection attempt detected</strong> — this
+                    report contains text that appears to manipulate the AI
+                    scoring engine. Scores are unaffected.
+                    {Array.isArray(result.promptInjectionLabels) && result.promptInjectionLabels.length > 0 && (
+                      <span className="block mt-1 text-red-400/80">
+                        Patterns: {result.promptInjectionLabels.join(", ")}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
               {result.llmUsed === false && (
                 <div className="flex-1 rounded-lg bg-violet-500/10 border border-violet-500/30 px-3 py-2 flex items-center gap-2">
                   <BrainCircuit className="w-4 h-4 text-violet-400 flex-shrink-0" />

@@ -1131,6 +1131,8 @@ export interface ReportAnalysis {
    * @nullable
    */
   sensitivityProfile?: ReportAnalysisSensitivityProfile;
+  promptInjectionDetected?: boolean;
+  promptInjectionLabels?: string[];
   /** True when LLM analysis contributed to the final slopScore. False means the score is purely heuristic. */
   llmEnhanced: boolean;
   /** True when LLM analysis was attempted but failed (timeout, parse error, API error). False when LLM succeeded or was not attempted. */
@@ -1357,6 +1359,8 @@ export interface CheckResult {
    * @nullable
    */
   sensitivityProfile?: CheckResultSensitivityProfile;
+  promptInjectionDetected?: boolean;
+  promptInjectionLabels?: string[];
   llmEnhanced: boolean;
   /** True when LLM analysis was attempted but failed. */
   llmFailed?: boolean;

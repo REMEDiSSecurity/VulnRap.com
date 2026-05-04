@@ -576,7 +576,12 @@ async function analyzeSlopWithLLMOnce(
 
     const isNano = model.includes("nano");
     const activePrompt = getSystemPrompt(model);
-    const tokenBudget = isNano ? 4000 : 8000;
+    const envCap = parseInt(process.env.LLM_MAX_COMPLETION_TOKENS ?? "", 10);
+    const defaultBudget = isNano ? 4000 : 8000;
+    const tokenBudget =
+      Number.isFinite(envCap) && envCap > 0
+        ? Math.min(envCap, defaultBudget)
+        : defaultBudget;
     // Task #724 — Forward the inbound request id to OpenAI as a custom
     // header (the SDK accepts arbitrary headers per-call). The httpFetch /
     // withResilience wrapper from Task #725 now provides timeout, retry,
