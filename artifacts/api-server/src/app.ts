@@ -21,6 +21,7 @@ import sitemapRouter from "./routes/sitemap";
 import changelogFeedRouter from "./routes/changelog-feed";
 import { logger } from "./lib/logger";
 import { buildPublicUrl, validatePublicUrlEnv } from "./lib/public-url";
+import { createSpaFallback } from "./lib/spa-fallback";
 import {
   buildCorsOriginCallback,
   validateAllowedOriginsEnv,
@@ -320,10 +321,7 @@ if (process.env.NODE_ENV === "production") {
       },
     }),
   );
-  app.use((_req, res) => {
-    res.setHeader("Cache-Control", "no-cache");
-    res.sendFile(path.join(frontendDir, "index.html"));
-  });
+  app.use(createSpaFallback(frontendDir));
 }
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
