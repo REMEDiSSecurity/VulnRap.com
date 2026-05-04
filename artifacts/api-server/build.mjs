@@ -149,6 +149,7 @@ async function buildAll() {
         path.resolve(artifactDir, "src/backfill-vulnrap-cli.ts"),
         path.resolve(artifactDir, "src/backfill-avri-family.ts"),
         path.resolve(artifactDir, "src/backfill-fabricated-evidence.ts"),
+        path.resolve(artifactDir, "src/backfill-engine-versions.ts"),
       ];
 
   const buildOptions = {
