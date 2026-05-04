@@ -19,6 +19,10 @@ import {
   type AlertOutcome,
   type PruneResult,
 } from "./score-stability-monitor";
+import {
+  dispatchShadowDriftAlertIfNeeded,
+  type AlertOutcome as ShadowDriftAlertOutcome,
+} from "./shadow-drift-monitor";
 
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h (nightly)
 const DEFAULT_RETRY_INTERVAL_MS = 60 * 60 * 1000; // 1h on failure
@@ -56,6 +60,7 @@ export interface StabilityCheckResult {
   ranCheck: boolean;
   rescore?: RescorePassResult;
   alert?: AlertOutcome;
+  shadowDriftAlert?: ShadowDriftAlertOutcome;
   prune?: PruneResult;
 }
 
@@ -99,9 +104,32 @@ export async function runScoreStabilityCheck(): Promise<StabilityCheckResult> {
         "[score-stability] Flip-rate exceeded threshold.",
       );
     }
+    let shadowDriftAlert: ShadowDriftAlertOutcome | undefined;
+    try {
+      shadowDriftAlert = await dispatchShadowDriftAlertIfNeeded();
+      if (shadowDriftAlert.exceeded) {
+        logger.info(
+          {
+            windowKey: shadowDriftAlert.windowKey,
+            divergenceRate: shadowDriftAlert.divergenceRate,
+            legitSlopFlips: shadowDriftAlert.legitSlopFlips,
+            triggeredBy: shadowDriftAlert.triggeredBy,
+            dispatched: shadowDriftAlert.dispatched,
+            alreadyAlerted: shadowDriftAlert.alreadyAlerted,
+            webhookSkipped: shadowDriftAlert.webhookSkipped,
+          },
+          "[shadow-drift] Shadow drift threshold exceeded.",
+        );
+      }
+    } catch (err) {
+      logger.warn(
+        { err },
+        "[shadow-drift] Shadow drift alert check failed (non-fatal).",
+      );
+    }
     const prune = await pruneOldRescoreLogRows();
     const ok = rescore.failed === 0;
-    return { ok, ranCheck: true, rescore, alert, prune };
+    return { ok, ranCheck: true, rescore, alert, shadowDriftAlert, prune };
   } catch (err) {
     logger.warn(
       { err },
