@@ -1518,6 +1518,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/IncidentLog"
+    post:
+      operationId: createIncident
+      tags: [internal]
+      summary: Publish a new incident postmortem (reviewer-only)
+      description: |
+        Task #1057 — Reviewer-gated endpoint that appends a new
+        incident postmortem to the incident log. Requires the
+        `CALIBRATION_TOKEN` via `X-Calibration-Token` header or
+        `Authorization: Bearer <token>`. Validates the body against
+        the `IncidentEntry` schema, auto-bumps the `version` patch
+        number, and records an audit-log entry.
+      parameters:
+        - name: X-Calibration-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Reviewer calibration token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIncidentBody"
+      responses:
+        "201":
+          description: Incident published successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateIncidentResponse"
+        "401":
+          description: Missing or invalid reviewer token
+        "409":
+          description: Duplicate incident ID
 
   /showcase:
     get:
@@ -8524,6 +8559,59 @@ components:
           items:
             $ref: "#/components/schemas/IncidentEntry"
       required: [version, incidents]
+
+    CreateIncidentBody:
+      type: object
+      description: |
+        Task #1057 — Request body for `POST /api/incidents`. All
+        fields from `IncidentEntry` are required except
+        `changelogAnchor` which is optional. A `reviewer` field
+        identifies the actor for the audit log.
+      properties:
+        id:
+          type: string
+          description: Opaque slug for the incident (stable across curator edits).
+        date:
+          type: string
+          format: date
+          description: ISO date the incident started (YYYY-MM-DD).
+        duration:
+          type: string
+          description: Human-readable incident duration (e.g. "42 minutes", "3 hours").
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+          description: Curator-assigned severity tier.
+        summary:
+          type: string
+          description: One-sentence description of what happened.
+        rootCause:
+          type: string
+          description: Plain-language root cause analysis.
+        remediation:
+          type: string
+          description: What we changed to prevent recurrence.
+        changelogAnchor:
+          type: string
+          description: Optional `/changelog#anchor` fragment linking to the related release notes.
+        reviewer:
+          type: string
+          description: Reviewer identity for the audit log.
+      required: [id, date, duration, severity, summary, rootCause, remediation]
+
+    CreateIncidentResponse:
+      type: object
+      description: |
+        Task #1057 — Response from `POST /api/incidents` confirming
+        the new incident was appended and the version was bumped.
+      properties:
+        ok:
+          type: boolean
+        version:
+          type: string
+        incident:
+          $ref: "#/components/schemas/IncidentEntry"
+      required: [ok, version, incident]
 
     GalleryResponse:
       type: object

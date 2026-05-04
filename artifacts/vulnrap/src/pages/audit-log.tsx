@@ -13,6 +13,7 @@ import {
   type FormEvent,
   type InputHTMLAttributes,
 } from "react";
+import { Link } from "react-router-dom";
 import {
   useGetAuditLog,
   getGetAuditLogQueryKey,
@@ -329,13 +330,22 @@ export default function AuditLogPage() {
         <Shield className="w-6 h-6 text-primary" />
         <h1 className="text-2xl font-bold">Reviewer Audit Log</h1>
       </div>
-      <p className="text-sm text-muted-foreground mb-6">
+      <p className="text-sm text-muted-foreground mb-4">
         Every reviewer-gated mutation (config changes, hand-wavy phrase
         add/remove, threshold tweaks, fixture compaction settings) is recorded
         here with actor, endpoint, redacted payload, and final response status.
         This page is gated by the same reviewer token as the rest of the
         calibration surface.
       </p>
+      <div className="flex gap-2 mb-6">
+        <Link
+          to="/admin/incidents"
+          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline underline-offset-2"
+        >
+          <Shield className="w-3 h-3" />
+          Publish incident postmortem
+        </Link>
+      </div>
 
       <Card className="mb-6">
         <CardHeader>
