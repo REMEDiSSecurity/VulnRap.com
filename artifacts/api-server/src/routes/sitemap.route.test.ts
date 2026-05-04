@@ -1,7 +1,8 @@
-// Task #710 — Tests for the dynamic /sitemap.xml endpoint and the
-// XML builder + route table. Pure helpers (`buildSitemapXml`) are
-// exercised directly; the HTTP route is exercised via supertest-style
-// `app.listen(0)` + fetch so the real Express mount path is covered.
+// Task #710 + #1060 — Tests for the dynamic sitemap endpoints, the
+// XML builder + route table, sitemap index, and paginated report sitemaps.
+// Pure helpers are exercised directly; HTTP routes are exercised via
+// supertest-style `app.listen(0)` + fetch so the real Express mount
+// path is covered.
 
 process.env.DATABASE_URL =
   process.env.DATABASE_URL || "postgres://test:test@localhost:5432/test";
@@ -9,12 +10,6 @@ process.env.DATABASE_URL =
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 
-// Lightweight sitemap validator. We avoid pulling in `fast-xml-parser`
-// just for tests — the format is simple enough to validate structurally:
-//   1. Starts with the XML prolog.
-//   2. Has a single `<urlset xmlns="...">` root with the canonical xmlns.
-//   3. Tags balance (every opener has a matching closer in LIFO order).
-//   4. Every `<url>` block has the four required children.
 function validateSitemap(xml: string): { ok: boolean; reason?: string } {
   if (!xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')) {
     return { ok: false, reason: "missing XML prolog" };
@@ -57,6 +52,29 @@ function validateSitemap(xml: string): { ok: boolean; reason?: string } {
   return { ok: true };
 }
 
+function validateSitemapIndex(xml: string): { ok: boolean; reason?: string } {
+  if (!xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')) {
+    return { ok: false, reason: "missing XML prolog" };
+  }
+  if (
+    !xml.includes(
+      '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    )
+  ) {
+    return { ok: false, reason: "missing canonical sitemapindex xmlns" };
+  }
+  const sitemapBlocks = xml.match(/<sitemap>[\s\S]*?<\/sitemap>/g) ?? [];
+  for (const block of sitemapBlocks) {
+    if (!/<loc>[^<]+<\/loc>/.test(block)) {
+      return { ok: false, reason: "<sitemap> missing <loc>" };
+    }
+    if (!/<lastmod>[^<]+<\/lastmod>/.test(block)) {
+      return { ok: false, reason: "<sitemap> missing <lastmod>" };
+    }
+  }
+  return { ok: true };
+}
+
 const appModule = await import("../app");
 const app = appModule.default;
 
@@ -74,22 +92,25 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-// Parity test — keeps PUBLIC_ROUTES in lock-step with the frontend
-// router. Parses every `<Route path="...">` from `App.tsx` and asserts:
-//   - every static (non-parameterised) public route is in PUBLIC_ROUTES
-//   - every route in PUBLIC_ROUTES is actually declared in App.tsx
-//   - reviewer-only routes are in App.tsx but NOT in PUBLIC_ROUTES
-// This catches future drift where someone adds a new public page but
-// forgets to register it for indexing.
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { inArray } from "drizzle-orm";
+import { db, reportsTable } from "@workspace/db";
 import {
   buildSitemapXml,
+  buildSitemapIndexXml,
+  buildReportSitemapXml,
+  paginateReports,
+  reportPageCount,
   PUBLIC_ROUTES,
   REVIEWER_ONLY_ROUTES,
+  REPORT_SITEMAP_PAGE_SIZE,
+  type ReportRow,
 } from "./sitemap";
 import { ROUTE_TO_FILES } from "../lib/git-mtime";
 import type { AddressInfo } from "node:net";
+
+const SITEMAP_TEST_MARKER = "__sitemap_test__";
 
 function extractFrontendRoutes(): string[] {
   const appTsx = readFileSync(
@@ -334,6 +355,166 @@ describe("buildSitemapXml", () => {
   });
 });
 
+describe("buildSitemapIndexXml", () => {
+  it("produces well-formed sitemap index XML", () => {
+    const xml = buildSitemapIndexXml(
+      "https://vulnrap.com",
+      3,
+      "2026-05-04T00:00:00.000Z",
+    );
+    const validation = validateSitemapIndex(xml);
+    expect(validation.ok, validation.reason).toBe(true);
+  });
+
+  it("always includes the static sitemap.xml as the first child", () => {
+    const xml = buildSitemapIndexXml(
+      "https://vulnrap.com",
+      0,
+      "2026-05-04T00:00:00.000Z",
+    );
+    expect(xml).toContain("<loc>https://vulnrap.com/sitemap.xml</loc>");
+  });
+
+  it("references the correct number of report child sitemaps", () => {
+    const xml = buildSitemapIndexXml(
+      "https://vulnrap.com",
+      3,
+      "2026-05-04T00:00:00.000Z",
+    );
+    expect(xml).toContain(
+      "<loc>https://vulnrap.com/sitemap-reports-1.xml</loc>",
+    );
+    expect(xml).toContain(
+      "<loc>https://vulnrap.com/sitemap-reports-2.xml</loc>",
+    );
+    expect(xml).toContain(
+      "<loc>https://vulnrap.com/sitemap-reports-3.xml</loc>",
+    );
+    expect(xml).not.toContain("sitemap-reports-4.xml");
+    const sitemapBlocks = xml.match(/<sitemap>/g) ?? [];
+    expect(sitemapBlocks.length).toBe(4);
+  });
+
+  it("emits zero report child sitemaps when there are no public reports", () => {
+    const xml = buildSitemapIndexXml(
+      "https://vulnrap.com",
+      0,
+      "2026-05-04T00:00:00.000Z",
+    );
+    expect(xml).not.toContain("sitemap-reports-");
+    const sitemapBlocks = xml.match(/<sitemap>/g) ?? [];
+    expect(sitemapBlocks.length).toBe(1);
+  });
+
+  it("strips trailing slashes from the base URL", () => {
+    const xml = buildSitemapIndexXml(
+      "https://vulnrap.com/",
+      1,
+      "2026-05-04T00:00:00.000Z",
+    );
+    expect(xml).not.toContain("vulnrap.com//");
+  });
+});
+
+describe("buildReportSitemapXml", () => {
+  const reports: ReportRow[] = [
+    { id: 42, createdAt: new Date("2026-03-15T10:00:00Z") },
+    { id: 99, createdAt: new Date("2026-04-20T14:30:00Z") },
+  ];
+
+  it("produces well-formed XML", () => {
+    const xml = buildReportSitemapXml("https://vulnrap.com", reports);
+    const validation = validateSitemap(xml);
+    expect(validation.ok, validation.reason).toBe(true);
+  });
+
+  it("generates three URLs per report (results, verify, signals)", () => {
+    const xml = buildReportSitemapXml("https://vulnrap.com", reports);
+    const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) ?? [];
+    expect(urlBlocks.length).toBe(6);
+
+    expect(xml).toContain("<loc>https://vulnrap.com/results/42</loc>");
+    expect(xml).toContain("<loc>https://vulnrap.com/verify/42</loc>");
+    expect(xml).toContain("<loc>https://vulnrap.com/signals/42</loc>");
+    expect(xml).toContain("<loc>https://vulnrap.com/results/99</loc>");
+    expect(xml).toContain("<loc>https://vulnrap.com/verify/99</loc>");
+    expect(xml).toContain("<loc>https://vulnrap.com/signals/99</loc>");
+  });
+
+  it("uses the report createdAt as lastmod", () => {
+    const xml = buildReportSitemapXml("https://vulnrap.com", reports);
+    expect(xml).toContain(
+      "<lastmod>2026-03-15T10:00:00.000Z</lastmod>",
+    );
+    expect(xml).toContain(
+      "<lastmod>2026-04-20T14:30:00.000Z</lastmod>",
+    );
+  });
+
+  it("returns empty urlset for zero reports", () => {
+    const xml = buildReportSitemapXml("https://vulnrap.com", []);
+    expect(xml).toContain("<urlset");
+    expect(xml).toContain("</urlset>");
+    const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) ?? [];
+    expect(urlBlocks.length).toBe(0);
+  });
+});
+
+describe("paginateReports", () => {
+  const reports: ReportRow[] = Array.from({ length: 25 }, (_, i) => ({
+    id: i + 1,
+    createdAt: new Date(`2026-01-${String(i + 1).padStart(2, "0")}T00:00:00Z`),
+  }));
+
+  it("returns the correct slice for page 1", () => {
+    const page = paginateReports(reports, 1, 10);
+    expect(page.length).toBe(10);
+    expect(page[0].id).toBe(1);
+    expect(page[9].id).toBe(10);
+  });
+
+  it("returns the correct slice for page 2", () => {
+    const page = paginateReports(reports, 2, 10);
+    expect(page.length).toBe(10);
+    expect(page[0].id).toBe(11);
+    expect(page[9].id).toBe(20);
+  });
+
+  it("returns a partial page for the last page", () => {
+    const page = paginateReports(reports, 3, 10);
+    expect(page.length).toBe(5);
+    expect(page[0].id).toBe(21);
+  });
+
+  it("returns empty for a page beyond the data", () => {
+    const page = paginateReports(reports, 4, 10);
+    expect(page.length).toBe(0);
+  });
+});
+
+describe("reportPageCount", () => {
+  it("returns 0 for 0 reports", () => {
+    expect(reportPageCount(0, 10_000)).toBe(0);
+  });
+
+  it("returns 1 for reports within one page", () => {
+    expect(reportPageCount(5_000, 10_000)).toBe(1);
+    expect(reportPageCount(10_000, 10_000)).toBe(1);
+  });
+
+  it("returns correct pages for reports exceeding one page", () => {
+    expect(reportPageCount(10_001, 10_000)).toBe(2);
+    expect(reportPageCount(30_000, 10_000)).toBe(3);
+    expect(reportPageCount(30_001, 10_000)).toBe(4);
+  });
+
+  it("uses the default page size when not specified", () => {
+    expect(reportPageCount(1)).toBe(1);
+    expect(reportPageCount(REPORT_SITEMAP_PAGE_SIZE)).toBe(1);
+    expect(reportPageCount(REPORT_SITEMAP_PAGE_SIZE + 1)).toBe(2);
+  });
+});
+
 describe("GET /sitemap.xml", () => {
   it("returns valid XML with the expected content-type and cache header", async () => {
     const res = await fetch(`${baseUrl}/sitemap.xml`);
@@ -376,5 +557,162 @@ describe("GET /sitemap.xml", () => {
       if (previous === undefined) delete process.env.PUBLIC_URL;
       else process.env.PUBLIC_URL = previous;
     }
+  });
+});
+
+describe("GET /sitemap-index.xml", () => {
+  it("returns valid sitemap index XML with correct headers", async () => {
+    const res = await fetch(`${baseUrl}/sitemap-index.xml`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type") ?? "").toContain("application/xml");
+    expect(res.headers.get("cache-control")).toBe(
+      "public, max-age=3600, stale-while-revalidate=600",
+    );
+    const body = await res.text();
+    const validation = validateSitemapIndex(body);
+    expect(validation.ok, validation.reason).toBe(true);
+  });
+
+  it("always references sitemap.xml as a child", async () => {
+    const res = await fetch(`${baseUrl}/sitemap-index.xml`);
+    const body = await res.text();
+    expect(body).toContain("sitemap.xml</loc>");
+  });
+});
+
+describe("GET /sitemap-reports-:page.xml", () => {
+  it("returns 404 for page 0", async () => {
+    const res = await fetch(`${baseUrl}/sitemap-reports-0.xml`);
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 for negative page", async () => {
+    const res = await fetch(`${baseUrl}/sitemap-reports--1.xml`);
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 for non-numeric page", async () => {
+    const res = await fetch(`${baseUrl}/sitemap-reports-abc.xml`);
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 for a page beyond the total page count", async () => {
+    const res = await fetch(`${baseUrl}/sitemap-reports-99999.xml`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("report sitemap DB integration", () => {
+  const testContentHash = `sitemap_test_${Date.now()}`;
+  let visibleId: number;
+  let hiddenId: number;
+
+  beforeAll(async () => {
+    const base = {
+      deleteToken: "test",
+      simhash: "0",
+      minhashSignature: [],
+      lshBuckets: [],
+      contentText: SITEMAP_TEST_MARKER,
+      redactedText: SITEMAP_TEST_MARKER,
+      contentMode: "full",
+      slopScore: 50,
+      slopTier: "Questionable",
+      qualityScore: 50,
+      confidence: 0.5,
+      breakdown: { linguistic: 0, factual: 0, template: 0, llm: null, quality: 50 },
+      evidence: [],
+      humanIndicators: [],
+      authenticityScore: 50,
+      validityScore: 50,
+      quadrant: "WEAK_HUMAN",
+      archetype: "REQUEST_DETAILS",
+      similarityMatches: [],
+      sectionHashes: {},
+      sectionMatches: [],
+      redactionSummary: { totalRedactions: 0, categories: {} },
+      feedback: [],
+      fileSize: 100,
+    };
+
+    const [visible] = await db
+      .insert(reportsTable)
+      .values({
+        ...base,
+        contentHash: `${testContentHash}_visible`,
+        showInFeed: true,
+      })
+      .returning({ id: reportsTable.id });
+    visibleId = visible.id;
+
+    const [hidden] = await db
+      .insert(reportsTable)
+      .values({
+        ...base,
+        contentHash: `${testContentHash}_hidden`,
+        showInFeed: false,
+      })
+      .returning({ id: reportsTable.id });
+    hiddenId = hidden.id;
+  });
+
+  afterAll(async () => {
+    await db
+      .delete(reportsTable)
+      .where(
+        inArray(reportsTable.contentHash, [
+          `${testContentHash}_visible`,
+          `${testContentHash}_hidden`,
+        ]),
+      );
+  });
+
+  it("excludes hidden reports (showInFeed=false) from report sitemap", async () => {
+    const res = await fetch(`${baseUrl}/sitemap-reports-1.xml`);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain(`/results/${visibleId}</loc>`);
+    expect(body).toContain(`/verify/${visibleId}</loc>`);
+    expect(body).toContain(`/signals/${visibleId}</loc>`);
+    expect(body).not.toContain(`/results/${hiddenId}</loc>`);
+    expect(body).not.toContain(`/verify/${hiddenId}</loc>`);
+    expect(body).not.toContain(`/signals/${hiddenId}</loc>`);
+  });
+
+  it("returns valid sitemap XML with correct headers for page 1", async () => {
+    const res = await fetch(`${baseUrl}/sitemap-reports-1.xml`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type") ?? "").toContain("application/xml");
+    expect(res.headers.get("cache-control")).toBe(
+      "public, max-age=3600, stale-while-revalidate=600",
+    );
+    const body = await res.text();
+    const validation = validateSitemap(body);
+    expect(validation.ok, validation.reason).toBe(true);
+  });
+
+  it("sitemap index references report child sitemaps when public reports exist", async () => {
+    const res = await fetch(`${baseUrl}/sitemap-index.xml`);
+    const body = await res.text();
+    expect(body).toContain("sitemap-reports-1.xml</loc>");
+  });
+});
+
+describe("robots.txt sitemap directive", () => {
+  it("points at sitemap-index.xml instead of sitemap.xml", () => {
+    const robotsTxt = readFileSync(
+      path.resolve(
+        import.meta.dirname,
+        "..",
+        "..",
+        "..",
+        "vulnrap",
+        "public",
+        "robots.txt",
+      ),
+      "utf8",
+    );
+    expect(robotsTxt).toContain("Sitemap: https://vulnrap.com/sitemap-index.xml");
+    expect(robotsTxt).not.toContain("Sitemap: https://vulnrap.com/sitemap.xml");
   });
 });

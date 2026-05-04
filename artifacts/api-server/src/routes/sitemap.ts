@@ -1,18 +1,26 @@
-// Task #710 + #1059 — Sitemap generator.
+// Task #710 + #1059 + #1060 — Sitemap generator.
 //
-// Generates `sitemap.xml` from a curated route table mirroring the
-// frontend router in `artifacts/vulnrap/src/App.tsx`. Reviewer-only
-// routes (those gated behind the calibration token — `/feedback-analytics`,
-// `/audit-log`) are intentionally excluded so they don't waste search
-// engine crawl budget on pages that return 401 to anonymous visitors.
+// Generates a sitemap index (`/sitemap-index.xml`) that references:
+//   1. `/sitemap.xml` — the curated static route table mirroring the
+//      frontend router in `artifacts/vulnrap/src/App.tsx`.
+//   2. `/sitemap-reports-{page}.xml` — paginated child sitemaps listing
+//      every public report (where `showInFeed=true`), covering
+//      `/results/:id`, `/verify/:id`, and `/signals/:id` routes.
+//
+// Reviewer-only routes (those gated behind the calibration token —
+// `/feedback-analytics`, `/audit-log`) are intentionally excluded so
+// they don't waste search engine crawl budget on pages that return 401
+// to anonymous visitors.
 //
 // `lastmod` is derived per-page from the git history of the
 // corresponding page component (Task #1059). Falls back to the deploy
 // timestamp when git metadata is unavailable.
 //
 // Mounted at the app root (not under `/api`) so the canonical
-// `/sitemap.xml` URL referenced from `robots.txt` resolves directly.
+// `/sitemap-index.xml` URL referenced from `robots.txt` resolves directly.
 import { Router, type IRouter } from "express";
+import { eq, asc } from "drizzle-orm";
+import { db, reportsTable } from "@workspace/db";
 import { buildPublicUrlForRequest } from "../lib/public-url";
 import { resolveRouteMtimes } from "../lib/git-mtime";
 
@@ -36,8 +44,7 @@ export interface SitemapRoute {
 // (`/feedback-analytics`, `/audit-log`) and parameterised routes
 // (`/results/:id`, `/verify/:id`, `/signals/:id`) are intentionally
 // excluded — the former because they require auth, the latter because
-// listing every report id would balloon the sitemap and the per-report
-// pages are reachable via `/reports`.
+// they are now covered by the paginated report child sitemaps.
 export const PUBLIC_ROUTES: ReadonlyArray<SitemapRoute> = [
   { path: "/", changefreq: "daily", priority: 1.0 },
   { path: "/blog", changefreq: "weekly", priority: 0.9 },
@@ -95,6 +102,8 @@ export const REVIEWER_ONLY_ROUTES: ReadonlyArray<string> = [
   "/audit-log",
 ];
 
+export const REPORT_SITEMAP_PAGE_SIZE = 10_000;
+
 const DEPLOY_LASTMOD = new Date().toISOString();
 
 let routeMtimes: Map<string, string> | null = null;
@@ -150,6 +159,118 @@ ${urls}
 `;
 }
 
+export interface ReportRow {
+  id: number;
+  createdAt: Date;
+}
+
+export async function fetchPublicReportIds(): Promise<ReportRow[]> {
+  const rows = await db
+    .select({ id: reportsTable.id, createdAt: reportsTable.createdAt })
+    .from(reportsTable)
+    .where(eq(reportsTable.showInFeed, true))
+    .orderBy(asc(reportsTable.id));
+  return rows;
+}
+
+export function buildReportSitemapXml(
+  baseUrl: string,
+  reports: ReportRow[],
+): string {
+  const base = baseUrl.replace(/\/+$/, "");
+
+  const urls = reports
+    .map((r) => {
+      const lastmod = r.createdAt.toISOString();
+      const resultsLoc = escapeXml(`${base}/results/${r.id}`);
+      const verifyLoc = escapeXml(`${base}/verify/${r.id}`);
+      const signalsLoc = escapeXml(`${base}/signals/${r.id}`);
+      return [
+        "  <url>",
+        `    <loc>${resultsLoc}</loc>`,
+        `    <lastmod>${escapeXml(lastmod)}</lastmod>`,
+        `    <changefreq>monthly</changefreq>`,
+        `    <priority>0.5</priority>`,
+        "  </url>",
+        "  <url>",
+        `    <loc>${verifyLoc}</loc>`,
+        `    <lastmod>${escapeXml(lastmod)}</lastmod>`,
+        `    <changefreq>monthly</changefreq>`,
+        `    <priority>0.4</priority>`,
+        "  </url>",
+        "  <url>",
+        `    <loc>${signalsLoc}</loc>`,
+        `    <lastmod>${escapeXml(lastmod)}</lastmod>`,
+        `    <changefreq>monthly</changefreq>`,
+        `    <priority>0.4</priority>`,
+        "  </url>",
+      ].join("\n");
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>
+`;
+}
+
+export function buildSitemapIndexXml(
+  baseUrl: string,
+  reportPageCount: number,
+  lastmod: string,
+): string {
+  const base = baseUrl.replace(/\/+$/, "");
+
+  const sitemaps: string[] = [];
+
+  sitemaps.push(
+    [
+      "  <sitemap>",
+      `    <loc>${escapeXml(`${base}/sitemap.xml`)}</loc>`,
+      `    <lastmod>${escapeXml(lastmod)}</lastmod>`,
+      "  </sitemap>",
+    ].join("\n"),
+  );
+
+  for (let i = 1; i <= reportPageCount; i++) {
+    sitemaps.push(
+      [
+        "  <sitemap>",
+        `    <loc>${escapeXml(`${base}/sitemap-reports-${i}.xml`)}</loc>`,
+        `    <lastmod>${escapeXml(lastmod)}</lastmod>`,
+        "  </sitemap>",
+      ].join("\n"),
+    );
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${sitemaps.join("\n")}
+</sitemapindex>
+`;
+}
+
+export function paginateReports(
+  reports: ReportRow[],
+  page: number,
+  pageSize: number = REPORT_SITEMAP_PAGE_SIZE,
+): ReportRow[] {
+  const start = (page - 1) * pageSize;
+  return reports.slice(start, start + pageSize);
+}
+
+export function reportPageCount(
+  totalReports: number,
+  pageSize: number = REPORT_SITEMAP_PAGE_SIZE,
+): number {
+  if (totalReports === 0) return 0;
+  return Math.ceil(totalReports / pageSize);
+}
+
+const SITEMAP_CACHE_HEADER =
+  "public, max-age=3600, stale-while-revalidate=600";
+
 const router: IRouter = Router();
 
 router.get("/sitemap.xml", async (_req, res) => {
@@ -159,8 +280,48 @@ router.get("/sitemap.xml", async (_req, res) => {
     baseUrl,
     routeLastmods: routeMtimes ?? undefined,
   });
-  res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=600");
+  res.set("Cache-Control", SITEMAP_CACHE_HEADER);
   res.type("application/xml").send(xml);
+});
+
+router.get("/sitemap-index.xml", async (_req, res) => {
+  try {
+    await routeMtimesReady;
+    const baseUrl = buildPublicUrlForRequest(_req);
+    const reports = await fetchPublicReportIds();
+    const pages = reportPageCount(reports.length);
+    const xml = buildSitemapIndexXml(baseUrl, pages, DEPLOY_LASTMOD);
+    res.set("Cache-Control", SITEMAP_CACHE_HEADER);
+    res.type("application/xml").send(xml);
+  } catch {
+    res.status(500).type("text/plain").send("Internal Server Error");
+  }
+});
+
+router.get("/sitemap-reports-:page.xml", async (_req, res) => {
+  try {
+    const page = parseInt(_req.params.page, 10);
+    if (isNaN(page) || page < 1) {
+      res.status(404).type("text/plain").send("Not Found");
+      return;
+    }
+
+    const baseUrl = buildPublicUrlForRequest(_req);
+    const reports = await fetchPublicReportIds();
+    const pages = reportPageCount(reports.length);
+
+    if (page > pages) {
+      res.status(404).type("text/plain").send("Not Found");
+      return;
+    }
+
+    const slice = paginateReports(reports, page);
+    const xml = buildReportSitemapXml(baseUrl, slice);
+    res.set("Cache-Control", SITEMAP_CACHE_HEADER);
+    res.type("application/xml").send(xml);
+  } catch {
+    res.status(500).type("text/plain").send("Internal Server Error");
+  }
 });
 
 export default router;

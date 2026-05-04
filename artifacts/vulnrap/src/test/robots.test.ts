@@ -78,7 +78,7 @@ describe("public/robots.txt", () => {
   });
 
   it("references the canonical sitemap URL", () => {
-    expect(PARSED.sitemaps).toContain("https://vulnrap.com/sitemap.xml");
+    expect(PARSED.sitemaps).toContain("https://vulnrap.com/sitemap-index.xml");
   });
 
   it("only uses recognised directives", () => {

@@ -170,4 +170,4 @@ Allow: /
 Disallow: /feedback-analytics
 Disallow: /audit-log
 
-Sitemap: https://vulnrap.com/sitemap.xml
+Sitemap: https://vulnrap.com/sitemap-index.xml
