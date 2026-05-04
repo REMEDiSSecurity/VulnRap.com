@@ -2861,22 +2861,27 @@ export default function Results() {
     }
   };
 
+  const getMarkdownPayload = () => {
+    if (!report) return "";
+    const ev = (report.evidence as EvidenceCsvRow[] | undefined) ?? [];
+    return buildReportMarkdown({
+      reportCode: anonymizeId(id),
+      slopScore: report.slopScore,
+      slopTier: report.slopTier,
+      qualityScore: report.qualityScore ?? null,
+      evidence: ev,
+      reportText:
+        (report as { redactedText?: string | null }).redactedText ?? "",
+      liveUrl: window.location.href,
+    });
+  };
+
   // Task #716: paste-ready Markdown export for triagers (Slack/Jira/Linear).
   const exportMarkdown = () => {
     if (!report || exporting) return;
     setExporting("md");
     try {
-      const ev = (report.evidence as EvidenceCsvRow[] | undefined) ?? [];
-      const md = buildReportMarkdown({
-        reportCode: anonymizeId(id),
-        slopScore: report.slopScore,
-        slopTier: report.slopTier,
-        qualityScore: report.qualityScore ?? null,
-        evidence: ev,
-        reportText:
-          (report as { redactedText?: string | null }).redactedText ?? "",
-        liveUrl: window.location.href,
-      });
+      const md = getMarkdownPayload();
       const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -2887,6 +2892,17 @@ export default function Results() {
       toast({ title: "Exported", description: "Markdown report downloaded." });
     } finally {
       setExporting(null);
+    }
+  };
+
+  const copyMarkdown = async () => {
+    if (!report) return;
+    try {
+      const md = getMarkdownPayload();
+      await navigator.clipboard.writeText(md);
+      toast({ title: "Copied", description: "Markdown report copied to clipboard." });
+    } catch {
+      toast({ title: "Copy failed", description: "Could not access clipboard. Try downloading the Markdown file instead.", variant: "destructive" });
     }
   };
 
@@ -3437,6 +3453,17 @@ export default function Results() {
               <Download className="w-4 h-4" />
             )}
             {exporting === "md" ? "Exporting..." : "Markdown"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={copyMarkdown}
+            disabled={exporting !== null}
+            className="gap-2 glass-card hover:border-primary/30"
+            data-testid="copy-markdown"
+            title="Copy Markdown report to clipboard for pasting into Slack, Jira, or Linear."
+          >
+            <Copy className="w-4 h-4" />
+            Copy MD
           </Button>
           {deleteToken && (
             <Button
