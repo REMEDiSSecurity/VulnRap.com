@@ -85,6 +85,92 @@ const AI_PHRASES: WeightedPhrase[] = [
   { phrase: "resonate with", weight: 5 },
   { phrase: "venture into", weight: 5 },
   { phrase: "embark on", weight: 5 },
+
+  // Spanish AI-cliché phrases
+  { phrase: "es importante señalar", weight: 6 },
+  { phrase: "es importante destacar", weight: 6 },
+  { phrase: "en el ámbito de", weight: 7 },
+  { phrase: "profundizar de manera integral", weight: 8 },
+  { phrase: "profundizar de forma", weight: 7 },
+  { phrase: "multifacétic", weight: 6 },
+  { phrase: "de suma importancia", weight: 7 },
+  { phrase: "es primordial", weight: 6 },
+  { phrase: "implicaciones de gran alcance", weight: 7 },
+  { phrase: "análisis exhaustivo", weight: 5 },
+  { phrase: "medidas proactivas", weight: 5 },
+  { phrase: "compromiso total", weight: 5 },
+  { phrase: "enfoque integral", weight: 6 },
+  { phrase: "no se puede subestimar", weight: 7 },
+  { phrase: "navegar las complejidades", weight: 8 },
+
+  // German AI-cliché phrases
+  { phrase: "es ist wichtig zu beachten", weight: 6 },
+  { phrase: "es ist wichtig zu erwähnen", weight: 6 },
+  { phrase: "im bereich der", weight: 6 },
+  { phrase: "eintauchen", weight: 7 },
+  { phrase: "vielschichtig", weight: 6 },
+  { phrase: "weitreichende auswirkungen", weight: 7 },
+  { phrase: "von höchster wichtigkeit", weight: 7 },
+  { phrase: "mit größter dringlichkeit", weight: 7 },
+  { phrase: "umfassende analyse", weight: 5 },
+  { phrase: "ganzheitlicher ansatz", weight: 6 },
+  { phrase: "proaktive maßnahmen", weight: 5 },
+  { phrase: "nicht unterschätzt werden", weight: 7 },
+
+  // Japanese AI-cliché phrases
+  { phrase: "留意することが重要", weight: 6 },
+  { phrase: "注意することが重要", weight: 6 },
+  { phrase: "領域において", weight: 7 },
+  { phrase: "深く掘り下げ", weight: 8 },
+  { phrase: "多面的", weight: 6 },
+  { phrase: "極めて重要", weight: 6 },
+  { phrase: "最重要課題", weight: 6 },
+  { phrase: "包括的に", weight: 5 },
+  { phrase: "包括的な分析", weight: 5 },
+  { phrase: "総合的なアプローチ", weight: 6 },
+  { phrase: "過小評価できない", weight: 7 },
+
+  // Russian AI-cliché phrases
+  { phrase: "важно отметить", weight: 6 },
+  { phrase: "стоит отметить", weight: 5 },
+  { phrase: "в сфере современн", weight: 7 },
+  { phrase: "погружаться", weight: 7 },
+  { phrase: "погрузиться", weight: 7 },
+  { phrase: "многогранн", weight: 6 },
+  { phrase: "далеко идущие последствия", weight: 7 },
+  { phrase: "крайне важно", weight: 6 },
+  { phrase: "первостепенн", weight: 6 },
+  { phrase: "всесторонне", weight: 5 },
+  { phrase: "всесторонний анализ", weight: 5 },
+  { phrase: "комплексный подход", weight: 6 },
+  { phrase: "нельзя недооценивать", weight: 7 },
+
+  // Portuguese AI-cliché phrases
+  { phrase: "é importante observar", weight: 6 },
+  { phrase: "é importante notar", weight: 6 },
+  { phrase: "no âmbito d", weight: 7 },
+  { phrase: "mergulhar", weight: 7 },
+  { phrase: "multifacetad", weight: 6 },
+  { phrase: "tapeçaria", weight: 7 },
+  { phrase: "primordial", weight: 6 },
+  { phrase: "implicações de longo alcance", weight: 7 },
+  { phrase: "análise abrangente", weight: 5 },
+  { phrase: "abordagem holística", weight: 6 },
+  { phrase: "medidas proativas", weight: 5 },
+  { phrase: "não pode ser subestimad", weight: 7 },
+
+  // Arabic AI-cliché phrases
+  { phrase: "من المهم ملاحظة", weight: 6 },
+  { phrase: "من الجدير بالذكر", weight: 6 },
+  { phrase: "في مجال أمن", weight: 7 },
+  { phrase: "الغوص فيه بشكل شامل", weight: 8 },
+  { phrase: "بشكل شامل", weight: 5 },
+  { phrase: "متعددة الأوجه", weight: 6 },
+  { phrase: "بالغ الأهمية", weight: 6 },
+  { phrase: "الأهمية القصوى", weight: 7 },
+  { phrase: "آثار بعيدة المدى", weight: 7 },
+  { phrase: "تحليل شامل", weight: 5 },
+  { phrase: "نهج شامل", weight: 6 },
 ];
 
 interface FormulaicPattern {
@@ -251,6 +337,172 @@ const FORMULAIC_AI_PHRASES: FormulaicPattern[] = [
       /during\s+(?:a\s+)?(?:recent\s+)?(?:security\s+)?(?:engagement|assessment|penetration\s+test)/i,
     weight: 6,
     type: "ai_engagement_claim",
+  },
+
+  // Spanish formulaic AI patterns
+  {
+    pattern: /(?:hola|estimado)\s+equipo\s+de\s+seguridad/i,
+    weight: 6,
+    type: "ai_formal_greeting_es",
+  },
+  {
+    pattern: /espero\s+que\s+est[ée]n\s+(?:muy\s+)?bien/i,
+    weight: 12,
+    type: "ai_pleasantry_es",
+  },
+  {
+    pattern: /quedo\s+a\s+la\s+espera\s+de\s+su\s+respuesta/i,
+    weight: 8,
+    type: "ai_look_forward_es",
+  },
+  {
+    pattern:
+      /(?:podría|puede)\s+(?:potencialmente\s+)?permitir\s+(?:ejecución|ejecucion)\s+remota/i,
+    weight: 7,
+    type: "ai_impact_inflation_es",
+  },
+  {
+    pattern: /con\s+la\s+máxima\s+urgencia/i,
+    weight: 7,
+    type: "ai_passive_recommend_es",
+  },
+
+  // German formulaic AI patterns
+  {
+    pattern: /(?:hallo|liebes?)\s+sicherheitsteam/i,
+    weight: 6,
+    type: "ai_formal_greeting_de",
+  },
+  {
+    pattern: /ich\s+hoffe\s+es\s+geht\s+(?:euch|ihnen)\s+gut/i,
+    weight: 12,
+    type: "ai_pleasantry_de",
+  },
+  {
+    pattern: /ich\s+freue\s+mich\s+auf\s+(?:eure|ihre)\s+antwort/i,
+    weight: 8,
+    type: "ai_look_forward_de",
+  },
+  {
+    pattern:
+      /(?:könnte|kann)\s+(?:potenziell\s+)?(?:remote\s+code\s+execution|datenexfiltration|kontoübernahme)/i,
+    weight: 7,
+    type: "ai_impact_inflation_de",
+  },
+  {
+    pattern: /mit\s+größter\s+dringlichkeit\s+behoben/i,
+    weight: 7,
+    type: "ai_passive_recommend_de",
+  },
+
+  // Japanese formulaic AI patterns
+  {
+    pattern: /いつもお世話になっております/,
+    weight: 6,
+    type: "ai_formal_greeting_ja",
+  },
+  {
+    pattern: /報告させていただきます/,
+    weight: 8,
+    type: "ai_polite_report_ja",
+  },
+  {
+    pattern: /ご返信をお待ちしております/,
+    weight: 8,
+    type: "ai_look_forward_ja",
+  },
+  {
+    pattern: /よろしくお願いいたします/,
+    weight: 5,
+    type: "ai_closing_ja",
+  },
+  {
+    pattern: /最大限の緊急性をもって/,
+    weight: 7,
+    type: "ai_passive_recommend_ja",
+  },
+
+  // Russian formulaic AI patterns
+  {
+    pattern: /команд[аеу]\s+безопасности/i,
+    weight: 6,
+    type: "ai_formal_greeting_ru",
+  },
+  {
+    pattern: /надеюсь\s+у\s+вас\s+вс[её]\s+хорошо/i,
+    weight: 12,
+    type: "ai_pleasantry_ru",
+  },
+  {
+    pattern: /с\s+нетерпением\s+жду\s+вашего\s+ответа/i,
+    weight: 8,
+    type: "ai_look_forward_ru",
+  },
+  {
+    pattern:
+      /(?:может|могла)\s+(?:потенциально\s+)?позволить\s+удал[её]нное\s+выполнение/i,
+    weight: 7,
+    type: "ai_impact_inflation_ru",
+  },
+  {
+    pattern: /с\s+максимальной\s+срочностью/i,
+    weight: 7,
+    type: "ai_passive_recommend_ru",
+  },
+
+  // Portuguese formulaic AI patterns
+  {
+    pattern: /(?:olá|prezad[oa])\s+equipe\s+de\s+seguranç/i,
+    weight: 6,
+    type: "ai_formal_greeting_pt",
+  },
+  {
+    pattern: /espero\s+que\s+estejam\s+(?:todos\s+)?bem/i,
+    weight: 12,
+    type: "ai_pleasantry_pt",
+  },
+  {
+    pattern: /aguardo\s+(?:a\s+)?resposta/i,
+    weight: 8,
+    type: "ai_look_forward_pt",
+  },
+  {
+    pattern:
+      /(?:poderia|pode)\s+(?:potencialmente\s+)?permitir\s+execuç[aã]o\s+remota/i,
+    weight: 7,
+    type: "ai_impact_inflation_pt",
+  },
+  {
+    pattern: /com\s+a\s+máxima\s+urgência/i,
+    weight: 7,
+    type: "ai_passive_recommend_pt",
+  },
+
+  // Arabic formulaic AI patterns
+  {
+    pattern: /فريق\s+الأمان/,
+    weight: 6,
+    type: "ai_formal_greeting_ar",
+  },
+  {
+    pattern: /أتمنى\s+أن\s+تكونوا\s+بخير/,
+    weight: 12,
+    type: "ai_pleasantry_ar",
+  },
+  {
+    pattern: /في\s+انتظار\s+ردكم/,
+    weight: 8,
+    type: "ai_look_forward_ar",
+  },
+  {
+    pattern: /بأقصى\s+درجات\s+الاستعجال/,
+    weight: 7,
+    type: "ai_passive_recommend_ar",
+  },
+  {
+    pattern: /الاختراق\s+الكامل\s+للبنية\s+التحتية/,
+    weight: 7,
+    type: "ai_total_compromise_ar",
   },
 ];
 

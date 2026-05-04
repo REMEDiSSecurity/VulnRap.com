@@ -371,7 +371,7 @@ exports[`Task #267: per-fixture hallucination detector totalWeight is pinned > p
       "phantom_exploit_script",
       "structural_fabrication",
     ],
-    "totalWeight": 35,
+    "totalWeight": 43,
   },
   "T4-16-fake-graphql-impossible-shape": {
     "signals": [
