@@ -2667,7 +2667,10 @@ components:
       description: |
         Task #645 — Static "revert this mutation" hint stitched onto each
         audit-log entry by the read endpoint. Null when the entry's
-        endpoint has no known reverse operation.
+        endpoint has no known reverse operation. Task #1004 — `payload`
+        carries the ready-to-send reverse request body reconstructed
+        server-side from the original request payload; null when the
+        original payload was empty or reconstruction failed.
       properties:
         method:
           type: string
@@ -2675,6 +2678,11 @@ components:
           type: string
         description:
           type: string
+        payload:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Ready-to-send reverse request body. Null when reconstruction is not possible.
       required: [method, endpoint, description]
 
     AuditLogEntry:

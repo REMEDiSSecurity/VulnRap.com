@@ -13,7 +13,11 @@ import { Router, type IRouter } from "express";
 import { db, auditLogTable, type AuditLogEntry } from "@workspace/db";
 import { and, desc, eq, gte, ilike, lte, sql, type SQL } from "drizzle-orm";
 import { requireCalibrationAuthStrict } from "../middlewares/require-calibration-auth";
-import { lookupRevertHint } from "../middlewares/audit-log-middleware";
+import {
+  lookupRevertHint,
+  type AuditRevertHint,
+} from "../middlewares/audit-log-middleware";
+import { getHandwavyPhraseHistory } from "../lib/engines/avri/handwavy-phrases";
 
 const router: IRouter = Router();
 
@@ -78,18 +82,62 @@ router.get("/audit-log", requireCalibrationAuthStrict, async (req, res) => {
         .where(whereClause),
     ]);
 
-    const entries = rows.map((row: AuditLogEntry) => ({
-      id: row.id,
-      actor: row.actor,
-      method: row.method,
-      endpoint: row.endpoint,
-      requestPayload: row.requestPayload ?? null,
-      queryParams: row.queryParams ?? null,
-      responseStatus: row.responseStatus,
-      ip: row.ip ?? null,
-      createdAt: row.createdAt.toISOString(),
-      revertHint: lookupRevertHint(row.method, row.endpoint),
-    }));
+    const needsHistory = rows.some(
+      (r) =>
+        r.method === "DELETE" &&
+        /\/handwavy-phrases$/.test(r.endpoint.split("?")[0]),
+    );
+    const phraseHistory = needsHistory ? getHandwavyPhraseHistory() : [];
+
+    const entries = rows.map((row: AuditLogEntry) => {
+      let revertHint: AuditRevertHint | null = null;
+      const match = lookupRevertHint(
+        row.method,
+        row.endpoint,
+        row.requestPayload,
+      );
+      if (match) {
+        const payload = match.payload ? { ...match.payload } : null;
+        if (
+          payload &&
+          match.hint.endpoint ===
+            "/api/feedback/calibration/handwavy-phrases/reinstate" &&
+          typeof payload.phrase === "string" &&
+          !payload.removedAt
+        ) {
+          const needle = payload.phrase.toLowerCase().trim();
+          const entryTime = row.createdAt.getTime();
+          let bestRemovedAt: string | null = null;
+          let bestDelta = Infinity;
+          for (const h of phraseHistory) {
+            if (h.phrase?.toLowerCase().trim() !== needle) continue;
+            const delta = Math.abs(
+              new Date(h.removedAt).getTime() - entryTime,
+            );
+            if (delta < 60_000 && delta < bestDelta) {
+              bestDelta = delta;
+              bestRemovedAt = h.removedAt;
+            }
+          }
+          if (bestRemovedAt) {
+            payload.removedAt = bestRemovedAt;
+          }
+        }
+        revertHint = { ...match.hint, payload };
+      }
+      return {
+        id: row.id,
+        actor: row.actor,
+        method: row.method,
+        endpoint: row.endpoint,
+        requestPayload: row.requestPayload ?? null,
+        queryParams: row.queryParams ?? null,
+        responseStatus: row.responseStatus,
+        ip: row.ip ?? null,
+        createdAt: row.createdAt.toISOString(),
+        revertHint,
+      };
+    });
 
     res.status(200).json({
       total: count,

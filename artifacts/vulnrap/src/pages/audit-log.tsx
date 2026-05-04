@@ -7,6 +7,7 @@
 // operation surface a "Revert" link that pre-fills the next mutation.
 
 import {
+  useCallback,
   useMemo,
   useState,
   type FormEvent,
@@ -15,13 +16,17 @@ import {
 import {
   useGetAuditLog,
   getGetAuditLogQueryKey,
+  customFetch,
+  ApiError,
   type AuditLogEntry,
   type GetAuditLogMethod,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  Loader2,
   RotateCcw,
   Shield,
 } from "lucide-react";
@@ -36,6 +41,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 import { formatAuditTimestamp } from "@/lib/audit-format";
 import { cn } from "@/lib/utils";
 
@@ -115,8 +121,55 @@ function PayloadView({ value }: { value: unknown }) {
   );
 }
 
-function AuditEntryRow({ entry }: { entry: AuditLogEntry }) {
+function AuditEntryRow({
+  entry,
+  onReverted,
+}: {
+  entry: AuditLogEntry;
+  onReverted: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [revertState, setRevertState] = useState<
+    "idle" | "loading" | "success" | { error: string }
+  >("idle");
+  const { toast } = useToast();
+
+  const handleRevert = useCallback(async () => {
+    if (!entry.revertHint) return;
+    const hint = entry.revertHint;
+    setRevertState("loading");
+    try {
+      const payload = hint.payload ?? null;
+      const body = payload != null ? JSON.stringify(payload) : undefined;
+      await customFetch(hint.endpoint, {
+        method: hint.method,
+        body,
+        headers: body ? { "content-type": "application/json" } : undefined,
+      });
+      setRevertState("success");
+      toast({
+        title: "Revert successful",
+        description: hint.description,
+      });
+      onReverted();
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Unknown error";
+      setRevertState({ error: message });
+    }
+  }, [entry, onReverted, toast]);
+
+  const isLoading = revertState === "loading";
+  const isSuccess = revertState === "success";
+  const errorMessage =
+    typeof revertState === "object" && "error" in revertState
+      ? revertState.error
+      : null;
+
   return (
     <div className="border border-border rounded-lg p-3 bg-card/50">
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -156,27 +209,46 @@ function AuditEntryRow({ entry }: { entry: AuditLogEntry }) {
         >
           {expanded ? "Hide payload" : "Show payload"}
         </Button>
-        {entry.revertHint && (
+        {entry.revertHint && entry.revertHint.payload && (
           <Button
             type="button"
             variant="outline"
             size="sm"
-            asChild
-            className="text-amber-300 border-amber-500/40 hover:bg-amber-500/10"
+            disabled={isLoading || isSuccess}
+            onClick={handleRevert}
+            title={entry.revertHint.description}
+            className={cn(
+              "border-amber-500/40",
+              isSuccess
+                ? "text-emerald-300 border-emerald-500/40"
+                : "text-amber-300 hover:bg-amber-500/10",
+            )}
           >
-            <a
-              href={`${entry.revertHint.endpoint}`}
-              title={entry.revertHint.description}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            {isLoading ? (
+              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+            ) : (
               <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
-              Revert ({entry.revertHint.method}{" "}
-              {entry.revertHint.endpoint.replace(/^\/api/, "")})
-            </a>
+            )}
+            {isSuccess
+              ? "Reverted"
+              : `Revert (${entry.revertHint.method} ${entry.revertHint.endpoint.replace(/^\/api/, "")})`}
           </Button>
         )}
       </div>
+      {errorMessage && (
+        <div className="mt-2 text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded px-2 py-1.5 break-all">
+          Revert failed: {errorMessage}
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="text-red-300 underline ml-2 h-auto p-0 text-xs"
+            onClick={() => setRevertState("idle")}
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
       {expanded && (
         <div className="mt-3 grid gap-2">
           <div>
@@ -203,6 +275,11 @@ export default function AuditLogPage() {
   const [draft, setDraft] = useState<FiltersState>(EMPTY_FILTERS);
   const [applied, setApplied] = useState<FiltersState>(EMPTY_FILTERS);
   const [page, setPage] = useState(0);
+  const queryClient = useQueryClient();
+
+  const handleReverted = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: getGetAuditLogQueryKey() });
+  }, [queryClient]);
 
   const params = useMemo(() => {
     const out: Record<string, unknown> = {
@@ -400,7 +477,11 @@ export default function AuditLogPage() {
           ) : (
             <div className="space-y-2">
               {entries.map((entry) => (
-                <AuditEntryRow key={entry.id} entry={entry} />
+                <AuditEntryRow
+                  key={entry.id}
+                  entry={entry}
+                  onReverted={handleReverted}
+                />
               ))}
             </div>
           )}

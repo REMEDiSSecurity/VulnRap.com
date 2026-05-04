@@ -146,12 +146,31 @@ export interface AuditRevertHint {
   method: string;
   endpoint: string;
   description: string;
+  payload?: Record<string, unknown> | null;
+}
+
+type PayloadBuilder = (requestPayload: unknown) => Record<string, unknown> | null;
+
+function pickStringFields(
+  obj: unknown,
+  requiredKey: string,
+  ...optionalKeys: string[]
+): Record<string, unknown> | null {
+  if (!obj || typeof obj !== "object") return null;
+  const rec = obj as Record<string, unknown>;
+  if (typeof rec[requiredKey] !== "string") return null;
+  const out: Record<string, unknown> = { [requiredKey]: rec[requiredKey] };
+  for (const k of optionalKeys) {
+    if (typeof rec[k] === "string") out[k] = rec[k];
+  }
+  return out;
 }
 
 const REVERT_HINTS: Array<{
   pattern: RegExp;
   method: string;
-  hint: AuditRevertHint;
+  hint: Omit<AuditRevertHint, "payload">;
+  buildPayload: PayloadBuilder;
 }> = [
   {
     pattern: /^\/api\/feedback\/calibration\/handwavy-phrases$/,
@@ -161,6 +180,7 @@ const REVERT_HINTS: Array<{
       endpoint: "/api/feedback/calibration/handwavy-phrases",
       description: "Remove the just-added phrase",
     },
+    buildPayload: (rp) => pickStringFields(rp, "phrase", "reviewer"),
   },
   {
     pattern: /^\/api\/feedback\/calibration\/handwavy-phrases$/,
@@ -169,6 +189,12 @@ const REVERT_HINTS: Array<{
       method: "POST",
       endpoint: "/api/feedback/calibration/handwavy-phrases/reinstate",
       description: "Reinstate the removed phrase",
+    },
+    buildPayload: (rp) => {
+      if (!rp || typeof rp !== "object") return null;
+      const rec = rp as Record<string, unknown>;
+      if (Array.isArray(rec.phrases)) return null;
+      return pickStringFields(rp, "phrase", "reviewer");
     },
   },
   {
@@ -179,6 +205,7 @@ const REVERT_HINTS: Array<{
       endpoint: "/api/feedback/calibration/handwavy-phrases",
       description: "Re-add the undone phrase",
     },
+    buildPayload: (rp) => pickStringFields(rp, "phrase", "reviewer"),
   },
   {
     pattern: /^\/api\/feedback\/calibration\/handwavy-phrases\/reinstate$/,
@@ -188,17 +215,27 @@ const REVERT_HINTS: Array<{
       endpoint: "/api/feedback/calibration/handwavy-phrases",
       description: "Remove the reinstated phrase again",
     },
+    buildPayload: (rp) => pickStringFields(rp, "phrase", "reviewer"),
   },
 ];
+
+export interface RevertHintMatch {
+  hint: Omit<AuditRevertHint, "payload">;
+  payload: Record<string, unknown> | null;
+}
 
 export function lookupRevertHint(
   method: string,
   endpoint: string,
-): AuditRevertHint | null {
+  requestPayload?: unknown,
+): RevertHintMatch | null {
   const upper = method.toUpperCase();
   for (const candidate of REVERT_HINTS) {
     if (candidate.method === upper && candidate.pattern.test(endpoint)) {
-      return candidate.hint;
+      return {
+        hint: candidate.hint,
+        payload: candidate.buildPayload(requestPayload ?? null),
+      };
     }
   }
   return null;

@@ -188,6 +188,10 @@ vi.mock("@workspace/db", () => {
   };
 });
 
+vi.mock("../lib/engines/avri/handwavy-phrases", () => ({
+  getHandwavyPhraseHistory: () => [],
+}));
+
 // drizzle-orm itself is also imported by the route for its sql tag and
 // predicate helpers — re-export the same shims.
 vi.mock("drizzle-orm", async () => {

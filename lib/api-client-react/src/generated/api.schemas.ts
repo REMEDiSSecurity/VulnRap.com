@@ -15,6 +15,7 @@ export interface AuditRevertHint {
   method: string;
   endpoint: string;
   description: string;
+  payload?: Record<string, unknown> | null;
 }
 
 /**
