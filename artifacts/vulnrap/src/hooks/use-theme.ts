@@ -5,9 +5,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { getCalibrationToken } from "@workspace/api-client-react";
 
 export type ThemeChoice = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
@@ -48,6 +50,47 @@ export function applyTheme(resolved: ResolvedTheme) {
   root.style.colorScheme = resolved;
 }
 
+function isValidTheme(v: unknown): v is ThemeChoice {
+  return v === "system" || v === "light" || v === "dark";
+}
+
+function buildApiUrl(path: string): string {
+  const base = (typeof import.meta !== "undefined" && import.meta.env?.BASE_URL) || "/";
+  return `${base.replace(/\/$/, "")}/api${path}`;
+}
+
+async function fetchServerTheme(): Promise<ThemeChoice | null> {
+  const token = getCalibrationToken();
+  if (!token) return null;
+  try {
+    const headers: Record<string, string> = {
+      "x-calibration-token": token,
+    };
+    const res = await fetch(buildApiUrl("/preferences/theme"), { headers });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { theme?: string };
+    if (isValidTheme(data.theme)) return data.theme;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function saveServerTheme(choice: ThemeChoice): void {
+  const token = getCalibrationToken();
+  if (!token) return;
+  fetch(buildApiUrl("/preferences/theme"), {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      "x-calibration-token": token,
+    },
+    body: JSON.stringify({ theme: choice }),
+  }).catch(() => {
+    // fire-and-forget
+  });
+}
+
 interface ThemeContextValue {
   theme: ThemeChoice;
   resolved: ResolvedTheme;
@@ -62,6 +105,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [resolved, setResolved] = useState<ResolvedTheme>(() =>
     resolveTheme(readStoredTheme()),
   );
+  const serverFetched = useRef(false);
+
+  useEffect(() => {
+    if (serverFetched.current) return;
+    serverFetched.current = true;
+    fetchServerTheme().then((serverTheme) => {
+      if (serverTheme !== null) {
+        setThemeState(serverTheme);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const r = resolveTheme(theme);
@@ -92,11 +146,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener?.("change", onChange);
   }, [theme]);
 
-  const setTheme = useCallback((t: ThemeChoice) => setThemeState(t), []);
+  const setTheme = useCallback((t: ThemeChoice) => {
+    setThemeState(t);
+    saveServerTheme(t);
+  }, []);
   const cycleTheme = useCallback(() => {
-    setThemeState((prev) =>
-      prev === "system" ? "light" : prev === "light" ? "dark" : "system",
-    );
+    setThemeState((prev) => {
+      const next =
+        prev === "system" ? "light" : prev === "light" ? "dark" : "system";
+      saveServerTheme(next);
+      return next;
+    });
   }, []);
 
   const value = useMemo<ThemeContextValue>(
@@ -110,7 +170,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 export function useTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
   if (!ctx) {
-    // Safe fallback when used outside provider (e.g. tests).
     return {
       theme: "system",
       resolved: "dark",

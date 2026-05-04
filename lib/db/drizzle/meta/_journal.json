@@ -57,6 +57,13 @@
       "when": 1777870095163,
       "tag": "0007_tired_rick_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777911139846,
+      "tag": "0008_wonderful_nitro",
+      "breakpoints": true
     }
   ]
 }
