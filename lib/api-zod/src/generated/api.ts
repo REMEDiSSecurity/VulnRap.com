@@ -3910,7 +3910,7 @@ export const ListPresetsResponse = zod
                 .max(listPresetsResponsePresetsItemEngineWeightsLlmMax),
             })
             .describe(
-              'Per-engine emphasis weights in the [0, 2] range. 1.0 means \"use the\nplatform default weighting\"; lower values de-emphasise that engine,\nhigher values emphasise it. Applied as multipliers to each engine\'s\nbreakdown score on /check before the Bayesian probability combination.\n',
+              'Per-engine emphasis weights in the [0, 2] range. 1.0 means \"use the\nplatform default weighting\"; lower values de-emphasise that engine,\nhigher values emphasise it. Applied as multipliers to each engine\'s\nbreakdown score on \/check before the Bayesian probability combination.\n',
             ),
         })
         .describe("A single curated preset profile."),
