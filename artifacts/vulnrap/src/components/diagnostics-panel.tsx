@@ -549,6 +549,10 @@ export function DiagnosticsPanel({
                       ))}
                     </div>
                   </section>
+                  <SubstanceBreakdownSection
+                    engines={data.engines.engines}
+                    overrides={overrides}
+                  />
                   <EvidenceStrengthSection engines={data.engines.engines} />
                   <GoldSignalBonusSection engines={data.engines.engines} />
                 </>
@@ -2001,6 +2005,205 @@ function AuditTelemetrySection({ audit }: { audit: AuditTelemetryBlock }) {
         </p>
       </div>
     </section>
+  );
+}
+
+// Task #932 — Substance breakdown panel. Mirrors the 5 sub-components and
+// weights documented on /engines/substance so a reader can see, on their own
+// report, which sub-component pulled the substance score up or down. The
+// shape is what `runEngine2` writes into `signalBreakdown` in
+// `artifacts/api-server/src/lib/engines/engines.ts`:
+//   { codeEvidence:    { score, weight: 0.35 },
+//     references:      { score, weight: 0.30 },
+//     reproducibility: { score, weight: 0.20 },
+//     pocIntegrity:    { score, weight: 0.10 },
+//     claimEvidence:   { score, weight: 0.05 } }
+// The contribution shown is `round(score * weight)` so the column sums
+// (modulo evidence-strength + gold-signal bonuses applied later in the
+// engine) line up with the per-engine substance score. When
+// `E3_SUBSTANCE_GATE` is recorded in overridesApplied we surface a
+// callout linking to /engines/substance so reviewers can see why their
+// CWE-coherence score was capped.
+type SubstanceComponentKey =
+  | "codeEvidence"
+  | "references"
+  | "reproducibility"
+  | "pocIntegrity"
+  | "claimEvidence";
+
+const SUBSTANCE_COMPONENTS: Array<{
+  key: SubstanceComponentKey;
+  label: string;
+  description: string;
+}> = [
+  {
+    key: "codeEvidence",
+    label: "codeEvidence",
+    description:
+      "Code-fenced PoCs, real URLs, line-number references — the strongest substance signal.",
+  },
+  {
+    key: "references",
+    label: "references",
+    description:
+      "Function-call references, file-path mentions, identifier diversity in the report body.",
+  },
+  {
+    key: "reproducibility",
+    label: "reproducibility",
+    description:
+      "Step-by-step reproduction language, command/HTTP request/response presence.",
+  },
+  {
+    key: "pocIntegrity",
+    label: "pocIntegrity",
+    description:
+      "Whether quoted PoCs actually exercise the claimed bug versus boilerplate snippets.",
+  },
+  {
+    key: "claimEvidence",
+    label: "claimEvidence",
+    description:
+      "Ratio of concrete evidence tokens to abstract impact claims (expert ≈ 0.27, slop ≈ 0.03).",
+  },
+];
+
+type SubstanceComponentBlock = { score?: number; weight?: number };
+
+function readSubstanceComponent(
+  sb: Record<string, unknown>,
+  key: SubstanceComponentKey,
+): SubstanceComponentBlock | null {
+  const raw = sb[key];
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  const score = typeof obj.score === "number" ? obj.score : undefined;
+  const weight = typeof obj.weight === "number" ? obj.weight : undefined;
+  if (score === undefined && weight === undefined) return null;
+  return { score, weight };
+}
+
+function SubstanceBreakdownSection({
+  engines,
+  overrides,
+}: {
+  engines: EngineResult[];
+  overrides: string[];
+}) {
+  const e2 = engines.find((e) => /Technical Substance/i.test(e.engine));
+  const sb = (e2?.signalBreakdown ?? {}) as Record<string, unknown>;
+  const rows = SUBSTANCE_COMPONENTS.map((c) => ({
+    ...c,
+    block: readSubstanceComponent(sb, c.key),
+  })).filter((r) => r.block !== null) as Array<{
+    key: SubstanceComponentKey;
+    label: string;
+    description: string;
+    block: SubstanceComponentBlock;
+  }>;
+
+  if (!e2 || rows.length === 0) return null;
+
+  const gateOverride = overrides.find((o) => o.startsWith("E3_SUBSTANCE_GATE"));
+
+  return (
+    <>
+      <Separator className="bg-border/30" />
+      <section className="space-y-2" data-testid="substance-breakdown-section">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">
+            Engine 2 — Substance Breakdown
+          </div>
+          <Link
+            to="/engines/substance"
+            className="text-[10px] font-mono text-muted-foreground hover:text-primary"
+            data-testid="link-substance-breakdown-docs"
+          >
+            How this is scored →
+          </Link>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px] font-mono">
+            <thead>
+              <tr className="text-muted-foreground/70 text-left">
+                <th className="font-normal pb-1 pr-2">component</th>
+                <th className="font-normal pb-1 pr-2 text-right">score</th>
+                <th className="font-normal pb-1 pr-2 text-right">weight</th>
+                <th className="font-normal pb-1 pr-2 text-right">contribution</th>
+                <th className="font-normal pb-1 w-1/2">bar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ key, label, description, block }) => {
+                const score = Math.max(
+                  0,
+                  Math.min(100, Math.round(block.score ?? 0)),
+                );
+                const weight = block.weight ?? 0;
+                const contribution = Math.round(score * weight);
+                const tone =
+                  score >= 60
+                    ? "bg-green-500/70"
+                    : score >= 40
+                      ? "bg-yellow-500/70"
+                      : "bg-red-500/70";
+                return (
+                  <tr
+                    key={key}
+                    className="border-t border-border/20"
+                    title={description}
+                    data-testid={`substance-component-${key}`}
+                  >
+                    <td className="py-1 pr-2 text-foreground">{label}</td>
+                    <td className="py-1 pr-2 text-right">{score}</td>
+                    <td className="py-1 pr-2 text-right text-muted-foreground">
+                      ×{weight.toFixed(2)}
+                    </td>
+                    <td className="py-1 pr-2 text-right font-semibold">
+                      {contribution}
+                    </td>
+                    <td className="py-1">
+                      <div
+                        className="h-1.5 rounded bg-muted/40 overflow-hidden"
+                        aria-hidden="true"
+                      >
+                        <div
+                          className={`h-full ${tone}`}
+                          style={{ width: `${score}%` }}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
+          Contribution = score × weight. The five components sum to the raw
+          substance score before evidence-strength and gold-signal bonuses are
+          applied.
+        </p>
+        {gateOverride && (
+          <div
+            className="rounded border border-yellow-500/40 bg-yellow-500/10 px-2 py-1.5 text-[11px] font-mono text-yellow-300 leading-relaxed"
+            data-testid="substance-gate-callout"
+          >
+            <div className="font-bold">E3_SUBSTANCE_GATE fired</div>
+            <div className="text-yellow-200/90 whitespace-pre-wrap break-words">
+              {gateOverride.replace(/^E3_SUBSTANCE_GATE:\s*/, "")}
+            </div>
+            <Link
+              to="/engines/substance#substance-gate"
+              className="inline-block mt-1 text-yellow-300 underline hover:text-yellow-200"
+              data-testid="link-substance-gate-docs"
+            >
+              Why this cap exists →
+            </Link>
+          </div>
+        )}
+      </section>
+    </>
   );
 }
 

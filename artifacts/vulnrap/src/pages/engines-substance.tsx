@@ -322,7 +322,10 @@ export default function EnginesSubstance() {
       </div>
 
       {/* Substance gate */}
-      <Card className="bg-card/40 backdrop-blur border-primary/20">
+      <Card
+        id="substance-gate"
+        className="bg-card/40 backdrop-blur border-primary/20 scroll-mt-24"
+      >
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-primary">
             <ShieldCheck className="w-5 h-5" />
