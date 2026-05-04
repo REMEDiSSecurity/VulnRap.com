@@ -10,6 +10,8 @@ import {
   useGetScoreHistory,
   useGetCohortBaseline,
   getGetCohortBaselineQueryKey,
+  useListGallery,
+  getListGalleryQueryKey,
   type Verification,
   type VerificationCheck,
   type VerificationSummary,
@@ -72,6 +74,7 @@ import {
   Loader2,
   Printer,
   Flame,
+  Sparkles,
 } from "lucide-react";
 import qrcodegen from "qrcode-generator";
 import { useEffect, useState } from "react";
@@ -3132,6 +3135,15 @@ export default function Results() {
     },
   });
 
+  const { data: galleryData } = useListGallery({
+    query: {
+      queryKey: getListGalleryQueryKey(),
+      staleTime: 5 * 60 * 1000,
+      retry: false,
+    },
+  });
+  const gallerySample = galleryData?.samples.find((s) => s.reportId === id);
+
   // Mirror the reconstructed badge into the user's local history bookmarks so
   // they can spot approximate scores from the history list without opening
   // each report. Only updates entries that already exist locally.
@@ -3537,6 +3549,32 @@ export default function Results() {
         </div>
       </div>
       <div className="h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent -mt-4" />
+
+      {gallerySample && (
+        <Link
+          to="/gallery"
+          data-testid="featured-in-gallery-badge"
+          className="flex items-start gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 hover:bg-primary/10 hover:border-primary/40 transition-colors group"
+        >
+          <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5 group-hover:text-primary" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Featured in gallery
+              </span>
+              <Badge
+                variant="outline"
+                className="text-[9px] px-1.5 py-0 h-4 border-primary/30 text-primary/80"
+              >
+                View gallery →
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+              {gallerySample.snippet}
+            </p>
+          </div>
+        </Link>
+      )}
 
       {showDeleteConfirm && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">

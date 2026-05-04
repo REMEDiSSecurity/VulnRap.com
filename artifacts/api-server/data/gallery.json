@@ -13,7 +13,7 @@
         "No reproduction steps",
         "No CWE / CVSS"
       ],
-      "reportId": 4
+      "reportId": 51
     },
     {
       "id": "obvious-could-might-soup",
@@ -26,7 +26,7 @@
         "No affected version",
         "Vague impact section"
       ],
-      "reportId": 4
+      "reportId": 51
     },
     {
       "id": "obvious-llm-disclaimer",
@@ -39,7 +39,7 @@
         "Template boilerplate",
         "No technical artefacts"
       ],
-      "reportId": 4
+      "reportId": 51
     },
     {
       "id": "subtle-plausible-xss-no-poc",
@@ -52,7 +52,7 @@
         "Missing reproduction trace",
         "Plausible CWE-79 framing"
       ],
-      "reportId": 1
+      "reportId": 48
     },
     {
       "id": "subtle-fabricated-cve",
@@ -65,7 +65,7 @@
         "Real-looking endpoint",
         "Plausible CWE-918 framing"
       ],
-      "reportId": 5
+      "reportId": 52
     },
     {
       "id": "subtle-overstated-impact",
@@ -78,7 +78,7 @@
         "PoC weaker than claim",
         "Real endpoint, weak evidence"
       ],
-      "reportId": 2
+      "reportId": 49
     },
     {
       "id": "borderline-terse-but-real",
@@ -91,7 +91,7 @@
         "Real reproduction",
         "Concrete file/function"
       ],
-      "reportId": 6
+      "reportId": 53
     },
     {
       "id": "borderline-template-but-honest",
@@ -104,7 +104,7 @@
         "Genuine PoC inside",
         "Authentic root-cause"
       ],
-      "reportId": 3
+      "reportId": 50
     },
     {
       "id": "borderline-mixed-signals",
@@ -117,7 +117,7 @@
         "Hedging tail",
         "Mixed substance"
       ],
-      "reportId": 1
+      "reportId": 48
     },
     {
       "id": "clean-stored-xss",
@@ -130,7 +130,7 @@
         "CWE + CVSS present",
         "Concrete remediation"
       ],
-      "reportId": 1
+      "reportId": 48
     },
     {
       "id": "clean-idor-invoice",
@@ -143,7 +143,7 @@
         "Root-cause code shown",
         "Specific remediation"
       ],
-      "reportId": 2
+      "reportId": 49
     },
     {
       "id": "clean-sqli-search",
@@ -156,7 +156,7 @@
         "Vulnerable code snippet",
         "Drop-in fix snippet"
       ],
-      "reportId": 3
+      "reportId": 50
     }
   ]
 }
