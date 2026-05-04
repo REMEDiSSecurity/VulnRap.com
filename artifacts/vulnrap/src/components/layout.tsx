@@ -39,6 +39,7 @@ import {
   BookA,
   Shield,
   ClipboardList,
+  Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getCalibrationToken } from "@workspace/api-client-react";
@@ -185,6 +186,7 @@ const NAV: NavEntry[] = [
     matchPrefixes: [
       "/developers",
       "/quickstart",
+      "/connect",
       "/architecture",
       "/blog",
       "/changelog",
@@ -211,6 +213,12 @@ const NAV: NavEntry[] = [
         label: "Quickstart",
         icon: <Rocket className="w-4 h-4" />,
         description: "Zero to first scored report in five copy-paste steps.",
+      },
+      {
+        to: "/connect",
+        label: "Connect Your Agent",
+        icon: <Plug className="w-4 h-4" />,
+        description: "One-click MCP install snippets for Claude, Cursor, Zed, Continue, and Windsurf.",
       },
       {
         to: "/how-it-works",

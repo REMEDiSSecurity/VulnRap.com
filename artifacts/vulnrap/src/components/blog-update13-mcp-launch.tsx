@@ -1,4 +1,5 @@
 import { Calendar } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
@@ -94,8 +95,12 @@ export function BlogUpdate13McpLaunch() {
         </pre>
 
         <P>
-          Cursor, Zed, and Continue use the same MCP wire protocol &mdash; point
-          them at the same <code>npx</code> command and you are done. No
+          Cursor, Zed, Continue, and Windsurf use the same MCP wire protocol.
+          See the{" "}
+          <Link to="/connect" className="text-primary hover:underline">
+            Connect Your Agent
+          </Link>{" "}
+          page for copy-paste config snippets for every supported client. No
           accounts, no API keys.
         </P>
 
