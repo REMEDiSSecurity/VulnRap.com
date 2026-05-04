@@ -4,7 +4,6 @@ import { userFeedbackTable, reportsTable } from "@workspace/db";
 import { SubmitFeedbackBody } from "@workspace/api-zod";
 import { sql, eq, desc, gte, and, isNotNull } from "drizzle-orm";
 import { generateChallenge, verifyChallenge } from "../lib/challenge";
-import { getCurrentConfig } from "../lib/scoring-config";
 
 const router: IRouter = Router();
 
@@ -280,84 +279,22 @@ router.get("/feedback/analytics", async (_req, res): Promise<void> => {
 // when the in-sample numbers were optimistic (the whole point of locking a
 // holdout). When a partition has zero rows, precision/recall are returned
 // as null so the UI can render "insufficient data" instead of a misleading 0.
+//
+// Task #982 — The metric math is now shared with the holdout drift
+// scheduler via `computeHoldoutEval` so both code paths stay in sync.
 router.get("/feedback/holdout-eval", async (_req, res): Promise<void> => {
   try {
-    const config = getCurrentConfig();
-    const scoreThreshold = config.tierThresholds.high;
-    const ratingThreshold = 2;
-
-    const rows = await db
-      .select({
-        slopScore: reportsTable.slopScore,
-        rating: userFeedbackTable.rating,
-        helpful: userFeedbackTable.helpful,
-        isHoldout: userFeedbackTable.isHoldout,
-      })
-      .from(userFeedbackTable)
-      .innerJoin(reportsTable, eq(userFeedbackTable.reportId, reportsTable.id))
-      .where(isNotNull(reportsTable.slopScore));
-
-    type Partition = {
-      totalFeedback: number;
-      tp: number;
-      fp: number;
-      fn: number;
-      tn: number;
-      precision: number | null;
-      recall: number | null;
-      f1: number | null;
-      accuracy: number | null;
-    };
-    const empty = (): Partition => ({
-      totalFeedback: 0,
-      tp: 0,
-      fp: 0,
-      fn: 0,
-      tn: 0,
-      precision: null,
-      recall: null,
-      f1: null,
-      accuracy: null,
-    });
-    const holdout = empty();
-    const inSample = empty();
-
-    for (const row of rows) {
-      const score = row.slopScore ?? 0;
-      const predictedSlop = score >= scoreThreshold;
-      const actuallySlop =
-        row.rating <= ratingThreshold || row.helpful === false;
-      const target = row.isHoldout ? holdout : inSample;
-      target.totalFeedback++;
-      if (predictedSlop && actuallySlop) target.tp++;
-      else if (predictedSlop && !actuallySlop) target.fp++;
-      else if (!predictedSlop && actuallySlop) target.fn++;
-      else target.tn++;
-    }
-
-    const finalize = (p: Partition): Partition => {
-      const round = (n: number) => Math.round(n * 1000) / 1000;
-      const precDen = p.tp + p.fp;
-      const recDen = p.tp + p.fn;
-      const total = p.totalFeedback;
-      const precision = precDen > 0 ? round(p.tp / precDen) : null;
-      const recall = recDen > 0 ? round(p.tp / recDen) : null;
-      const f1 =
-        precision != null && recall != null && precision + recall > 0
-          ? round((2 * precision * recall) / (precision + recall))
-          : null;
-      const accuracy = total > 0 ? round((p.tp + p.tn) / total) : null;
-      return { ...p, precision, recall, f1, accuracy };
-    };
+    const { computeHoldoutEval } = await import("../lib/holdout-eval");
+    const result = await computeHoldoutEval();
 
     res.json({
       thresholds: {
-        scoreThreshold,
-        ratingThreshold,
-        description: `Predicted slop = slopScore >= ${scoreThreshold}; actually slop = user rating <= ${ratingThreshold} OR helpful = false`,
+        scoreThreshold: result.scoreThreshold,
+        ratingThreshold: result.ratingThreshold,
+        description: `Predicted slop = slopScore >= ${result.scoreThreshold}; actually slop = user rating <= ${result.ratingThreshold} OR helpful = false`,
       },
-      holdout: finalize(holdout),
-      inSample: finalize(inSample),
+      holdout: result.holdout,
+      inSample: result.inSample,
       holdoutFraction: 0.2,
     });
   } catch (err) {

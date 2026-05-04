@@ -20,6 +20,7 @@ import {
 } from "../lib/avri-drift-notifications";
 import { getRescoreBackfillSchedulerStatus } from "../lib/rescore-backfill-scheduler";
 import { getScoreStabilitySchedulerStatus } from "../lib/score-stability-scheduler";
+import { getHoldoutDriftSchedulerStatus } from "../lib/holdout-drift-scheduler";
 import {
   computeScoreStabilitySummary,
   DEFAULT_LOOKBACK_DAYS,
@@ -1489,6 +1490,25 @@ router.get(
       res
         .status(500)
         .json({ error: "Failed to read score stability scheduler status." });
+    }
+  },
+);
+
+// Task #982 — Operator-visible heartbeat for the daily holdout-vs-in-sample
+// accuracy drift scheduler. Same conventions as the other scheduler-status
+// endpoints: timestamps + booleans + small numeric counters only (no error
+// text or env values), safe to expose unauthenticated.
+router.get(
+  "/feedback/calibration/holdout-drift/scheduler-status",
+  (_req, res) => {
+    try {
+      const status = getHoldoutDriftSchedulerStatus();
+      res.json(status);
+    } catch (err) {
+      _req.log?.error(err, "Failed to read holdout drift scheduler status");
+      res
+        .status(500)
+        .json({ error: "Failed to read holdout drift scheduler status." });
     }
   },
 );

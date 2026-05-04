@@ -25,6 +25,9 @@ const { startRescoreBackfillScheduler } = await import(
 const { startScoreStabilityScheduler } = await import(
   "./lib/score-stability-scheduler"
 );
+const { startHoldoutDriftScheduler } = await import(
+  "./lib/holdout-drift-scheduler"
+);
 const { startPgPoolCollector, stopPgPoolCollector } = await import(
   "./lib/metrics"
 );
@@ -60,6 +63,7 @@ const server = app.listen(port, (err) => {
   const stalledSchedulerWatchdog = startStalledSchedulerWatchdog();
   const rescoreScheduler = startRescoreBackfillScheduler();
   const stabilityScheduler = startScoreStabilityScheduler();
+  const holdoutDriftScheduler = startHoldoutDriftScheduler();
   // Task #462 — Graceful shutdown that actually exits.
   //
   // Without an explicit process.exit, the pino-pretty transport's worker
@@ -95,6 +99,7 @@ const server = app.listen(port, (err) => {
     stalledSchedulerWatchdog.stop();
     rescoreScheduler.stop();
     stabilityScheduler.stop();
+    holdoutDriftScheduler.stop();
     stopPgPoolCollector();
     server.close();
     server.closeAllConnections?.();
