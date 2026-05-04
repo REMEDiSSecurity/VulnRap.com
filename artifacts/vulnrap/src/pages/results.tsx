@@ -352,7 +352,7 @@ interface EngineRadarSectionProps {
   cwe?: string | null;
 }
 
-function EngineRadarSection({
+export function EngineRadarSection({
   vulnrap,
   qualityScore,
   cwe,
