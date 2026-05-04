@@ -6,16 +6,25 @@
  * OpenAPI spec version: 3.0.0
  */
 /**
+ * Ready-to-send reverse request body. Null when reconstruction is not possible.
+ */
+export type AuditRevertHintPayload = { [key: string]: unknown } | null;
+
+/**
  * Task #645 — Static "revert this mutation" hint stitched onto each
 audit-log entry by the read endpoint. Null when the entry's
-endpoint has no known reverse operation.
+endpoint has no known reverse operation. Task #1004 — `payload`
+carries the ready-to-send reverse request body reconstructed
+server-side from the original request payload; null when the
+original payload was empty or reconstruction failed.
 
  */
 export interface AuditRevertHint {
   method: string;
   endpoint: string;
   description: string;
-  payload?: Record<string, unknown> | null;
+  /** Ready-to-send reverse request body. Null when reconstruction is not possible. */
+  payload?: AuditRevertHintPayload;
 }
 
 /**

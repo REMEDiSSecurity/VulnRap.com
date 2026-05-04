@@ -12,6 +12,7 @@ export * from "./applyCalibrationResponse";
 export * from "./auditLogEntry";
 export * from "./auditLogResponse";
 export * from "./auditRevertHint";
+export * from "./auditRevertHintPayload";
 export * from "./avriDriftFamilyMean";
 export * from "./avriDriftFlag";
 export * from "./avriDriftFlagKind";

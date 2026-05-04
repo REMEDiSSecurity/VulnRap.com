@@ -3033,9 +3033,15 @@ export const GetAuditLogResponse = zod
               method: zod.string(),
               endpoint: zod.string(),
               description: zod.string(),
+              payload: zod
+                .record(zod.string(), zod.unknown())
+                .nullish()
+                .describe(
+                  "Ready-to-send reverse request body. Null when reconstruction is not possible.",
+                ),
             })
             .describe(
-              'Task #645 — Static \"revert this mutation\" hint stitched onto each\naudit-log entry by the read endpoint. Null when the entry\'s\nendpoint has no known reverse operation.\n',
+              'Task #645 — Static \"revert this mutation\" hint stitched onto each\naudit-log entry by the read endpoint. Null when the entry\'s\nendpoint has no known reverse operation. Task #1004 — `payload`\ncarries the ready-to-send reverse request body reconstructed\nserver-side from the original request payload; null when the\noriginal payload was empty or reconstruction failed.\n',
             )
             .nullable(),
         })
