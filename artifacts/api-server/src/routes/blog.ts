@@ -7,60 +7,11 @@
 // Mounted at the application root (not under `/api`) because feed readers
 // and the auto-discovery <link> in blog.tsx point at `/blog/feed.xml`
 // directly, matching the path convention the task spec calls out.
-import { existsSync, readFileSync } from "fs";
-import path from "path";
 import { Router, type IRouter, type Request } from "express";
 import { buildPublicUrl } from "../lib/public-url";
+import { loadBlogPostsMeta, type BlogPostMeta } from "../lib/blog-posts";
 
-const BLOG_POSTS_CANDIDATES = [
-  process.env.BLOG_POSTS_PATH,
-  path.resolve(process.cwd(), "data/blog-posts.json"),
-  path.resolve(process.cwd(), "artifacts/api-server/data/blog-posts.json"),
-].filter((p): p is string => !!p);
-
-interface BlogPost {
-  id: string;
-  title: string;
-  date: string;
-  summary: string;
-}
-
-interface BlogPostsFile {
-  version: number;
-  updatedAt: string;
-  posts: BlogPost[];
-}
-
-function resolveBlogPostsPath(): string {
-  for (const candidate of BLOG_POSTS_CANDIDATES) {
-    if (existsSync(candidate)) return candidate;
-  }
-  throw new Error(
-    `[blog] Could not find blog-posts.json. Tried: ${BLOG_POSTS_CANDIDATES.join(", ")}`,
-  );
-}
-
-function loadBlogPosts(): BlogPostsFile {
-  const raw = JSON.parse(
-    readFileSync(resolveBlogPostsPath(), "utf8"),
-  ) as BlogPostsFile;
-  if (!raw || !Array.isArray(raw.posts)) {
-    throw new Error("[blog] blog-posts.json is missing a `posts` array");
-  }
-  for (const post of raw.posts) {
-    if (!post.id || !post.title || !post.date || !post.summary) {
-      throw new Error(
-        `[blog] blog-posts.json entry is missing required fields: ${JSON.stringify(post)}`,
-      );
-    }
-    if (Number.isNaN(Date.parse(post.date))) {
-      throw new Error(`[blog] Invalid date for post ${post.id}: ${post.date}`);
-    }
-  }
-  return raw;
-}
-
-const BLOG_POSTS = loadBlogPosts();
+const BLOG_POSTS = loadBlogPostsMeta();
 
 function escapeXml(value: string): string {
   return value
@@ -80,7 +31,7 @@ function toIsoDate(date: string): string {
 
 export function buildBlogAtomFeed(
   req: Request | null,
-  posts: BlogPost[] = BLOG_POSTS.posts,
+  posts: BlogPostMeta[] = BLOG_POSTS,
 ): string {
   const baseUrl = buildPublicUrl({ req: req ?? undefined });
   const feedUrl = buildPublicUrl({

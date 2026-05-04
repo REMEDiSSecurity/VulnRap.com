@@ -108,9 +108,11 @@ import {
   type ReportRow,
 } from "./sitemap";
 import { ROUTE_TO_FILES } from "../lib/git-mtime";
+import { loadBlogPostsMeta } from "../lib/blog-posts";
 import type { AddressInfo } from "node:net";
 
 const SITEMAP_TEST_MARKER = "__sitemap_test__";
+const BLOG_POSTS = loadBlogPostsMeta();
 
 function extractFrontendRoutes(): string[] {
   const appTsx = readFileSync(
@@ -256,7 +258,7 @@ describe("buildSitemapXml", () => {
     const validation = validateSitemap(xml);
     expect(validation.ok, validation.reason).toBe(true);
     const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) ?? [];
-    expect(urlBlocks.length).toBe(PUBLIC_ROUTES.length);
+    expect(urlBlocks.length).toBe(PUBLIC_ROUTES.length + BLOG_POSTS.length);
     for (const block of urlBlocks) {
       const loc = /<loc>([^<]+)<\/loc>/.exec(block)?.[1];
       expect(loc?.startsWith("https://vulnrap.com/")).toBe(true);
@@ -321,6 +323,7 @@ describe("buildSitemapXml", () => {
       baseUrl: "https://vulnrap.com",
       routes,
       routeLastmods,
+      blogPosts: [],
     });
     const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) ?? [];
     const lastmods = urlBlocks.map(
@@ -352,6 +355,38 @@ describe("buildSitemapXml", () => {
     });
     expect(xml).toContain("<lastmod>2026-01-15T10:00:00+00:00</lastmod>");
     expect(xml).toContain(`<lastmod>${fallback}</lastmod>`);
+  });
+});
+
+describe("blog post entries", () => {
+  it("includes a <url> entry for every blog post", () => {
+    const xml = buildSitemapXml({ baseUrl: "https://vulnrap.com" });
+    for (const post of BLOG_POSTS) {
+      expect(xml).toContain(
+        `<loc>https://vulnrap.com/blog#${post.id}</loc>`,
+      );
+    }
+  });
+
+  it("uses the post date as lastmod in ISO format", () => {
+    const xml = buildSitemapXml({
+      baseUrl: "https://vulnrap.com",
+      blogPosts: [
+        { id: "test-post", title: "Test", date: "2026-04-15", summary: "s" },
+      ],
+    });
+    expect(xml).toContain("<loc>https://vulnrap.com/blog#test-post</loc>");
+    expect(xml).toContain("<lastmod>2026-04-15T00:00:00.000Z</lastmod>");
+  });
+
+  it("can be suppressed by passing an empty blogPosts array", () => {
+    const xml = buildSitemapXml({
+      baseUrl: "https://vulnrap.com",
+      blogPosts: [],
+    });
+    const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) ?? [];
+    expect(urlBlocks.length).toBe(PUBLIC_ROUTES.length);
+    expect(xml).not.toContain("/blog#");
   });
 });
 
@@ -535,6 +570,14 @@ describe("GET /sitemap.xml", () => {
     const body = await res.text();
     for (const route of PUBLIC_ROUTES) {
       expect(body).toContain(`${route.path}</loc>`);
+    }
+  });
+
+  it("includes every blog post anchor URL", async () => {
+    const res = await fetch(`${baseUrl}/sitemap.xml`);
+    const body = await res.text();
+    for (const post of BLOG_POSTS) {
+      expect(body).toContain(`/blog#${post.id}</loc>`);
     }
   });
 

@@ -1,4 +1,4 @@
-// Task #710 + #1059 + #1060 — Sitemap generator.
+// Task #710 + #1059 + #1060 + #1062 — Sitemap generator.
 //
 // Generates a sitemap index (`/sitemap-index.xml`) that references:
 //   1. `/sitemap.xml` — the curated static route table mirroring the
@@ -12,6 +12,11 @@
 // they don't waste search engine crawl budget on pages that return 401
 // to anonymous visitors.
 //
+// Task #1062 — Every blog post is included as an individual URL entry
+// so search engines can discover and index each post directly. The
+// `lastmod` for each post is derived from its curated `date` field in
+// `blog-posts.json`.
+//
 // `lastmod` is derived per-page from the git history of the
 // corresponding page component (Task #1059). Falls back to the deploy
 // timestamp when git metadata is unavailable.
@@ -23,6 +28,7 @@ import { eq, asc } from "drizzle-orm";
 import { db, reportsTable } from "@workspace/db";
 import { buildPublicUrlForRequest } from "../lib/public-url";
 import { resolveRouteMtimes } from "../lib/git-mtime";
+import { loadBlogPostsMeta, type BlogPostMeta } from "../lib/blog-posts";
 
 export type SitemapChangefreq =
   | "always"
@@ -98,11 +104,14 @@ export const PUBLIC_ROUTES: ReadonlyArray<SitemapRoute> = [
 // are *never* present in the generated sitemap. Mirrors the auth-gated
 // pages in `App.tsx`.
 export const REVIEWER_ONLY_ROUTES: ReadonlyArray<string> = [
+  "/admin/incidents",
   "/feedback-analytics",
   "/audit-log",
 ];
 
 export const REPORT_SITEMAP_PAGE_SIZE = 10_000;
+
+const BLOG_POSTS = loadBlogPostsMeta();
 
 const DEPLOY_LASTMOD = new Date().toISOString();
 
@@ -129,6 +138,12 @@ export interface BuildSitemapOptions {
   routes?: ReadonlyArray<SitemapRoute>;
   lastmod?: string;
   routeLastmods?: Map<string, string>;
+  blogPosts?: ReadonlyArray<BlogPostMeta>;
+}
+
+function toIsoDate(date: string): string {
+  const parsed = new Date(date.length === 10 ? `${date}T00:00:00Z` : date);
+  return parsed.toISOString();
 }
 
 export function buildSitemapXml(options: BuildSitemapOptions): string {
@@ -136,8 +151,9 @@ export function buildSitemapXml(options: BuildSitemapOptions): string {
   const routes = options.routes ?? PUBLIC_ROUTES;
   const fallbackLastmod = options.lastmod ?? DEPLOY_LASTMOD;
   const perRoute = options.routeLastmods;
+  const blogPosts = options.blogPosts ?? BLOG_POSTS;
 
-  const urls = routes
+  const routeUrls = routes
     .map((route) => {
       const loc = escapeXml(`${base}${route.path}`);
       const lastmod = perRoute?.get(route.path) ?? fallbackLastmod;
@@ -152,9 +168,26 @@ export function buildSitemapXml(options: BuildSitemapOptions): string {
     })
     .join("\n");
 
+  const blogUrls = blogPosts
+    .map((post) => {
+      const loc = escapeXml(`${base}/blog#${post.id}`);
+      const lastmod = toIsoDate(post.date);
+      return [
+        "  <url>",
+        `    <loc>${loc}</loc>`,
+        `    <lastmod>${escapeXml(lastmod)}</lastmod>`,
+        `    <changefreq>monthly</changefreq>`,
+        `    <priority>0.8</priority>`,
+        "  </url>",
+      ].join("\n");
+    })
+    .join("\n");
+
+  const allUrls = blogUrls ? `${routeUrls}\n${blogUrls}` : routeUrls;
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls}
+${allUrls}
 </urlset>
 `;
 }
