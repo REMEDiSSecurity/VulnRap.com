@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   UploadCloud,
@@ -89,7 +89,8 @@ import {
   type SensitivityPreset,
 } from "@/lib/settings";
 import { AnalysisStepper } from "@/components/analysis-stepper";
-import { CustomRedactionPanel } from "@/components/custom-redaction-panel";
+import { CustomRedactionPanel, findMatches, type ParsedRule } from "@/components/custom-redaction-panel";
+import { HighlightTextarea } from "@/components/highlight-textarea";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { QualityPreviewSidebar } from "@/components/quality-preview-sidebar";
 import { EngineTogglePanel } from "@/components/engine-toggle-panel";
@@ -634,6 +635,15 @@ export default function Check() {
   const [isDragging, setIsDragging] = useState(false);
   const [skipLlm, setSkipLlm] = useState(false);
   const [skipRedaction, setSkipRedaction] = useState(false);
+  const [redactionRules, setRedactionRules] = useState<ParsedRule[]>([]);
+  const handleRedactionRulesChange = useCallback((rules: ParsedRule[]) => {
+    setRedactionRules(rules);
+  }, []);
+  const inlineRedactionMatches = useMemo(() => {
+    const validRules = redactionRules.filter((r) => r.regex);
+    if (validRules.length === 0 || rawText.trim().length === 0) return [];
+    return findMatches(rawText, validRules);
+  }, [rawText, redactionRules]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const rawTextRef = useRef<HTMLTextAreaElement>(null);
   const handleSubmitRef = useRef<() => void>(() => {});
@@ -1006,13 +1016,13 @@ export default function Check() {
 
           {inputMode === "text" ? (
             <div className="space-y-2">
-              <textarea
+              <HighlightTextarea
                 ref={rawTextRef}
                 data-testid="input-rawtext"
-                className="w-full h-48 rounded-xl glass-card p-4 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 placeholder:text-muted-foreground/40 bg-transparent"
-                placeholder="Paste the vulnerability report text here...&#10;&#10;Plain text only. Content is analyzed but never stored."
+                placeholder={"Paste the vulnerability report text here...\n\nPlain text only. Content is analyzed but never stored."}
                 value={rawText}
-                onChange={(e) => setRawText(e.target.value)}
+                onChange={setRawText}
+                matches={inlineRedactionMatches}
                 spellCheck={false}
                 autoComplete="off"
               />
@@ -1212,6 +1222,7 @@ export default function Check() {
             <CustomRedactionPanel
               text={inputMode === "text" ? rawText : ""}
               redactionDisabled={skipRedaction}
+              onRulesChange={handleRedactionRulesChange}
             />
           </div>
         </CardContent>

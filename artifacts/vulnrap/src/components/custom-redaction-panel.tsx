@@ -89,9 +89,10 @@ export function findMatches(text: string, rules: ParsedRule[]): MatchSpan[] {
 interface Props {
   text: string;
   redactionDisabled?: boolean;
+  onRulesChange?: (rules: ParsedRule[]) => void;
 }
 
-export function CustomRedactionPanel({ text, redactionDisabled }: Props) {
+export function CustomRedactionPanel({ text, redactionDisabled, onRulesChange }: Props) {
   const [open, setOpen] = useState(false);
   const [rulesInput, setRulesInput] = useState("");
   const [persist, setPersist] = useState(false);
@@ -125,6 +126,10 @@ export function CustomRedactionPanel({ text, redactionDisabled }: Props) {
   }, [persist, rulesInput]);
 
   const rules = useMemo(() => parseRules(rulesInput), [rulesInput]);
+
+  useEffect(() => {
+    onRulesChange?.(rules);
+  }, [rules, onRulesChange]);
   const validRules = rules.filter((r) => r.regex);
   const invalidRules = rules.filter((r) => !r.regex);
 
