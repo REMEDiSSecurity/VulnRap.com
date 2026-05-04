@@ -4,8 +4,8 @@
 // layer is unit-tested separately for the actual drift compute; this
 // file feeds a synthetic AvriDriftReport into `toPublicDriftSummary`
 // so the projection contract can't silently regress on a refactor.
-import { describe, it, expect } from "vitest";
-import { toPublicDriftSummary } from "./avri-drift-public";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { toPublicDriftSummary, getPublicDriftSummary, invalidateDriftSummaryCache } from "./avri-drift-public";
 import type { AvriDriftReport, WeekBucket } from "./avri-drift";
 
 function week(
@@ -151,5 +151,57 @@ describe("toPublicDriftSummary", () => {
     // Newest 12 retained, oldest 4 dropped.
     expect(summary.weeks[0].weekStart).toBe("2026-02-02");
     expect(summary.weeks[11].weekStart).toBe("2026-04-20");
+  });
+});
+
+import { generateAvriDriftReport } from "./avri-drift";
+
+vi.mock("./avri-drift", () => ({
+  generateAvriDriftReport: vi.fn().mockResolvedValue({
+    generatedAt: "2026-04-30T12:00:00.000Z",
+    weeksRequested: 16,
+    totalReportsScanned: 100,
+    cohort: "avri_on_only",
+    bucketingNote: "",
+    thresholds: { gapWarn: 45, familyShiftWarn: 5, minBucketSize: 3 },
+    weeks: [
+      {
+        weekStart: "2026-04-20",
+        reportCount: 10,
+        t1: { count: 5, mean: 70 },
+        t3: { count: 5, mean: 20 },
+        gap: 50,
+        perFamily: { t1: [], t3: [] },
+        gapEligible: true,
+      },
+    ],
+    flags: [],
+    runbookPath: "",
+  } satisfies AvriDriftReport),
+}));
+
+const mockedGenerate = vi.mocked(generateAvriDriftReport);
+
+describe("getPublicDriftSummary caching", () => {
+  beforeEach(() => {
+    invalidateDriftSummaryCache();
+    mockedGenerate.mockClear();
+  });
+
+  it("returns cached result on second call without re-running generateAvriDriftReport", async () => {
+    const first = await getPublicDriftSummary();
+    const second = await getPublicDriftSummary();
+
+    expect(first).toEqual(second);
+    expect(mockedGenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-fetches after invalidation", async () => {
+    await getPublicDriftSummary();
+    expect(mockedGenerate).toHaveBeenCalledTimes(1);
+
+    invalidateDriftSummaryCache();
+    await getPublicDriftSummary();
+    expect(mockedGenerate).toHaveBeenCalledTimes(2);
   });
 });

@@ -11,6 +11,10 @@ const router: IRouter = Router();
 router.get("/public/drift-summary", async (req, res) => {
   try {
     const summary = await getPublicDriftSummary();
+    res.set(
+      "Cache-Control",
+      "public, max-age=300, stale-while-revalidate=600",
+    );
     res.json(summary);
   } catch (err) {
     req.log?.error(err, "Failed to generate public drift summary");

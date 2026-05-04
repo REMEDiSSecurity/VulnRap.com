@@ -85,11 +85,35 @@ export function toPublicDriftSummary(
   };
 }
 
+const DRIFT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let cachedSummary: PublicDriftSummary | null = null;
+let cachedAt = 0;
+let inflight: Promise<PublicDriftSummary> | null = null;
+
 export async function getPublicDriftSummary(): Promise<PublicDriftSummary> {
-  // Pull a slightly larger window than 12 so we can drop ineligible
-  // weeks and still typically have 12 usable rows for the sparkline.
-  const report = await generateAvriDriftReport({ weeks: 16 });
-  return toPublicDriftSummary(report);
+  const now = Date.now();
+  if (cachedSummary && now - cachedAt < DRIFT_CACHE_TTL_MS) {
+    return cachedSummary;
+  }
+  if (inflight) return inflight;
+  inflight = (async () => {
+    const report = await generateAvriDriftReport({ weeks: 16 });
+    const summary = toPublicDriftSummary(report);
+    cachedSummary = summary;
+    cachedAt = Date.now();
+    return summary;
+  })();
+  try {
+    return await inflight;
+  } finally {
+    inflight = null;
+  }
 }
 
-export const __testing = { utcMondayOf, PUBLIC_WEEK_LIMIT };
+export function invalidateDriftSummaryCache(): void {
+  cachedSummary = null;
+  cachedAt = 0;
+}
+
+export const __testing = { utcMondayOf, PUBLIC_WEEK_LIMIT, get cachedAt() { return cachedAt; } };
