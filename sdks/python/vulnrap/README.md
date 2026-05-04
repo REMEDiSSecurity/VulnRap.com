@@ -59,6 +59,24 @@ with open("report.txt", "rb") as f:
     c.score_report(file=f, file_name="report.txt")
 ```
 
+### Async client
+
+For asyncio code (FastAPI handlers, aiohttp bots, Jupyter notebooks),
+use `AsyncClient`. It mirrors `Client` one-for-one and shares the same
+result models — only the methods are awaitables.
+
+```python
+import asyncio
+from vulnrap import AsyncClient
+
+async def main() -> None:
+    async with AsyncClient() as c:
+        res = await c.test_yourself(raw_text="Found a path traversal...")
+        print(res.slop_score, res.slop_tier)
+
+asyncio.run(main())
+```
+
 ### Privacy and analysis flags
 
 ```python

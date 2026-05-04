@@ -53,6 +53,7 @@ packages = []
 [tool.hatch.build.targets.wheel.force-include]
 "__init__.py" = "vulnrap/__init__.py"
 "client.py" = "vulnrap/client.py"
+"async_client.py" = "vulnrap/async_client.py"
 "types.py" = "vulnrap/types.py"
 "py.typed" = "vulnrap/py.typed"
 
@@ -60,6 +61,7 @@ packages = []
 include = [
     "__init__.py",
     "client.py",
+    "async_client.py",
     "types.py",
     "py.typed",
     "tests",

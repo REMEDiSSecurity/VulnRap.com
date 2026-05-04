@@ -15,6 +15,7 @@ Basic usage::
 All endpoints are free, anonymous, rate-limited per IP.
 """
 
+from .async_client import AsyncClient
 from .client import Client, DEFAULT_BASE_URL, __version__
 from .types import (
     APIError,
@@ -34,6 +35,7 @@ from .types import (
 
 __all__ = [
     "APIError",
+    "AsyncClient",
     "CheckResult",
     "Client",
     "ContentMode",
