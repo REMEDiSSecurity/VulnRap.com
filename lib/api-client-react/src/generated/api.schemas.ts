@@ -1567,6 +1567,18 @@ the diagnostics panel.
    * @nullable
    */
   inferredCweName?: string | null;
+  /**
+   * Human-readable label of the most-likely AI agent that authored this report
+   * (e.g. "Claude", "GPT-4 / ChatGPT"). Null when the detector verdict is "unknown".
+   * @nullable
+   */
+  agentFingerprintLabel?: string | null;
+  /**
+   * Confidence (0–1) in the agentFingerprintLabel verdict. Null when
+   * agentFingerprintLabel is null. Capped at 0.95 by the detector.
+   * @nullable
+   */
+  agentFingerprintConfidence?: number | null;
 };
 
 export type ReportFeedSummaryTierCounts = { [key: string]: number };

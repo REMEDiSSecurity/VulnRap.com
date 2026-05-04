@@ -806,11 +806,21 @@ export default function Reports() {
                       </Badge>
                     );
                   })()}
-                {/* Task #198 — Surface AVRI Engine 2's revoke-trigger blocks
-                    on the feed row so reviewers triaging the queue can spot
-                    fabricated-raw-HTTP and stripped-trace reports without
-                    opening each diagnostics panel. The two badges are paired
-                    in style/placement to keep them visually symmetric. */}
+                {report.agentFingerprintLabel && (
+                  <Badge
+                    variant="outline"
+                    data-testid="badge-agent-fingerprint"
+                    className="text-[10px] hidden md:inline-flex font-mono text-purple-400 border-purple-500/40 bg-purple-500/5"
+                    title="Heuristic fingerprint — not attribution. Based on stylistic patterns in the report prose."
+                  >
+                    Likely: {report.agentFingerprintLabel}
+                    {report.agentFingerprintConfidence != null && (
+                      <span className="ml-1 text-purple-300/70">
+                        · {Math.round(report.agentFingerprintConfidence * 100)}%
+                      </span>
+                    )}
+                  </Badge>
+                )}
                 {report.strippedCrashTrace && (
                   <Badge
                     variant="outline"

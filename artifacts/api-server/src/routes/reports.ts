@@ -2309,6 +2309,7 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       // so the row mapper can fall back to the blob for unbackfilled rows.
       fakeRawHttp: reportsTable.fakeRawHttp,
       strippedCrashTrace: reportsTable.strippedCrashTrace,
+      contentText: reportsTable.contentText,
     })
     .from(reportsTable)
     .where(whereClause)
@@ -2345,6 +2346,17 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       strippedCrashTrace,
       inferredCwe,
       inferredCweName,
+      ...(() => {
+        const body = r.contentText ?? "";
+        const fp = detectAgentFingerprint(body);
+        if (fp.likelyAgent === "unknown" || fp.confidence <= 0) {
+          return { agentFingerprintLabel: null, agentFingerprintConfidence: null };
+        }
+        return {
+          agentFingerprintLabel: AGENT_DISPLAY_LABEL[fp.likelyAgent],
+          agentFingerprintConfidence: fp.confidence,
+        };
+      })(),
     };
   });
 

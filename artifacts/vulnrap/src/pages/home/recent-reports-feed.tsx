@@ -112,6 +112,20 @@ export function RecentReportsFeed() {
               >
                 {report.contentMode === "full" ? "Shared" : "Private"}
               </Badge>
+              {report.agentFingerprintLabel && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] hidden lg:inline-flex font-mono text-purple-400 border-purple-500/40 bg-purple-500/5"
+                  title="Heuristic fingerprint — not attribution. Based on stylistic patterns in the report prose."
+                >
+                  Likely: {report.agentFingerprintLabel}
+                  {report.agentFingerprintConfidence != null && (
+                    <span className="ml-1 text-purple-300/70">
+                      · {Math.round(report.agentFingerprintConfidence * 100)}%
+                    </span>
+                  )}
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <div className="flex items-center gap-1.5 sm:gap-2">

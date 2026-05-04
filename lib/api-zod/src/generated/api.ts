@@ -2576,6 +2576,18 @@ export const GetReportFeedResponse = zod.object({
         .describe(
           'Friendly name of the soft-citation match (e.g. \"XSS\", \"Open Redirect\")\npaired with inferredCwe. Null when inferredCwe is null. Used as a tooltip\non the row badge so reviewers can see the matched class without opening\nthe diagnostics panel.\n',
         ),
+      agentFingerprintLabel: zod
+        .string()
+        .nullish()
+        .describe(
+          'Human-readable label of the most-likely AI agent that authored this report (e.g. \"Claude\", \"GPT-4 / ChatGPT\"). Null when the detector verdict is \"unknown\".\n',
+        ),
+      agentFingerprintConfidence: zod
+        .number()
+        .nullish()
+        .describe(
+          'Confidence (0\\u20131) in the agentFingerprintLabel verdict. Null when agentFingerprintLabel is null. Capped at 0.95 by the detector.\n',
+        ),
     }),
   ),
   total: zod.number(),
