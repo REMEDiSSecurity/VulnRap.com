@@ -88,6 +88,7 @@ import {
   PUBLIC_ROUTES,
   REVIEWER_ONLY_ROUTES,
 } from "./sitemap";
+import { ROUTE_TO_FILES } from "../lib/git-mtime";
 import type { AddressInfo } from "node:net";
 
 function extractFrontendRoutes(): string[] {
@@ -183,6 +184,51 @@ describe("PUBLIC_ROUTES", () => {
   });
 });
 
+describe("ROUTE_TO_FILES mapping", () => {
+  it("has an entry for every PUBLIC_ROUTES path", () => {
+    const mapped = new Set(Object.keys(ROUTE_TO_FILES));
+    const missing = PUBLIC_ROUTES.map((r) => r.path).filter(
+      (p) => !mapped.has(p),
+    );
+    expect(
+      missing,
+      `PUBLIC_ROUTES paths missing from ROUTE_TO_FILES: ${missing.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("does not map routes that are not in PUBLIC_ROUTES", () => {
+    const publicPaths = new Set(PUBLIC_ROUTES.map((r) => r.path));
+    const stale = Object.keys(ROUTE_TO_FILES).filter(
+      (p) => !publicPaths.has(p),
+    );
+    expect(
+      stale,
+      `ROUTE_TO_FILES keys not present in PUBLIC_ROUTES: ${stale.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("references page files that actually exist on disk", () => {
+    const pagesDir = path.resolve(
+      import.meta.dirname,
+      "..",
+      "..",
+      "..",
+      "vulnrap",
+      "src",
+      "pages",
+    );
+    for (const [route, files] of Object.entries(ROUTE_TO_FILES)) {
+      for (const file of files) {
+        const full = path.join(pagesDir, file);
+        expect(
+          () => readFileSync(full),
+          `ROUTE_TO_FILES["${route}"] references "${file}" which does not exist`,
+        ).not.toThrow();
+      }
+    }
+  });
+});
+
 describe("buildSitemapXml", () => {
   it("produces well-formed XML that validates as a sitemap urlset", () => {
     const xml = buildSitemapXml({ baseUrl: "https://vulnrap.com" });
@@ -219,6 +265,72 @@ describe("buildSitemapXml", () => {
       routes: [{ path: "/", changefreq: "daily", priority: 1.0 }],
     });
     expect(xml).toContain(`<lastmod>${lastmod}</lastmod>`);
+  });
+
+  it("uses per-route lastmod from routeLastmods when provided", () => {
+    const routeLastmods = new Map<string, string>([
+      ["/", "2026-01-15T10:00:00+00:00"],
+      ["/check", "2026-03-20T14:30:00+00:00"],
+    ]);
+    const routes = [
+      { path: "/", changefreq: "daily" as const, priority: 1.0 },
+      { path: "/check", changefreq: "weekly" as const, priority: 0.8 },
+    ];
+    const xml = buildSitemapXml({
+      baseUrl: "https://vulnrap.com",
+      routes,
+      routeLastmods,
+    });
+    expect(xml).toContain("<lastmod>2026-01-15T10:00:00+00:00</lastmod>");
+    expect(xml).toContain("<lastmod>2026-03-20T14:30:00+00:00</lastmod>");
+  });
+
+  it("routes with different underlying file mtimes get different lastmod values", () => {
+    const routeLastmods = new Map<string, string>([
+      ["/", "2026-04-01T00:00:00+00:00"],
+      ["/check", "2026-02-15T00:00:00+00:00"],
+      ["/terms", "2025-12-01T00:00:00+00:00"],
+    ]);
+    const routes = [
+      { path: "/", changefreq: "daily" as const, priority: 1.0 },
+      { path: "/check", changefreq: "weekly" as const, priority: 0.8 },
+      { path: "/terms", changefreq: "monthly" as const, priority: 0.5 },
+    ];
+    const xml = buildSitemapXml({
+      baseUrl: "https://vulnrap.com",
+      routes,
+      routeLastmods,
+    });
+    const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) ?? [];
+    const lastmods = urlBlocks.map(
+      (block) => /<lastmod>([^<]+)<\/lastmod>/.exec(block)?.[1],
+    );
+    expect(lastmods).toEqual([
+      "2026-04-01T00:00:00+00:00",
+      "2026-02-15T00:00:00+00:00",
+      "2025-12-01T00:00:00+00:00",
+    ]);
+    const unique = new Set(lastmods);
+    expect(unique.size).toBe(3);
+  });
+
+  it("falls back to the global lastmod when routeLastmods has no entry for a route", () => {
+    const routeLastmods = new Map<string, string>([
+      ["/", "2026-01-15T10:00:00+00:00"],
+    ]);
+    const fallback = "2026-05-01T00:00:00.000Z";
+    const routes = [
+      { path: "/", changefreq: "daily" as const, priority: 1.0 },
+      { path: "/check", changefreq: "weekly" as const, priority: 0.8 },
+    ];
+    const xml = buildSitemapXml({
+      baseUrl: "https://vulnrap.com",
+      routes,
+      routeLastmods,
+      lastmod: fallback,
+    });
+    expect(xml).toContain("<lastmod>2026-01-15T10:00:00+00:00</lastmod>");
+    expect(xml).toContain(`<lastmod>${fallback}</lastmod>`);
   });
 });
 

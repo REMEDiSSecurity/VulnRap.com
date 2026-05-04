@@ -1,4 +1,4 @@
-// Task #710 — Sitemap generator.
+// Task #710 + #1059 — Sitemap generator.
 //
 // Generates `sitemap.xml` from a curated route table mirroring the
 // frontend router in `artifacts/vulnrap/src/App.tsx`. Reviewer-only
@@ -6,13 +6,15 @@
 // `/audit-log`) are intentionally excluded so they don't waste search
 // engine crawl budget on pages that return 401 to anonymous visitors.
 //
-// `lastmod` uses the deploy timestamp (process boot time) per the task's
-// out-of-scope note; per-page git mtimes are explicitly out of scope.
+// `lastmod` is derived per-page from the git history of the
+// corresponding page component (Task #1059). Falls back to the deploy
+// timestamp when git metadata is unavailable.
 //
 // Mounted at the app root (not under `/api`) so the canonical
 // `/sitemap.xml` URL referenced from `robots.txt` resolves directly.
 import { Router, type IRouter } from "express";
 import { buildPublicUrlForRequest } from "../lib/public-url";
+import { resolveRouteMtimes } from "../lib/git-mtime";
 
 export type SitemapChangefreq =
   | "always"
@@ -48,21 +50,31 @@ export const PUBLIC_ROUTES: ReadonlyArray<SitemapRoute> = [
   { path: "/changelog", changefreq: "weekly", priority: 0.7 },
   { path: "/compare", changefreq: "weekly", priority: 0.7 },
   { path: "/compare-detectors", changefreq: "weekly", priority: 0.7 },
+  { path: "/connect", changefreq: "monthly", priority: 0.7 },
   { path: "/corpus-stats", changefreq: "daily", priority: 0.7 },
   { path: "/cwe", changefreq: "monthly", priority: 0.7 },
   { path: "/docs/good-report", changefreq: "monthly", priority: 0.7 },
+  { path: "/engines", changefreq: "monthly", priority: 0.7 },
+  { path: "/engines/ai-authorship", changefreq: "monthly", priority: 0.7 },
+  { path: "/engines/avri", changefreq: "monthly", priority: 0.7 },
   { path: "/engines/cwe-coherence", changefreq: "monthly", priority: 0.7 },
   { path: "/engines/substance", changefreq: "monthly", priority: 0.7 },
+  { path: "/engines/technical-substance", changefreq: "monthly", priority: 0.7 },
   { path: "/gallery", changefreq: "weekly", priority: 0.7 },
+  { path: "/glossary", changefreq: "monthly", priority: 0.7 },
   { path: "/how-it-works", changefreq: "monthly", priority: 0.7 },
+  { path: "/incidents", changefreq: "weekly", priority: 0.7 },
   { path: "/playground", changefreq: "weekly", priority: 0.7 },
   { path: "/presets", changefreq: "monthly", priority: 0.7 },
+  { path: "/press", changefreq: "monthly", priority: 0.7 },
   { path: "/pricing", changefreq: "monthly", priority: 0.7 },
   { path: "/quickstart", changefreq: "monthly", priority: 0.7 },
   { path: "/redaction-examples", changefreq: "monthly", priority: 0.7 },
   { path: "/roadmap", changefreq: "weekly", priority: 0.7 },
+  { path: "/showcase", changefreq: "weekly", priority: 0.7 },
   { path: "/signals", changefreq: "weekly", priority: 0.7 },
   { path: "/stats", changefreq: "daily", priority: 0.7 },
+  { path: "/test-yourself", changefreq: "weekly", priority: 0.7 },
   { path: "/transparency", changefreq: "weekly", priority: 0.7 },
   { path: "/use-cases", changefreq: "monthly", priority: 0.7 },
   { path: "/accessibility", changefreq: "monthly", priority: 0.6 },
@@ -83,9 +95,16 @@ export const REVIEWER_ONLY_ROUTES: ReadonlyArray<string> = [
   "/audit-log",
 ];
 
-// Captured at module load (process boot). The deploy timestamp is a
-// reasonable `lastmod` proxy until per-page git mtime sourcing lands.
 const DEPLOY_LASTMOD = new Date().toISOString();
+
+let routeMtimes: Map<string, string> | null = null;
+const routeMtimesReady: Promise<void> = resolveRouteMtimes(DEPLOY_LASTMOD)
+  .then((m) => {
+    routeMtimes = m;
+  })
+  .catch(() => {
+    routeMtimes = null;
+  });
 
 function escapeXml(s: string): string {
   return s
@@ -100,16 +119,19 @@ export interface BuildSitemapOptions {
   baseUrl: string;
   routes?: ReadonlyArray<SitemapRoute>;
   lastmod?: string;
+  routeLastmods?: Map<string, string>;
 }
 
 export function buildSitemapXml(options: BuildSitemapOptions): string {
   const base = options.baseUrl.replace(/\/+$/, "");
   const routes = options.routes ?? PUBLIC_ROUTES;
-  const lastmod = options.lastmod ?? DEPLOY_LASTMOD;
+  const fallbackLastmod = options.lastmod ?? DEPLOY_LASTMOD;
+  const perRoute = options.routeLastmods;
 
   const urls = routes
     .map((route) => {
       const loc = escapeXml(`${base}${route.path}`);
+      const lastmod = perRoute?.get(route.path) ?? fallbackLastmod;
       return [
         "  <url>",
         `    <loc>${loc}</loc>`,
@@ -130,9 +152,13 @@ ${urls}
 
 const router: IRouter = Router();
 
-router.get("/sitemap.xml", (req, res) => {
-  const baseUrl = buildPublicUrlForRequest(req);
-  const xml = buildSitemapXml({ baseUrl });
+router.get("/sitemap.xml", async (_req, res) => {
+  await routeMtimesReady;
+  const baseUrl = buildPublicUrlForRequest(_req);
+  const xml = buildSitemapXml({
+    baseUrl,
+    routeLastmods: routeMtimes ?? undefined,
+  });
   res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=600");
   res.type("application/xml").send(xml);
 });
