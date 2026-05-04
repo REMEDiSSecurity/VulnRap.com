@@ -19,6 +19,7 @@ import metricsRouter from "./routes/metrics";
 import blogRouter from "./routes/blog";
 import sitemapRouter from "./routes/sitemap";
 import changelogFeedRouter from "./routes/changelog-feed";
+import incidentsFeedRouter from "./routes/incidents-feed";
 import { logger } from "./lib/logger";
 import { buildPublicUrl, validatePublicUrlEnv } from "./lib/public-url";
 import { createSpaFallback } from "./lib/spa-fallback";
@@ -269,6 +270,11 @@ app.use(sitemapRouter);
 // (not under /api) so the public URL is /changelog/feed.xml, matching the
 // auto-discovery <link rel="alternate"> injected into the changelog page.
 app.use(changelogFeedRouter);
+
+// Task #1058 — Public Atom feed for incident postmortems. Mounted at the app
+// root so the public URL is /incidents/feed.xml, matching the auto-discovery
+// <link rel="alternate"> injected into the incidents page.
+app.use(incidentsFeedRouter);
 
 // Task #724 — Mount the Prometheus scrape endpoint under /api so it inherits
 // the same helmet / CORS / trust-proxy posture. The handler enforces its own
