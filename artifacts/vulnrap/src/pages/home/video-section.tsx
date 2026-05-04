@@ -29,15 +29,6 @@ export function VideoSection() {
       {open && (
         <div className="mt-2 space-y-2">
           <div className="rounded-xl glass-card-accent overflow-hidden">
-            {/*
-              Task #727 — the rap-sheet clip is a screen-recorded
-              walkthrough with no spoken dialogue (captions are baked
-              into the source video), so an external <track> would be
-              empty/redundant. The <video> is set to `muted` so AT
-              users aren't fed an audio stream they have no caption
-              for. Adding a real WebVTT captions track is filed as a
-              follow-up — see docs/accessibility.md known-gaps list.
-            */}
             <video
               className="w-full"
               controls
@@ -53,6 +44,12 @@ export function VideoSection() {
               <source
                 src={`${import.meta.env.BASE_URL}vulnrap-rap-sheet.mov`}
                 type="video/mp4"
+              />
+              <track
+                kind="captions"
+                srcLang="en"
+                src={`${import.meta.env.BASE_URL}vulnrap-rap-sheet.vtt`}
+                default
               />
               Your browser does not support video playback.
             </video>

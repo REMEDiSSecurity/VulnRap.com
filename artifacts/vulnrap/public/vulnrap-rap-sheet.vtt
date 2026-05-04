@@ -1,0 +1,49 @@
+WEBVTT
+
+00:00.000 --> 00:04.000
+[Screen recording: VulnRap landing page loads]
+
+00:04.000 --> 00:09.000
+The submission form accepts a vulnerability report title and description.
+
+00:09.000 --> 00:14.000
+[User types a report title into the input field]
+
+00:14.000 --> 00:20.000
+A detailed description of the vulnerability is entered, including reproduction steps.
+
+00:20.000 --> 00:26.000
+[User clicks the Analyze button]
+
+00:26.000 --> 00:33.000
+VulnRap scores the report across multiple dimensions: substance, linguistics, and CWE classification.
+
+00:33.000 --> 00:40.000
+[Score breakdown panel appears showing AVRI composite score]
+
+00:40.000 --> 00:47.000
+The AVRI composite score summarises overall report quality. Higher scores indicate clearer, more actionable reports.
+
+00:47.000 --> 00:54.000
+[Triage recommendation badge appears]
+
+00:54.000 --> 01:01.000
+A triage recommendation — Accept, Review, or Reject — is surfaced alongside the score breakdown.
+
+01:01.000 --> 01:08.000
+[Redaction panel expands]
+
+01:08.000 --> 01:15.000
+Sensitive tokens are automatically detected and replaced with [REDACTED] before the report is stored or shared.
+
+01:15.000 --> 01:22.000
+[Report comparison view opens with two side-by-side panels]
+
+01:22.000 --> 01:29.000
+Two reports can be compared side by side to evaluate relative quality and completeness.
+
+01:29.000 --> 01:35.000
+[Screen returns to the landing page]
+
+01:35.000 --> 01:40.000
+VulnRap — automated vulnerability report triage.
