@@ -64,6 +64,13 @@
       "when": 1777911139846,
       "tag": "0008_wonderful_nitro",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779062400000,
+      "tag": "0009_newsletter_welcome_delivery",
+      "breakpoints": true
     }
   ]
 }

@@ -29,6 +29,20 @@ export const newsletterSubscriptionsTable = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Task #1113 — Track welcome email delivery.
+    //
+    //  * `welcomeSentAt` is set to the wall-clock timestamp when the
+    //    welcome / confirm email was successfully dispatched (HTTP 2xx
+    //    from the delivery webhook). NULL means either the email has
+    //    never been attempted (subscriber is brand-new and the
+    //    fire-and-forget dispatch hasn't resolved yet) or every
+    //    attempt has failed.
+    //  * `welcomeLastError` stores the most-recent error message when
+    //    the delivery webhook returned non-2xx or threw. Cleared to
+    //    NULL on a successful send so a non-NULL value always means
+    //    "last attempt failed". Capped at 500 characters.
+    welcomeSentAt: timestamp("welcome_sent_at", { withTimezone: true }),
+    welcomeLastError: varchar("welcome_last_error", { length: 500 }),
   },
   (table) => [
     uniqueIndex("uq_newsletter_subscriptions_email_hmac").on(table.emailHmac),

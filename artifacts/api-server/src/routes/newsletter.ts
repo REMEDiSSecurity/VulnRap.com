@@ -270,6 +270,31 @@ function buildConfirmUrl(req: Express.Request, token: string): string {
   return url.toString();
 }
 
+// Task #1113 — Persist delivery outcome and update row.
+// Called inside fire-and-forget blocks so errors are swallowed — we
+// must never let a status-update failure surface to the subscriber.
+async function persistDeliveryOutcome(
+  rowId: number,
+  result: { ok: boolean; error?: string },
+): Promise<void> {
+  try {
+    await db
+      .update(newsletterSubscriptionsTable)
+      .set({
+        welcomeSentAt: result.ok ? new Date() : null,
+        welcomeLastError: result.ok
+          ? null
+          : (result.error?.slice(0, 500) ?? "unknown error"),
+      })
+      .where(eq(newsletterSubscriptionsTable.id, rowId));
+  } catch (err) {
+    logger.warn(
+      { err, rowId },
+      "[newsletter] failed to persist email delivery status",
+    );
+  }
+}
+
 const subscribeLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 20,
@@ -392,29 +417,88 @@ router.post(
         })();
       }
 
+      // Task #1113 — On a duplicate signup, check whether the welcome email
+      // was ever successfully delivered. If welcomeSentAt is still NULL
+      // (delivery failed or the webhook was misconfigured at signup time),
+      // re-mint a fresh token and retry delivery now that the user has
+      // supplied their address again. This is the primary retry path: the
+      // subscriber re-submits the form and we silently heal the gap.
+      if (alreadySubscribed) {
+        const existingRows = await db
+          .select({
+            id: newsletterSubscriptionsTable.id,
+            welcomeSentAt: newsletterSubscriptionsTable.welcomeSentAt,
+          })
+          .from(newsletterSubscriptionsTable)
+          .where(eq(newsletterSubscriptionsTable.emailHmac, emailHmac))
+          .limit(1);
+
+        const existing = existingRows[0] ?? null;
+        if (existing && existing.welcomeSentAt === null) {
+          // Re-mint a token so we can build a valid unsubscribe URL.
+          const { token: retryToken, tokenHash: retryTokenHash } =
+            generateToken();
+          await db
+            .update(newsletterSubscriptionsTable)
+            .set({ tokenHash: retryTokenHash })
+            .where(eq(newsletterSubscriptionsTable.id, existing.id));
+
+          const retryRowId = existing.id;
+          const unsubscribeUrl = buildUnsubscribeUrl(req, retryToken);
+          const confirmUrl = requireConfirm
+            ? buildConfirmUrl(req, retryToken)
+            : undefined;
+
+          void (async () => {
+            const result = await sendNewsletterEmail({
+              kind: requireConfirm ? "confirm" : "welcome",
+              to: normalized,
+              unsubscribeUrl,
+              confirmUrl,
+            }).catch((err) => {
+              logger.warn(
+                { err },
+                "[newsletter] retry welcome / confirm email dispatch threw",
+              );
+              return {
+                ok: false,
+                error: err instanceof Error ? err.message : String(err),
+              };
+            });
+            await persistDeliveryOutcome(retryRowId, result);
+          })();
+        }
+      }
+
       // Best-effort welcome / confirm email. Fire-and-forget so a slow
       // delivery webhook never blocks the API response. We only mail
-      // freshly-inserted rows: a duplicate signup attempt is a no-op
-      // here — the original row's token is unrecoverable (only the
-      // hash is stored), so re-mailing would require minting a new
-      // token and PUTting it on the row, which we deliberately skip
-      // to keep "duplicate signup" silent.
+      // freshly-inserted rows: a duplicate signup attempt is handled above
+      // (retry path). The delivery outcome is persisted back to the row so
+      // operators can observe failures via /internal/newsletter-delivery.
       if (!alreadySubscribed) {
+        const rowId = inserted[0]!.id;
         const unsubscribeUrl = buildUnsubscribeUrl(req, token);
         const confirmUrl = requireConfirm
           ? buildConfirmUrl(req, token)
           : undefined;
-        void sendNewsletterEmail({
-          kind: requireConfirm ? "confirm" : "welcome",
-          to: normalized,
-          unsubscribeUrl,
-          confirmUrl,
-        }).catch((err) => {
-          logger.warn(
-            { err },
-            "[newsletter] welcome / confirm email dispatch threw",
-          );
-        });
+        void (async () => {
+          const result = await sendNewsletterEmail({
+            kind: requireConfirm ? "confirm" : "welcome",
+            to: normalized,
+            unsubscribeUrl,
+            confirmUrl,
+          }).catch((err) => {
+            logger.warn(
+              { err },
+              "[newsletter] welcome / confirm email dispatch threw",
+            );
+            return {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            };
+          });
+          await persistDeliveryOutcome(rowId, result);
+        })();
       }
 
       const message = alreadySubscribed

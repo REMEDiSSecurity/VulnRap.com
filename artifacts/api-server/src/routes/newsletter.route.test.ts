@@ -1,9 +1,13 @@
 // Task #733 — Cover the welcome / confirm / unsubscribe additions to
 // /api/newsletter. Mocks `@workspace/db` with a tiny in-memory table so
 // the real Express handlers run end-to-end without a Postgres.
+//
+// Task #1113 — Extended to cover delivery-status tracking
+// (welcomeSentAt / welcomeLastError) and the re-send-on-retry path.
 import express from "express";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { createHash } from "node:crypto";
 import {
   describe,
   it,
@@ -20,6 +24,8 @@ interface Row {
   tokenHash: string | null;
   confirmedAt: Date | null;
   createdAt: Date;
+  welcomeSentAt: Date | null;
+  welcomeLastError: string | null;
 }
 
 const ROWS: Row[] = [];
@@ -38,6 +44,8 @@ vi.mock("@workspace/db", async () => {
     tokenHash: { name: "tokenHash" },
     confirmedAt: { name: "confirmedAt" },
     createdAt: { name: "createdAt" },
+    welcomeSentAt: { name: "welcomeSentAt" },
+    welcomeLastError: { name: "welcomeLastError" },
   };
 
   type Cond = { col: { name: string }; val: unknown };
@@ -71,6 +79,8 @@ vi.mock("@workspace/db", async () => {
             tokenHash: (_values.tokenHash as string | null) ?? null,
             confirmedAt: (_values.confirmedAt as Date | null) ?? null,
             createdAt: new Date(),
+            welcomeSentAt: null,
+            welcomeLastError: null,
           };
           ROWS.push(row);
           return [{ id: row.id }];
@@ -88,11 +98,16 @@ vi.mock("@workspace/db", async () => {
           _cond = c;
           return chain;
         },
+        orderBy(_: unknown) {
+          return chain;
+        },
         async limit(_n: number): Promise<Array<Record<string, unknown>>> {
           const matched = ROWS.filter((r) => (_cond ? matches(r, _cond) : true));
           const out = matched.map((r) => ({
             id: r.id,
             confirmedAt: r.confirmedAt,
+            welcomeSentAt: r.welcomeSentAt,
+            welcomeLastError: r.welcomeLastError,
           }));
           return out.slice(0, _n);
         },
@@ -111,7 +126,6 @@ vi.mock("@workspace/db", async () => {
           _cond = c;
           return Promise.resolve();
         },
-        // never awaited directly, returned via where above
         get _set() {
           return _set;
         },
@@ -157,7 +171,12 @@ vi.mock("@workspace/db", async () => {
 vi.mock("drizzle-orm", async () => {
   return {
     eq: (col: { name: string }, val: unknown) => ({ col, val }),
+    isNotNull: (col: { name: string }) => ({ col, val: "__isNotNull__" }),
+    isNull: (col: { name: string }) => ({ col, val: null }),
+    lt: (col: { name: string }, val: unknown) => ({ col, val }),
     sql: () => ({}),
+    desc: (_col: unknown) => ({}),
+    and: (..._conds: unknown[]) => ({}),
   };
 });
 
@@ -166,6 +185,7 @@ let baseUrl: string;
 
 beforeAll(async () => {
   process.env.VISITOR_HMAC_KEY = "test-key-for-newsletter-suite";
+  process.env.NEWSLETTER_CHALLENGE_HMAC_KEY = "test-challenge-key-newsletter";
   process.env.PUBLIC_URL = "https://example.test";
   const { default: newsletterRouter } = await import("./newsletter");
   const { __setNewsletterEmailDispatcher } = await import(
@@ -251,14 +271,50 @@ function request<T>(
   });
 }
 
+// Fetch a PoW challenge from the server and brute-force a valid solution.
+// Difficulty 4 means the SHA-256 hash must start with "0000" (hex),
+// which takes ~65 536 iterations on average — fast in a test context.
+async function solveChallenge(): Promise<{
+  challengeId: string;
+  challengeSolution: string;
+}> {
+  const ch = await request<{
+    challengeId: string;
+    nonce: string;
+    difficulty: number;
+    prefix: string;
+  }>("GET", "/api/newsletter/challenge");
+  const { challengeId, nonce, difficulty, prefix } = ch.body;
+  const target = "0".repeat(difficulty);
+  for (let i = 0; ; i++) {
+    const candidate = i.toString(36);
+    const hash = createHash("sha256")
+      .update(prefix + nonce + candidate)
+      .digest("hex");
+    if (hash.startsWith(target)) {
+      return { challengeId, challengeSolution: candidate };
+    }
+  }
+}
+
+// Convenience wrapper: solve PoW then POST /api/newsletter/subscribe.
+async function subscribe<T>(email: string, extra?: Record<string, unknown>): Promise<Resp<T>> {
+  const pow = await solveChallenge();
+  return request<T>("POST", "/api/newsletter/subscribe", {
+    ...pow,
+    email,
+    ...extra,
+  });
+}
+
 describe("POST /api/newsletter/subscribe (single opt-in default)", () => {
   it("creates a row, sends a welcome email with an unsubscribe link, and is idempotent on re-signup", async () => {
-    const r1 = await request<{
+    const r1 = await subscribe<{
       ok: boolean;
       alreadySubscribed: boolean;
       pendingConfirmation: boolean;
       message: string;
-    }>("POST", "/api/newsletter/subscribe", { email: "first@example.com" });
+    }>("first@example.com");
     expect(r1.status).toBe(201);
     expect(r1.body).toMatchObject({
       ok: true,
@@ -270,8 +326,8 @@ describe("POST /api/newsletter/subscribe (single opt-in default)", () => {
     expect(ROWS[0]!.tokenHash).toMatch(/^[a-f0-9]{64}$/);
     expect(ROWS[0]!.confirmedAt).toBeInstanceOf(Date);
 
-    // Wait for fire-and-forget email dispatch.
-    await new Promise((r) => setTimeout(r, 20));
+    // Wait for fire-and-forget email dispatch and delivery-status update.
+    await new Promise((r) => setTimeout(r, 40));
     expect(DISPATCHED).toHaveLength(1);
     expect(DISPATCHED[0]).toMatchObject({
       kind: "welcome",
@@ -282,39 +338,95 @@ describe("POST /api/newsletter/subscribe (single opt-in default)", () => {
     );
     expect(DISPATCHED[0]!.confirmUrl).toBeUndefined();
 
-    // Duplicate: returns 201 with alreadySubscribed=true and does not
-    // mint a new email.
-    const r2 = await request<{ alreadySubscribed: boolean }>(
-      "POST",
-      "/api/newsletter/subscribe",
-      { email: "first@example.com" },
-    );
+    // Task #1113 — delivery outcome is persisted on the row.
+    expect(ROWS[0]!.welcomeSentAt).toBeInstanceOf(Date);
+    expect(ROWS[0]!.welcomeLastError).toBeNull();
+
+    // Duplicate: returns 201 with alreadySubscribed=true.
+    // Since welcomeSentAt is now set, the retry path is NOT triggered.
+    const r2 = await subscribe<{ alreadySubscribed: boolean }>("first@example.com");
     expect(r2.status).toBe(201);
     expect(r2.body.alreadySubscribed).toBe(true);
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, 40));
+    // No additional email dispatched because welcomeSentAt was already set.
     expect(DISPATCHED).toHaveLength(1);
+  });
+
+  it("re-sends the welcome email on re-signup when the original delivery failed", async () => {
+    // First signup — dispatcher returns failure.
+    const { __setNewsletterEmailDispatcher } = await import(
+      "../lib/newsletter-email"
+    );
+    __setNewsletterEmailDispatcher(async (payload) => {
+      DISPATCHED.push({
+        kind: payload.kind,
+        to: payload.to,
+        unsubscribeUrl: payload.unsubscribeUrl,
+        confirmUrl: payload.confirmUrl,
+      });
+      return { ok: false, status: 503, error: "Service Unavailable" };
+    });
+
+    await subscribe("retry@example.com");
+    await new Promise((r) => setTimeout(r, 40));
+
+    // welcomeSentAt should still be null; error should be recorded.
+    expect(ROWS[0]!.welcomeSentAt).toBeNull();
+    expect(ROWS[0]!.welcomeLastError).toBe("Service Unavailable");
+    expect(DISPATCHED).toHaveLength(1);
+
+    // Restore a succeeding dispatcher.
+    __setNewsletterEmailDispatcher(async (payload) => {
+      DISPATCHED.push({
+        kind: payload.kind,
+        to: payload.to,
+        unsubscribeUrl: payload.unsubscribeUrl,
+        confirmUrl: payload.confirmUrl,
+      });
+      return { ok: true, status: 200 };
+    });
+
+    // Re-signup triggers the retry path.
+    const r2 = await subscribe<{ alreadySubscribed: boolean }>("retry@example.com");
+    expect(r2.status).toBe(201);
+    expect(r2.body.alreadySubscribed).toBe(true);
+    await new Promise((r) => setTimeout(r, 40));
+
+    // A second email was dispatched.
+    expect(DISPATCHED).toHaveLength(2);
+    expect(DISPATCHED[1]).toMatchObject({
+      kind: "welcome",
+      to: "retry@example.com",
+    });
+
+    // Delivery status is updated after successful retry.
+    expect(ROWS[0]!.welcomeSentAt).toBeInstanceOf(Date);
+    expect(ROWS[0]!.welcomeLastError).toBeNull();
   });
 });
 
 describe("POST /api/newsletter/subscribe (double opt-in)", () => {
   it("leaves confirmedAt null, sends a confirm email, and confirms via /confirm", async () => {
     process.env.NEWSLETTER_DOUBLE_OPT_IN = "true";
-    const r = await request<{
+    const r = await subscribe<{
       pendingConfirmation: boolean;
       message: string;
-    }>("POST", "/api/newsletter/subscribe", { email: "two@example.com" });
+    }>("two@example.com");
     expect(r.status).toBe(201);
     expect(r.body.pendingConfirmation).toBe(true);
     expect(r.body.message).toMatch(/check your inbox/i);
     expect(ROWS[0]!.confirmedAt).toBeNull();
 
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, 40));
     expect(DISPATCHED).toHaveLength(1);
     expect(DISPATCHED[0]!.kind).toBe("confirm");
     expect(DISPATCHED[0]!.confirmUrl).toBeTruthy();
     const confirmUrl = new URL(DISPATCHED[0]!.confirmUrl!);
     const token = confirmUrl.searchParams.get("token")!;
     expect(token).toMatch(/^[a-f0-9]{64}$/);
+
+    // Task #1113 — delivery outcome recorded for double opt-in confirm too.
+    expect(ROWS[0]!.welcomeSentAt).toBeInstanceOf(Date);
 
     // Confirm via the link.
     const c = await request<{ ok: boolean; alreadyConfirmed: boolean }>(
@@ -354,10 +466,8 @@ describe("POST /api/newsletter/subscribe (double opt-in)", () => {
 
 describe("/api/newsletter/unsubscribe", () => {
   it("removes the row given a valid token (GET form, one-click)", async () => {
-    await request("POST", "/api/newsletter/subscribe", {
-      email: "remove@example.com",
-    });
-    await new Promise((r) => setTimeout(r, 20));
+    await subscribe("remove@example.com");
+    await new Promise((r) => setTimeout(r, 40));
     const url = new URL(DISPATCHED[0]!.unsubscribeUrl);
     const token = url.searchParams.get("token")!;
     expect(ROWS).toHaveLength(1);
@@ -380,10 +490,8 @@ describe("/api/newsletter/unsubscribe", () => {
   });
 
   it("accepts the POST body form for richer clients", async () => {
-    await request("POST", "/api/newsletter/subscribe", {
-      email: "post-remove@example.com",
-    });
-    await new Promise((r) => setTimeout(r, 20));
+    await subscribe("post-remove@example.com");
+    await new Promise((r) => setTimeout(r, 40));
     const url = new URL(DISPATCHED[0]!.unsubscribeUrl);
     const token = url.searchParams.get("token")!;
 
