@@ -19,7 +19,8 @@
 // only appends to `report_rescore_log`, so a flipped re-score never
 // changes what end users see for an existing report.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { atomicWriteJsonFileSync } from "./atomic-write";
 import path from "path";
 import { fileURLToPath } from "url";
 import { and, gte, lt, desc, isNotNull, count } from "drizzle-orm";
@@ -106,22 +107,12 @@ function readAlertState(): AlertStateFile {
 
 function writeAlertState(state: AlertStateFile): void {
   const filePath = resolveAlertStatePath();
-  const dir = path.dirname(filePath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const trimmed = state.alertedDays.slice(-ALERT_HISTORY_LIMIT);
-  writeFileSync(
-    filePath,
-    JSON.stringify(
-      {
-        _meta:
-          "Per-day dedup keys for the score-stability flip-rate alerts. Capped at the last 90 days; oldest trimmed first.",
-        alertedDays: trimmed,
-      },
-      null,
-      2,
-    ) + "\n",
-    "utf8",
-  );
+  atomicWriteJsonFileSync(filePath, {
+    _meta:
+      "Per-day dedup keys for the score-stability flip-rate alerts. Capped at the last 90 days; oldest trimmed first.",
+    alertedDays: trimmed,
+  });
 }
 
 export interface RescorePassOptions {

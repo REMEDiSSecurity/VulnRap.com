@@ -23,7 +23,8 @@
 // before/after for whatever fields actually changed). The `edits` log is
 // bounded so a single phrase cannot grow the JSON file unboundedly.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { atomicWriteJsonFileSync } from "../../atomic-write";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -434,8 +435,6 @@ function persist(
   history: HandwavyHistoryEntry[],
 ): HandwavyHistoryEntry[] {
   const p = resolvePath();
-  const dir = path.dirname(p);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const trimmedHistory = trimHistory(history);
   const body: PhrasesFile = {
     _meta: {
@@ -445,7 +444,7 @@ function persist(
     phrases: markers as unknown as Array<Record<string, unknown>>,
     history: trimmedHistory,
   };
-  writeFileSync(p, JSON.stringify(body, null, 2) + "\n", "utf8");
+  atomicWriteJsonFileSync(p, body);
   return trimmedHistory;
 }
 

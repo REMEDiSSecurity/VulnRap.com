@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { promises as fs } from "node:fs";
+import { promises as fs, readdirSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 // Pin the loader to an isolated tmp file BEFORE importing the loader so the
@@ -1708,5 +1708,13 @@ describe("handwavy-phrases loader", () => {
     const t = Date.parse(result.marker.addedAt!);
     expect(t).toBeGreaterThanOrEqual(before);
     expect(t).toBeLessThanOrEqual(after);
+  });
+
+  // Task #1117 — persist() must use atomicWriteJsonFileSync so a crash
+  // mid-write leaves no stale .tmp sibling and no corrupt JSON blob.
+  it("leaves no .tmp siblings after writing phrases to disk", () => {
+    addHandwavyPhrase("tmp-sibling-probe", { reviewer: "tester" });
+    const entries = readdirSync(TMP_DIR);
+    expect(entries).toEqual(["handwavy-phrases.json"]);
   });
 });

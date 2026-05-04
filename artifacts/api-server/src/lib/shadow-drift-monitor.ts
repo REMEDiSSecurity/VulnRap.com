@@ -24,7 +24,8 @@
 //   - Injectable dispatcher for tests.
 //   - Links to the reviewer panel (/feedback-analytics) in the payload.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { atomicWriteJsonFileSync } from "./atomic-write";
 import path from "path";
 import { fileURLToPath } from "url";
 import { and, gte, sql } from "drizzle-orm";
@@ -119,22 +120,12 @@ function readAlertState(): AlertStateFile {
 
 function writeAlertState(state: AlertStateFile): void {
   const filePath = resolveAlertStatePath();
-  const dir = path.dirname(filePath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const trimmed = state.alertedWindows.slice(-ALERT_HISTORY_LIMIT);
-  writeFileSync(
-    filePath,
-    JSON.stringify(
-      {
-        _meta:
-          "Per-window dedup keys for the shadow-drift divergence alerts. Capped at the last 90 entries; oldest trimmed first.",
-        alertedWindows: trimmed,
-      },
-      null,
-      2,
-    ) + "\n",
-    "utf8",
-  );
+  atomicWriteJsonFileSync(filePath, {
+    _meta:
+      "Per-window dedup keys for the shadow-drift divergence alerts. Capped at the last 90 entries; oldest trimmed first.",
+    alertedWindows: trimmed,
+  });
 }
 
 function readLookbackDays(fallback: number): number {

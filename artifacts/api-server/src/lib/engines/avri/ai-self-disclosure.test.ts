@@ -1,6 +1,6 @@
 import path from "node:path";
 import os from "node:os";
-import { promises as fs } from "node:fs";
+import { promises as fs, readdirSync } from "node:fs";
 import {
   afterAll,
   afterEach,
@@ -351,5 +351,18 @@ first-extra-marker second-extra-marker third-extra-marker.`;
     expect(detectAiSelfDisclosure("hit another-marker here").detected).toBe(
       true,
     );
+  });
+
+  // Task #1117 — persist() must use atomicWriteJsonFileSync so a crash
+  // mid-write leaves no stale .tmp sibling and no corrupt JSON blob.
+  it("leaves no .tmp siblings after writing phrases to disk", () => {
+    addAiSelfDisclosurePhrase(
+      "tmp_sibling_probe",
+      "tmp-sibling-probe",
+      "i",
+      { reviewer: "tester" },
+    );
+    const entries = readdirSync(tmpDir);
+    expect(entries).toEqual(["ai-self-disclosure-phrases.json"]);
   });
 });

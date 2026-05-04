@@ -1,7 +1,12 @@
-import { describe, it, expect } from "vitest";
+import os from "node:os";
+import path from "node:path";
+import { promises as fs, readdirSync } from "node:fs";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
   detectAgentFingerprint,
   AGENT_DISPLAY_LABEL,
+  addAgentFingerprintRule,
+  __resetAgentFingerprintRulesForTests,
   type AgentLabel,
 } from "./agent-fingerprint";
 
@@ -164,5 +169,43 @@ In conclusion, to summarize, remember that this is the right approach.`;
     expect(r.features.wordCount).toBeGreaterThan(0);
     expect(r.features.sentenceCount).toBeGreaterThan(0);
     expect(r.features.avgSentenceLen).toBeGreaterThan(0);
+  });
+});
+
+// Task #1117 — persist() in agent-fingerprint.ts must use
+// atomicWriteJsonFileSync so a crash mid-write leaves no stale .tmp
+// sibling and no corrupt JSON blob.
+describe("addAgentFingerprintRule — no .tmp siblings after write (Task #1117)", () => {
+  let tmpDir: string;
+  let rulesPath: string;
+
+  beforeAll(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "agent-fp-atomic-"));
+    rulesPath = path.join(tmpDir, "agent-fingerprint-rules.json");
+    process.env.AGENT_FINGERPRINT_RULES_PATH = rulesPath;
+    __resetAgentFingerprintRulesForTests();
+  });
+
+  afterAll(async () => {
+    delete process.env.AGENT_FINGERPRINT_RULES_PATH;
+    __resetAgentFingerprintRulesForTests();
+    try {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  });
+
+  it("leaves no .tmp siblings after writing rules to disk", () => {
+    addAgentFingerprintRule(
+      "tmp_sibling_probe",
+      "gpt4",
+      "tmp-sibling-probe",
+      "i",
+      5,
+      "no-tmp-sibling test probe",
+    );
+    const entries = readdirSync(tmpDir);
+    expect(entries).toEqual(["agent-fingerprint-rules.json"]);
   });
 });

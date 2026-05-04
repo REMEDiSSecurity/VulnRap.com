@@ -33,7 +33,8 @@
 //   HOLDOUT_DRIFT_MIN_SAMPLES        — minimum holdout rows before alerting
 //                                      (default 20)
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { atomicWriteJsonFileSync } from "./atomic-write";
 import path from "path";
 import { fileURLToPath } from "url";
 import { computeHoldoutEval, type HoldoutPartition } from "./holdout-eval";
@@ -138,10 +139,6 @@ function readAlertState(): AlertsFile {
 
 function writeAlertState(file: AlertsFile): void {
   const filePath = resolvePath();
-  const dir = path.dirname(filePath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
   const trimmed = file.alerts.slice(-DEDUP_HISTORY_LIMIT);
   const payload: AlertsFile = {
     _meta:
@@ -149,7 +146,7 @@ function writeAlertState(file: AlertsFile): void {
       "Persisted dedup state for holdout accuracy drift alerts. Each entry represents a day on which a holdout-vs-in-sample gap exceeded the configured threshold (capped at 90).",
     alerts: trimmed,
   };
-  writeFileSync(filePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+  atomicWriteJsonFileSync(filePath, payload);
 }
 
 function isAlreadyAlerted(dedupKey: string): boolean {

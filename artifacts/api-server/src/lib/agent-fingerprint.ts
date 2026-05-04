@@ -40,7 +40,8 @@
 // change + redeploy. The in-code defaults serve as fallback when the
 // JSON file is missing/empty/corrupt.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { atomicWriteJsonFileSync } from "./atomic-write";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -554,8 +555,6 @@ function load(): CacheState {
 
 function persist(rules: AgentFingerprintRule[]): void {
   const p = resolvePath();
-  const dir = path.dirname(p);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const body: RulesFile = {
     _meta: {
       description:
@@ -563,7 +562,7 @@ function persist(rules: AgentFingerprintRule[]): void {
     },
     rules: rules as unknown as Array<Record<string, unknown>>,
   };
-  writeFileSync(p, JSON.stringify(body, null, 2) + "\n", "utf8");
+  atomicWriteJsonFileSync(p, body);
 }
 
 export function getAgentFingerprintRules(): AgentFingerprintRule[] {

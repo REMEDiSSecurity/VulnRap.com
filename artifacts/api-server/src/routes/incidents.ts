@@ -6,7 +6,8 @@
 // appends a new entry, bumps the version, persists to disk, and
 // records an audit-log entry. Mirrors the auth pattern from
 // `internal.ts` (requireCalibrationAuth).
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
+import { atomicWriteJsonFileSync } from "../lib/atomic-write";
 import path from "path";
 import { Router, type IRouter } from "express";
 import { ListIncidentsResponse } from "@workspace/api-zod";
@@ -156,7 +157,7 @@ router.post(
         })),
       };
 
-      writeFileSync(incidentsFilePath, JSON.stringify(fileData, null, 2) + "\n", "utf8");
+      atomicWriteJsonFileSync(incidentsFilePath, fileData);
 
       INCIDENT_LOG = candidateLog.data;
 
@@ -187,3 +188,9 @@ router.post(
 );
 
 export default router;
+
+export const __testing = {
+  writeIncidentsFile(filePath: string, data: Record<string, unknown>): void {
+    atomicWriteJsonFileSync(filePath, data);
+  },
+};

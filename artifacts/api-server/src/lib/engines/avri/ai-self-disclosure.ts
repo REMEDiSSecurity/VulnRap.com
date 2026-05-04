@@ -32,7 +32,8 @@
 // match), so extending the list cannot accidentally turn a single phrase
 // into compounding damage.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, existsSync } from "fs";
+import { atomicWriteJsonFileSync } from "../../atomic-write";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -271,8 +272,6 @@ function load(): CacheState {
 
 function persist(phrases: AiSelfDisclosurePhrase[]): void {
   const p = resolvePath();
-  const dir = path.dirname(p);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const body: PhrasesFile = {
     _meta: {
       description:
@@ -280,7 +279,7 @@ function persist(phrases: AiSelfDisclosurePhrase[]): void {
     },
     phrases: phrases as unknown as Array<Record<string, unknown>>,
   };
-  writeFileSync(p, JSON.stringify(body, null, 2) + "\n", "utf8");
+  atomicWriteJsonFileSync(p, body);
 }
 
 /**

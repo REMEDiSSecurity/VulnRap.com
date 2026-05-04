@@ -12,7 +12,7 @@
 // suite stays offline so it runs on every CI sweep regardless of
 // DATABASE_URL availability.
 
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -261,6 +261,23 @@ describe("dispatchScoreStabilityAlertIfNeeded", () => {
     });
     expect(outcome.exceeded).toBe(false);
     expect(rec.calls).toHaveLength(0);
+  });
+
+  // Task #1117 — writeAlertState must use atomicWriteJsonFileSync so a
+  // crash mid-write leaves no stale .tmp sibling and no corrupt JSON.
+  it("leaves no .tmp siblings after writing alert state", async () => {
+    const rec = recorder();
+    await dispatchScoreStabilityAlertIfNeeded({
+      summary: summaryWith("2026-05-02", 1000, 50), // 5 % — above threshold
+      evaluateDate: "2026-05-02",
+      dispatch: rec.dispatch,
+    });
+    const entries = readdirSync(tmpDir);
+    expect(entries).toEqual(["state.json"]);
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      alertedDays: string[];
+    };
+    expect(persisted.alertedDays).toContain("2026-05-02");
   });
 });
 

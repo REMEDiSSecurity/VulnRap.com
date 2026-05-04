@@ -4,6 +4,7 @@ import {
   writeFileSync,
   readFileSync,
   existsSync,
+  readdirSync,
 } from "fs";
 import { tmpdir } from "os";
 import path from "path";
@@ -2311,5 +2312,54 @@ describe("startStalledSchedulerWatchdog — silent-replica wiring", () => {
     } finally {
       watchdog.stop();
     }
+  });
+});
+
+// Task #1117 — writeState must use atomicWriteJsonFileSync so a crash
+// mid-write can't leave behind a stale .tmp sibling or a half-written
+// JSON blob.
+describe("writeState leaves no .tmp siblings (atomic write)", () => {
+  let tmpDir: string;
+  let statePath: string;
+  let originalEnv: { statePath?: string; publicUrl?: string };
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "avri-drift-atomic-"));
+    statePath = path.join(tmpDir, "notifications.json");
+    originalEnv = {
+      statePath: process.env.AVRI_DRIFT_NOTIFICATIONS_PATH,
+      publicUrl: process.env.PUBLIC_URL,
+    };
+    process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = statePath;
+    process.env.PUBLIC_URL = "https://vulnrap.example.com";
+    __testing.resetResolvedPath();
+  });
+
+  afterEach(() => {
+    if (originalEnv.statePath === undefined)
+      delete process.env.AVRI_DRIFT_NOTIFICATIONS_PATH;
+    else process.env.AVRI_DRIFT_NOTIFICATIONS_PATH = originalEnv.statePath;
+    if (originalEnv.publicUrl === undefined) delete process.env.PUBLIC_URL;
+    else process.env.PUBLIC_URL = originalEnv.publicUrl;
+    __testing.resetResolvedPath();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("leaves only the state file and no .tmp siblings after a successful write", async () => {
+    const dispatch: WebhookDispatcher = async () => ({ ok: true, status: 200 });
+    const report = makeReport({ flags: [GAP_FLAG, FAM_FLAG_T1_INJ] });
+
+    await notifyDriftFlagsIfNew(report, {
+      webhookUrl: "https://example.test/hook",
+      publicUrl: "https://vulnrap.example.com",
+      dispatch,
+    });
+
+    const entries = readdirSync(tmpDir);
+    expect(entries).toEqual(["notifications.json"]);
+    const content = JSON.parse(
+      readFileSync(statePath, "utf8"),
+    ) as { notified: unknown[] };
+    expect(content.notified.length).toBeGreaterThan(0);
   });
 });

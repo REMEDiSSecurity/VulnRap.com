@@ -22,11 +22,12 @@
 // point AVRI_DRIFT_WEBHOOK_URL at their existing webhook→email bridge
 // (Slack incoming webhook, Discord, PagerDuty Events v2, etc.).
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { hostname as osHostname } from "os";
 import { randomBytes } from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
+import { atomicWriteJsonFileSync } from "./atomic-write";
 import { logger } from "./logger";
 import { buildPublicUrl } from "./public-url";
 import {
@@ -515,10 +516,6 @@ function readState(): NotificationsFile {
 
 function writeState(file: NotificationsFile): void {
   const filePath = resolvePath();
-  const dir = path.dirname(filePath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
   // Trim oldest first so the most-recent HISTORY_LIMIT entries are kept.
   const trimmed = file.notified.slice(-HISTORY_LIMIT);
   const trimmedHistory = (file.rearmHistory ?? []).slice(-REARM_HISTORY_LIMIT);
@@ -556,7 +553,7 @@ function writeState(file: NotificationsFile): void {
     schedulerHeartbeats: trimmedHeartbeats,
     replicaSilenceAlerts: trimmedSilences,
   };
-  writeFileSync(filePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+  atomicWriteJsonFileSync(filePath, payload);
 }
 
 export interface NotifyOptions {

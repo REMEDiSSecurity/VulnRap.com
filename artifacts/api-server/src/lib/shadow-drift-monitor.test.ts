@@ -12,7 +12,7 @@
 //   - Dedup by window key.
 //   - Webhook-missing / dispatch-failure handling.
 
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -452,6 +452,30 @@ describe("dispatchShadowDriftAlertIfNeeded", () => {
     expect(payload.lookbackDays).toBe(14);
     expect(payload.windowStart).toBe("2026-04-20");
     expect(payload.windowEnd).toBe("2026-05-04");
+  });
+
+  // Task #1117 — writeAlertState must use atomicWriteJsonFileSync so a
+  // crash mid-write leaves no stale .tmp sibling and no corrupt JSON.
+  it("leaves no .tmp siblings after writing alert state", async () => {
+    const rec = recorder();
+    await dispatchShadowDriftAlertIfNeeded({
+      summary: makeSummary({
+        total: 1000,
+        divergent: 200,
+        legitSlopFlips: 30,
+        divergenceRate: 0.2,
+      }),
+      divergenceThreshold: 0.1,
+      tierFlipThreshold: 20,
+      dispatch: rec.dispatch,
+    });
+    const { readdirSync } = await import("fs");
+    const entries = readdirSync(tmpDir);
+    expect(entries).toEqual(["state.json"]);
+    const persisted = JSON.parse(readFileSync(statePath, "utf8")) as {
+      alertedWindows: string[];
+    };
+    expect(persisted.alertedWindows.length).toBeGreaterThan(0);
   });
 });
 
