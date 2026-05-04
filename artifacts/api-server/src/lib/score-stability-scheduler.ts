@@ -14,8 +14,10 @@ import { logger } from "./logger";
 import {
   runScoreStabilityRescorePass,
   dispatchScoreStabilityAlertIfNeeded,
+  pruneOldRescoreLogRows,
   type RescorePassResult,
   type AlertOutcome,
+  type PruneResult,
 } from "./score-stability-monitor";
 
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h (nightly)
@@ -54,6 +56,7 @@ export interface StabilityCheckResult {
   ranCheck: boolean;
   rescore?: RescorePassResult;
   alert?: AlertOutcome;
+  prune?: PruneResult;
 }
 
 /**
@@ -96,8 +99,9 @@ export async function runScoreStabilityCheck(): Promise<StabilityCheckResult> {
         "[score-stability] Flip-rate exceeded threshold.",
       );
     }
+    const prune = await pruneOldRescoreLogRows();
     const ok = rescore.failed === 0;
-    return { ok, ranCheck: true, rescore, alert };
+    return { ok, ranCheck: true, rescore, alert, prune };
   } catch (err) {
     logger.warn(
       { err },

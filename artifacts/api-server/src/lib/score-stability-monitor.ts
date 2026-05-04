@@ -22,7 +22,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { and, gte, lt, desc, isNotNull } from "drizzle-orm";
+import { and, gte, lt, desc, isNotNull, count } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   reportsTable,
@@ -827,6 +827,56 @@ export async function dispatchScoreStabilityAlertIfNeeded(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Retention pruning.
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_RETENTION_DAYS = 90;
+
+function readRetentionDays(): number {
+  const raw = (process.env.RESCORE_LOG_RETENTION_DAYS ?? "").trim();
+  if (raw.length === 0) return DEFAULT_RETENTION_DAYS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_RETENTION_DAYS;
+  return parsed;
+}
+
+export interface PruneResult {
+  retentionDays: number;
+  cutoff: Date;
+  deletedRows: number;
+}
+
+export async function pruneOldRescoreLogRows(
+  opts: { retentionDays?: number; now?: () => Date } = {},
+): Promise<PruneResult> {
+  const retentionDays = opts.retentionDays ?? readRetentionDays();
+  const now = (opts.now ?? (() => new Date()))();
+  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+
+  const [{ rowCount }] = await db
+    .select({ rowCount: count() })
+    .from(reportRescoreLogTable)
+    .where(lt(reportRescoreLogTable.scoredAt, cutoff));
+
+  if (rowCount > 0) {
+    await db
+      .delete(reportRescoreLogTable)
+      .where(lt(reportRescoreLogTable.scoredAt, cutoff));
+  }
+
+  const deletedRows = rowCount;
+
+  if (deletedRows > 0) {
+    logger.info(
+      { retentionDays, cutoff: cutoff.toISOString(), deletedRows },
+      "[score-stability] Pruned old rescore log rows.",
+    );
+  }
+
+  return { retentionDays, cutoff, deletedRows };
+}
+
 // Test hooks.
 export const __testing = {
   resetAlertState: () => {
@@ -836,8 +886,10 @@ export const __testing = {
   readAlertState,
   writeAlertState,
   readFlipRateThreshold,
+  readRetentionDays,
   DEFAULT_FLIP_RATE_THRESHOLD,
   DEFAULT_LOOKBACK_DAYS,
+  DEFAULT_RETENTION_DAYS,
   BATCH_SIZE,
   MAX_PAGES,
 };
