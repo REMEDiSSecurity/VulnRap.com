@@ -112,12 +112,42 @@ export function medianFromBins(bins: CohortBin[]): number | null {
   return Math.round((last.min + last.max) / 2);
 }
 
+// Pure helper: exact mid-rank percentile of `score` against the cohort,
+// using the raw row counts from SQL (not the bucketed histogram). Mirrors
+// the bucket-based helper above but operates on `below` / `equal` /
+// `total` directly so a report scoring 61 vs 69 gets a different label
+// instead of both rounding to the same 10-point step. Rounded to one
+// decimal place — finer than the integer the bucket math returns and
+// avoids leaking float noise to the UI.
+export function exactPercentileFromCounts(
+  below: number,
+  equal: number,
+  total: number,
+): number {
+  if (total <= 0) return 0;
+  const rank = (below + equal / 2) / total;
+  const pct = Math.max(0, Math.min(100, rank * 100));
+  return Math.round(pct * 10) / 10;
+}
+
+// Parses & clamps the optional `score` query parameter. Returns null
+// when absent or non-numeric so the percentile path is skipped without
+// surfacing a 400 — keeps the ribbon endpoint forgiving of stale
+// clients that send garbage.
+export function parseScoreParam(raw: unknown): number | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const n = Number(Array.isArray(raw) ? raw[0] : raw);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, n));
+}
+
 router.get("/cohort/baseline", async (req, res): Promise<void> => {
   const rawCwe = req.query.cwe ? String(req.query.cwe) : null;
   // Unknown values fall through to the platform-wide cohort (mirrors the
   // avriFamily filter on the feed endpoint) so a stale client value never
   // returns 400.
   const cweFilter = rawCwe && COHORT_CWE_FAMILY_IDS.has(rawCwe) ? rawCwe : null;
+  const queriedScore = parseScoreParam(req.query.score);
 
   // Task #933 — same baseline ribbon UI is also used to contextualise the
   // legacy AI Detection ("slop") score that still sits further down the
@@ -179,6 +209,28 @@ router.get("/cohort/baseline", async (req, res): Promise<void> => {
 
   const totalReports = bins.reduce((acc, b) => acc + b.count, 0);
   const median = medianFromBins(bins);
+
+  // Exact percentile path — when the caller passed a `score`, run a single
+  // count-aggregate query to get the number of cohort rows strictly below
+  // and exactly equal to the queried score. Combined with the cohort total
+  // we can compute a mid-rank percentile that doesn't quantise to the
+  // 10-point bucket steps the histogram-derived percentile suffers from.
+  // Skipped entirely when the cohort is empty (percentile is meaningless)
+  // or when no score was supplied (so the regular ribbon fetch stays a
+  // single round-trip).
+  let percentile: number | null = null;
+  if (queriedScore !== null && totalReports > 0) {
+    const rankRows = await db
+      .select({
+        below: sql<number>`count(*) filter (where ${reportsTable.vulnrapCompositeScore} < ${queriedScore})::int`,
+        equal: sql<number>`count(*) filter (where ${reportsTable.vulnrapCompositeScore} = ${queriedScore})::int`,
+      })
+      .from(reportsTable)
+      .where(and(...conditions));
+    const below = Number(rankRows[0]?.below ?? 0) || 0;
+    const equal = Number(rankRows[0]?.equal ?? 0) || 0;
+    percentile = exactPercentileFromCounts(below, equal, totalReports);
+  }
 
   // Per-axis medians for the per-engine radar overlay (task #623). Pulled
   // from the cached `vulnrap_engine_results` JSONB array (which holds the
@@ -251,6 +303,8 @@ router.get("/cohort/baseline", async (req, res): Promise<void> => {
     windowDays: WINDOW_DAYS,
     totalReports,
     median,
+    percentile,
+    queriedScore,
     bins,
     engineMedians,
   });

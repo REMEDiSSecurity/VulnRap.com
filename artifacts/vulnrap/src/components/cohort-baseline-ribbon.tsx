@@ -87,11 +87,17 @@ export function CohortBaselineRibbon({
   metric = "composite",
   compact = false,
 }: CohortBaselineRibbonProps) {
-  const platformParams =
-    metric === "slop" ? { metric: "slop" as const } : undefined;
-  const platformQuery = useGetCohortBaseline(platformParams, {
+  // Build platform query params: metric selects the score axis (composite
+  // vs slop); score enables the server's exact-percentile path so the
+  // label isn't quantised in 10-point steps.
+  const platformParams: { metric?: "slop"; score?: number } = {};
+  if (metric === "slop") platformParams.metric = "slop";
+  if (Number.isFinite(score)) platformParams.score = score;
+  const hasParams = Object.keys(platformParams).length > 0;
+  const resolvedPlatformParams = hasParams ? platformParams : undefined;
+  const platformQuery = useGetCohortBaseline(resolvedPlatformParams, {
     query: {
-      queryKey: getGetCohortBaselineQueryKey(platformParams),
+      queryKey: getGetCohortBaselineQueryKey(resolvedPlatformParams),
       // 1h server cache + 5min client gc keeps this from being a per-render
       // flicker while still letting a session-long visitor pick up the
       // hourly refresh.
@@ -120,10 +126,18 @@ export function CohortBaselineRibbon({
     () => (platform ? sparklineHeights(platform.bins) : []),
     [platform],
   );
-  const percentile = useMemo(
-    () => (platform ? percentileFromBins(score, platform.bins) : 0),
-    [platform, score],
-  );
+  // Prefer the server's exact percentile (computed from the raw cohort
+  // rows with mid-rank, no bucketing) when present. Falls back to the
+  // bucket-derived approximation so a stale-cache hit or older backend
+  // still yields a label.
+  const percentile = useMemo(() => {
+    if (!platform) return 0;
+    const exact = (platform as { percentile?: number | null }).percentile;
+    if (typeof exact === "number" && Number.isFinite(exact)) {
+      return exact;
+    }
+    return percentileFromBins(score, platform.bins);
+  }, [platform, score]);
 
   if (platformQuery.isLoading) {
     return (
@@ -145,11 +159,14 @@ export function CohortBaselineRibbon({
   const metricLabel = metric === "slop" ? "AI Detection" : "Cohort";
   const headerLabel =
     metric === "slop" ? "AI-likelihood baseline" : "Cohort baseline";
+  const percentileText = Number.isInteger(percentile)
+    ? String(percentile)
+    : percentile.toFixed(1);
   const percentileLabel = platformEmpty
     ? `No ${metricLabel.toLowerCase()} baseline yet — be the first scored this week.`
     : metric === "slop"
-      ? `Higher than ${percentile}% of AI-likelihood scores this week`
-      : `Higher than ${percentile}% of reports scored this week`;
+      ? `Higher than ${percentileText}% of AI-likelihood scores this week`
+      : `Higher than ${percentileText}% of reports scored this week`;
   const medianLine =
     !platformEmpty && platform.median != null
       ? `7d median ${platform.median}`

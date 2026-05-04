@@ -12669,6 +12669,8 @@ before the multi-engine consensus) are excluded from the cohort.
  * @summary Get cohort baseline distribution
  */
 export const getCohortBaselineQueryMetricDefault = `composite`;
+export const getCohortBaselineQueryScoreMin = 0;
+export const getCohortBaselineQueryScoreMax = 100;
 
 export const GetCohortBaselineQueryParams = zod.object({
   cwe: zod.coerce
@@ -12682,6 +12684,14 @@ export const GetCohortBaselineQueryParams = zod.object({
     .default(getCohortBaselineQueryMetricDefault)
     .describe(
       'Which per-report score axis to bucket the cohort against.\n`composite` (default) uses the VulnRap composite score shown in\nthe results page header. `slop` uses the legacy AI Detection\n(\"slop\") score that still appears further down the results page,\nso the same baseline ribbon UI can contextualise that legacy\nnumber too. When `metric=slop` the engineMedians block is null\n(engine medians are only meaningful for the composite cohort).\n',
+    ),
+  score: zod.coerce
+    .number()
+    .min(getCohortBaselineQueryScoreMin)
+    .max(getCohortBaselineQueryScoreMax)
+    .optional()
+    .describe(
+      "Optional composite score to compute an exact percentile rank\nfor. When supplied, the response includes a `percentile` field\ncomputed from the underlying rows (mid-rank convention) so\ncallers do not have to approximate from the 10-bucket\nhistogram.\n",
     ),
 });
 
@@ -12706,6 +12716,18 @@ export const GetCohortBaselineResponse = zod
       .nullable()
       .describe(
         "Median composite score for the cohort. Null when totalReports is 0.",
+      ),
+    percentile: zod
+      .number()
+      .nullish()
+      .describe(
+        "Exact percentile rank for the queried `score` against the\nunderlying cohort rows (not the bucketed histogram), computed\nwith the mid-rank convention so ties contribute half their\ncount. Present only when the request supplied a `score` query\nparameter and the cohort is non-empty; null otherwise. The\nvalue is a 0..100 number rounded to one decimal place — the\nUI prefers this over the bucket-derived percentile when\npresent.\n",
+      ),
+    queriedScore: zod
+      .number()
+      .nullish()
+      .describe(
+        "Echo of the `score` query parameter the percentile was computed\nagainst, clamped to 0..100. Null when no `score` was supplied.\n",
       ),
     bins: zod
       .array(

@@ -37,6 +37,26 @@ platform cohort is returned instead.
    * @nullable
    */
   median: number | null;
+  /**
+   * Exact percentile rank for the queried `score` against the
+underlying cohort rows (not the bucketed histogram), computed
+with the mid-rank convention so ties contribute half their
+count. Present only when the request supplied a `score` query
+parameter and the cohort is non-empty; null otherwise. The
+value is a 0..100 number rounded to one decimal place — the
+UI prefers this over the bucket-derived percentile when
+present.
+
+   * @nullable
+   */
+  percentile?: number | null;
+  /**
+   * Echo of the `score` query parameter the percentile was computed
+against, clamped to 0..100. Null when no `score` was supplied.
+
+   * @nullable
+   */
+  queriedScore?: number | null;
   /** 10-bucket histogram of composite scores in the cohort. */
   bins: CohortBaselineBinsItem[];
   /** Median per-axis sub-scores across the same cohort, used by the

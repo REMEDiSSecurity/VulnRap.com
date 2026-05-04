@@ -34,7 +34,7 @@ interface QueryReturn {
 function setQueryReturns(platform: QueryReturn, family?: QueryReturn) {
   useGetCohortBaselineMock.mockReset();
   useGetCohortBaselineMock.mockImplementation(
-    (params: { cwe?: string } | undefined) => {
+    (params: { cwe?: string; score?: number } | undefined) => {
       if (params && params.cwe) {
         return family ?? { data: undefined, isLoading: false, isError: false };
       }
@@ -106,6 +106,8 @@ describe("CohortBaselineRibbon", () => {
         windowDays: 7,
         totalReports: 100,
         median: 55,
+        percentile: null,
+        queriedScore: null,
         bins: makeBins([30, 24, 24, 0, 0, 0, 22, 0, 0, 0]),
       },
       isLoading: false,
@@ -131,6 +133,48 @@ describe("CohortBaselineRibbon", () => {
     ).toMatch(/last 7d · n=100/);
   });
 
+  it("prefers the server's exact percentile over the bucket-derived approximation", () => {
+    // Same histogram as the populated-cohort test (which the bucket math
+    // would resolve to 89%), but the server returns a finer 78.5%. The
+    // ribbon must render the server's value verbatim — that's the whole
+    // point of the exact-percentile path.
+    setQueryReturns({
+      data: {
+        cwe: null,
+        windowDays: 7,
+        totalReports: 100,
+        median: 55,
+        percentile: 78.5,
+        queriedScore: 61,
+        bins: makeBins([30, 24, 24, 0, 0, 0, 22, 0, 0, 0]),
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<CohortBaselineRibbon score={61} />);
+    expect(
+      screen.getByTestId("cohort-baseline-ribbon-percentile-label").textContent,
+    ).toMatch(/Higher than 78\.5% of reports scored this week/);
+  });
+
+  it("falls back to bucket math when the server omits the exact percentile", () => {
+    setQueryReturns({
+      data: {
+        cwe: null,
+        windowDays: 7,
+        totalReports: 100,
+        median: 55,
+        bins: makeBins([30, 24, 24, 0, 0, 0, 22, 0, 0, 0]),
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<CohortBaselineRibbon score={65} />);
+    expect(
+      screen.getByTestId("cohort-baseline-ribbon-percentile-label").textContent,
+    ).toMatch(/Higher than 89% of reports scored this week/);
+  });
+
   it("renders the second-line CWE family median when one is supplied", () => {
     setQueryReturns(
       {
@@ -139,6 +183,8 @@ describe("CohortBaselineRibbon", () => {
           windowDays: 7,
           totalReports: 100,
           median: 55,
+          percentile: null,
+          queriedScore: null,
           bins: makeBins([10, 10, 10, 10, 10, 10, 10, 10, 10, 10]),
         },
         isLoading: false,

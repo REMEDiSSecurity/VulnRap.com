@@ -26,4 +26,15 @@ number too. When `metric=slop` the engineMedians block is null
 
  */
   metric?: GetCohortBaselineMetric;
+  /**
+ * Optional composite score to compute an exact percentile rank
+for. When supplied, the response includes a `percentile` field
+computed from the underlying rows (mid-rank convention) so
+callers do not have to approximate from the 10-bucket
+histogram.
+
+ * @minimum 0
+ * @maximum 100
+ */
+  score?: number;
 };

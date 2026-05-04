@@ -27,6 +27,8 @@ import {
   bucketIndexForScore,
   percentileRankFromBins,
   medianFromBins,
+  exactPercentileFromCounts,
+  parseScoreParam,
   type CohortBin,
 } from "./cohort";
 import type { AddressInfo } from "node:net";
@@ -97,6 +99,31 @@ describe("cohort helpers — pure math", () => {
     const bins: CohortBin[] = buildEmptyBins();
     bins[7].count = 12;
     expect(medianFromBins(bins)).toBe(75);
+  });
+
+  it("exactPercentileFromCounts uses mid-rank and rounds to one decimal", () => {
+    expect(exactPercentileFromCounts(0, 0, 0)).toBe(0);
+    // 78 strictly below, 22 tied → (78 + 11)/100 = 89%.
+    expect(exactPercentileFromCounts(78, 22, 100)).toBe(89);
+    // 61 vs 69 in a fixture cohort: with the histogram both round to the
+    // same bucket, but with raw counts they get distinct percentiles.
+    expect(exactPercentileFromCounts(60, 1, 100)).toBe(60.5);
+    expect(exactPercentileFromCounts(68, 1, 100)).toBe(68.5);
+  });
+
+  it("exactPercentileFromCounts clamps to 0..100", () => {
+    expect(exactPercentileFromCounts(-5, 0, 10)).toBeGreaterThanOrEqual(0);
+    expect(exactPercentileFromCounts(20, 0, 10)).toBeLessThanOrEqual(100);
+  });
+
+  it("parseScoreParam parses, clamps, and rejects garbage", () => {
+    expect(parseScoreParam(undefined)).toBeNull();
+    expect(parseScoreParam("")).toBeNull();
+    expect(parseScoreParam("nope")).toBeNull();
+    expect(parseScoreParam("62")).toBe(62);
+    expect(parseScoreParam("123")).toBe(100);
+    expect(parseScoreParam("-9")).toBe(0);
+    expect(parseScoreParam(["55", "12"])).toBe(55);
   });
 });
 
@@ -215,6 +242,8 @@ interface CohortBaselineResponse {
   windowDays: number;
   totalReports: number;
   median: number | null;
+  percentile: number | null;
+  queriedScore: number | null;
   bins: Array<{ min: number; max: number; count: number }>;
 }
 
@@ -227,8 +256,89 @@ describe("GET /cohort/baseline", () => {
     expect(r.body.windowDays).toBe(7);
     expect(r.body.totalReports).toBe(0);
     expect(r.body.median).toBeNull();
+    expect(r.body.percentile).toBeNull();
+    expect(r.body.queriedScore).toBeNull();
     expect(r.body.bins).toHaveLength(10);
     expect(r.body.bins.every((b) => b.count === 0)).toBe(true);
+  });
+
+  it("returns an exact percentile for the queried score against a small fixture cohort", async () => {
+    // Histogram payload first (drives `bins` + `totalReports` + `median`),
+    // then the count-aggregate payload that drives the exact percentile.
+    // Fixture: 100 reports; 78 score strictly below 65, 4 score exactly 65.
+    // Mid-rank percentile = (78 + 4/2) / 100 = 80%. The bucket math would
+    // round both 61 and 69 into the same [60,70) bucket and report the
+    // same 89%, so this test pins the exact path against a value the
+    // bucket math cannot produce.
+    selectQueue.push([
+      { bucket: 0, count: 30 },
+      { bucket: 1, count: 24 },
+      { bucket: 2, count: 24 },
+      { bucket: 6, count: 22 },
+    ]);
+    selectQueue.push([
+      { below: 78, equal: 4 } as unknown as { bucket: number; count: number },
+    ]);
+    const r = await request<CohortBaselineResponse>(
+      "/cohort/baseline?score=65",
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.totalReports).toBe(100);
+    expect(r.body.queriedScore).toBe(65);
+    expect(r.body.percentile).toBe(80);
+  });
+
+  it("distinguishes 61 vs 69 — bucket math collapses them, the exact path does not", async () => {
+    // Same histogram as above (78 below the [60,70) bucket, 22 in it),
+    // but different equal-counts at the queried score.
+    selectQueue.push([
+      { bucket: 0, count: 30 },
+      { bucket: 1, count: 24 },
+      { bucket: 2, count: 24 },
+      { bucket: 6, count: 22 },
+    ]);
+    selectQueue.push([
+      { below: 78, equal: 1 } as unknown as { bucket: number; count: number },
+    ]);
+    const r1 = await request<CohortBaselineResponse>(
+      "/cohort/baseline?score=61",
+    );
+    expect(r1.body.percentile).toBe(78.5);
+
+    selectQueue.push([
+      { bucket: 0, count: 30 },
+      { bucket: 1, count: 24 },
+      { bucket: 2, count: 24 },
+      { bucket: 6, count: 22 },
+    ]);
+    selectQueue.push([
+      { below: 99, equal: 1 } as unknown as { bucket: number; count: number },
+    ]);
+    const r2 = await request<CohortBaselineResponse>(
+      "/cohort/baseline?score=69",
+    );
+    expect(r2.body.percentile).toBe(99.5);
+  });
+
+  it("skips the exact-percentile query (and returns null) when the cohort is empty", async () => {
+    selectQueue.push([]);
+    const r = await request<CohortBaselineResponse>(
+      "/cohort/baseline?score=50",
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.totalReports).toBe(0);
+    expect(r.body.percentile).toBeNull();
+    expect(r.body.queriedScore).toBe(50);
+  });
+
+  it("ignores a non-numeric score and falls back to the bucket-only response", async () => {
+    selectQueue.push([{ bucket: 5, count: 3 }]);
+    const r = await request<CohortBaselineResponse>(
+      "/cohort/baseline?score=banana",
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.percentile).toBeNull();
+    expect(r.body.queriedScore).toBeNull();
   });
 
   it("packs per-bucket SQL rows into the histogram and totals them", async () => {
