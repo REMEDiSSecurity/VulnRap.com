@@ -11,6 +11,29 @@ import { X, ArrowLeft, ArrowRight, CheckCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "vulnrap-onboarding-dismissed";
+
+export const TOUR_STORAGE_KEYS = {
+  home: STORAGE_KEY,
+  check: "vulnrap-tour-check-dismissed",
+  results: "vulnrap-tour-results-dismissed",
+  compare: "vulnrap-tour-compare-dismissed",
+} as const;
+
+export function hasSeenPageTour(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function resetAllTours() {
+  try {
+    Object.values(TOUR_STORAGE_KEYS).forEach((k) =>
+      localStorage.removeItem(k),
+    );
+  } catch {}
+}
 const SAMPLE_TEXT = `Title: Reflected XSS in /search query parameter
 
 Affected: example-app v2.4.1 (commit 9af30c1, file src/routes/search.ts:42)
@@ -87,6 +110,7 @@ export function resetOnboardingTour() {
 
 interface OnboardingTourProps {
   steps?: TourStep[];
+  storageKey?: string;
   /** Called after dismissal/finish so the host can unmount. */
   onClose: () => void;
   /** When true, paste the sample text into the textarea on step 1. */
@@ -95,6 +119,7 @@ interface OnboardingTourProps {
 
 export function OnboardingTour({
   steps = DEFAULT_STEPS,
+  storageKey = STORAGE_KEY,
   onClose,
   prefillSample,
 }: OnboardingTourProps) {
@@ -112,12 +137,12 @@ export function OnboardingTour({
     (permanent: boolean) => {
       if (permanent) {
         try {
-          localStorage.setItem(STORAGE_KEY, "1");
+          localStorage.setItem(storageKey, "1");
         } catch {}
       }
       onClose();
     },
-    [onClose],
+    [onClose, storageKey],
   );
 
   // Compute target rect with scroll & resize re-measurement.

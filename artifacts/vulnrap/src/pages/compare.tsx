@@ -1,4 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import {
+  OnboardingTour,
+  hasSeenPageTour,
+  TOUR_STORAGE_KEYS,
+  type TourStep,
+} from "@/components/onboarding-tour";
 import {
   GitCompare,
   Loader2,
@@ -341,6 +347,33 @@ function ResultCard({
   );
 }
 
+const COMPARE_TOUR_STEPS: TourStep[] = [
+  {
+    target: '[data-testid="compare-report-a"]',
+    title: "1. Paste Report A",
+    body: "Paste the first vulnerability report here. Both reports are analyzed independently and compared for section overlap. Nothing is stored.",
+    placement: "bottom",
+  },
+  {
+    target: '[data-testid="compare-report-b"]',
+    title: "2. Paste Report B (or use database)",
+    body: "Paste a second report for side-by-side comparison, or toggle the database search to find the nearest match from stored reports.",
+    placement: "bottom",
+  },
+  {
+    target: '[data-testid="compare-db-toggle"]',
+    title: "3. Database similarity search",
+    body: "Enable this to compare your report against all stored reports using MinHash/LSH and SimHash fingerprinting instead of pasting a second report.",
+    placement: "top",
+  },
+  {
+    target: '[data-testid="compare-submit"]',
+    title: "4. Run the comparison",
+    body: "Hit this button to analyze both reports. You'll see per-engine scores, section overlap, and similarity matches — all in a side-by-side layout.",
+    placement: "top",
+  },
+];
+
 export default function Compare() {
   const { toast } = useToast();
   const [textA, setTextA] = useState("");
@@ -352,6 +385,18 @@ export default function Compare() {
   const [dbSectionMatches, setDbSectionMatches] = useState<SectionMatch[]>([]);
   const [requestMode, setRequestMode] = useState<"manual" | "db">("manual");
   const requestRef = useRef(0);
+
+  const [showTour, setShowTour] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const forced = params.get("tour") === "1";
+    if (forced || !hasSeenPageTour(TOUR_STORAGE_KEYS.compare)) {
+      const t = setTimeout(() => setShowTour(true), 600);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, []);
 
   const checkA = useCheckReport({
     mutation: {
@@ -467,7 +512,7 @@ export default function Compare() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="glass-card-accent rounded-xl">
+        <Card className="glass-card-accent rounded-xl" data-testid="compare-report-a">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">
               {dbLookup ? "Your Report" : "Report A"}
@@ -508,6 +553,7 @@ export default function Compare() {
 
         <Card
           className={`glass-card-accent rounded-xl transition-all ${dbLookup ? "border-cyan-500/20" : ""}`}
+          data-testid="compare-report-b"
         >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground flex items-center justify-between">
@@ -565,7 +611,7 @@ export default function Compare() {
         </Card>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3" data-testid="compare-db-toggle">
         <label className="flex items-center gap-2 cursor-pointer select-none group">
           <input
             type="checkbox"
@@ -590,6 +636,7 @@ export default function Compare() {
         className="w-full h-11 sm:h-12 text-base sm:text-lg font-bold gap-2 glow-button"
         onClick={handleCompare}
         disabled={!canCompare || isPending}
+        data-testid="compare-submit"
       >
         {isPending ? (
           <>
@@ -837,6 +884,14 @@ export default function Compare() {
             </Button>
           </div>
         </div>
+      )}
+
+      {showTour && (
+        <OnboardingTour
+          steps={COMPARE_TOUR_STEPS}
+          storageKey={TOUR_STORAGE_KEYS.compare}
+          onClose={() => setShowTour(false)}
+        />
       )}
     </div>
   );

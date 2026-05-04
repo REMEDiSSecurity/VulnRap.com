@@ -89,6 +89,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import FeedbackForm from "@/components/feedback-form";
+import {
+  OnboardingTour,
+  hasSeenPageTour,
+  TOUR_STORAGE_KEYS,
+  type TourStep,
+} from "@/components/onboarding-tour";
 import { markHistoryEntryReconstructed } from "@/lib/history";
 import { anonymizeId } from "@/lib/utils";
 import { SettingsButton } from "@/components/settings-panel";
@@ -2700,6 +2706,45 @@ export default function Results() {
   // "where it appears in the trace" (AVRI structural-markers panel).
   const [avriMarkerScrollTarget, setAvriMarkerScrollTarget] =
     useState<AvriMarkerScrollTarget | null>(null);
+  const [showTour, setShowTour] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const forced = params.get("tour") === "1";
+    if (forced || !hasSeenPageTour(TOUR_STORAGE_KEYS.results)) {
+      const t = setTimeout(() => setShowTour(true), 600);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, []);
+
+  const resultsTourSteps: TourStep[] = [
+    {
+      target: '[data-testid="button-print"]',
+      title: "1. Export & share",
+      body: "Print, export as JSON/CSV/Markdown, or copy a shareable link. Every format captures the full scoring breakdown for your records.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="engine-radar-section"]',
+      title: "2. Per-engine radar",
+      body: "This five-axis radar shows how the report scored across Engine 1 (Authorship), Engine 2 (Substance), Engine 3 (CWE Coherence), AVRI, and Quality. Toggle the cohort overlay to compare against the platform median.",
+      placement: "top",
+    },
+    {
+      target: '[data-testid="card-score-history"]',
+      title: "3. Score history timeline",
+      body: "See how the score evolved over multiple re-analyses. Hover any point to see the exact score and engine breakdown at that moment in time.",
+      placement: "top",
+    },
+    {
+      target: '[data-testid="report-view-container"]',
+      title: "4. Report view & heatmap",
+      body: "Toggle between the highlighted view and the signal heatmap to see exactly which parts of the report triggered each scoring signal.",
+      placement: "top",
+    },
+  ];
+
   const handleEvidenceMarkerClick = (markerId: string, line?: number) => {
     setAvriMarkerScrollTarget((prev) => ({
       id: markerId,
@@ -4870,6 +4915,14 @@ export default function Results() {
           </Button>
         </CardContent>
       </Card>
+
+      {showTour && (
+        <OnboardingTour
+          steps={resultsTourSteps}
+          storageKey={TOUR_STORAGE_KEYS.results}
+          onClose={() => setShowTour(false)}
+        />
+      )}
     </div>
   );
 }

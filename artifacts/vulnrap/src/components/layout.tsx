@@ -44,7 +44,7 @@ import { LaserEffects } from "@/components/laser-effects";
 import { CursorBugs } from "@/components/cursor-bugs";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { CURRENT_VERSION, RELEASE_DATE } from "@/pages/changelog";
-import { resetOnboardingTour } from "@/components/onboarding-tour";
+import { resetAllTours } from "@/components/onboarding-tour";
 import { t } from "@/lib/i18n";
 
 function feedbackMailto(page: string) {
@@ -457,13 +457,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleRestartTour = () => {
-    resetOnboardingTour();
-    if (pathname === "/") {
-      // Force a remount of Home so its first-run effect fires again.
-      window.location.search = "?tour=1";
-    } else {
-      window.location.href = "/?tour=1";
-    }
+    resetAllTours();
+    window.location.search = "?tour=1";
   };
 
   useEffect(() => {

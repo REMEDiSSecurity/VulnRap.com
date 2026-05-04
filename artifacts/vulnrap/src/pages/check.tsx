@@ -1,4 +1,10 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import {
+  OnboardingTour,
+  hasSeenPageTour,
+  TOUR_STORAGE_KEYS,
+  type TourStep,
+} from "@/components/onboarding-tour";
 import { useSearchParams } from "react-router-dom";
 import {
   UploadCloud,
@@ -682,6 +688,45 @@ export default function Check() {
   // check page ever grows a diagnostics/crash-trace surface, swap this
   // self-flash for the same `avriMarkerScrollTarget` plumbing used in
   // results.tsx.
+  const [showTour, setShowTour] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const forced = params.get("tour") === "1";
+    if (forced || !hasSeenPageTour(TOUR_STORAGE_KEYS.check)) {
+      const t = setTimeout(() => setShowTour(true), 600);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, []);
+
+  const checkTourSteps: TourStep[] = [
+    {
+      target: '[data-testid="input-rawtext"]',
+      title: "1. Paste or upload a report",
+      body: "Drop your vulnerability report text here, upload a file, or provide a link. The check runs the full analysis pipeline but never stores anything.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="toggle-skip-llm"]',
+      title: "2. Toggle LLM scoring",
+      body: "Enable or disable AI-enhanced analysis. Disabling it restricts scoring to local heuristic and statistical signals only — useful for quick checks.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="button-submit"]',
+      title: "3. Run the analysis",
+      body: "Hit this button to score the report. Results appear below within seconds — including slop score, quality score, and signal breakdowns.",
+      placement: "top",
+    },
+    {
+      target: '[data-testid="check-advanced-disclosure"]',
+      title: "4. Fine-tune with advanced controls",
+      body: "After analysis, expand this panel to mute or boost individual signals, toggle engines on/off, and see how tweaks affect the final score.",
+      placement: "top",
+    },
+  ];
+
   const [flashedMarker, setFlashedMarker] = useState<{
     id: string;
     nonce: number;
@@ -2401,6 +2446,14 @@ export default function Check() {
             </Button>
           </div>
         </div>
+      )}
+
+      {showTour && (
+        <OnboardingTour
+          steps={checkTourSteps}
+          storageKey={TOUR_STORAGE_KEYS.check}
+          onClose={() => setShowTour(false)}
+        />
       )}
     </div>
   );
