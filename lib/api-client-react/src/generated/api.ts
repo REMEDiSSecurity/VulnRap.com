@@ -1818,9 +1818,10 @@ export function useGetReportFeed<
 }
 
 /**
- * Returns the distinct fusion engine version strings present across all
-public feed reports, sorted in descending semver order. The result is
-briefly cached (60 s) so the dropdown stays cheap.
+ * Returns the distinct version strings for every scoring engine (fusion,
+linguistic, substance, cwe, avri) present across all public feed
+reports, each sorted in descending semver order. The result is briefly
+cached (60 s) so the dropdowns stay cheap.
 
  * @summary List distinct engine versions in the public feed
  */

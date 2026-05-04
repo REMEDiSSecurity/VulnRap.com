@@ -182,6 +182,11 @@ export default function Reports() {
       ? rawInferredCwe
       : "All";
   const fusionVersionFilter = searchParams.get("fusionVersion") ?? "All";
+  const linguisticVersionFilter =
+    searchParams.get("linguisticVersion") ?? "All";
+  const substanceVersionFilter = searchParams.get("substanceVersion") ?? "All";
+  const cweVersionFilter = searchParams.get("cweVersion") ?? "All";
+  const avriVersionFilter = searchParams.get("avriVersion") ?? "All";
   const rawOffset = parseInt(searchParams.get("offset") ?? "0", 10);
   const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
 
@@ -219,7 +224,22 @@ export default function Reports() {
     updateParams({ inferredCwe: value, offset: "0" });
   const setFusionVersionFilter = (value: string) =>
     updateParams({ fusionVersion: value, offset: "0" });
+  const setLinguisticVersionFilter = (value: string) =>
+    updateParams({ linguisticVersion: value, offset: "0" });
+  const setSubstanceVersionFilter = (value: string) =>
+    updateParams({ substanceVersion: value, offset: "0" });
+  const setCweVersionFilter = (value: string) =>
+    updateParams({ cweVersion: value, offset: "0" });
+  const setAvriVersionFilter = (value: string) =>
+    updateParams({ avriVersion: value, offset: "0" });
   const setOffset = (value: number) => updateParams({ offset: String(value) });
+
+  const hasActiveVersionFilter =
+    fusionVersionFilter !== "All" ||
+    linguisticVersionFilter !== "All" ||
+    substanceVersionFilter !== "All" ||
+    cweVersionFilter !== "All" ||
+    avriVersionFilter !== "All";
 
   // Sprint 12 — A filter is "active" when any of tier/family/sort differ from
   // their default. Offset is intentionally excluded: paging by itself isn't a
@@ -229,7 +249,7 @@ export default function Reports() {
     familyFilter !== "All" ||
     fabricatedFilter !== "All" ||
     inferredCweFilter !== "All" ||
-    fusionVersionFilter !== "All" ||
+    hasActiveVersionFilter ||
     sort !== "newest";
   const clearAllFilters = () =>
     updateParams({
@@ -238,6 +258,10 @@ export default function Reports() {
       fabricatedEvidence: null,
       inferredCwe: null,
       fusionVersion: null,
+      linguisticVersion: null,
+      substanceVersion: null,
+      cweVersion: null,
+      avriVersion: null,
       sort: null,
       offset: null,
     });
@@ -247,7 +271,7 @@ export default function Reports() {
   const [showFamilyMenu, setShowFamilyMenu] = useState(false);
   const [showFabricatedMenu, setShowFabricatedMenu] = useState(false);
   const [showInferredCweMenu, setShowInferredCweMenu] = useState(false);
-  const [showFusionVersionMenu, setShowFusionVersionMenu] = useState(false);
+  const [showEngineVersionMenu, setShowEngineVersionMenu] = useState(false);
 
   const feedParams = {
     limit: PAGE_SIZE,
@@ -284,6 +308,14 @@ export default function Reports() {
     ...(fusionVersionFilter !== "All"
       ? { fusionVersion: fusionVersionFilter }
       : {}),
+    ...(linguisticVersionFilter !== "All"
+      ? { linguisticVersion: linguisticVersionFilter }
+      : {}),
+    ...(substanceVersionFilter !== "All"
+      ? { substanceVersion: substanceVersionFilter }
+      : {}),
+    ...(cweVersionFilter !== "All" ? { cweVersion: cweVersionFilter } : {}),
+    ...(avriVersionFilter !== "All" ? { avriVersion: avriVersionFilter } : {}),
   };
 
   const {
@@ -304,6 +336,66 @@ export default function Reports() {
     },
   });
   const availableFusionVersions = engineVersionsData?.versions ?? [];
+  const availableLinguisticVersions =
+    engineVersionsData?.linguisticVersions ?? [];
+  const availableSubstanceVersions =
+    engineVersionsData?.substanceVersions ?? [];
+  const availableCweVersions = engineVersionsData?.cweVersions ?? [];
+  const availableAvriVersions = engineVersionsData?.avriVersions ?? [];
+
+  const engineVersionSections: Array<{
+    key: string;
+    label: string;
+    versions: string[];
+    current: string;
+    setter: (v: string) => void;
+  }> = [
+    {
+      key: "fusion",
+      label: "Fusion",
+      versions: availableFusionVersions,
+      current: fusionVersionFilter,
+      setter: setFusionVersionFilter,
+    },
+    {
+      key: "linguistic",
+      label: "Linguistic",
+      versions: availableLinguisticVersions,
+      current: linguisticVersionFilter,
+      setter: setLinguisticVersionFilter,
+    },
+    {
+      key: "substance",
+      label: "Substance",
+      versions: availableSubstanceVersions,
+      current: substanceVersionFilter,
+      setter: setSubstanceVersionFilter,
+    },
+    {
+      key: "cwe",
+      label: "CWE",
+      versions: availableCweVersions,
+      current: cweVersionFilter,
+      setter: setCweVersionFilter,
+    },
+    {
+      key: "avri",
+      label: "AVRI",
+      versions: availableAvriVersions,
+      current: avriVersionFilter,
+      setter: setAvriVersionFilter,
+    },
+  ].filter((s) => s.versions.length > 0);
+
+  const hasAnyEngineVersions = engineVersionSections.length > 0;
+
+  const engineVersionButtonLabel = (() => {
+    const active = engineVersionSections.filter((s) => s.current !== "All");
+    if (active.length === 0) return "All versions";
+    if (active.length === 1)
+      return `${active[0].label} ${active[0].current}`;
+    return `${active.length} version filters`;
+  })();
 
   const reports = feedData?.reports ?? [];
   const total = feedData?.total ?? 0;
@@ -414,7 +506,7 @@ export default function Reports() {
                 setShowFamilyMenu(false);
                 setShowFabricatedMenu(false);
                 setShowInferredCweMenu(false);
-                setShowFusionVersionMenu(false);
+                setShowEngineVersionMenu(false);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
             >
@@ -459,7 +551,7 @@ export default function Reports() {
                 setShowSortMenu(false);
                 setShowFabricatedMenu(false);
                 setShowInferredCweMenu(false);
-                setShowFusionVersionMenu(false);
+                setShowEngineVersionMenu(false);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
             >
@@ -526,7 +618,7 @@ export default function Reports() {
                 setShowFamilyMenu(false);
                 setShowSortMenu(false);
                 setShowInferredCweMenu(false);
-                setShowFusionVersionMenu(false);
+                setShowEngineVersionMenu(false);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
             >
@@ -572,7 +664,7 @@ export default function Reports() {
                   setShowFamilyMenu(false);
                   setShowFabricatedMenu(false);
                   setShowSortMenu(false);
-                  setShowFusionVersionMenu(false);
+                  setShowEngineVersionMenu(false);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
               >
@@ -600,60 +692,67 @@ export default function Reports() {
             </div>
           )}
 
-          {availableFusionVersions.length > 0 && (
+          {hasAnyEngineVersions && (
             <div className="relative">
               <button
                 type="button"
                 onClick={() => {
-                  setShowFusionVersionMenu(!showFusionVersionMenu);
+                  setShowEngineVersionMenu(!showEngineVersionMenu);
                   setShowTierMenu(false);
                   setShowFamilyMenu(false);
                   setShowFabricatedMenu(false);
                   setShowInferredCweMenu(false);
                   setShowSortMenu(false);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all",
+                  hasActiveVersionFilter && "border-primary/40 text-primary",
+                )}
               >
                 <Filter className="w-3.5 h-3.5 text-muted-foreground" />
-                <span>
-                  {fusionVersionFilter === "All"
-                    ? "All versions"
-                    : `Fusion ${fusionVersionFilter}`}
-                </span>
+                <span>{engineVersionButtonLabel}</span>
                 <ChevronDown className="w-3 h-3 text-muted-foreground" />
               </button>
-              {showFusionVersionMenu && (
-                <div className="absolute top-full mt-1 left-0 z-50 glass-card rounded-lg border border-border/50 shadow-xl py-1 min-w-[180px] max-h-[280px] overflow-y-auto">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFusionVersionFilter("All");
-                      setShowFusionVersionMenu(false);
-                    }}
-                    className={cn(
-                      "w-full text-left px-3 py-2 text-sm hover:bg-primary/10 transition-colors",
-                      fusionVersionFilter === "All" &&
-                        "text-primary font-medium",
-                    )}
-                  >
-                    All versions
-                  </button>
-                  {availableFusionVersions.map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => {
-                        setFusionVersionFilter(v);
-                        setShowFusionVersionMenu(false);
-                      }}
-                      className={cn(
-                        "w-full text-left px-3 py-2 text-sm font-mono hover:bg-primary/10 transition-colors",
-                        fusionVersionFilter === v &&
-                          "text-primary font-medium",
+              {showEngineVersionMenu && (
+                <div className="absolute top-full mt-1 left-0 z-50 glass-card rounded-lg border border-border/50 shadow-xl py-1 min-w-[210px] max-h-[360px] overflow-y-auto">
+                  {engineVersionSections.map((section, sIdx) => (
+                    <div key={section.key}>
+                      {sIdx > 0 && (
+                        <div className="mx-3 my-1 h-px bg-border/40" />
                       )}
-                    >
-                      Fusion {v}
-                    </button>
+                      <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        {section.label}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          section.setter("All");
+                        }}
+                        className={cn(
+                          "w-full text-left px-3 py-1.5 text-sm hover:bg-primary/10 transition-colors",
+                          section.current === "All" &&
+                            "text-primary font-medium",
+                        )}
+                      >
+                        All
+                      </button>
+                      {section.versions.map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => {
+                            section.setter(v);
+                            setShowEngineVersionMenu(false);
+                          }}
+                          className={cn(
+                            "w-full text-left px-3 py-1.5 text-sm font-mono hover:bg-primary/10 transition-colors",
+                            section.current === v && "text-primary font-medium",
+                          )}
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}
@@ -669,7 +768,7 @@ export default function Reports() {
                 setShowFamilyMenu(false);
                 setShowFabricatedMenu(false);
                 setShowInferredCweMenu(false);
-                setShowFusionVersionMenu(false);
+                setShowEngineVersionMenu(false);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-card text-sm font-medium hover:border-primary/30 transition-all"
             >
@@ -783,20 +882,21 @@ export default function Reports() {
               <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
             </button>
           )}
-          {fusionVersionFilter !== "All" && (
-            <button
-              type="button"
-              onClick={() => setFusionVersionFilter("All")}
-              aria-label={`Remove engine version filter: Fusion ${fusionVersionFilter}`}
-              className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full glass-card text-xs font-medium border border-border/50 hover:border-primary/40 transition-all group"
-            >
-              <span className="text-muted-foreground">Engine:</span>
-              <span className="text-foreground font-mono">
-                Fusion {fusionVersionFilter}
-              </span>
-              <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
-            </button>
-          )}
+          {engineVersionSections
+            .filter((s) => s.current !== "All")
+            .map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => s.setter("All")}
+                aria-label={`Remove ${s.label} version filter: ${s.current}`}
+                className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full glass-card text-xs font-medium border border-border/50 hover:border-primary/40 transition-all group"
+              >
+                <span className="text-muted-foreground">{s.label}:</span>
+                <span className="text-foreground font-mono">{s.current}</span>
+                <X className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
+              </button>
+            ))}
           {sort !== "newest" && (
             <button
               type="button"

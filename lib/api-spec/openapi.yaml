@@ -718,6 +718,38 @@ paths:
             Filter by fusion engine version (exact match against engine_versions->>'fusion').
             For example `3.10.0`. Use GET /reports/feed/engine-versions
             to discover available values.
+        - name: linguisticVersion
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Filter by linguistic engine version (exact match against engine_versions->>'linguistic').
+            For example `3.10.0`. Use GET /reports/feed/engine-versions to discover available values.
+        - name: substanceVersion
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Filter by substance engine version (exact match against engine_versions->>'substance').
+            For example `3.10.0`. Use GET /reports/feed/engine-versions to discover available values.
+        - name: cweVersion
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Filter by CWE engine version (exact match against engine_versions->>'cwe').
+            For example `3.10.0`. Use GET /reports/feed/engine-versions to discover available values.
+        - name: avriVersion
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Filter by AVRI engine version (exact match against engine_versions->>'avri').
+            For example `3.10.0`. Use GET /reports/feed/engine-versions to discover available values.
         - name: sort
           in: query
           required: false
@@ -739,9 +771,10 @@ paths:
       tags: [reports]
       summary: List distinct engine versions in the public feed
       description: |
-        Returns the distinct fusion engine version strings present across all
-        public feed reports, sorted in descending semver order. The result is
-        briefly cached (60 s) so the dropdown stays cheap.
+        Returns the distinct version strings for every scoring engine (fusion,
+        linguistic, substance, cwe, avri) present across all public feed
+        reports, each sorted in descending semver order. The result is briefly
+        cached (60 s) so the dropdowns stay cheap.
       responses:
         "200":
           description: Distinct engine versions
@@ -4157,8 +4190,32 @@ components:
           items:
             type: string
           description: Distinct fusion engine version strings present in the public feed, sorted in descending semver order.
+        linguisticVersions:
+          type: array
+          items:
+            type: string
+          description: Distinct linguistic engine version strings present in the public feed, sorted in descending semver order.
+        substanceVersions:
+          type: array
+          items:
+            type: string
+          description: Distinct substance engine version strings present in the public feed, sorted in descending semver order.
+        cweVersions:
+          type: array
+          items:
+            type: string
+          description: Distinct CWE engine version strings present in the public feed, sorted in descending semver order.
+        avriVersions:
+          type: array
+          items:
+            type: string
+          description: Distinct AVRI engine version strings present in the public feed, sorted in descending semver order.
       required:
         - versions
+        - linguisticVersions
+        - substanceVersions
+        - cweVersions
+        - avriVersions
 
     CohortBaseline:
       type: object

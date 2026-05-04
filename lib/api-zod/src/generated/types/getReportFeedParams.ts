@@ -52,5 +52,29 @@ to discover available values.
 
  */
   fusionVersion?: string;
+  /**
+ * Filter by linguistic engine version (exact match against engine_versions->>'linguistic').
+For example `3.10.0`. Use GET /reports/feed/engine-versions to discover available values.
+
+ */
+  linguisticVersion?: string;
+  /**
+ * Filter by substance engine version (exact match against engine_versions->>'substance').
+For example `3.10.0`. Use GET /reports/feed/engine-versions to discover available values.
+
+ */
+  substanceVersion?: string;
+  /**
+ * Filter by CWE engine version (exact match against engine_versions->>'cwe').
+For example `3.10.0`. Use GET /reports/feed/engine-versions to discover available values.
+
+ */
+  cweVersion?: string;
+  /**
+ * Filter by AVRI engine version (exact match against engine_versions->>'avri').
+For example `3.10.0`. Use GET /reports/feed/engine-versions to discover available values.
+
+ */
+  avriVersion?: string;
   sort?: GetReportFeedSort;
 };

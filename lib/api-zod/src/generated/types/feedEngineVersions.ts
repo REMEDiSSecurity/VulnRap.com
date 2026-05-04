@@ -9,4 +9,12 @@
 export interface FeedEngineVersions {
   /** Distinct fusion engine version strings present in the public feed, sorted in descending semver order. */
   versions: string[];
+  /** Distinct linguistic engine version strings present in the public feed, sorted in descending semver order. */
+  linguisticVersions: string[];
+  /** Distinct substance engine version strings present in the public feed, sorted in descending semver order. */
+  substanceVersions: string[];
+  /** Distinct CWE engine version strings present in the public feed, sorted in descending semver order. */
+  cweVersions: string[];
+  /** Distinct AVRI engine version strings present in the public feed, sorted in descending semver order. */
+  avriVersions: string[];
 }

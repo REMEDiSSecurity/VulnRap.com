@@ -2534,6 +2534,30 @@ export const GetReportFeedQueryParams = zod.object({
     .describe(
       "Filter by fusion engine version (exact match against engine_versions->>'fusion').\nFor example `3.10.0`. Use GET \/reports\/feed\/engine-versions\nto discover available values.\n",
     ),
+  linguisticVersion: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Filter by linguistic engine version (exact match against engine_versions->>'linguistic').\nFor example `3.10.0`. Use GET \/reports\/feed\/engine-versions to discover available values.\n",
+    ),
+  substanceVersion: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Filter by substance engine version (exact match against engine_versions->>'substance').\nFor example `3.10.0`. Use GET \/reports\/feed\/engine-versions to discover available values.\n",
+    ),
+  cweVersion: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Filter by CWE engine version (exact match against engine_versions->>'cwe').\nFor example `3.10.0`. Use GET \/reports\/feed\/engine-versions to discover available values.\n",
+    ),
+  avriVersion: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Filter by AVRI engine version (exact match against engine_versions->>'avri').\nFor example `3.10.0`. Use GET \/reports\/feed\/engine-versions to discover available values.\n",
+    ),
   sort: zod
     .enum(["newest", "oldest", "score_asc", "score_desc"])
     .default(getReportFeedQuerySortDefault),
@@ -2611,9 +2635,10 @@ export const GetReportFeedResponse = zod.object({
 });
 
 /**
- * Returns the distinct fusion engine version strings present across all
-public feed reports, sorted in descending semver order. The result is
-briefly cached (60 s) so the dropdown stays cheap.
+ * Returns the distinct version strings for every scoring engine (fusion,
+linguistic, substance, cwe, avri) present across all public feed
+reports, each sorted in descending semver order. The result is briefly
+cached (60 s) so the dropdowns stay cheap.
 
  * @summary List distinct engine versions in the public feed
  */
@@ -2622,6 +2647,26 @@ export const GetReportFeedEngineVersionsResponse = zod.object({
     .array(zod.string())
     .describe(
       "Distinct fusion engine version strings present in the public feed, sorted in descending semver order.",
+    ),
+  linguisticVersions: zod
+    .array(zod.string())
+    .describe(
+      "Distinct linguistic engine version strings present in the public feed, sorted in descending semver order.",
+    ),
+  substanceVersions: zod
+    .array(zod.string())
+    .describe(
+      "Distinct substance engine version strings present in the public feed, sorted in descending semver order.",
+    ),
+  cweVersions: zod
+    .array(zod.string())
+    .describe(
+      "Distinct CWE engine version strings present in the public feed, sorted in descending semver order.",
+    ),
+  avriVersions: zod
+    .array(zod.string())
+    .describe(
+      "Distinct AVRI engine version strings present in the public feed, sorted in descending semver order.",
     ),
 });
 

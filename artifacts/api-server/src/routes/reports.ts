@@ -2131,55 +2131,117 @@ router.post("/reports/check", async (req, res): Promise<void> => {
   res.json(response);
 });
 
-let cachedFusionVersions: { versions: string[]; expiresAt: number } | null =
-  null;
+interface CachedEngineVersions {
+  versions: string[];
+  linguisticVersions: string[];
+  substanceVersions: string[];
+  cweVersions: string[];
+  avriVersions: string[];
+  expiresAt: number;
+}
+
+let cachedEngineVersions: CachedEngineVersions | null = null;
+
+function semverDesc(a: string, b: string): number {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pb[i] ?? 0) - (pa[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+function distinctSorted(rows: Array<{ version: string | null }>): string[] {
+  return rows
+    .map((r) => r.version)
+    .filter((v): v is string => typeof v === "string" && v.length > 0)
+    .sort(semverDesc);
+}
 
 router.get(
   "/reports/feed/engine-versions",
   async (_req, res): Promise<void> => {
     const now = Date.now();
-    if (cachedFusionVersions && cachedFusionVersions.expiresAt > now) {
+    if (cachedEngineVersions && cachedEngineVersions.expiresAt > now) {
       res.set(
         "Cache-Control",
         "public, max-age=60, stale-while-revalidate=120",
       );
-      res.json({ versions: cachedFusionVersions.versions });
+      const { expiresAt: _exp, ...payload } = cachedEngineVersions;
+      res.json(payload);
       return;
     }
 
-    const rows = await db
-      .select({
-        version: sql<string>`${reportsTable.engineVersions}->>'fusion'`,
-      })
-      .from(reportsTable)
-      .where(
-        and(
-          eq(reportsTable.showInFeed, true),
-          sql`${reportsTable.engineVersions}->>'fusion' IS NOT NULL`,
-        ),
-      )
-      .groupBy(sql`${reportsTable.engineVersions}->>'fusion'`);
+    const baseWhere = and(
+      eq(reportsTable.showInFeed, true),
+      sql`${reportsTable.engineVersions} IS NOT NULL`,
+    );
 
-    const versions = rows
-      .map((r) => r.version)
-      .filter(Boolean)
-      .sort((a, b) => {
-        const pa = a.split(".").map(Number);
-        const pb = b.split(".").map(Number);
-        for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-          const diff = (pb[i] ?? 0) - (pa[i] ?? 0);
-          if (diff !== 0) return diff;
-        }
-        return 0;
-      });
+    const [fusionRows, linguisticRows, substanceRows, cweRows, avriRows] =
+      await Promise.all([
+        db
+          .select({
+            version: sql<string | null>`${reportsTable.engineVersions}->>'fusion'`,
+          })
+          .from(reportsTable)
+          .where(
+            and(baseWhere, sql`${reportsTable.engineVersions}->>'fusion' IS NOT NULL`),
+          )
+          .groupBy(sql`${reportsTable.engineVersions}->>'fusion'`),
+        db
+          .select({
+            version: sql<string | null>`${reportsTable.engineVersions}->>'linguistic'`,
+          })
+          .from(reportsTable)
+          .where(
+            and(baseWhere, sql`${reportsTable.engineVersions}->>'linguistic' IS NOT NULL`),
+          )
+          .groupBy(sql`${reportsTable.engineVersions}->>'linguistic'`),
+        db
+          .select({
+            version: sql<string | null>`${reportsTable.engineVersions}->>'substance'`,
+          })
+          .from(reportsTable)
+          .where(
+            and(baseWhere, sql`${reportsTable.engineVersions}->>'substance' IS NOT NULL`),
+          )
+          .groupBy(sql`${reportsTable.engineVersions}->>'substance'`),
+        db
+          .select({
+            version: sql<string | null>`${reportsTable.engineVersions}->>'cwe'`,
+          })
+          .from(reportsTable)
+          .where(
+            and(baseWhere, sql`${reportsTable.engineVersions}->>'cwe' IS NOT NULL`),
+          )
+          .groupBy(sql`${reportsTable.engineVersions}->>'cwe'`),
+        db
+          .select({
+            version: sql<string | null>`${reportsTable.engineVersions}->>'avri'`,
+          })
+          .from(reportsTable)
+          .where(
+            and(baseWhere, sql`${reportsTable.engineVersions}->>'avri' IS NOT NULL`),
+          )
+          .groupBy(sql`${reportsTable.engineVersions}->>'avri'`),
+      ]);
 
-    cachedFusionVersions = { versions, expiresAt: now + 60_000 };
+    const payload = {
+      versions: distinctSorted(fusionRows),
+      linguisticVersions: distinctSorted(linguisticRows),
+      substanceVersions: distinctSorted(substanceRows),
+      cweVersions: distinctSorted(cweRows),
+      avriVersions: distinctSorted(avriRows),
+    };
+
+    cachedEngineVersions = { ...payload, expiresAt: now + 60_000 };
 
     res.set(
       "Cache-Control",
       "public, max-age=60, stale-while-revalidate=120",
     );
-    res.json({ versions });
+    res.json(payload);
   },
 );
 
@@ -2235,14 +2297,38 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   const inferredCweFilter =
     rawInferredCwe && CWE_ID_RE.test(rawInferredCwe) ? rawInferredCwe : null;
 
+  const SEMVER_LIKE = /^\d+\.\d+\.\d+$/;
   const rawFusionVersion = req.query.fusionVersion
     ? String(req.query.fusionVersion)
     : null;
-  const SEMVER_LIKE = /^\d+\.\d+\.\d+$/;
   const fusionVersionFilter =
     rawFusionVersion && SEMVER_LIKE.test(rawFusionVersion)
       ? rawFusionVersion
       : null;
+  const rawLinguisticVersion = req.query.linguisticVersion
+    ? String(req.query.linguisticVersion)
+    : null;
+  const linguisticVersionFilter =
+    rawLinguisticVersion && SEMVER_LIKE.test(rawLinguisticVersion)
+      ? rawLinguisticVersion
+      : null;
+  const rawSubstanceVersion = req.query.substanceVersion
+    ? String(req.query.substanceVersion)
+    : null;
+  const substanceVersionFilter =
+    rawSubstanceVersion && SEMVER_LIKE.test(rawSubstanceVersion)
+      ? rawSubstanceVersion
+      : null;
+  const rawCweVersion = req.query.cweVersion
+    ? String(req.query.cweVersion)
+    : null;
+  const cweVersionFilter =
+    rawCweVersion && SEMVER_LIKE.test(rawCweVersion) ? rawCweVersion : null;
+  const rawAvriVersion = req.query.avriVersion
+    ? String(req.query.avriVersion)
+    : null;
+  const avriVersionFilter =
+    rawAvriVersion && SEMVER_LIKE.test(rawAvriVersion) ? rawAvriVersion : null;
 
   const conditions = [eq(reportsTable.showInFeed, true)];
   if (tierFilter) {
@@ -2301,6 +2387,26 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
       sql`${reportsTable.engineVersions}->>'fusion' = ${fusionVersionFilter}`,
     );
   }
+  if (linguisticVersionFilter) {
+    conditions.push(
+      sql`${reportsTable.engineVersions}->>'linguistic' = ${linguisticVersionFilter}`,
+    );
+  }
+  if (substanceVersionFilter) {
+    conditions.push(
+      sql`${reportsTable.engineVersions}->>'substance' = ${substanceVersionFilter}`,
+    );
+  }
+  if (cweVersionFilter) {
+    conditions.push(
+      sql`${reportsTable.engineVersions}->>'cwe' = ${cweVersionFilter}`,
+    );
+  }
+  if (avriVersionFilter) {
+    conditions.push(
+      sql`${reportsTable.engineVersions}->>'avri' = ${avriVersionFilter}`,
+    );
+  }
   const whereClause = and(...conditions)!;
 
   // Summary counts include the fabricated-evidence filter (so the cards
@@ -2326,6 +2432,26 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
   if (fusionVersionFilter) {
     summaryConditions.push(
       sql`${reportsTable.engineVersions}->>'fusion' = ${fusionVersionFilter}`,
+    );
+  }
+  if (linguisticVersionFilter) {
+    summaryConditions.push(
+      sql`${reportsTable.engineVersions}->>'linguistic' = ${linguisticVersionFilter}`,
+    );
+  }
+  if (substanceVersionFilter) {
+    summaryConditions.push(
+      sql`${reportsTable.engineVersions}->>'substance' = ${substanceVersionFilter}`,
+    );
+  }
+  if (cweVersionFilter) {
+    summaryConditions.push(
+      sql`${reportsTable.engineVersions}->>'cwe' = ${cweVersionFilter}`,
+    );
+  }
+  if (avriVersionFilter) {
+    summaryConditions.push(
+      sql`${reportsTable.engineVersions}->>'avri' = ${avriVersionFilter}`,
     );
   }
   const summaryWhere = and(...summaryConditions)!;
