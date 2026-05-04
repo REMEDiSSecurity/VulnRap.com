@@ -1117,6 +1117,55 @@ report-results:
             </p>
           </CardContent>
         </Card>
+
+        <Card className="glass-card rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Badge
+                variant="outline"
+                className="border-primary/40 text-primary text-[10px] font-mono uppercase"
+              >
+                Intigriti
+              </Badge>
+              Score every submission, message back, optionally auto-close
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Wire Intigriti's{" "}
+              <code className="font-mono text-xs text-foreground">
+                submission.created
+              </code>{" "}
+              outbound webhook into{" "}
+              <code className="font-mono text-xs text-foreground">
+                /api/reports/check
+              </code>
+              , post the composite score as an internal message, and
+              (opt-in) close the AUTO_CLOSE tier with{" "}
+              <code className="font-mono text-xs text-foreground">
+                closeReason=NotApplicable
+              </code>{" "}
+              and a templated reply. Reference shell + Python scripts inline.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <a
+              href="https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/intigriti.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              data-testid="link-intigriti-recipe"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Read the Intigriti recipe
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <p className="text-[11px] text-muted-foreground/60 italic mt-2">
+              Repo path:{" "}
+              <code className="font-mono">
+                artifacts/api-server/docs/integrations/intigriti.md
+              </code>
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="space-y-4">
