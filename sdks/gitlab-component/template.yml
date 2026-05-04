@@ -1,0 +1,54 @@
+spec:
+  inputs:
+    report-text:
+      description: "Inline report text. Mutually exclusive with report-file. One of report-text / report-file is required."
+      default: ""
+    report-file:
+      description: "Path to a report file inside the workspace (.txt, .md, .pdf). Mutually exclusive with report-text."
+      default: ""
+    api-base-url:
+      description: "Base URL of the VulnRap API. Override for self-hosted deployments."
+      default: "https://vulnrap.com"
+    fail-threshold:
+      description: "Composite slop score (0-100) at which the job exits non-zero. Set to a number above 100 (e.g. 999) to never fail. Default 70."
+      default: "70"
+    skip-llm:
+      description: "Skip LLM analysis — use only local heuristic/statistical scoring."
+      default: "false"
+    skip-redaction:
+      description: "Skip PII auto-redaction (forces skip-llm true server-side)."
+      default: "false"
+    stage:
+      description: "Pipeline stage to run the scoring job in."
+      default: "test"
+    entrypoint-url:
+      description: "URL to fetch entrypoint.sh from. Pin to a commit SHA for reproducible builds (e.g. replace 'main' with a commit hash). Override for forks."
+      default: "https://raw.githubusercontent.com/vulnrap/vulnrap/main/sdks/gitlab-component/entrypoint.sh"
+---
+
+vulnrap-score:
+  stage: $[[ inputs.stage ]]
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache bash curl jq >/dev/null 2>&1
+  variables:
+    INPUT_REPORT_TEXT: $[[ inputs.report-text ]]
+    INPUT_REPORT_FILE: $[[ inputs.report-file ]]
+    INPUT_API_BASE_URL: $[[ inputs.api-base-url ]]
+    INPUT_FAIL_THRESHOLD: $[[ inputs.fail-threshold ]]
+    INPUT_SKIP_LLM: $[[ inputs.skip-llm ]]
+    INPUT_SKIP_REDACTION: $[[ inputs.skip-redaction ]]
+    VULNRAP_ENTRYPOINT_URL: $[[ inputs.entrypoint-url ]]
+  script:
+    - |
+      if [ -f sdks/gitlab-component/entrypoint.sh ]; then
+        bash sdks/gitlab-component/entrypoint.sh
+      elif [ -f .vulnrap/entrypoint.sh ]; then
+        bash .vulnrap/entrypoint.sh
+      else
+        curl --silent --fail --location --output /tmp/vulnrap-entrypoint.sh "${VULNRAP_ENTRYPOINT_URL}"
+        bash /tmp/vulnrap-entrypoint.sh
+      fi
+  artifacts:
+    reports:
+      dotenv: vulnrap.env

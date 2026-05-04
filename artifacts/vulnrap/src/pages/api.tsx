@@ -900,6 +900,122 @@ jobs:
       <div className="space-y-4">
         <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
           <Plug className="w-5 h-5 text-primary" />
+          GitLab CI/CD Component
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Reusable GitLab CI/CD component that scores incoming security advisory
+          MRs against VulnRap and exposes the slop score, tier, and triage
+          verdict as dotenv artifact variables downstream jobs can consume. Same
+          engine, same inputs — just{" "}
+          <code className="font-mono text-xs text-foreground">include:</code> it
+          and go.
+        </p>
+
+        <Card
+          className="glass-card rounded-xl"
+          data-testid="card-gitlab-component"
+        >
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Badge
+                variant="outline"
+                className="border-orange-500 text-orange-500 text-[10px] font-mono uppercase"
+              >
+                GitLab CI
+              </Badge>
+              <code className="text-primary font-mono text-xs">
+                sdks/gitlab-component/template.yml
+              </code>
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Inputs:{" "}
+              <code className="font-mono text-xs text-foreground">
+                report-text
+              </code>{" "}
+              or{" "}
+              <code className="font-mono text-xs text-foreground">
+                report-file
+              </code>
+              , optional{" "}
+              <code className="font-mono text-xs text-foreground">
+                fail-threshold
+              </code>{" "}
+              (default 70). Outputs via dotenv artifact:{" "}
+              <code className="font-mono text-xs text-foreground">
+                VULNRAP_SLOP_SCORE
+              </code>
+              ,{" "}
+              <code className="font-mono text-xs text-foreground">
+                VULNRAP_SLOP_TIER
+              </code>
+              ,{" "}
+              <code className="font-mono text-xs text-foreground">
+                VULNRAP_VERDICT
+              </code>
+              ,{" "}
+              <code className="font-mono text-xs text-foreground">
+                VULNRAP_QUALITY_SCORE
+              </code>
+              ,{" "}
+              <code className="font-mono text-xs text-foreground">
+                VULNRAP_CONFIDENCE
+              </code>
+              ,{" "}
+              <code className="font-mono text-xs text-foreground">
+                VULNRAP_SIMILARITY_MATCH_COUNT
+              </code>
+              .
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <CopyBlock
+              language="yaml"
+              code={`include:
+  - remote: "https://raw.githubusercontent.com/vulnrap/vulnrap/main/sdks/gitlab-component/template.yml"
+
+stages:
+  - test
+  - report
+
+vulnrap-score:
+  variables:
+    INPUT_REPORT_FILE: advisories/CVE-2026-0001.md
+    INPUT_FAIL_THRESHOLD: "80"   # block the MR if it scores 80+
+
+report-results:
+  stage: report
+  needs: [vulnrap-score]
+  script:
+    - echo "Slop score $VULNRAP_SLOP_SCORE ($VULNRAP_SLOP_TIER)"
+    - echo "Verdict $VULNRAP_VERDICT"
+    - |
+      if [ "$VULNRAP_VERDICT" = "AUTO_CLOSE" ]; then
+        echo "This report was flagged as AI slop"
+      fi`}
+            />
+            <a
+              href="https://github.com/vulnrap/vulnrap/blob/main/sdks/gitlab-component/README.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              data-testid="link-gitlab-component-readme"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Read the GitLab CI component docs
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <p className="text-[11px] text-muted-foreground/60 italic mt-2">
+              Repo path:{" "}
+              <code className="font-mono">sdks/gitlab-component/</code> —
+              include via remote URL or vendor into your repo.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
+          <Plug className="w-5 h-5 text-primary" />
           Integration Recipes
         </h2>
         <p className="text-sm text-muted-foreground">
