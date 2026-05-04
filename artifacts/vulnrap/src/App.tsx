@@ -39,6 +39,9 @@ const Privacy = lazyRetry(() => import("@/pages/privacy"));
 const Verify = lazyRetry(() => import("@/pages/verify"));
 const Check = lazyRetry(() => import("@/pages/check"));
 const ApiDocs = lazyRetry(() => import("@/pages/api"));
+const IntegrationRecipe = lazyRetry(
+  () => import("@/pages/integration-recipe"),
+);
 const Security = lazyRetry(() => import("@/pages/security"));
 const UseCases = lazyRetry(() => import("@/pages/use-cases"));
 const Terms = lazyRetry(() => import("@/pages/terms"));
@@ -116,6 +119,10 @@ function AppRoutes() {
             <Route path="/stats" element={<Stats />} />
             <Route path="/corpus-stats" element={<CorpusStats />} />
             <Route path="/developers" element={<ApiDocs />} />
+            <Route
+              path="/developers/integrations/:slug"
+              element={<IntegrationRecipe />}
+            />
             <Route path="/security" element={<Security />} />
             <Route path="/use-cases" element={<UseCases />} />
             <Route path="/terms" element={<Terms />} />

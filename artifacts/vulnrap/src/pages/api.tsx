@@ -20,6 +20,7 @@ import {
   Bookmark,
 } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -1049,23 +1050,26 @@ report-results:
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <a
-              href="https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/hackerone.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-              data-testid="link-hackerone-recipe"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Read the HackerOne recipe
-              <ExternalLink className="w-3 h-3" />
-            </a>
-            <p className="text-[11px] text-muted-foreground/60 italic mt-2">
-              Repo path:{" "}
-              <code className="font-mono">
-                artifacts/api-server/docs/integrations/hackerone.md
-              </code>
-            </p>
+            <div className="flex items-center gap-4 flex-wrap">
+              <Link
+                to="/developers/integrations/hackerone"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                data-testid="link-hackerone-recipe"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Read the HackerOne recipe
+              </Link>
+              <a
+                href="https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/hackerone.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                data-testid="link-hackerone-recipe-github"
+              >
+                View on GitHub
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
           </CardContent>
         </Card>
 
@@ -1098,23 +1102,26 @@ report-results:
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <a
-              href="https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/bugcrowd.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-              data-testid="link-bugcrowd-recipe"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Read the Bugcrowd recipe
-              <ExternalLink className="w-3 h-3" />
-            </a>
-            <p className="text-[11px] text-muted-foreground/60 italic mt-2">
-              Repo path:{" "}
-              <code className="font-mono">
-                artifacts/api-server/docs/integrations/bugcrowd.md
-              </code>
-            </p>
+            <div className="flex items-center gap-4 flex-wrap">
+              <Link
+                to="/developers/integrations/bugcrowd"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                data-testid="link-bugcrowd-recipe"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Read the Bugcrowd recipe
+              </Link>
+              <a
+                href="https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/bugcrowd.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                data-testid="link-bugcrowd-recipe-github"
+              >
+                View on GitHub
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
           </CardContent>
         </Card>
 
@@ -1147,23 +1154,26 @@ report-results:
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <a
-              href="https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/intigriti.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-              data-testid="link-intigriti-recipe"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Read the Intigriti recipe
-              <ExternalLink className="w-3 h-3" />
-            </a>
-            <p className="text-[11px] text-muted-foreground/60 italic mt-2">
-              Repo path:{" "}
-              <code className="font-mono">
-                artifacts/api-server/docs/integrations/intigriti.md
-              </code>
-            </p>
+            <div className="flex items-center gap-4 flex-wrap">
+              <Link
+                to="/developers/integrations/intigriti"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                data-testid="link-intigriti-recipe"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Read the Intigriti recipe
+              </Link>
+              <a
+                href="https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/intigriti.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                data-testid="link-intigriti-recipe-github"
+              >
+                View on GitHub
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
           </CardContent>
         </Card>
       </div>
