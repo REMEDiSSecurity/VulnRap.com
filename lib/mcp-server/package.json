@@ -1,32 +1,53 @@
 {
-  "name": "@workspace/mcp-server",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@vulnrap/mcp-server",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for VulnRap — score, triage, and analyse vulnerability reports from any MCP-compatible agent (Claude Desktop, Cursor, etc.)",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vulnrap/vulnrap.git",
+    "directory": "lib/mcp-server"
+  },
+  "homepage": "https://vulnrap.com/api",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "vulnrap",
+    "vulnerability",
+    "security",
+    "triage",
+    "slop",
+    "ai",
+    "claude-desktop",
+    "cursor"
+  ],
   "bin": {
-    "vulnrap-mcp": "./dist/index.js"
+    "vulnrap-mcp": "./dist/bundle.js"
   },
-  "exports": {
-    ".": "./src/index.ts",
-    "./tools": "./src/tools.ts"
-  },
+  "files": [
+    "dist/bundle.js",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node ./dist/index.js",
+    "build:bundle": "node esbuild.config.mjs",
+    "prepublishOnly": "node esbuild.config.mjs",
+    "start": "node ./dist/bundle.js",
     "dev": "tsx ./src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --exclude src/live.smoke.test.ts",
     "test:live": "MCP_LIVE=1 vitest run src/live.smoke.test.ts"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "@workspace/api-zod": "workspace:*",
-    "zod": "catalog:"
-  },
+  "dependencies": {},
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node": "catalog:",
+    "@workspace/api-zod": "workspace:*",
+    "esbuild": "0.27.3",
     "tsx": "catalog:",
     "typescript": "~5.9.2",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.4",
+    "zod": "catalog:"
   }
 }

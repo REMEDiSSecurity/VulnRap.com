@@ -1,4 +1,4 @@
-# `@workspace/mcp-server` — Public VulnRap MCP server
+# `@vulnrap/mcp-server` — Public VulnRap MCP server
 
 A standalone [Model Context Protocol](https://modelcontextprotocol.io)
 server that exposes the public VulnRap REST API as a set of MCP tools so
@@ -6,8 +6,36 @@ LLM-tool ecosystems (Claude Desktop, Cursor, custom agents) can call
 VulnRap with one line of config.
 
 The server is deliberately a thin wrapper: every tool maps 1:1 to a
-public HTTP endpoint, validates the input with [`@workspace/api-zod`](../api-zod)
-where possible, and returns the upstream JSON verbatim.
+public HTTP endpoint, validates the input with Zod, and returns the
+upstream JSON verbatim.
+
+## Quick start (npx)
+
+No clone, no build — just run:
+
+```bash
+npx -y @vulnrap/mcp-server
+```
+
+## Claude Desktop config
+
+Add this block to `claude_desktop_config.json` and restart Claude Desktop:
+
+```jsonc
+{
+  "mcpServers": {
+    "vulnrap": {
+      "command": "npx",
+      "args": ["-y", "@vulnrap/mcp-server"],
+      "env": {
+        "VULNRAP_API_BASE_URL": "https://vulnrap.com"
+      }
+    }
+  }
+}
+```
+
+Override `VULNRAP_API_BASE_URL` for self-hosted deployments.
 
 ## Tools
 
@@ -21,40 +49,44 @@ where possible, and returns the upstream JSON verbatim.
 | `get_drift_summary`    | `GET /api/public/drift-summary`       |
 | `query_signal_metrics` | `GET /api/feedback/holdout-eval`      |
 | `get_cohort_baseline`  | `GET /api/cohort/baseline`            |
-| `test_yourself`        | `GET /api/test/run` (BYO rows POSTed) |
+| `test_yourself`        | `GET /api/test/run`                   |
 
 Reviewer-only endpoints are intentionally **not** exposed.
 
-## Run
+## Development (workspace)
 
 ```bash
-pnpm --filter @workspace/mcp-server build
-pnpm --filter @workspace/mcp-server start
+pnpm --filter @vulnrap/mcp-server build
+pnpm --filter @vulnrap/mcp-server start
 ```
 
-The server speaks MCP over stdio. Override the API base URL with
-`VULNRAP_API_BASE_URL=https://example.test` for self-hosted deployments.
+## Building the standalone bundle
 
-## Claude Desktop config
+```bash
+pnpm --filter @vulnrap/mcp-server run build:bundle
+```
 
-```jsonc
-{
-  "mcpServers": {
-    "vulnrap": {
-      "command": "node",
-      "args": ["/absolute/path/to/lib/mcp-server/dist/index.js"],
-      "env": {
-        "VULNRAP_API_BASE_URL": "https://vulnrap.com",
-      },
-    },
-  },
-}
+This produces `dist/bundle.js` — a single self-contained ESM file with
+all workspace dependencies (including `@workspace/api-zod`) inlined.
+This is the file shipped to npm.
+
+## Publishing
+
+```bash
+./scripts/release.sh
+```
+
+Or manually:
+
+```bash
+node esbuild.config.mjs
+npm publish --access public
 ```
 
 ## Tests
 
 ```bash
-pnpm --filter @workspace/mcp-server test
+pnpm --filter @vulnrap/mcp-server test
 ```
 
 The tests stub `globalThis.fetch` so the suite is offline-safe.

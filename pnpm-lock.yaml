@@ -696,20 +696,19 @@ importers:
         version: 4.1.4(@opentelemetry/api@1.9.1)(@types/node@25.3.5)(happy-dom@20.9.0)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.3)
 
   lib/mcp-server:
-    dependencies:
+    devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
-      '@workspace/api-zod':
-        specifier: workspace:*
-        version: link:../api-zod
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
-    devDependencies:
       '@types/node':
         specifier: 'catalog:'
         version: 25.3.5
+      '@workspace/api-zod':
+        specifier: workspace:*
+        version: link:../api-zod
+      esbuild:
+        specifier: 0.27.3
+        version: 0.27.3
       tsx:
         specifier: 'catalog:'
         version: 4.21.0
@@ -719,6 +718,9 @@ importers:
       vitest:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.1)(@types/node@25.3.5)(happy-dom@20.9.0)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.3)
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
 
   scripts:
     devDependencies:

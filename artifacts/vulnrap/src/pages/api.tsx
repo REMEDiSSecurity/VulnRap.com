@@ -1408,17 +1408,20 @@ async function analyzeAndPost(filePath, slackWebhook) {
             lib/mcp-server
           </code>{" "}
           and ships nine tools that map 1:1 to the public REST endpoints —
-          reviewer-only endpoints are intentionally not exposed.
+          reviewer-only endpoints are intentionally not exposed. Install it
+          with{" "}
+          <code className="font-mono text-xs text-foreground">
+            npx -y @vulnrap/mcp-server
+          </code>
+          .
         </p>
 
         <Card className="glass-card rounded-xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Tools exposed</CardTitle>
             <CardDescription className="mt-1">
-              Each tool wraps a single public endpoint with input validation via{" "}
-              <code className="font-mono text-xs text-foreground">
-                @workspace/api-zod
-              </code>
+              Each tool wraps a single public endpoint with input validation via
+              Zod
               .
             </CardDescription>
           </CardHeader>
@@ -1482,16 +1485,20 @@ async function analyzeAndPost(filePath, slackWebhook) {
 
         <Card className="glass-card rounded-xl">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Build &amp; run</CardTitle>
+            <CardTitle className="text-sm">Install &amp; run</CardTitle>
+            <CardDescription className="mt-1">
+              No clone required — run directly via npx:
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <CopyBlock
-              language="bash"
-              code={`pnpm --filter @workspace/mcp-server build
-node ./lib/mcp-server/dist/index.js
-# Override the API base URL for self-hosted deployments:
-VULNRAP_API_BASE_URL=https://my-vulnrap.example pnpm --filter @workspace/mcp-server start`}
-            />
+          <CardContent className="space-y-3">
+            <CopyBlock language="bash" code={`npx -y @vulnrap/mcp-server`} />
+            <p className="text-[11px] text-muted-foreground/60 italic">
+              Override the API base URL for self-hosted deployments:{" "}
+              <code className="font-mono">
+                VULNRAP_API_BASE_URL=https://my-vulnrap.example npx -y
+                @vulnrap/mcp-server
+              </code>
+            </p>
           </CardContent>
         </Card>
 
@@ -1513,8 +1520,8 @@ VULNRAP_API_BASE_URL=https://my-vulnrap.example pnpm --filter @workspace/mcp-ser
               code={`{
   "mcpServers": {
     "vulnrap": {
-      "command": "node",
-      "args": ["/absolute/path/to/lib/mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@vulnrap/mcp-server"],
       "env": {
         "VULNRAP_API_BASE_URL": "https://vulnrap.com"
       }

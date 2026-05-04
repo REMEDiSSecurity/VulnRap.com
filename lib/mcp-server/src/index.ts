@@ -116,7 +116,7 @@ function describeZodField(s: z.ZodTypeAny): Record<string, unknown> {
 
 export function buildServer(): Server {
   const server = new Server(
-    { name: "vulnrap-mcp", version: "0.0.0" },
+    { name: "vulnrap-mcp", version: "0.1.0" },
     { capabilities: { tools: {} } },
   );
 
