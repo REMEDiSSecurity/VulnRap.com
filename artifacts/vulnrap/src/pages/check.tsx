@@ -87,6 +87,7 @@ import {
   adjustTier,
   SENSITIVITY_PRESETS,
   type SensitivityPreset,
+  type EngineWeights,
 } from "@/lib/settings";
 import { AnalysisStepper } from "@/components/analysis-stepper";
 import { CustomRedactionPanel, findMatches, type ParsedRule } from "@/components/custom-redaction-panel";
@@ -364,19 +365,28 @@ function CheckScoreContent({
   sensitivity,
   onSensitivityChange,
   signalAdjustments,
+  engineWeights,
 }: {
   result: CheckResultData;
   sensitivity: SensitivityPreset;
   onSensitivityChange: (preset: SensitivityPreset) => void;
   signalAdjustments: SignalAdjustments;
+  engineWeights: EngineWeights | null;
 }) {
   const settings = getSettings();
-  const isAdj = sensitivity !== "balanced";
+  const hasCustomWeights =
+    engineWeights != null &&
+    (engineWeights.linguistic !== 1.0 ||
+      engineWeights.factual !== 1.0 ||
+      engineWeights.template !== 1.0 ||
+      engineWeights.llm !== 1.0);
+  const isAdj = sensitivity !== "balanced" || hasCustomWeights;
   const adjScore = adjustScore(
     result.slopScore,
     sensitivity,
     result.breakdown,
     result.humanIndicators,
+    engineWeights,
   );
   const baseDisp = isAdj ? adjScore : result.slopScore;
   const hasSignalOverrides = Object.keys(signalAdjustments).length > 0;
@@ -680,6 +690,8 @@ export default function Check() {
   const [sensitivity, setSensitivity] = useState<SensitivityPreset>(
     () => getSettings().sensitivityPreset,
   );
+  const [activeEngineWeights, setActiveEngineWeights] =
+    useState<EngineWeights | null>(null);
   const handleSensitivityChange = (preset: SensitivityPreset) => {
     setSensitivity(preset);
     saveSettings({ sensitivityPreset: preset });
@@ -767,9 +779,10 @@ export default function Check() {
       slopThresholdHigh: match.slopThresholdHigh,
     });
     setSensitivity(match.sensitivity);
+    setActiveEngineWeights(match.engineWeights ?? null);
     toast({
       title: `Preset loaded: ${match.name}`,
-      description: `Sensitivity ${match.sensitivity}, slop tiers ${match.slopThresholdLow}/${match.slopThresholdHigh}.`,
+      description: `Sensitivity ${match.sensitivity}, slop tiers ${match.slopThresholdLow}/${match.slopThresholdHigh}, engine weights applied.`,
     });
     const next = new URLSearchParams(searchParams);
     next.delete("preset");
@@ -1342,6 +1355,7 @@ export default function Check() {
                 sensitivity={sensitivity}
                 onSensitivityChange={handleSensitivityChange}
                 signalAdjustments={signalAdjustments}
+                engineWeights={activeEngineWeights}
               />
             </Card>
 

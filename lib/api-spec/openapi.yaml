@@ -8143,9 +8143,8 @@ components:
       description: |
         Per-engine emphasis weights in the [0, 2] range. 1.0 means "use the
         platform default weighting"; lower values de-emphasise that engine,
-        higher values emphasise it. Currently informational on /check (the
-        page applies sensitivity + slop thresholds locally) but surfaced on
-        /presets so reviewers can compare profiles at a glance.
+        higher values emphasise it. Applied as multipliers to each engine's
+        breakdown score on /check before the Bayesian probability combination.
       properties:
         linguistic:
           type: number

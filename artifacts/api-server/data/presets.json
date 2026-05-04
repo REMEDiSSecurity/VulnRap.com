@@ -1,5 +1,5 @@
 {
-  "$comment": "Task #631 — Curated public preset library. Each preset bundles a sensitivity calibration plus per-engine weights so PSIRT/triage teams can pick a starting profile from /presets and deep-link to /check?preset=<id>. Weights are informational descriptors of how each scoring engine is emphasised; the /check page applies sensitivity + slop thresholds to local settings when a preset is loaded. Keep weights in [0, 2] and sensitivity in {lenient, balanced, strict}. Edit this file (and bump the version when shipping changes) — there is no admin UI for v1.",
+  "$comment": "Task #631 — Curated public preset library. Each preset bundles a sensitivity calibration plus per-engine weights so PSIRT/triage teams can pick a starting profile from /presets and deep-link to /check?preset=<id>. Weights are per-engine multipliers applied to each engine's breakdown score before the Bayesian probability combination in the client-side adjustScore function. Keep weights in [0, 2] and sensitivity in {lenient, balanced, strict}. Edit this file (and bump the version when shipping changes) — there is no admin UI for v1.",
   "version": "1.0.0",
   "presets": [
     {

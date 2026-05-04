@@ -66,13 +66,36 @@ export interface HumanIndicatorData {
   weight: number;
 }
 
+export interface EngineWeights {
+  linguistic: number;
+  factual: number;
+  template: number;
+  llm: number;
+}
+
+export const DEFAULT_ENGINE_WEIGHTS: EngineWeights = {
+  linguistic: 1.0,
+  factual: 1.0,
+  template: 1.0,
+  llm: 1.0,
+};
+
 export function adjustScore(
   canonicalScore: number,
   preset: SensitivityPreset,
   breakdown?: BreakdownData | null,
   humanIndicators?: HumanIndicatorData[] | null,
+  engineWeights?: EngineWeights | null,
 ): number {
-  if (preset === "balanced") return canonicalScore;
+  const weights = engineWeights ?? DEFAULT_ENGINE_WEIGHTS;
+  const hasCustomWeights =
+    engineWeights != null &&
+    (weights.linguistic !== 1.0 ||
+      weights.factual !== 1.0 ||
+      weights.template !== 1.0 ||
+      weights.llm !== 1.0);
+
+  if (preset === "balanced" && !hasCustomWeights) return canonicalScore;
 
   if (!breakdown) {
     const m = SENSITIVITY_PRESETS[preset].axisMultiplier;
@@ -83,12 +106,25 @@ export function adjustScore(
 
   const axes: { name: string; score: number }[] = [];
   if (breakdown.linguistic != null)
-    axes.push({ name: "linguistic", score: breakdown.linguistic });
+    axes.push({
+      name: "linguistic",
+      score: Math.min(100, breakdown.linguistic * weights.linguistic),
+    });
   if (breakdown.factual != null)
-    axes.push({ name: "factual", score: breakdown.factual });
+    axes.push({
+      name: "factual",
+      score: Math.min(100, breakdown.factual * weights.factual),
+    });
   if (breakdown.template != null)
-    axes.push({ name: "template", score: breakdown.template });
-  if (breakdown.llm != null) axes.push({ name: "llm", score: breakdown.llm });
+    axes.push({
+      name: "template",
+      score: Math.min(100, breakdown.template * weights.template),
+    });
+  if (breakdown.llm != null)
+    axes.push({
+      name: "llm",
+      score: Math.min(100, breakdown.llm * weights.llm),
+    });
 
   const activeAxes = axes.filter(
     (a) => a.score > (AXIS_THRESHOLDS[a.name] ?? 10),
