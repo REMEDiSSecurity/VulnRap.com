@@ -48,6 +48,12 @@ import {
   editAiSelfDisclosurePhrase,
   removeAiSelfDisclosurePhrase,
 } from "../lib/engines/avri/ai-self-disclosure";
+import {
+  getAgentFingerprintRules,
+  addAgentFingerprintRule,
+  editAgentFingerprintRule,
+  removeAgentFingerprintRule,
+} from "../lib/agent-fingerprint";
 import { TEST_FIXTURE_COHORTS } from "./test-fixtures";
 import {
   requireCalibrationAuth,
@@ -3477,6 +3483,194 @@ router.delete(
       res
         .status(500)
         .json({ error: "Failed to clear scoring gate run history." });
+    }
+  },
+);
+
+// Task #979 — Reviewer-extensible agent-fingerprint phrase rules.
+// Mirrors the AI self-disclosure phrase CRUD pattern: GET surfaces the
+// active reviewer-added rules (auth-strict); POST appends a new rule;
+// PUT edits by id; DELETE removes by id. Built-in defaults live in the
+// code and are always present — this list only holds reviewer additions.
+router.get(
+  "/feedback/calibration/agent-fingerprint-rules",
+  requireCalibrationAuthStrict,
+  (_req, res) => {
+    try {
+      const rules = getAgentFingerprintRules();
+      res.json({
+        rules,
+        total: rules.length,
+      });
+    } catch (err) {
+      _req.log?.error(err, "Failed to read agent-fingerprint rules");
+      res
+        .status(500)
+        .json({ error: "Failed to read agent-fingerprint rules." });
+    }
+  },
+);
+
+router.post(
+  "/feedback/calibration/agent-fingerprint-rules",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const {
+        id,
+        agent,
+        pattern,
+        flags,
+        weight,
+        description,
+        reviewer,
+        rationale,
+      } = (req.body ?? {}) as {
+        id?: unknown;
+        agent?: unknown;
+        pattern?: unknown;
+        flags?: unknown;
+        weight?: unknown;
+        description?: unknown;
+        reviewer?: unknown;
+        rationale?: unknown;
+      };
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
+        return;
+      }
+      if (rationale !== undefined && typeof rationale !== "string") {
+        res
+          .status(400)
+          .json({ error: "rationale must be a string when provided." });
+        return;
+      }
+      const result = addAgentFingerprintRule(id, agent, pattern, flags, weight, description, {
+        reviewer: typeof reviewer === "string" ? reviewer : undefined,
+        rationale: typeof rationale === "string" ? rationale : undefined,
+      });
+      res.status(result.added ? 201 : 200).json({
+        added: result.added,
+        rule: result.rule,
+        total: result.total,
+        rules: getAgentFingerprintRules(),
+      });
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        /^(?:id|agent|pattern|flags|weight|description|rationale) /.test(err.message)
+      ) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      req.log?.error(err, "Failed to add agent-fingerprint rule");
+      res
+        .status(500)
+        .json({ error: "Failed to add agent-fingerprint rule." });
+    }
+  },
+);
+
+router.put(
+  "/feedback/calibration/agent-fingerprint-rules/:id",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const { agent, pattern, flags, weight, description, reviewer, rationale } =
+        (req.body ?? {}) as {
+          agent?: unknown;
+          pattern?: unknown;
+          flags?: unknown;
+          weight?: unknown;
+          description?: unknown;
+          reviewer?: unknown;
+          rationale?: unknown;
+        };
+      if (reviewer !== undefined && typeof reviewer !== "string") {
+        res
+          .status(400)
+          .json({ error: "reviewer must be a string when provided." });
+        return;
+      }
+      if (rationale !== undefined && typeof rationale !== "string") {
+        res
+          .status(400)
+          .json({ error: "rationale must be a string when provided." });
+        return;
+      }
+      const result = editAgentFingerprintRule(
+        req.params.id,
+        agent,
+        pattern,
+        flags,
+        weight,
+        description,
+        {
+          reviewer: typeof reviewer === "string" ? reviewer : undefined,
+          rationale: typeof rationale === "string" ? rationale : undefined,
+        },
+      );
+      if (!result.edited) {
+        res.status(404).json({
+          error: "Rule not found.",
+          edited: false,
+          id: req.params.id,
+        });
+        return;
+      }
+      res.status(200).json({
+        edited: result.edited,
+        rule: result.rule,
+        total: result.total,
+        rules: getAgentFingerprintRules(),
+      });
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        /^(?:id|agent|pattern|flags|weight|description|rationale) /.test(err.message)
+      ) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      req.log?.error(err, "Failed to edit agent-fingerprint rule");
+      res
+        .status(500)
+        .json({ error: "Failed to edit agent-fingerprint rule." });
+    }
+  },
+);
+
+router.delete(
+  "/feedback/calibration/agent-fingerprint-rules/:id",
+  requireCalibrationAuth,
+  (req, res) => {
+    try {
+      const result = removeAgentFingerprintRule(req.params.id);
+      if (!result.removed) {
+        res.status(404).json({
+          error: "Rule not found.",
+          removed: false,
+          id: req.params.id,
+        });
+        return;
+      }
+      res.status(200).json({
+        removed: result.removed,
+        rule: result.rule,
+        total: result.total,
+        rules: getAgentFingerprintRules(),
+      });
+    } catch (err) {
+      if (err instanceof Error && /^id /.test(err.message)) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      req.log?.error(err, "Failed to remove agent-fingerprint rule");
+      res
+        .status(500)
+        .json({ error: "Failed to remove agent-fingerprint rule." });
     }
   },
 );

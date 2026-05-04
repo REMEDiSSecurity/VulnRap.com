@@ -2966,8 +2966,15 @@ router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
         likelyAgentLabel: AGENT_DISPLAY_LABEL[r.likelyAgent],
         confidence: r.confidence,
         scores: r.scores,
-        // Cap matches list so the JSON stays small for large reports.
-        matches: r.matches.slice(0, 12),
+        matches: r.matches.slice(0, 12).map((m) => ({
+          id: m.id,
+          description: m.description,
+          weight: m.weight,
+          excerpt: m.excerpt,
+          ...(m.addedBy ? { addedBy: m.addedBy } : {}),
+          ...(m.addedAt ? { addedAt: m.addedAt } : {}),
+          ...(m.rationale ? { rationale: m.rationale } : {}),
+        })),
         features: r.features,
       };
     })(),

@@ -214,6 +214,9 @@ export interface DiagnosticsResponse {
       description: string;
       weight: number;
       excerpt?: string;
+      addedBy?: string;
+      addedAt?: string;
+      rationale?: string;
     }>;
     features: {
       wordCount: number;
@@ -2847,6 +2850,20 @@ function AgentFingerprintSection({
                   <span className="text-muted-foreground/80">
                     {" "}
                     — “{m.excerpt}”
+                  </span>
+                )}
+                {m.addedBy && (
+                  <span className="text-purple-400/70 text-[10px]">
+                    {" "}
+                    [reviewer: {m.addedBy}
+                    {m.addedAt &&
+                      ` · ${new Date(m.addedAt).toLocaleDateString()}`}
+                    ]
+                  </span>
+                )}
+                {m.rationale && (
+                  <span className="text-muted-foreground/60 text-[10px] italic block ml-4">
+                    {m.rationale}
                   </span>
                 )}
               </li>

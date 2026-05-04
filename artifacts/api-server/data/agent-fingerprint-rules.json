@@ -1,0 +1,6 @@
+{
+  "_meta": {
+    "description": "Cross-AI-agent fingerprint phrase rules. Loaded by lib/agent-fingerprint.ts at startup with the in-code defaults as fallback. Each entry compiles to a RegExp matched against the report body. Reviewers can append new rules through POST /feedback/calibration/agent-fingerprint-rules without a redeploy."
+  },
+  "rules": []
+}

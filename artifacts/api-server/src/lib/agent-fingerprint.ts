@@ -33,6 +33,16 @@
 // "ambiguous" disambiguation. When no agent's score clears a small
 // minimum, the verdict is "unknown" (avoiding overclaiming on short or
 // generic prose).
+//
+// Task #979 — phrase rules moved to data/agent-fingerprint-rules.json so
+// reviewers can append new rules through
+// POST /feedback/calibration/agent-fingerprint-rules without a code
+// change + redeploy. The in-code defaults serve as fallback when the
+// JSON file is missing/empty/corrupt.
+
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 export type AgentLabel =
   | "gpt4"
@@ -43,6 +53,17 @@ export type AgentLabel =
   | "human"
   | "unknown";
 
+const VALID_AGENTS_LIST = [
+  "gpt4",
+  "claude",
+  "gemini",
+  "cursor-agent",
+  "replit-agent",
+  "human",
+] as const;
+
+const VALID_AGENTS: Set<string> = new Set<string>(VALID_AGENTS_LIST);
+
 export interface AgentFingerprintMatch {
   /** Stable id for the rule that fired. */
   id: string;
@@ -52,6 +73,12 @@ export interface AgentFingerprintMatch {
   weight: number;
   /** First excerpt from the report that matched (lowercased, capped). */
   excerpt?: string;
+  /** Reviewer who added this rule (undefined for built-in defaults). */
+  addedBy?: string;
+  /** ISO 8601 timestamp the rule was added. */
+  addedAt?: string;
+  /** Free-text justification supplied by the reviewer. */
+  rationale?: string;
 }
 
 export interface AgentFingerprintResult {
@@ -79,10 +106,26 @@ interface PhraseRule {
   pattern: RegExp;
   weight: number;
   description: string;
+  addedBy?: string;
+  addedAt?: string;
+  rationale?: string;
 }
 
-const RULES: PhraseRule[] = [
-  // GPT-4 / ChatGPT pleasantry & framing tells
+export interface AgentFingerprintRule {
+  id: string;
+  agent: Exclude<AgentLabel, "unknown">;
+  pattern: string;
+  flags?: string;
+  weight: number;
+  description: string;
+  addedBy?: string;
+  addedAt?: string;
+  rationale?: string;
+  editedBy?: string;
+  editedAt?: string;
+}
+
+const DEFAULT_RULES: PhraseRule[] = [
   {
     id: "gpt4_certainly_opening",
     agent: "gpt4",
@@ -132,8 +175,6 @@ const RULES: PhraseRule[] = [
     description: '"Remember that" sermon tell',
     pattern: /\bremember\s+that\b/i,
   },
-
-  // Claude tells
   {
     id: "claude_ill_help",
     agent: "claude",
@@ -185,8 +226,6 @@ const RULES: PhraseRule[] = [
     description: '"It seems" / "appears to be" hedging cluster',
     pattern: /\b(?:it\s+(?:seems|appears)|appears\s+to\s+be)\b/i,
   },
-
-  // Gemini tells
   {
     id: "gemini_of_course_here_is",
     agent: "gemini",
@@ -230,8 +269,6 @@ const RULES: PhraseRule[] = [
     pattern:
       /\b(?:robust\s+solution|comprehensive\s+overview|thorough\s+analysis)\b/i,
   },
-
-  // Cursor agent tells
   {
     id: "cursor_ive_edited",
     agent: "cursor-agent",
@@ -278,8 +315,6 @@ const RULES: PhraseRule[] = [
     description: '"apply_patch" / "edit_file" tool tell',
     pattern: /\b(?:apply_patch|edit_file|search_replace)\b/i,
   },
-
-  // Replit agent tells
   {
     id: "replit_ive_created",
     agent: "replit-agent",
@@ -329,11 +364,6 @@ const RULES: PhraseRule[] = [
     description: '"the Secrets pane" / "environment secrets"',
     pattern: /\bthe\s+secrets\s+(?:pane|tab|tool)\b/i,
   },
-
-  // Human tells (mirroring + extending lib/human-indicators.ts so the
-  // detector remains self-contained and so a "human" verdict here can
-  // disagree with the broader human-indicators system without coupling
-  // weights).
   {
     id: "human_contractions_dense",
     agent: "human",
@@ -375,17 +405,428 @@ const RULES: PhraseRule[] = [
   },
 ];
 
-/** Cap on how many distinct rules of one agent can score. Keeps a single
- * over-represented phrase from running away with the verdict. */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const CANDIDATE_PATHS = [
+  path.resolve(__dirname, "../../../data/agent-fingerprint-rules.json"),
+  path.resolve(process.cwd(), "data/agent-fingerprint-rules.json"),
+  path.resolve(
+    process.cwd(),
+    "artifacts/api-server/data/agent-fingerprint-rules.json",
+  ),
+];
+
+const ID_PATTERN = /^[a-z0-9_]{1,64}$/i;
+const PATTERN_MAX_LEN = 500;
+const FLAGS_PATTERN = /^[gimsuy]{0,7}$/;
+const WEIGHT_MIN = 1;
+const WEIGHT_MAX = 10;
+
+interface RulesFile {
+  _meta?: unknown;
+  rules: Array<Record<string, unknown>>;
+}
+
+interface CacheState {
+  compiled: PhraseRule[];
+  persisted: AgentFingerprintRule[];
+}
+
+let CACHED: CacheState | null = null;
+let RESOLVED_PATH: string | null = null;
+
+function resolvePath(): string {
+  if (RESOLVED_PATH) return RESOLVED_PATH;
+  const override = process.env.AGENT_FINGERPRINT_RULES_PATH;
+  if (override && override.trim().length > 0) {
+    RESOLVED_PATH = path.resolve(override);
+    return RESOLVED_PATH;
+  }
+  for (const p of CANDIDATE_PATHS) {
+    if (existsSync(p)) {
+      RESOLVED_PATH = p;
+      return p;
+    }
+  }
+  RESOLVED_PATH = CANDIDATE_PATHS[0];
+  return RESOLVED_PATH;
+}
+
+function trimOrUndefined(x: unknown, max: number): string | undefined {
+  if (typeof x !== "string") return undefined;
+  const v = x.trim();
+  if (!v) return undefined;
+  return v.length > max ? v.slice(0, max) : v;
+}
+
+function isIsoTimestamp(x: unknown): x is string {
+  return typeof x === "string" && !Number.isNaN(Date.parse(x));
+}
+
+function coerceRule(entry: unknown): AgentFingerprintRule | null {
+  if (!entry || typeof entry !== "object") return null;
+  const obj = entry as Record<string, unknown>;
+  if (typeof obj.id !== "string" || !ID_PATTERN.test(obj.id)) return null;
+  if (typeof obj.agent !== "string" || !VALID_AGENTS.has(obj.agent)) return null;
+  if (typeof obj.pattern !== "string") return null;
+  if (obj.pattern.length === 0 || obj.pattern.length > PATTERN_MAX_LEN)
+    return null;
+  if (typeof obj.weight !== "number" || obj.weight < WEIGHT_MIN || obj.weight > WEIGHT_MAX)
+    return null;
+  if (typeof obj.description !== "string" || obj.description.trim().length === 0)
+    return null;
+  let flags: string | undefined;
+  if (obj.flags !== undefined && obj.flags !== null) {
+    if (typeof obj.flags !== "string" || !FLAGS_PATTERN.test(obj.flags))
+      return null;
+    if (obj.flags.length > 0) flags = obj.flags;
+  }
+  try {
+    new RegExp(obj.pattern, flags ?? "i");
+  } catch {
+    return null;
+  }
+  const out: AgentFingerprintRule = {
+    id: obj.id,
+    agent: obj.agent as Exclude<AgentLabel, "unknown">,
+    pattern: obj.pattern,
+    weight: obj.weight,
+    description: obj.description.trim(),
+  };
+  if (flags !== undefined) out.flags = flags;
+  const addedBy = trimOrUndefined(obj.addedBy, 200);
+  if (addedBy) out.addedBy = addedBy;
+  if (isIsoTimestamp(obj.addedAt)) out.addedAt = obj.addedAt;
+  const rationale = trimOrUndefined(obj.rationale, 500);
+  if (rationale) out.rationale = rationale;
+  const editedBy = trimOrUndefined(obj.editedBy, 200);
+  if (editedBy) out.editedBy = editedBy;
+  if (isIsoTimestamp(obj.editedAt)) out.editedAt = obj.editedAt;
+  return out;
+}
+
+function compileRule(rule: AgentFingerprintRule): PhraseRule {
+  const flags = rule.flags ?? "i";
+  return {
+    id: rule.id,
+    agent: rule.agent,
+    pattern: new RegExp(rule.pattern, flags),
+    weight: rule.weight,
+    description: rule.description,
+    addedBy: rule.addedBy,
+    addedAt: rule.addedAt,
+    rationale: rule.rationale,
+  };
+}
+
+function load(): CacheState {
+  if (CACHED) return CACHED;
+  const p = resolvePath();
+  let persisted: AgentFingerprintRule[] = [];
+  if (existsSync(p)) {
+    try {
+      const raw = JSON.parse(readFileSync(p, "utf8")) as RulesFile;
+      if (Array.isArray(raw.rules)) {
+        persisted = raw.rules
+          .map(coerceRule)
+          .filter((m): m is AgentFingerprintRule => m !== null);
+      }
+    } catch {
+      // Fall through — corrupt JSON file never disables the detector.
+    }
+  }
+  const seen = new Set<string>();
+  const deduped: AgentFingerprintRule[] = [];
+  for (const r of persisted) {
+    if (!seen.has(r.id)) {
+      seen.add(r.id);
+      deduped.push(r);
+    }
+  }
+  const reviewerCompiled = deduped.map(compileRule);
+  const compiled = [
+    ...DEFAULT_RULES,
+    ...reviewerCompiled.filter((r) => !DEFAULT_RULES.some((d) => d.id === r.id)),
+  ];
+  CACHED = { compiled, persisted: deduped };
+  return CACHED;
+}
+
+function persist(rules: AgentFingerprintRule[]): void {
+  const p = resolvePath();
+  const dir = path.dirname(p);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const body: RulesFile = {
+    _meta: {
+      description:
+        "Cross-AI-agent fingerprint phrase rules. Loaded by lib/agent-fingerprint.ts at startup with the in-code defaults as fallback. Each entry compiles to a RegExp matched against the report body. Reviewers can append new rules through POST /feedback/calibration/agent-fingerprint-rules without a redeploy.",
+    },
+    rules: rules as unknown as Array<Record<string, unknown>>,
+  };
+  writeFileSync(p, JSON.stringify(body, null, 2) + "\n", "utf8");
+}
+
+export function getAgentFingerprintRules(): AgentFingerprintRule[] {
+  return load().persisted.map((r) => ({ ...r }));
+}
+
+export interface AddAgentFingerprintRuleOptions {
+  reviewer?: string;
+  rationale?: string;
+  now?: string;
+}
+
+export interface AddAgentFingerprintRuleResult {
+  added: boolean;
+  rule: AgentFingerprintRule;
+  total: number;
+}
+
+export function addAgentFingerprintRule(
+  rawId: unknown,
+  rawAgent: unknown,
+  rawPattern: unknown,
+  rawFlags: unknown,
+  rawWeight: unknown,
+  rawDescription: unknown,
+  options: AddAgentFingerprintRuleOptions = {},
+): AddAgentFingerprintRuleResult {
+  if (typeof rawId !== "string" || rawId.trim().length === 0) {
+    throw new Error("id must be a non-empty string.");
+  }
+  const id = rawId.trim();
+  if (!ID_PATTERN.test(id)) {
+    throw new Error("id must be 1-64 characters of [A-Za-z0-9_].");
+  }
+  if (typeof rawAgent !== "string" || !VALID_AGENTS.has(rawAgent)) {
+    throw new Error(
+      `agent must be one of: ${VALID_AGENTS_LIST.join(", ")}.`,
+    );
+  }
+  const agent = rawAgent as Exclude<AgentLabel, "unknown">;
+  if (typeof rawPattern !== "string" || rawPattern.length === 0) {
+    throw new Error("pattern must be a non-empty string.");
+  }
+  if (rawPattern.length > PATTERN_MAX_LEN) {
+    throw new Error(`pattern must be at most ${PATTERN_MAX_LEN} characters.`);
+  }
+  let flags: string | undefined;
+  if (rawFlags !== undefined && rawFlags !== null) {
+    if (typeof rawFlags !== "string" || !FLAGS_PATTERN.test(rawFlags)) {
+      throw new Error(
+        "flags must contain only regex flag characters [gimsuy].",
+      );
+    }
+    if (rawFlags.length > 0) flags = rawFlags;
+  }
+  try {
+    new RegExp(rawPattern, flags ?? "i");
+  } catch (e) {
+    throw new Error(
+      `pattern is not a valid regular expression: ${(e as Error).message}`,
+    );
+  }
+  if (typeof rawWeight !== "number" || !Number.isFinite(rawWeight)) {
+    throw new Error("weight must be a finite number.");
+  }
+  const weight = Math.round(rawWeight);
+  if (weight < WEIGHT_MIN || weight > WEIGHT_MAX) {
+    throw new Error(`weight must be between ${WEIGHT_MIN} and ${WEIGHT_MAX}.`);
+  }
+  if (typeof rawDescription !== "string" || rawDescription.trim().length === 0) {
+    throw new Error("description must be a non-empty string.");
+  }
+  const description = rawDescription.trim().slice(0, 200);
+  const reviewer = trimOrUndefined(options.reviewer, 200);
+  const rationale = trimOrUndefined(options.rationale, 500);
+  if (rationale && rationale.length < 3) {
+    throw new Error("rationale must be at least 3 characters when provided.");
+  }
+  const { persisted: current } = load();
+  const builtIn = DEFAULT_RULES.find((r) => r.id === id);
+  if (builtIn) {
+    throw new Error(`id "${id}" conflicts with a built-in rule.`);
+  }
+  const existing = current.find((r) => r.id === id);
+  if (existing) {
+    return { added: false, rule: { ...existing }, total: current.length };
+  }
+  const addedAt = isIsoTimestamp(options.now)
+    ? options.now
+    : new Date().toISOString();
+  const rule: AgentFingerprintRule = {
+    id,
+    agent,
+    pattern: rawPattern,
+    weight,
+    description,
+  };
+  if (flags !== undefined) rule.flags = flags;
+  if (reviewer) rule.addedBy = reviewer;
+  rule.addedAt = addedAt;
+  if (rationale) rule.rationale = rationale;
+  const next = [...current, rule];
+  persist(next);
+  CACHED = null;
+  return { added: true, rule: { ...rule }, total: next.length };
+}
+
+export interface EditAgentFingerprintRuleOptions {
+  reviewer?: string;
+  rationale?: string;
+  now?: string;
+}
+
+export interface EditAgentFingerprintRuleResult {
+  edited: boolean;
+  rule: AgentFingerprintRule;
+  total: number;
+}
+
+export function editAgentFingerprintRule(
+  rawId: unknown,
+  rawAgent: unknown,
+  rawPattern: unknown,
+  rawFlags: unknown,
+  rawWeight: unknown,
+  rawDescription: unknown,
+  options: EditAgentFingerprintRuleOptions = {},
+): EditAgentFingerprintRuleResult {
+  if (typeof rawId !== "string" || rawId.trim().length === 0) {
+    throw new Error("id must be a non-empty string.");
+  }
+  const id = rawId.trim();
+  if (!ID_PATTERN.test(id)) {
+    throw new Error("id must be 1-64 characters of [A-Za-z0-9_].");
+  }
+  if (typeof rawAgent !== "string" || !VALID_AGENTS.has(rawAgent)) {
+    throw new Error(
+      `agent must be one of: ${VALID_AGENTS_LIST.join(", ")}.`,
+    );
+  }
+  const agent = rawAgent as Exclude<AgentLabel, "unknown">;
+  if (typeof rawPattern !== "string" || rawPattern.length === 0) {
+    throw new Error("pattern must be a non-empty string.");
+  }
+  if (rawPattern.length > PATTERN_MAX_LEN) {
+    throw new Error(`pattern must be at most ${PATTERN_MAX_LEN} characters.`);
+  }
+  let flags: string | undefined;
+  if (rawFlags !== undefined && rawFlags !== null) {
+    if (typeof rawFlags !== "string" || !FLAGS_PATTERN.test(rawFlags)) {
+      throw new Error(
+        "flags must contain only regex flag characters [gimsuy].",
+      );
+    }
+    if (rawFlags.length > 0) flags = rawFlags;
+  }
+  try {
+    new RegExp(rawPattern, flags ?? "i");
+  } catch (e) {
+    throw new Error(
+      `pattern is not a valid regular expression: ${(e as Error).message}`,
+    );
+  }
+  if (typeof rawWeight !== "number" || !Number.isFinite(rawWeight)) {
+    throw new Error("weight must be a finite number.");
+  }
+  const weight = Math.round(rawWeight);
+  if (weight < WEIGHT_MIN || weight > WEIGHT_MAX) {
+    throw new Error(`weight must be between ${WEIGHT_MIN} and ${WEIGHT_MAX}.`);
+  }
+  if (typeof rawDescription !== "string" || rawDescription.trim().length === 0) {
+    throw new Error("description must be a non-empty string.");
+  }
+  const description = rawDescription.trim().slice(0, 200);
+  const reviewer = trimOrUndefined(options.reviewer, 200);
+  let rationaleUpdate: string | null | undefined;
+  if (options.rationale === undefined) {
+    rationaleUpdate = undefined;
+  } else if (typeof options.rationale !== "string") {
+    throw new Error("rationale must be a string when provided.");
+  } else {
+    const r = options.rationale.trim();
+    if (r.length === 0) {
+      rationaleUpdate = null;
+    } else if (r.length < 3) {
+      throw new Error("rationale must be at least 3 characters when provided.");
+    } else {
+      rationaleUpdate = r.length > 500 ? r.slice(0, 500) : r;
+    }
+  }
+  const { persisted: current } = load();
+  const idx = current.findIndex((r) => r.id === id);
+  if (idx === -1) {
+    return {
+      edited: false,
+      rule: { id, agent, pattern: rawPattern, weight, description, ...(flags ? { flags } : {}) },
+      total: current.length,
+    };
+  }
+  const prior = current[idx];
+  const editedAt = isIsoTimestamp(options.now)
+    ? options.now
+    : new Date().toISOString();
+  const updated: AgentFingerprintRule = {
+    id,
+    agent,
+    pattern: rawPattern,
+    weight,
+    description,
+  };
+  if (flags !== undefined) updated.flags = flags;
+  if (prior.addedBy) updated.addedBy = prior.addedBy;
+  if (prior.addedAt) updated.addedAt = prior.addedAt;
+  if (rationaleUpdate === undefined) {
+    if (prior.rationale) updated.rationale = prior.rationale;
+  } else if (rationaleUpdate !== null) {
+    updated.rationale = rationaleUpdate;
+  }
+  if (reviewer) updated.editedBy = reviewer;
+  updated.editedAt = editedAt;
+  const next = [...current];
+  next[idx] = updated;
+  persist(next);
+  CACHED = null;
+  return { edited: true, rule: { ...updated }, total: next.length };
+}
+
+export interface RemoveAgentFingerprintRuleResult {
+  removed: boolean;
+  rule?: AgentFingerprintRule;
+  total: number;
+}
+
+export function removeAgentFingerprintRule(
+  rawId: unknown,
+): RemoveAgentFingerprintRuleResult {
+  if (typeof rawId !== "string" || rawId.trim().length === 0) {
+    throw new Error("id must be a non-empty string.");
+  }
+  const id = rawId.trim();
+  if (!ID_PATTERN.test(id)) {
+    throw new Error("id must be 1-64 characters of [A-Za-z0-9_].");
+  }
+  const { persisted: current } = load();
+  const idx = current.findIndex((r) => r.id === id);
+  if (idx === -1) {
+    return { removed: false, total: current.length };
+  }
+  const removed = current[idx];
+  const next = current.filter((_, i) => i !== idx);
+  persist(next);
+  CACHED = null;
+  return { removed: true, rule: { ...removed }, total: next.length };
+}
+
+export function __resetAgentFingerprintRulesForTests(): void {
+  CACHED = null;
+  RESOLVED_PATH = null;
+}
+
 const MAX_RULES_PER_AGENT = 6;
-/** Stylometric tells contribute up to this many points (em-dash density,
- * bold-header density, etc.) so the verdict isn't purely phrase-driven. */
 const STYLO_MAX_POINTS = 4;
-/** Below this raw point total the verdict collapses to "unknown" — short
- * or generic prose shouldn't get a confident label. */
 const MIN_TOP_SCORE_FOR_LABEL = 5;
-/** Excerpts in the matches array are truncated to this many chars so the
- * diagnostics-panel response stays small. */
 const EXCERPT_MAX_LEN = 80;
 
 function excerpt(s: string): string {
@@ -412,14 +853,6 @@ function styloFeatures(text: string): AgentFingerprintResult["features"] {
   };
 }
 
-/**
- * Detect the most-likely AI agent (or human) that authored `text`.
- *
- * The function is pure and side-effect-free; callers may invoke it on
- * every diagnostics request without persisting anything. Designed for
- * texts up to ~50KB — every regex is anchored / non-catastrophic so
- * runtime stays linear in input length.
- */
 export function detectAgentFingerprint(
   text: string | null | undefined,
 ): AgentFingerprintResult {
@@ -446,6 +879,8 @@ export function detectAgentFingerprint(
   };
   if (!text || typeof text !== "string") return empty;
 
+  const { compiled: RULES } = load();
+
   const features = styloFeatures(text);
   const scores: Record<Exclude<AgentLabel, "unknown">, number> = {
     gpt4: 0,
@@ -465,44 +900,46 @@ export function detectAgentFingerprint(
     if (rule.pattern.global) {
       const all = text.match(rule.pattern);
       const count = all ? all.length : 0;
-      // Global rules only score when they fire enough to be a real signal
-      // (3+ hits) — a single contraction or one inline path means nothing.
       if (count >= 3) {
         const w = rule.weight;
         scores[rule.agent] += w;
         perAgentRuleCount[rule.agent]++;
-        matches.push({
+        const m: AgentFingerprintMatch = {
           id: rule.id,
           description: `${rule.description} (${count}×)`,
           weight: w,
           excerpt: all && all[0] ? excerpt(all[0]) : undefined,
-        });
+        };
+        if (rule.addedBy) m.addedBy = rule.addedBy;
+        if (rule.addedAt) m.addedAt = rule.addedAt;
+        if (rule.rationale) m.rationale = rule.rationale;
+        matches.push(m);
       }
     } else {
       const m = text.match(rule.pattern);
       if (m && m[0]) {
         scores[rule.agent] += rule.weight;
         perAgentRuleCount[rule.agent]++;
-        matches.push({
+        const match: AgentFingerprintMatch = {
           id: rule.id,
           description: rule.description,
           weight: rule.weight,
           excerpt: excerpt(m[0]),
-        });
+        };
+        if (rule.addedBy) match.addedBy = rule.addedBy;
+        if (rule.addedAt) match.addedAt = rule.addedAt;
+        if (rule.rationale) match.rationale = rule.rationale;
+        matches.push(match);
       }
     }
   }
 
-  // Stylometric tells — capped contribution per agent so they tilt close
-  // calls without dominating phrase evidence.
   const stylo = Math.min(
     STYLO_MAX_POINTS,
     Math.round(features.emDashCount / 4) +
       Math.round(features.boldHeaderCount / 3),
   );
   if (stylo > 0 && features.wordCount >= 60) {
-    // Em-dash + bold-header density tilts toward GPT-4 / Gemini formatting
-    // habits. Split the points so neither runs away with it.
     scores.gpt4 += Math.ceil(stylo / 2);
     scores.gemini += Math.floor(stylo / 2);
     matches.push({
@@ -511,8 +948,6 @@ export function detectAgentFingerprint(
       weight: stylo,
     });
   }
-  // Long mean sentence length is a Claude / GPT-4 tell over Gemini's
-  // bullet-heavy short sentences.
   if (features.avgSentenceLen >= 24 && features.wordCount >= 80) {
     scores.claude += 2;
     matches.push({
@@ -521,7 +956,6 @@ export function detectAgentFingerprint(
       weight: 2,
     });
   }
-  // Aggressive bulleting tilts toward Gemini.
   if (features.bulletCount >= 6 && features.wordCount >= 80) {
     scores.gemini += 2;
     matches.push({
@@ -531,8 +965,6 @@ export function detectAgentFingerprint(
     });
   }
 
-  // Pick the winner. If the top score is too low we report "unknown" so
-  // the panel doesn't display an attribution we can't defend.
   let topAgent: Exclude<AgentLabel, "unknown"> = "gpt4";
   let topScore = -1;
   let runnerUp = 0;
@@ -552,9 +984,6 @@ export function detectAgentFingerprint(
     return { likelyAgent: "unknown", confidence: 0, scores, matches, features };
   }
 
-  // Confidence: blend of (a) how dominant the top is over the runner-up
-  // and (b) how big the top is in absolute terms. Capped at 0.95 — we
-  // never claim certainty.
   const margin = topScore === 0 ? 0 : (topScore - runnerUp) / topScore;
   const magnitude = Math.min(1, topScore / 18);
   const confidence = Math.min(0.95, 0.5 * margin + 0.5 * magnitude);
@@ -568,7 +997,6 @@ export function detectAgentFingerprint(
   };
 }
 
-/** Friendly label for the diagnostics panel. */
 export const AGENT_DISPLAY_LABEL: Record<AgentLabel, string> = {
   gpt4: "GPT-4 / ChatGPT",
   claude: "Claude",
