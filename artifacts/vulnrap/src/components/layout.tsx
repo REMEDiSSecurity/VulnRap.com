@@ -37,8 +37,11 @@ import {
   Siren,
   HeartPulse,
   BookA,
+  Shield,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getCalibrationToken } from "@workspace/api-client-react";
 import logoSrc from "@/assets/logo.png";
 import { LaserEffects } from "@/components/laser-effects";
 import { CursorBugs } from "@/components/cursor-bugs";
@@ -78,6 +81,27 @@ type NavEntry = NavLeafItem | NavGroup;
 function isGroup(entry: NavEntry): entry is NavGroup {
   return (entry as NavGroup).items !== undefined;
 }
+
+const REVIEWER_NAV: NavGroup = {
+  label: "Reviewer",
+  icon: <Shield className="w-3.5 h-3.5" />,
+  matchPrefixes: ["/audit-log", "/feedback-analytics"],
+  align: "right",
+  items: [
+    {
+      to: "/audit-log",
+      label: "Audit Log",
+      icon: <ClipboardList className="w-4 h-4" />,
+      description: "Paginated log of every reviewer-gated mutation.",
+    },
+    {
+      to: "/feedback-analytics",
+      label: "Feedback Analytics",
+      icon: <BarChart3 className="w-4 h-4" />,
+      description: "Calibration feedback stats, cohort drift, and dataset health.",
+    },
+  ],
+};
 
 const NAV: NavEntry[] = [
   {
@@ -455,6 +479,8 @@ function NavDropdown({ group, pathname }: NavDropdownProps) {
 export function Layout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isReviewer = getCalibrationToken() !== null;
+  const navEntries: NavEntry[] = isReviewer ? [...NAV, REVIEWER_NAV] : NAV;
 
   const handleRestartTour = () => {
     resetAllTours();
@@ -499,7 +525,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
 
           <nav className="hidden lg:flex items-center gap-0.5">
-            {NAV.map((entry) => {
+            {navEntries.map((entry) => {
               if (isGroup(entry)) {
                 return (
                   <NavDropdown
@@ -562,7 +588,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             style={{ backgroundColor: "hsl(var(--background))" }}
           >
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-1">
-              {NAV.map((entry) => {
+              {navEntries.map((entry) => {
                 if (isGroup(entry)) {
                   const active = isGroupActive(pathname, entry);
                   return (
