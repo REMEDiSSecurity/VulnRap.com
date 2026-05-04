@@ -509,7 +509,21 @@ func fetchReportText(ctx context.Context, reportID string) (string, error) {
 }
 
 func postInternalComment(ctx context.Context, reportID string, res *vulnrap.CheckResult) error {
-        composite, label, action, reason := summarize(res)
+        composite, label := 0, res.SlopTier
+        action, reason := "STANDARD_TRIAGE", ""
+
+        if res.Vulnrap != nil {
+                composite = res.Vulnrap.CompositeScore
+                if res.Vulnrap.Label != "" {
+                        label = res.Vulnrap.Label
+                }
+        }
+        if res.Recommendation != nil {
+                if res.Recommendation.Action != "" {
+                        action = res.Recommendation.Action
+                }
+                reason = res.Recommendation.Reason
+        }
 
         var lines bytes.Buffer
         if res.Vulnrap != nil {
@@ -549,32 +563,6 @@ func postInternalComment(ctx context.Context, reportID string, res *vulnrap.Chec
                 return fmt.Errorf("h1 internal comment: HTTP %d: %s", resp.StatusCode, b)
         }
         return nil
-}
-
-// summarize pulls composite + recommendation off CheckResult. The SDK's typed
-// surface covers the composite; recommendation lives in the raw payload.
-func summarize(res *vulnrap.CheckResult) (composite int, label, action, reason string) {
-        action, reason = "STANDARD_TRIAGE", ""
-        label = res.SlopTier
-        if res.Vulnrap != nil {
-                composite = res.Vulnrap.CompositeScore
-                if res.Vulnrap.Label != "" {
-                        label = res.Vulnrap.Label
-                }
-        }
-        if raw, ok := res.Raw["recommendation"]; ok {
-                var rec struct {
-                        Action string `json:"action"`
-                        Reason string `json:"reason"`
-                }
-                if json.Unmarshal(raw, &rec) == nil {
-                        if rec.Action != "" {
-                                action = rec.Action
-                        }
-                        reason = rec.Reason
-                }
-        }
-        return composite, label, action, reason
 }
 
 func h1Hooks(w http.ResponseWriter, r *http.Request) {
@@ -636,17 +624,17 @@ A few notes specific to the Go path:
   variant if you also want a diagnostics blob to link from the
   internal comment.
 - **`CheckResult.Vulnrap`** carries the typed composite (score, label,
-  per-engine breakdown). The SDK keeps the rest of the server payload
-  on `CheckResult.Raw` so you can pull experimental fields like
-  `recommendation.action` / `recommendation.reason` without waiting on
-  an SDK release — that is what `summarize` above does.
+  per-engine breakdown). **`CheckResult.Recommendation`** is the typed
+  triage recommendation (`Action`, `Reason`, `ChallengeQuestions`) —
+  read it directly off the struct instead of reaching into `Raw`. It is
+  `nil` when the server omits the field (treat that as `STANDARD_TRIAGE`).
 - **Errors are typed.** Wrap `vulnrapCl.TestYourself` returns with
   `errors.As(err, &apiErr)` (where `apiErr` is `*vulnrap.APIError`) if
   you want to branch on `apiErr.StatusCode` — for example, treat 429
   as "back off and let a human triage" rather than "post nothing".
-- **The auto-close logic from Step 4 maps 1:1.** Read
-  `recommendation.action` off `res.Raw` (as in `summarize`) and the
-  AVRI gold-hit count off the Technical Substance Analyzer entry of
+- **The auto-close logic from Step 4 maps 1:1.** Check
+  `res.Recommendation.Action == "AUTO_CLOSE"` and the AVRI gold-hit
+  count off the Technical Substance Analyzer entry of
   `res.Vulnrap.Engines` to gate a `POST /v1/reports/{id}/state_changes`
   call with `state: "not-applicable"`.
 

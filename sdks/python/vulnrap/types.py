@@ -141,6 +141,30 @@ class RedactionSummary:
 
 
 @dataclass
+class Recommendation:
+    """Triage recommendation returned by the server.
+
+    ``action`` is one of ``PRIORITIZE``, ``MANUAL_REVIEW``,
+    ``STANDARD_TRIAGE``, ``CHALLENGE_REPORTER``, or ``AUTO_CLOSE``.
+    ``reason`` is a one-liner explaining the matrix decision.
+    ``challenge_questions`` is only populated when ``action`` is
+    ``CHALLENGE_REPORTER``.
+    """
+
+    action: str = ""
+    reason: str = ""
+    challenge_questions: List[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "Recommendation":
+        return cls(
+            action=str(data.get("action", "") or ""),
+            reason=str(data.get("reason", "") or ""),
+            challenge_questions=[str(q) for q in _list(data.get("challengeQuestions"))],
+        )
+
+
+@dataclass
 class VulnrapEngineResult:
     """One engine's score in the multi-engine composite."""
 
@@ -230,6 +254,7 @@ class ReportAnalysis:
     llm_used: bool = False
     redaction_applied: bool = False
     vulnrap: Optional[VulnrapComposite] = None
+    recommendation: Optional[Recommendation] = None
     avri_family: Optional[str] = None
     file_name: Optional[str] = None
     file_size: int = 0
@@ -244,6 +269,7 @@ class ReportAnalysis:
         except ValueError:
             mode = ContentMode.FULL
         vulnrap_raw = data.get("vulnrap")
+        rec_raw = data.get("recommendation")
         section_hashes = data.get("sectionHashes") or {}
         return cls(
             id=int(data.get("id", 0) or 0),
@@ -274,6 +300,7 @@ class ReportAnalysis:
             llm_used=bool(data.get("llmUsed", False)),
             redaction_applied=bool(data.get("redactionApplied", False)),
             vulnrap=VulnrapComposite.from_dict(vulnrap_raw) if isinstance(vulnrap_raw, Mapping) else None,
+            recommendation=Recommendation.from_dict(rec_raw) if isinstance(rec_raw, Mapping) else None,
             avri_family=_opt_str(data.get("avriFamily")),
             file_name=_opt_str(data.get("fileName")),
             file_size=int(data.get("fileSize", 0) or 0),
@@ -304,11 +331,13 @@ class CheckResult:
     llm_slop_score: Optional[int] = None
     llm_feedback: List[str] = field(default_factory=list)
     vulnrap: Optional[VulnrapComposite] = None
+    recommendation: Optional[Recommendation] = None
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "CheckResult":
         vulnrap_raw = data.get("vulnrap")
+        rec_raw = data.get("recommendation")
         section_hashes = data.get("sectionHashes") or {}
         return cls(
             slop_score=int(data.get("slopScore", 0) or 0),
@@ -325,6 +354,7 @@ class CheckResult:
             llm_slop_score=_opt_int(data.get("llmSlopScore")),
             llm_feedback=[str(s) for s in _list(data.get("llmFeedback"))],
             vulnrap=VulnrapComposite.from_dict(vulnrap_raw) if isinstance(vulnrap_raw, Mapping) else None,
+            recommendation=Recommendation.from_dict(rec_raw) if isinstance(rec_raw, Mapping) else None,
             raw=dict(data),
         )
 

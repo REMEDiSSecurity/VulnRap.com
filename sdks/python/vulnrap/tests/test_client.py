@@ -10,10 +10,12 @@ import pytest
 
 from vulnrap import (
     APIError,
+    CheckResult,
     Client,
     ContentMode,
     DEFAULT_BASE_URL,
     PlatformStats,
+    Recommendation,
     ReportAnalysis,
     __version__,
 )
@@ -185,6 +187,122 @@ def test_test_yourself(httpx_mock) -> None:
     # /reports/check should NOT include contentMode
     assert "contentMode" not in body
     assert "skipLlm" in body
+
+
+def test_test_yourself_recommendation_present(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE}/reports/check",
+        json={
+            "slopScore": 20,
+            "slopTier": "MEDIUM",
+            "breakdown": {"linguistic": 5, "factual": 5, "template": 5, "quality": 50},
+            "similarityMatches": [],
+            "redactionSummary": {"totalRedactions": 0, "categories": {}},
+            "recommendation": {
+                "action": "CHALLENGE_REPORTER",
+                "reason": "low composite, suspect phrasing",
+                "challengeQuestions": ["Can you share a PoC?", "What version is affected?"],
+            },
+        },
+    )
+    with Client(base_url=BASE) as c:
+        res = c.test_yourself(raw_text="suspicious content")
+
+    assert isinstance(res, CheckResult)
+    assert res.recommendation is not None
+    assert isinstance(res.recommendation, Recommendation)
+    assert res.recommendation.action == "CHALLENGE_REPORTER"
+    assert res.recommendation.reason == "low composite, suspect phrasing"
+    assert res.recommendation.challenge_questions == ["Can you share a PoC?", "What version is affected?"]
+
+
+def test_test_yourself_recommendation_absent(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE}/reports/check",
+        json={
+            "slopScore": 5,
+            "slopTier": "LOW",
+            "breakdown": {"linguistic": 0, "factual": 0, "template": 0, "quality": 90},
+            "similarityMatches": [],
+            "redactionSummary": {"totalRedactions": 0, "categories": {}},
+        },
+    )
+    with Client(base_url=BASE) as c:
+        res = c.test_yourself(raw_text="good report")
+
+    assert isinstance(res, CheckResult)
+    assert res.recommendation is None
+
+
+def test_score_report_recommendation_present(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE}/reports",
+        json={
+            "id": 77,
+            "contentHash": "xyz",
+            "contentMode": "full",
+            "slopScore": 82,
+            "slopTier": "HIGH",
+            "qualityScore": 15,
+            "confidence": 0.95,
+            "breakdown": {"linguistic": 25, "factual": 20, "template": 22, "quality": 15},
+            "evidence": [],
+            "similarityMatches": [],
+            "sectionMatches": [],
+            "redactionSummary": {"totalRedactions": 0, "categories": {}},
+            "feedback": [],
+            "llmEnhanced": False,
+            "fileSize": 0,
+            "createdAt": "2026-05-04T00:00:00Z",
+            "recommendation": {
+                "action": "AUTO_CLOSE",
+                "reason": "composite below threshold",
+            },
+        },
+        status_code=201,
+    )
+    with Client(base_url=BASE) as c:
+        res = c.score_report(raw_text="as an AI language model...")
+
+    assert isinstance(res, ReportAnalysis)
+    assert res.recommendation is not None
+    assert res.recommendation.action == "AUTO_CLOSE"
+    assert res.recommendation.reason == "composite below threshold"
+    assert res.recommendation.challenge_questions == []
+
+
+def test_score_report_recommendation_absent(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE}/reports",
+        json={
+            "id": 55,
+            "contentHash": "abc",
+            "contentMode": "full",
+            "slopScore": 10,
+            "slopTier": "LOW",
+            "qualityScore": 88,
+            "confidence": 0.85,
+            "breakdown": {"linguistic": 2, "factual": 1, "template": 1, "quality": 88},
+            "evidence": [],
+            "similarityMatches": [],
+            "sectionMatches": [],
+            "redactionSummary": {"totalRedactions": 0, "categories": {}},
+            "feedback": [],
+            "llmEnhanced": False,
+            "fileSize": 0,
+            "createdAt": "2026-05-04T00:00:00Z",
+        },
+        status_code=201,
+    )
+    with Client(base_url=BASE) as c:
+        res = c.score_report(raw_text="solid human report")
+
+    assert isinstance(res, ReportAnalysis)
+    assert res.recommendation is None
 
 
 def test_api_error_parses_message(httpx_mock) -> None:

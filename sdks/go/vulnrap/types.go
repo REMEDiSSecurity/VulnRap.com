@@ -81,6 +81,18 @@ type VulnrapComposite struct {
         EngineCount      int                   `json:"engineCount,omitempty"`
 }
 
+// Recommendation is the triage recommendation returned by the server.
+//
+// Action is one of PRIORITIZE, MANUAL_REVIEW, STANDARD_TRIAGE,
+// CHALLENGE_REPORTER, or AUTO_CLOSE. Reason is a one-liner explaining the
+// matrix decision. ChallengeQuestions is only populated when Action is
+// CHALLENGE_REPORTER.
+type Recommendation struct {
+        Action             string   `json:"action"`
+        Reason             string   `json:"reason"`
+        ChallengeQuestions []string `json:"challengeQuestions,omitempty"`
+}
+
 // ReportAnalysis is the response from ScoreReport and LookupReport.
 //
 // Only the always-present fields are typed strongly. The full server payload
@@ -116,13 +128,14 @@ type ReportAnalysis struct {
         LLMUsed           bool               `json:"llmUsed,omitempty"`
         RedactionApplied  bool               `json:"redactionApplied,omitempty"`
         Vulnrap           *VulnrapComposite  `json:"vulnrap,omitempty"`
+        Recommendation    *Recommendation    `json:"recommendation,omitempty"`
         AvriFamily        *string            `json:"avriFamily,omitempty"`
         FileName          *string            `json:"fileName,omitempty"`
         FileSize          int                `json:"fileSize"`
         CreatedAt         time.Time          `json:"createdAt"`
 
         // Raw holds the unparsed server response so callers can read fields not
-        // surfaced by this struct (e.g. diagnostics, triageRecommendation).
+        // surfaced by this struct (e.g. diagnostics).
         Raw map[string]json.RawMessage `json:"-"`
 }
 
@@ -167,7 +180,8 @@ type CheckResult struct {
         // the same report body was already in the database.
         PreviouslySubmitted bool `json:"previouslySubmitted"`
         // ExistingReportID is the matching row when PreviouslySubmitted is true.
-        ExistingReportID *int `json:"existingReportId,omitempty"`
+        ExistingReportID *int            `json:"existingReportId,omitempty"`
+        Recommendation   *Recommendation `json:"recommendation,omitempty"`
 
         // Raw holds the unparsed server response.
         Raw map[string]json.RawMessage `json:"-"`

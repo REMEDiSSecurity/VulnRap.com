@@ -20,6 +20,7 @@ from vulnrap import (
     ContentMode,
     DEFAULT_BASE_URL,
     PlatformStats,
+    Recommendation,
     ReportAnalysis,
     __version__,
 )
@@ -201,6 +202,90 @@ def test_async_test_yourself() -> None:
     # /reports/check must NOT include contentMode
     assert "contentMode" not in captured["body"]
     assert "skipLlm" in captured["body"]
+
+
+def test_async_test_yourself_recommendation_present() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "slopScore": 18,
+                "slopTier": "MEDIUM",
+                "breakdown": {"linguistic": 5, "factual": 4, "template": 4, "quality": 55},
+                "similarityMatches": [],
+                "redactionSummary": {"totalRedactions": 0, "categories": {}},
+                "recommendation": {
+                    "action": "CHALLENGE_REPORTER",
+                    "reason": "low composite, suspect phrasing",
+                    "challengeQuestions": ["Provide a PoC.", "Which version?"],
+                },
+            },
+        )
+
+    async def go() -> CheckResult:
+        async with AsyncClient(base_url=BASE, http_client=_mock_client(handler)) as c:
+            return await c.test_yourself(raw_text="suspicious report")
+
+    res = _run(go())
+    assert res.recommendation is not None
+    assert isinstance(res.recommendation, Recommendation)
+    assert res.recommendation.action == "CHALLENGE_REPORTER"
+    assert res.recommendation.reason == "low composite, suspect phrasing"
+    assert len(res.recommendation.challenge_questions) == 2
+
+
+def test_async_score_report_recommendation_absent() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            201,
+            json={
+                "id": 55,
+                "contentHash": "abc",
+                "contentMode": "full",
+                "slopScore": 10,
+                "slopTier": "LOW",
+                "qualityScore": 88,
+                "confidence": 0.85,
+                "breakdown": {"linguistic": 2, "factual": 1, "template": 1, "quality": 88},
+                "evidence": [],
+                "similarityMatches": [],
+                "sectionMatches": [],
+                "redactionSummary": {"totalRedactions": 0, "categories": {}},
+                "feedback": [],
+                "llmEnhanced": False,
+                "fileSize": 0,
+                "createdAt": "2026-05-04T00:00:00Z",
+            },
+        )
+
+    async def go() -> ReportAnalysis:
+        async with AsyncClient(base_url=BASE, http_client=_mock_client(handler)) as c:
+            return await c.score_report(raw_text="solid human report")
+
+    res = _run(go())
+    assert isinstance(res, ReportAnalysis)
+    assert res.recommendation is None
+
+
+def test_async_test_yourself_recommendation_absent() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "slopScore": 3,
+                "slopTier": "LOW",
+                "breakdown": {"linguistic": 0, "factual": 0, "template": 0, "quality": 95},
+                "similarityMatches": [],
+                "redactionSummary": {"totalRedactions": 0, "categories": {}},
+            },
+        )
+
+    async def go() -> CheckResult:
+        async with AsyncClient(base_url=BASE, http_client=_mock_client(handler)) as c:
+            return await c.test_yourself(raw_text="solid report with evidence")
+
+    res = _run(go())
+    assert res.recommendation is None
 
 
 def test_async_api_error() -> None:
