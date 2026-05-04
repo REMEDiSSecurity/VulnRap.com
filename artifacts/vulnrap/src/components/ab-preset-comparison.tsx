@@ -68,11 +68,11 @@ function computeOutcome(
   return { preset, score, tier, topSignals: filtered };
 }
 
-function PresetCard({ outcome }: { outcome: PresetOutcome }) {
+function PresetCard({ outcome, slot }: { outcome: PresetOutcome; slot: "a" | "b" }) {
   const meta = SENSITIVITY_PRESETS[outcome.preset];
   const tierClass = TIER_COLOR[outcome.tier] ?? "text-muted-foreground";
   return (
-    <div className="rounded-lg border border-border/40 bg-muted/10 p-3 flex-1 min-w-0">
+    <div className="rounded-lg border border-border/40 bg-muted/10 p-3 flex-1 min-w-0" data-testid={`preset-card-${slot}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
           {meta.label}
@@ -85,12 +85,12 @@ function PresetCard({ outcome }: { outcome: PresetOutcome }) {
         </Badge>
       </div>
       <div className="flex items-baseline gap-2 mb-2">
-        <div className="text-3xl font-mono font-bold tracking-tight">
+        <div className="text-3xl font-mono font-bold tracking-tight" data-testid={`preset-score-${slot}`}>
           {outcome.score}
         </div>
         <div className="text-[10px] text-muted-foreground">/ 100</div>
       </div>
-      <div className={`text-sm font-bold ${tierClass} mb-3`}>
+      <div className={`text-sm font-bold ${tierClass} mb-3`} data-testid={`preset-tier-${slot}`}>
         {outcome.tier}
       </div>
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
@@ -240,8 +240,8 @@ export function AbPresetComparison({
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
-            <PresetCard outcome={outcomeA} />
-            <PresetCard outcome={outcomeB} />
+            <PresetCard outcome={outcomeA} slot="a" />
+            <PresetCard outcome={outcomeB} slot="b" />
           </div>
           {tierDiverges && (
             <div
