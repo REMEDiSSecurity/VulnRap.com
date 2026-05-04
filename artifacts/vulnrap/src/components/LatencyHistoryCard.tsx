@@ -25,20 +25,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 
 const ENGINE_COLORS: Record<string, string> = {
-  linguistic: "#a78bfa",
-  substance: "#06b6d4",
-  cwe: "#f97316",
-  avri: "#22c55e",
-  llm_gate: "#eab308",
+  linguistic: "hsl(var(--chart-2))",
+  substance: "hsl(var(--chart-1))",
+  cwe: "hsl(var(--chart-4))",
+  avri: "hsl(var(--chart-5))",
+  llm_gate: "hsl(var(--chart-4))",
   composite: "#ec4899",
 };
 
 const FALLBACK_COLORS = [
-  "#a78bfa",
-  "#06b6d4",
-  "#f97316",
-  "#22c55e",
-  "#eab308",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
+  "hsl(var(--chart-4))",
   "#ec4899",
   "#8b5cf6",
   "#14b8a6",
@@ -184,23 +184,23 @@ export default function LatencyHistoryCard() {
               >
                 <defs>
                   <linearGradient id="pipelineGrad" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#06b6d4" />
-                    <stop offset="100%" stopColor="#a78bfa" />
+                    <stop offset="0%" stopColor="hsl(var(--chart-1))" />
+                    <stop offset="100%" stopColor="hsl(var(--chart-2))" />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,255,255,0.05)"
+                  stroke="var(--chart-grid)"
                 />
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                  tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                   tickLine={false}
                   axisLine={false}
                   interval="preserveStartEnd"
                 />
                 <YAxis
-                  tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                  tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(v) => formatMs(v)}
@@ -212,7 +212,7 @@ export default function LatencyHistoryCard() {
                   dataKey="Pipeline"
                   stroke="url(#pipelineGrad)"
                   strokeWidth={2.5}
-                  dot={{ r: 3, fill: "#06b6d4" }}
+                  dot={{ r: 3, fill: "hsl(var(--chart-1))" }}
                   activeDot={{ r: 5 }}
                   name="Pipeline"
                 />

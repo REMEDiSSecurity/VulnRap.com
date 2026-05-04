@@ -281,27 +281,27 @@ export function TransparencyDriftWidget() {
               >
                 <defs>
                   <linearGradient id="driftFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.45} />
+                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.45} />
                     <stop
                       offset="100%"
-                      stopColor="#06b6d4"
+                      stopColor="hsl(var(--chart-1))"
                       stopOpacity={0.05}
                     />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,255,255,0.05)"
+                  stroke="var(--chart-grid)"
                 />
                 <XAxis
                   dataKey="week"
-                  tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                  tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                   tickLine={false}
                   axisLine={false}
                   interval="preserveStartEnd"
                 />
                 <YAxis
-                  tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                  tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                   tickLine={false}
                   axisLine={false}
                 />
@@ -309,7 +309,7 @@ export function TransparencyDriftWidget() {
                 <Area
                   type="monotone"
                   dataKey="spread"
-                  stroke="#06b6d4"
+                  stroke="hsl(var(--chart-1))"
                   fill="url(#driftFill)"
                   strokeWidth={2}
                   name="Spread"

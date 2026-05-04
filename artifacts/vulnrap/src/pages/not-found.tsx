@@ -3,19 +3,19 @@ import { ArrowRight, FileWarning, Lock, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const E1_HEX = {
-  fill: "#facc15",
-  track: "rgba(250,204,21,0.10)",
-  ring: "rgba(250,204,21,0.35)",
+  fill: "hsl(var(--chart-4))",
+  track: "hsl(var(--chart-4) / 0.10)",
+  ring: "hsl(var(--chart-4) / 0.35)",
 };
 const E2_HEX = {
-  fill: "#22d3ee",
-  track: "rgba(34,211,238,0.10)",
-  ring: "rgba(34,211,238,0.35)",
+  fill: "hsl(var(--chart-1))",
+  track: "hsl(var(--chart-1) / 0.10)",
+  ring: "hsl(var(--chart-1) / 0.35)",
 };
 const E3_HEX = {
-  fill: "#a78bfa",
-  track: "rgba(167,139,250,0.10)",
-  ring: "rgba(167,139,250,0.35)",
+  fill: "hsl(var(--chart-2))",
+  track: "hsl(var(--chart-2) / 0.10)",
+  ring: "hsl(var(--chart-2) / 0.35)",
 };
 
 function EngineLine({
@@ -222,9 +222,9 @@ export default function NotFound() {
                 <div
                   className="inline-flex items-center gap-1.5 text-[10.5px] font-mono font-semibold rounded px-2 py-1"
                   style={{
-                    background: "rgba(251,191,36,0.10)",
-                    color: "#fbbf24",
-                    border: "1px solid rgba(251,191,36,0.45)",
+                    background: "hsl(var(--chart-4) / 0.10)",
+                    color: "hsl(var(--chart-4))",
+                    border: "1px solid hsl(var(--chart-4) / 0.45)",
                   }}
                 >
                   <Lock className="w-3 h-3" />
@@ -262,9 +262,9 @@ export default function NotFound() {
                 <div
                   className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 font-mono font-bold text-sm"
                   style={{
-                    background: "rgba(244,63,94,0.12)",
-                    color: "#fb7185",
-                    border: "1px solid rgba(244,63,94,0.45)",
+                    background: "hsl(var(--chart-3) / 0.12)",
+                    color: "hsl(var(--chart-3))",
+                    border: "1px solid hsl(var(--chart-3) / 0.45)",
                   }}
                 >
                   AUTO_CLOSE

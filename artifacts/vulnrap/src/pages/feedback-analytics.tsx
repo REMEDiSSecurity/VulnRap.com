@@ -306,11 +306,11 @@ function CorrelationScatter({
 
   const bucketOrder = ["0-20", "21-40", "41-60", "61-80", "81-100"];
   const bucketColors: Record<string, string> = {
-    "0-20": "#22c55e",
-    "21-40": "#34d399",
-    "41-60": "#eab308",
-    "61-80": "#f97316",
-    "81-100": "#ef4444",
+    "0-20": "hsl(var(--chart-5))",
+    "21-40": "hsl(var(--chart-5))",
+    "41-60": "hsl(var(--chart-4))",
+    "61-80": "hsl(var(--chart-4))",
+    "81-100": "hsl(var(--chart-3))",
   };
 
   const maxCount = Math.max(...data.map((d) => d.count), 1);
@@ -321,7 +321,7 @@ function CorrelationScatter({
       PAD.left + ((bIdx >= 0 ? bIdx : 0) / (bucketOrder.length - 1)) * pw;
     const y = PAD.top + ph - ((d.avgRating - 1) / 4) * ph;
     const r = 4 + (d.count / maxCount) * 10;
-    const color = bucketColors[d.scoreBucket] || "#06b6d4";
+    const color = bucketColors[d.scoreBucket] || "hsl(var(--chart-1))";
     return { ...d, x, y, r, color };
   });
 
@@ -341,14 +341,14 @@ function CorrelationScatter({
                 y1={y}
                 x2={W - PAD.right}
                 y2={y}
-                stroke="rgba(255,255,255,0.05)"
+                stroke="var(--chart-grid)"
                 strokeWidth={0.5}
               />
               <text
                 x={PAD.left - 4}
                 y={y + 3}
                 textAnchor="end"
-                fill="rgba(255,255,255,0.3)"
+                fill="var(--chart-tick)"
                 fontSize={8}
                 fontFamily="monospace"
               >
@@ -366,7 +366,7 @@ function CorrelationScatter({
               x={x}
               y={H - 4}
               textAnchor="middle"
-              fill="rgba(255,255,255,0.3)"
+              fill="var(--chart-tick)"
               fontSize={7}
               fontFamily="monospace"
             >
@@ -379,7 +379,7 @@ function CorrelationScatter({
           x={W / 2}
           y={H + 2}
           textAnchor="middle"
-          fill="rgba(255,255,255,0.2)"
+          fill="var(--chart-tick)"
           fontSize={7}
         >
           Slop Score Range
@@ -413,7 +413,7 @@ function CorrelationScatter({
                 width={80}
                 height={36}
                 rx={4}
-                fill="rgba(0,0,0,0.85)"
+                fill="hsl(var(--card))"
                 stroke={p.color}
                 strokeWidth={0.5}
               />
@@ -432,7 +432,7 @@ function CorrelationScatter({
                 x={p.x}
                 y={p.y - 16}
                 textAnchor="middle"
-                fill="rgba(255,255,255,0.5)"
+                fill="var(--chart-tick)"
                 fontSize={7}
               >
                 {p.count} entries · {p.scoreBucket}
@@ -443,7 +443,7 @@ function CorrelationScatter({
       </svg>
       <div className="grid grid-cols-5 gap-1 text-center">
         {data.map((d) => {
-          const color = bucketColors[d.scoreBucket] || "#06b6d4";
+          const color = bucketColors[d.scoreBucket] || "hsl(var(--chart-1))";
           const ratingColor =
             d.avgRating >= 4
               ? "text-green-400"
@@ -14159,7 +14159,7 @@ function HeadroomSparkline({
     PAD +
     (1 - (Math.max(0, Math.min(ceiling, last)) - yMin) / (yMax - yMin)) *
       (H - 2 * PAD);
-  const stroke = last < 5 ? "#f87171" : last < 10 ? "#facc15" : "#34d399";
+  const stroke = last < 5 ? "hsl(var(--chart-3))" : last < 10 ? "hsl(var(--chart-4))" : "hsl(var(--chart-5))";
 
   // Task #92 — older snapshots are down-sampled to one daily row per
   // archetype. Render the aggregated prefix as a dashed segment so
@@ -14214,7 +14214,7 @@ function HeadroomSparkline({
         y1={H - PAD}
         x2={W - PAD}
         y2={H - PAD}
-        stroke="rgba(255,255,255,0.08)"
+        stroke="var(--chart-grid)"
         strokeWidth={0.5}
       />
       {aggregatedPoints.length >= 2 && (
@@ -14280,7 +14280,7 @@ export function CompactionRollupsSparkline({
         y1={H - PAD}
         x2={W - PAD}
         y2={H - PAD}
-        stroke="rgba(255,255,255,0.08)"
+        stroke="var(--chart-grid)"
         strokeWidth={0.5}
       />
       {runs.map((r, i) => {
@@ -14662,7 +14662,7 @@ function GapSparkline({
         y1={warnY}
         x2={W - PAD.right}
         y2={warnY}
-        stroke="#ef4444"
+        stroke="hsl(var(--chart-3))"
         strokeWidth={1}
         strokeDasharray="3,3"
       />
@@ -14670,13 +14670,13 @@ function GapSparkline({
         x={PAD.left - 4}
         y={warnY + 3}
         textAnchor="end"
-        fill="#ef4444"
+        fill="hsl(var(--chart-3))"
         fontSize={8}
         fontFamily="monospace"
       >
         {gapWarn}
       </text>
-      <path d={path} fill="none" stroke="#06b6d4" strokeWidth={1.5} />
+      <path d={path} fill="none" stroke="hsl(var(--chart-1))" strokeWidth={1.5} />
       {eligible.map((w, i) => {
         const flagged = (w.gap as number) < gapWarn;
         return (
@@ -14685,13 +14685,13 @@ function GapSparkline({
               cx={xFor(i)}
               cy={yFor(w.gap as number)}
               r={3}
-              fill={flagged ? "#ef4444" : "#06b6d4"}
+              fill={flagged ? "hsl(var(--chart-3))" : "hsl(var(--chart-1))"}
             />
             <text
               x={xFor(i)}
               y={H - 6}
               textAnchor="middle"
-              fill="rgba(255,255,255,0.4)"
+              fill="var(--chart-tick)"
               fontSize={7}
               fontFamily="monospace"
             >
@@ -14704,7 +14704,7 @@ function GapSparkline({
         x={PAD.left - 4}
         y={PAD.top + 4}
         textAnchor="end"
-        fill="rgba(255,255,255,0.3)"
+        fill="var(--chart-tick)"
         fontSize={8}
         fontFamily="monospace"
       >
@@ -14714,7 +14714,7 @@ function GapSparkline({
         x={PAD.left - 4}
         y={H - PAD.bottom + 2}
         textAnchor="end"
-        fill="rgba(255,255,255,0.3)"
+        fill="var(--chart-tick)"
         fontSize={8}
         fontFamily="monospace"
       >
@@ -19183,7 +19183,7 @@ export function DatasetHistoryMeanSparkline({
         y1={H - PAD}
         x2={W - PAD}
         y2={H - PAD}
-        stroke="rgba(255,255,255,0.08)"
+        stroke="var(--chart-grid)"
         strokeWidth={0.5}
       />
       {targetLine != null && (
@@ -19192,7 +19192,7 @@ export function DatasetHistoryMeanSparkline({
           y1={yAt(targetLine.value)}
           x2={W - PAD}
           y2={yAt(targetLine.value)}
-          stroke="#ef4444"
+          stroke="hsl(var(--chart-3))"
           strokeWidth={0.6}
           strokeDasharray="2 2"
           data-testid="dataset-cohort-drift-gap-target-line"
@@ -19214,7 +19214,7 @@ export function DatasetHistoryMeanSparkline({
       {aggregatedCoords.length >= 2 && (
         <polyline
           fill="none"
-          stroke="#06b6d4"
+          stroke="hsl(var(--chart-1))"
           strokeOpacity={0.6}
           strokeWidth={1.25}
           strokeDasharray="2 1.5"
@@ -19227,7 +19227,7 @@ export function DatasetHistoryMeanSparkline({
       {rawCoords.length >= 2 && (
         <polyline
           fill="none"
-          stroke="#06b6d4"
+          stroke="hsl(var(--chart-1))"
           strokeWidth={1.25}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -19241,7 +19241,7 @@ export function DatasetHistoryMeanSparkline({
           cx={xAt(i)}
           cy={yAt(p.value)}
           r={1.4}
-          fill="#ef4444"
+          fill="hsl(var(--chart-3))"
           data-testid="dataset-cohort-drift-gap-breach-point"
         />
       ))}
@@ -19249,7 +19249,7 @@ export function DatasetHistoryMeanSparkline({
         cx={lastX}
         cy={lastY}
         r={1.8}
-        fill={lastFlagged ? "#ef4444" : "#06b6d4"}
+        fill={lastFlagged ? "hsl(var(--chart-3))" : "hsl(var(--chart-1))"}
         data-testid={
           lastFlagged ? "dataset-cohort-drift-gap-breach-point" : undefined
         }
@@ -19330,7 +19330,7 @@ export function DatasetCohortFixtureDeltaSparkline({
   const zeroY = yFor(0);
   // Reuse the same orange/muted treatment the tile applies to the
   // numeric Δ line so the sparkline highlight tracks the warn state.
-  const lastColor = isDivergent ? "#fb923c" : "rgba(148,163,184,0.8)";
+  const lastColor = isDivergent ? "hsl(var(--chart-4))" : "rgba(148,163,184,0.8)";
   const lineColor = "rgba(148,163,184,0.6)";
   // Task #380 — mirror DatasetHistoryMeanSparkline's split-stroke
   // (boundary point shared between dashed aggregated prefix and solid
@@ -19467,7 +19467,7 @@ export function DatasetRotationDensityBar({
         y1={H - PAD}
         x2={W - PAD}
         y2={H - PAD}
-        stroke="rgba(255,255,255,0.08)"
+        stroke="var(--chart-grid)"
         strokeWidth={0.5}
       />
       {buckets.map((b, i) => {
@@ -19891,7 +19891,7 @@ export function DatasetCohortDriftSection() {
                     y1="4"
                     x2="20"
                     y2="4"
-                    stroke="#06b6d4"
+                    stroke="hsl(var(--chart-1))"
                     strokeOpacity={0.6}
                     strokeWidth={1.5}
                     strokeDasharray="2 1.5"
@@ -19902,7 +19902,7 @@ export function DatasetCohortDriftSection() {
                     y1="4"
                     x2="36"
                     y2="4"
-                    stroke="#06b6d4"
+                    stroke="hsl(var(--chart-1))"
                     strokeWidth={1.5}
                     strokeLinecap="round"
                   />

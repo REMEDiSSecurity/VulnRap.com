@@ -126,6 +126,19 @@
   --chart-4: 40 100% 50%;
   --chart-5: 120 100% 50%;
 
+  --chart-grid: rgba(255, 255, 255, 0.05);
+  --chart-tick: rgba(255, 255, 255, 0.4);
+  --svg-dot-stroke: rgba(15, 23, 42, 0.85);
+  --svg-label-color: rgba(226, 232, 240, 0.75);
+  --svg-grid-color: rgba(148, 163, 184, 0.12);
+  --svg-axis-color: rgba(148, 163, 184, 0.18);
+  --gauge-track: rgba(255, 255, 255, 0.06);
+  --gauge-sub-label: rgba(255, 255, 255, 0.45);
+  --overlay-backdrop: rgba(0, 0, 0, 0.7);
+  --radar-frame-bg: linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.35) 100%);
+  --radar-frame-shadow: 0 0 0 1px rgba(0,255,255,0.04) inset, 0 8px 32px rgba(0,0,0,0.35);
+  --radar-frame-glow-opacity: 0.18;
+
   --radius: 0.25rem;
   --tracking-normal: 0em;
   --spacing: 0.25rem;
@@ -195,6 +208,19 @@
   --chart-3: 0 75% 48%;
   --chart-4: 35 95% 45%;
   --chart-5: 140 70% 35%;
+
+  --chart-grid: rgba(0, 0, 0, 0.06);
+  --chart-tick: rgba(30, 41, 59, 0.5);
+  --svg-dot-stroke: rgba(255, 255, 255, 0.85);
+  --svg-label-color: rgba(30, 41, 59, 0.7);
+  --svg-grid-color: rgba(30, 41, 59, 0.1);
+  --svg-axis-color: rgba(30, 41, 59, 0.15);
+  --gauge-track: rgba(0, 0, 0, 0.08);
+  --gauge-sub-label: rgba(30, 41, 59, 0.5);
+  --overlay-backdrop: rgba(0, 0, 0, 0.4);
+  --radar-frame-bg: linear-gradient(135deg, rgba(241,245,249,0.9) 0%, rgba(248,250,252,0.75) 100%);
+  --radar-frame-shadow: 0 0 0 1px rgba(0,80,120,0.06) inset, 0 4px 16px rgba(15,23,42,0.06);
+  --radar-frame-glow-opacity: 0.08;
 }
 
 /* When light mode is active, override the dark-coded custom utilities.
@@ -286,6 +312,74 @@ html.light {
     hsl(var(--primary) / 0.06) 0%,
     transparent 70%
   );
+}
+
+.light .stat-accent-cyan {
+  border-top-color: hsl(185 90% 32% / 0.5);
+}
+.light .stat-accent-red {
+  border-top-color: hsl(0 75% 48% / 0.5);
+}
+.light .stat-accent-amber {
+  border-top-color: hsl(35 95% 45% / 0.5);
+}
+.light .stat-accent-violet {
+  border-top-color: hsl(270 70% 50% / 0.5);
+}
+.light .icon-glow-cyan,
+.light .icon-glow-green,
+.light .icon-glow-violet,
+.light .icon-glow-amber,
+.light .icon-glow-red,
+.light .icon-glow-orange,
+.light .icon-glow-yellow,
+.light .icon-glow-pink,
+.light .icon-glow-purple {
+  border-color: rgba(0, 80, 120, 0.08);
+}
+.light .icon-glow-cyan { background: radial-gradient(circle, rgba(0, 150, 180, 0.08) 0%, rgba(0, 150, 180, 0.02) 70%, transparent 100%); }
+.light .icon-glow-green { background: radial-gradient(circle, rgba(22, 163, 74, 0.08) 0%, rgba(22, 163, 74, 0.02) 70%, transparent 100%); }
+.light .icon-glow-violet { background: radial-gradient(circle, rgba(109, 40, 217, 0.08) 0%, rgba(109, 40, 217, 0.02) 70%, transparent 100%); }
+.light .icon-glow-amber { background: radial-gradient(circle, rgba(217, 119, 6, 0.08) 0%, rgba(217, 119, 6, 0.02) 70%, transparent 100%); }
+.light .icon-glow-red { background: radial-gradient(circle, rgba(220, 38, 38, 0.08) 0%, rgba(220, 38, 38, 0.02) 70%, transparent 100%); }
+.light .icon-glow-orange { background: radial-gradient(circle, rgba(234, 88, 12, 0.08) 0%, rgba(234, 88, 12, 0.02) 70%, transparent 100%); }
+.light .icon-glow-yellow { background: radial-gradient(circle, rgba(202, 138, 4, 0.08) 0%, rgba(202, 138, 4, 0.02) 70%, transparent 100%); }
+.light .icon-glow-pink { background: radial-gradient(circle, rgba(219, 39, 119, 0.08) 0%, rgba(219, 39, 119, 0.02) 70%, transparent 100%); }
+.light .icon-glow-purple { background: radial-gradient(circle, rgba(147, 51, 234, 0.08) 0%, rgba(147, 51, 234, 0.02) 70%, transparent 100%); }
+.light .feature-card:hover {
+  box-shadow:
+    0 4px 16px rgba(15, 23, 42, 0.06),
+    0 0 12px rgba(0, 150, 180, 0.04);
+}
+.light .bar-gradient {
+  background: linear-gradient(
+    180deg,
+    hsl(185 90% 35% / 0.75) 0%,
+    hsl(270 70% 50% / 0.55) 100%
+  );
+}
+.light .gradient-border::before {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 150, 180, 0.25),
+    rgba(109, 40, 217, 0.25),
+    rgba(0, 150, 180, 0.1)
+  );
+}
+.light .logo-glow {
+  box-shadow:
+    0 0 12px rgba(0, 150, 180, 0.1),
+    0 0 24px rgba(0, 150, 180, 0.05);
+}
+.light .step-number {
+  background: linear-gradient(
+    180deg,
+    hsl(185 90% 32% / 0.4) 0%,
+    hsl(185 90% 32% / 0.08) 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* Hide laser/scan ambient effects in light mode — they were tuned for

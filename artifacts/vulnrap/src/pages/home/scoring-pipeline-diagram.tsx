@@ -24,22 +24,22 @@ const ENGINE_HEX: Record<
   { fill: string; faded: string; track: string; ring: string }
 > = {
   e1: {
-    fill: "#fbbf24",
-    faded: "rgba(251,191,36,0.35)",
-    track: "rgba(251,191,36,0.10)",
-    ring: "rgba(251,191,36,0.40)",
+    fill: "hsl(var(--chart-4))",
+    faded: "hsl(var(--chart-4) / 0.35)",
+    track: "hsl(var(--chart-4) / 0.10)",
+    ring: "hsl(var(--chart-4) / 0.40)",
   },
   e2: {
-    fill: "#22d3ee",
-    faded: "rgba(34,211,238,0.35)",
-    track: "rgba(34,211,238,0.10)",
-    ring: "rgba(34,211,238,0.40)",
+    fill: "hsl(var(--chart-1))",
+    faded: "hsl(var(--chart-1) / 0.35)",
+    track: "hsl(var(--chart-1) / 0.10)",
+    ring: "hsl(var(--chart-1) / 0.40)",
   },
   e3: {
-    fill: "#a78bfa",
-    faded: "rgba(167,139,250,0.35)",
-    track: "rgba(167,139,250,0.10)",
-    ring: "rgba(167,139,250,0.40)",
+    fill: "hsl(var(--chart-2))",
+    faded: "hsl(var(--chart-2) / 0.35)",
+    track: "hsl(var(--chart-2) / 0.10)",
+    ring: "hsl(var(--chart-2) / 0.40)",
   },
 };
 
@@ -244,12 +244,12 @@ function EngineRowSvg({
             y1={barY - 3}
             x2={barX + effW}
             y2={barY + barH + 3}
-            stroke="#fbbf24"
+            stroke="hsl(var(--chart-4))"
             strokeWidth={2}
           />
           <polygon
             points={`${barX + effW - 3.5},${barY - 5} ${barX + effW + 3.5},${barY - 5} ${barX + effW},${barY - 1.5}`}
-            fill="#fbbf24"
+            fill="hsl(var(--chart-4))"
           />
         </>
       )}
@@ -274,15 +274,15 @@ function EngineRowSvg({
             width={200}
             height={18}
             rx={4}
-            fill="rgba(251,191,36,0.10)"
-            stroke="rgba(251,191,36,0.45)"
+            fill="hsl(var(--chart-4) / 0.10)"
+            stroke="hsl(var(--chart-4) / 0.45)"
           />
           <text
             x={x + width - 192}
             y={barY + barH + 35}
             fontSize={10}
             fontWeight={600}
-            fill="#fbbf24"
+            fill="hsl(var(--chart-4))"
             fontFamily="ui-monospace, SFMono-Regular"
           >
             {`\u{1F512} substance gate \u00B7 ${row.gateNote}`}
@@ -307,13 +307,13 @@ function WorkedExampleSvg({
   height: number;
 }) {
   const isSlop = ex.variant === "slop";
-  const accent = isSlop ? "#f43f5e" : "#10b981";
-  const accentSoft = isSlop ? "rgba(244,63,94,0.35)" : "rgba(16,185,129,0.35)";
-  const accentBg = isSlop ? "rgba(244,63,94,0.06)" : "rgba(16,185,129,0.06)";
-  const compositeColor = isSlop ? "#fb7185" : "#34d399";
-  const triageColor = isSlop ? "#fbbf24" : "#34d399";
-  const triageSoft = isSlop ? "rgba(251,191,36,0.45)" : "rgba(16,185,129,0.45)";
-  const triageFill = isSlop ? "rgba(251,191,36,0.12)" : "rgba(16,185,129,0.12)";
+  const accent = isSlop ? "hsl(var(--chart-3))" : "hsl(var(--chart-5))";
+  const accentSoft = isSlop ? "hsl(var(--chart-3) / 0.35)" : "hsl(var(--chart-5) / 0.35)";
+  const accentBg = isSlop ? "hsl(var(--chart-3) / 0.06)" : "hsl(var(--chart-5) / 0.06)";
+  const compositeColor = isSlop ? "hsl(var(--chart-3))" : "hsl(var(--chart-5))";
+  const triageColor = isSlop ? "hsl(var(--chart-4))" : "hsl(var(--chart-5))";
+  const triageSoft = isSlop ? "hsl(var(--chart-4) / 0.45)" : "hsl(var(--chart-5) / 0.45)";
+  const triageFill = isSlop ? "hsl(var(--chart-4) / 0.12)" : "hsl(var(--chart-5) / 0.12)";
 
   const padX = 18;
   const innerX = x + padX;
@@ -738,7 +738,7 @@ export function ScoringPipelineDiagram() {
             Same CWE-89 cited.
           </tspan>
           {"  "}What separates these reports is{" "}
-          <tspan fill="#22d3ee" fontFamily="ui-monospace, SFMono-Regular">
+          <tspan fill="hsl(var(--chart-1))" fontFamily="ui-monospace, SFMono-Regular">
             substance
           </tspan>
           . When Engine 2 sees no evidence, the substance gate caps Engine 3.
@@ -780,7 +780,7 @@ export function ScoringPipelineDiagram() {
             Same CWE-89 cited.
           </tspan>
           {"  "}What separates them is{" "}
-          <tspan fill="#22d3ee" fontFamily="ui-monospace, SFMono-Regular">
+          <tspan fill="hsl(var(--chart-1))" fontFamily="ui-monospace, SFMono-Regular">
             substance
           </tspan>
           .

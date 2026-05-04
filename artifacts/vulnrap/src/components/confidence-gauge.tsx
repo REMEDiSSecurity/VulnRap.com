@@ -66,19 +66,19 @@ export function ConfidenceGauge({
   const color = useMemo(() => {
     if (pct >= 0.8)
       return {
-        stroke: "#22c55e",
-        glow: "rgba(34, 197, 94, 0.3)",
+        stroke: "hsl(var(--chart-5))",
+        glow: "hsl(var(--chart-5) / 0.3)",
         text: "text-green-400",
       };
     if (pct >= 0.5)
       return {
-        stroke: "#eab308",
-        glow: "rgba(234, 179, 8, 0.3)",
+        stroke: "hsl(var(--chart-4))",
+        glow: "hsl(var(--chart-4) / 0.3)",
         text: "text-yellow-400",
       };
     return {
-      stroke: "#f97316",
-      glow: "rgba(249, 115, 22, 0.3)",
+      stroke: "hsl(var(--chart-4))",
+      glow: "hsl(var(--chart-4) / 0.3)",
       text: "text-orange-400",
     };
   }, [pct]);
@@ -105,7 +105,7 @@ export function ConfidenceGauge({
         <path
           d={bgPath}
           fill="none"
-          stroke="rgba(255,255,255,0.06)"
+          stroke="var(--gauge-track, rgba(255,255,255,0.06))"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
         />
@@ -144,7 +144,7 @@ export function ConfidenceGauge({
           x={center}
           y={center + 20}
           textAnchor="middle"
-          fill="rgba(255,255,255,0.45)"
+          fill="var(--gauge-sub-label, rgba(255,255,255,0.45))"
           fontSize={9}
           fontWeight={500}
           style={{ textTransform: "uppercase", opacity: progress }}

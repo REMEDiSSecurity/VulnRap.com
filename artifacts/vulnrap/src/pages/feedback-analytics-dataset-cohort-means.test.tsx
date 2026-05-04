@@ -261,7 +261,7 @@ describe("DatasetCohortMeansSection per-tier delta sparkline (Task #516)", () =>
     // T2 — divergent path: dsMean 50, fxMean 38 → Δ+12 (>5pt default
     // warn), isDivergent=true. Same three-point history shape so the
     // SVG renders, but the latest-point circle should be the orange
-    // (#fb923c) divergent fill that mirrors the per-tile numeric Δ
+    // (hsl(var(--chart-4))) divergent fill that mirrors the per-tile numeric Δ
     // colour. This is the assertion that pins the `isDivergent`
     // hand-off from the tile down into the sparkline.
     const t2Sparkline = within(t2Trend).getByTestId(
@@ -269,7 +269,7 @@ describe("DatasetCohortMeansSection per-tier delta sparkline (Task #516)", () =>
     );
     const t2Circle = t2Sparkline.querySelector("circle");
     expect(t2Circle).not.toBeNull();
-    expect(t2Circle).toHaveAttribute("fill", "#fb923c");
+    expect(t2Circle).toHaveAttribute("fill", "hsl(var(--chart-4))");
 
     // T3 — empty-history fallback: zero snapshots in the
     // /api/test/dataset-history response → deltaPoints is empty →

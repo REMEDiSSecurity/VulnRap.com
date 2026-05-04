@@ -588,7 +588,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         >
           <div
             className="absolute inset-0"
-            style={{ backgroundColor: "rgba(0, 0, 0, 0.7)" }}
+            style={{ backgroundColor: "var(--overlay-backdrop, rgba(0, 0, 0, 0.7))" }}
             onClick={() => setMobileMenuOpen(false)}
           />
           <nav

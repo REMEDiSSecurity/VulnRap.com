@@ -622,16 +622,15 @@ function PolishedRadarFrame({ children }: { children: React.ReactNode }) {
     <div
       className="relative flex-shrink-0 rounded-xl border border-cyan-500/15 p-3 overflow-hidden"
       style={{
-        background:
-          "linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.35) 100%)",
-        boxShadow:
-          "0 0 0 1px rgba(0,255,255,0.04) inset, 0 8px 32px rgba(0,0,0,0.35)",
+        background: "var(--radar-frame-bg)",
+        boxShadow: "var(--radar-frame-shadow)",
       }}
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.18]"
+        className="pointer-events-none absolute inset-0"
         style={{
+          opacity: "var(--radar-frame-glow-opacity, 0.18)",
           background:
             "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(34,211,238,0.35), transparent 70%), radial-gradient(ellipse 35% 35% at 18% 25%, rgba(251,191,36,0.18), transparent 70%), radial-gradient(ellipse 35% 35% at 82% 75%, rgba(167,139,250,0.22), transparent 70%)",
         }}
@@ -695,11 +694,11 @@ function ScoreHistoryTimeline({ reportId }: { reportId: number }) {
     .join(" ");
 
   function pointColor(score: number): string {
-    if (score <= 35) return "#f87171";
-    if (score <= 50) return "#fb923c";
-    if (score <= 65) return "#facc15";
-    if (score <= 80) return "#34d399";
-    return "#4ade80";
+    if (score <= 35) return "hsl(var(--chart-3))";
+    if (score <= 50) return "hsl(var(--chart-3))";
+    if (score <= 65) return "hsl(var(--chart-4))";
+    if (score <= 80) return "hsl(var(--chart-5))";
+    return "hsl(var(--chart-5))";
   }
 
   function fmtTs(ts: string): string {
@@ -795,7 +794,7 @@ function ScoreHistoryTimeline({ reportId }: { reportId: number }) {
                     cy={yFor(e.compositeScore)}
                     r={hoverIdx === i ? 6 : 4}
                     fill={pointColor(e.compositeScore)}
-                    stroke="rgba(15,23,42,0.9)"
+                    stroke="var(--svg-dot-stroke)"
                     strokeWidth="1.5"
                   />
                   <text
@@ -803,7 +802,7 @@ function ScoreHistoryTimeline({ reportId }: { reportId: number }) {
                     y={yFor(e.compositeScore) - 9}
                     fontSize="9"
                     textAnchor="middle"
-                    fill="rgba(226,232,240,0.85)"
+                    fill="var(--svg-label-color)"
                     fontFamily="monospace"
                   >
                     {e.compositeScore}

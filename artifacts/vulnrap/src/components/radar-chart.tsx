@@ -25,7 +25,7 @@ interface RadarChartProps {
   overlayLabel?: string;
 }
 
-const DEFAULT_STOPS = ["#fbbf24", "#22d3ee", "#a78bfa"];
+const DEFAULT_STOPS = ["hsl(var(--chart-4))", "hsl(var(--chart-1))", "hsl(var(--chart-2))"];
 
 export function RadarChart({
   data,
@@ -118,21 +118,16 @@ export function RadarChart({
 
   const valueColor = (val: number, max: number) => {
     const pct = val / max;
-    if (pct >= 0.5) return "rgba(239, 68, 68, 1)";
-    if (pct >= 0.25) return "rgba(234, 179, 8, 1)";
-    return "rgba(34, 197, 94, 1)";
+    if (pct >= 0.5) return "hsl(var(--chart-3))";
+    if (pct >= 0.25) return "hsl(var(--chart-4))";
+    return "hsl(var(--chart-5))";
   };
 
   const polished = variant === "polished";
-  const gridColor = polished
-    ? "rgba(148, 163, 184, 0.12)"
-    : "rgba(255, 255, 255, 0.08)";
-  const axisColor = polished
-    ? "rgba(148, 163, 184, 0.18)"
-    : "rgba(255, 255, 255, 0.08)";
-  const labelColor = polished
-    ? "rgba(226, 232, 240, 0.75)"
-    : "rgba(255, 255, 255, 0.55)";
+  const gridColor = "var(--svg-grid-color)";
+  const axisColor = "var(--svg-axis-color)";
+  const labelColor = "var(--svg-label-color)";
+  const dotStrokeColor = "var(--svg-dot-stroke)";
 
   const polyGradId = `radarPoly-${uid}`;
   const strokeGradId = `radarStroke-${uid}`;
@@ -266,7 +261,7 @@ export function RadarChart({
               cy={p.ay}
               r={3 * progress}
               fill={c}
-              stroke="rgba(15,23,42,0.85)"
+              stroke={dotStrokeColor}
               strokeWidth={0.75}
             />
           </g>

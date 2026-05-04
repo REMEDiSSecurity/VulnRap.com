@@ -31,11 +31,11 @@ import {
 } from "@/components/ui/tooltip";
 
 const ENGINE_COLORS = [
-  "#06b6d4",
-  "#a78bfa",
-  "#f97316",
-  "#22c55e",
-  "#eab308",
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
+  "hsl(var(--chart-4))",
   "#ec4899",
 ];
 
@@ -244,11 +244,11 @@ export default function LatencySnapshotCard() {
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,255,255,0.05)"
+                  stroke="var(--chart-grid)"
                 />
                 <XAxis
                   dataKey="label"
-                  tick={{ fontSize: 9, fill: "rgba(255,255,255,0.4)" }}
+                  tick={{ fontSize: 9, fill: "var(--chart-tick)" }}
                   tickLine={false}
                   axisLine={false}
                   interval={0}
@@ -257,7 +257,7 @@ export default function LatencySnapshotCard() {
                   height={50}
                 />
                 <YAxis
-                  tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                  tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                   tickLine={false}
                   axisLine={false}
                   allowDecimals={false}
@@ -266,7 +266,7 @@ export default function LatencySnapshotCard() {
                 {view === "pipeline" ? (
                   <Bar
                     dataKey="Pipeline"
-                    fill="#06b6d4"
+                    fill="hsl(var(--chart-1))"
                     radius={[4, 4, 0, 0]}
                   />
                 ) : (

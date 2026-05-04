@@ -45,11 +45,11 @@ import LatencyHistoryCard from "@/components/LatencyHistoryCard";
 import PhraseSuggestionForm from "@/components/phrase-suggestion-form";
 
 const TIER_COLORS = {
-  clean: "#22c55e",
-  likelyHuman: "#34d399",
-  questionable: "#eab308",
-  likelySlop: "#f97316",
-  slop: "#ef4444",
+  clean: "hsl(var(--chart-5))",
+  likelyHuman: "hsl(var(--chart-5))",
+  questionable: "hsl(var(--chart-4))",
+  likelySlop: "hsl(var(--chart-4))",
+  slop: "hsl(var(--chart-3))",
 };
 
 function HeroStat({
@@ -249,27 +249,27 @@ export default function Transparency() {
                       x2="0"
                       y2="1"
                     >
-                      <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.4} />
+                      <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.4} />
                       <stop
                         offset="100%"
-                        stopColor="#06b6d4"
+                        stopColor="hsl(var(--chart-1))"
                         stopOpacity={0.05}
                       />
                     </linearGradient>
                   </defs>
                   <CartesianGrid
                     strokeDasharray="3 3"
-                    stroke="rgba(255,255,255,0.05)"
+                    stroke="var(--chart-grid)"
                   />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                     tickLine={false}
                     axisLine={false}
                     interval="preserveStartEnd"
                   />
                   <YAxis
-                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                     tickLine={false}
                     axisLine={false}
                     allowDecimals={false}
@@ -278,7 +278,7 @@ export default function Transparency() {
                   <Area
                     type="monotone"
                     dataKey="reports"
-                    stroke="#06b6d4"
+                    stroke="hsl(var(--chart-1))"
                     fill="url(#reportsFill)"
                     strokeWidth={2}
                     name="Reports"
@@ -313,17 +313,17 @@ export default function Transparency() {
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
-                    stroke="rgba(255,255,255,0.05)"
+                    stroke="var(--chart-grid)"
                   />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                     tickLine={false}
                     axisLine={false}
                     interval="preserveStartEnd"
                   />
                   <YAxis
-                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                     tickLine={false}
                     axisLine={false}
                     allowDecimals={false}
@@ -405,24 +405,24 @@ export default function Transparency() {
                 >
                   <defs>
                     <linearGradient id="scoreLine" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#a78bfa" />
-                      <stop offset="100%" stopColor="#06b6d4" />
+                      <stop offset="0%" stopColor="hsl(var(--chart-2))" />
+                      <stop offset="100%" stopColor="hsl(var(--chart-1))" />
                     </linearGradient>
                   </defs>
                   <CartesianGrid
                     strokeDasharray="3 3"
-                    stroke="rgba(255,255,255,0.05)"
+                    stroke="var(--chart-grid)"
                   />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                     tickLine={false}
                     axisLine={false}
                     interval="preserveStartEnd"
                   />
                   <YAxis
                     domain={[0, 100]}
-                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                     tickLine={false}
                     axisLine={false}
                   />
@@ -474,28 +474,28 @@ export default function Transparency() {
                 >
                   <defs>
                     <linearGradient id="agreeFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#22c55e" stopOpacity={0.6} />
+                      <stop offset="0%" stopColor="hsl(var(--chart-5))" stopOpacity={0.6} />
                       <stop
                         offset="100%"
-                        stopColor="#22c55e"
+                        stopColor="hsl(var(--chart-5))"
                         stopOpacity={0.1}
                       />
                     </linearGradient>
                   </defs>
                   <CartesianGrid
                     strokeDasharray="3 3"
-                    stroke="rgba(255,255,255,0.05)"
+                    stroke="var(--chart-grid)"
                   />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                     tickLine={false}
                     axisLine={false}
                     interval="preserveStartEnd"
                   />
                   <YAxis
                     domain={[0, 100]}
-                    tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                    tick={{ fontSize: 10, fill: "var(--chart-tick)" }}
                     tickLine={false}
                     axisLine={false}
                   />

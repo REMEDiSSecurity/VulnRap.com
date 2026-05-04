@@ -424,21 +424,21 @@ function tierStyle(tier: Sample["finalTier"]) {
   switch (tier) {
     case "rejected":
       return {
-        color: "#f87171",
-        bg: "rgba(248,113,113,0.12)",
-        border: "rgba(248,113,113,0.45)",
+        color: "hsl(var(--chart-3))",
+        bg: "hsl(var(--chart-3) / 0.12)",
+        border: "hsl(var(--chart-3) / 0.45)",
       };
     case "needs-review":
       return {
-        color: "#fbbf24",
-        bg: "rgba(251,191,36,0.12)",
-        border: "rgba(251,191,36,0.45)",
+        color: "hsl(var(--chart-4))",
+        bg: "hsl(var(--chart-4) / 0.12)",
+        border: "hsl(var(--chart-4) / 0.45)",
       };
     case "accept":
       return {
-        color: "#34d399",
-        bg: "rgba(52,211,153,0.12)",
-        border: "rgba(52,211,153,0.45)",
+        color: "hsl(var(--chart-5))",
+        bg: "hsl(var(--chart-5) / 0.12)",
+        border: "hsl(var(--chart-5) / 0.45)",
       };
   }
 }
@@ -763,7 +763,7 @@ export default function HowItWorks() {
                       style={{
                         backgroundColor: lit
                           ? step.accent
-                          : "rgba(255,255,255,0.15)",
+                          : "hsl(var(--muted-foreground) / 0.25)",
                         boxShadow: lit ? `0 0 8px ${step.accent}` : "none",
                       }}
                     />

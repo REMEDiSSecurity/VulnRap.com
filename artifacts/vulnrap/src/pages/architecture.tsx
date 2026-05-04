@@ -19,9 +19,9 @@ const NODES: PipelineNode[] = [
     sub: "POST /api/reports",
     to: "/developers",
     linkLabel: "API reference",
-    fill: "rgba(34,211,238,0.10)",
-    stroke: "rgba(34,211,238,0.55)",
-    text: "#22d3ee",
+    fill: "hsl(var(--chart-1) / 0.10)",
+    stroke: "hsl(var(--chart-1) / 0.55)",
+    text: "hsl(var(--chart-1))",
   },
   {
     id: "redact",
@@ -29,9 +29,9 @@ const NODES: PipelineNode[] = [
     sub: "PII / secret strip",
     to: "/privacy",
     linkLabel: "Privacy & redaction",
-    fill: "rgba(167,139,250,0.10)",
-    stroke: "rgba(167,139,250,0.55)",
-    text: "#a78bfa",
+    fill: "hsl(var(--chart-2) / 0.10)",
+    stroke: "hsl(var(--chart-2) / 0.55)",
+    text: "hsl(var(--chart-2))",
   },
   {
     id: "fuse",
@@ -39,9 +39,9 @@ const NODES: PipelineNode[] = [
     sub: "3 engines · weighted",
     to: "/engines",
     linkLabel: "Per-engine deep dives",
-    fill: "rgba(251,191,36,0.10)",
-    stroke: "rgba(251,191,36,0.55)",
-    text: "#fbbf24",
+    fill: "hsl(var(--chart-4) / 0.10)",
+    stroke: "hsl(var(--chart-4) / 0.55)",
+    text: "hsl(var(--chart-4))",
   },
   {
     id: "triage",
@@ -49,9 +49,9 @@ const NODES: PipelineNode[] = [
     sub: "label · gate · route",
     to: "/use-cases",
     linkLabel: "Triage use cases",
-    fill: "rgba(244,114,182,0.10)",
-    stroke: "rgba(244,114,182,0.55)",
-    text: "#f472b6",
+    fill: "hsl(var(--chart-3) / 0.10)",
+    stroke: "hsl(var(--chart-3) / 0.55)",
+    text: "hsl(var(--chart-3))",
   },
   {
     id: "store",
@@ -59,9 +59,9 @@ const NODES: PipelineNode[] = [
     sub: "hash · index · search",
     to: "/gallery",
     linkLabel: "Curated report gallery",
-    fill: "rgba(52,211,153,0.10)",
-    stroke: "rgba(52,211,153,0.55)",
-    text: "#34d399",
+    fill: "hsl(var(--chart-5) / 0.10)",
+    stroke: "hsl(var(--chart-5) / 0.55)",
+    text: "hsl(var(--chart-5))",
   },
   {
     id: "feedback",
@@ -69,9 +69,9 @@ const NODES: PipelineNode[] = [
     sub: "votes · drift · re-tune",
     to: "/feedback-analytics",
     linkLabel: "Feedback analytics",
-    fill: "rgba(96,165,250,0.10)",
-    stroke: "rgba(96,165,250,0.55)",
-    text: "#60a5fa",
+    fill: "hsl(var(--chart-1) / 0.10)",
+    stroke: "hsl(var(--chart-1) / 0.55)",
+    text: "hsl(var(--chart-1))",
   },
 ];
 
@@ -118,7 +118,7 @@ function PipelineSvg() {
           markerHeight="7"
           orient="auto-start-reverse"
         >
-          <path d="M0,0 L10,5 L0,10 z" fill="#60a5fa" />
+          <path d="M0,0 L10,5 L0,10 z" fill="hsl(var(--chart-1))" />
         </marker>
       </defs>
 
@@ -166,7 +166,7 @@ function PipelineSvg() {
             <path
               d={`M ${startX} ${startY} L ${startX} ${dipY} L ${endX} ${dipY} L ${endX} ${endY + 4}`}
               fill="none"
-              stroke="#60a5fa"
+              stroke="hsl(var(--chart-1))"
               strokeWidth={1.5}
               strokeDasharray="4 4"
               markerEnd="url(#arrow-loop)"
@@ -177,8 +177,8 @@ function PipelineSvg() {
               width={156}
               height={22}
               rx={4}
-              fill="rgba(96,165,250,0.10)"
-              stroke="rgba(96,165,250,0.45)"
+              fill="hsl(var(--chart-1) / 0.10)"
+              stroke="hsl(var(--chart-1) / 0.45)"
             />
             <text
               x={(startX + endX) / 2}
@@ -186,7 +186,7 @@ function PipelineSvg() {
               textAnchor="middle"
               fontSize={11}
               fontWeight={700}
-              fill="#60a5fa"
+              fill="hsl(var(--chart-1))"
               fontFamily="ui-monospace, SFMono-Regular"
             >
               feedback re-tunes weights
@@ -341,7 +341,7 @@ function SequenceSvg() {
           markerHeight="6"
           orient="auto-start-reverse"
         >
-          <path d="M0,0 L10,5 L0,10 z" fill="#34d399" />
+          <path d="M0,0 L10,5 L0,10 z" fill="hsl(var(--chart-5))" />
         </marker>
       </defs>
 
@@ -384,7 +384,7 @@ function SequenceSvg() {
       {SEQ_MESSAGES.map((m, i) => {
         const x1 = SEQ_LANE_X[m.from];
         const x2 = SEQ_LANE_X[m.to];
-        const stroke = m.reply ? "#34d399" : "#94a3b8";
+        const stroke = m.reply ? "hsl(var(--chart-5))" : "#94a3b8";
         const marker = m.reply ? "url(#seq-arrow-reply)" : "url(#seq-arrow)";
         const labelX = (x1 + x2) / 2;
         return (
@@ -404,7 +404,7 @@ function SequenceSvg() {
               y={m.y - 5}
               textAnchor="middle"
               fontSize={10.5}
-              fill={m.reply ? "#34d399" : "#cbd5e1"}
+              fill={m.reply ? "hsl(var(--chart-5))" : "#cbd5e1"}
               fontFamily="ui-monospace, SFMono-Regular"
             >
               {m.label}
