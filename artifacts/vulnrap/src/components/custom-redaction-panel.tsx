@@ -86,17 +86,44 @@ export function findMatches(text: string, rules: ParsedRule[]): MatchSpan[] {
   return merged;
 }
 
+const STORAGE_APPLY_KEY = "vulnrap.customRedactionRules.apply.v1";
+const DEFAULT_REDACTION_TOKEN = "[REDACTED]";
+
+export function applyRedaction(
+  text: string,
+  rules: ParsedRule[],
+  token: string = DEFAULT_REDACTION_TOKEN,
+): { redacted: string; count: number } {
+  const validRules = rules.filter((r) => r.regex);
+  const matches = findMatches(text, validRules);
+  if (matches.length === 0) return { redacted: text, count: 0 };
+  let result = "";
+  let cursor = 0;
+  for (const span of matches) {
+    if (span.start > cursor) result += text.slice(cursor, span.start);
+    result += token;
+    cursor = span.end;
+  }
+  if (cursor < text.length) result += text.slice(cursor);
+  return { redacted: result, count: matches.length };
+}
+
 interface Props {
   text: string;
   redactionDisabled?: boolean;
-  onRulesChange?: (rules: ParsedRule[]) => void;
+  onApplyStateChange?: (apply: boolean, rules: ParsedRule[]) => void;
 }
 
-export function CustomRedactionPanel({ text, redactionDisabled, onRulesChange }: Props) {
+export function CustomRedactionPanel({
+  text,
+  redactionDisabled,
+  onApplyStateChange,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [rulesInput, setRulesInput] = useState("");
   const [persist, setPersist] = useState(false);
   const [tested, setTested] = useState(false);
+  const [applyBeforeSending, setApplyBeforeSending] = useState(false);
 
   useEffect(() => {
     try {
@@ -105,6 +132,8 @@ export function CustomRedactionPanel({ text, redactionDisabled, onRulesChange }:
       if (persisted) {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) setRulesInput(saved);
+        const savedApply = localStorage.getItem(STORAGE_APPLY_KEY) === "1";
+        setApplyBeforeSending(savedApply);
       }
     } catch {
       // ignore
@@ -116,22 +145,28 @@ export function CustomRedactionPanel({ text, redactionDisabled, onRulesChange }:
       if (persist) {
         localStorage.setItem(STORAGE_KEY, rulesInput);
         localStorage.setItem(STORAGE_PERSIST_KEY, "1");
+        localStorage.setItem(STORAGE_APPLY_KEY, applyBeforeSending ? "1" : "0");
       } else {
         localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(STORAGE_APPLY_KEY);
         localStorage.setItem(STORAGE_PERSIST_KEY, "0");
       }
     } catch {
       // ignore
     }
-  }, [persist, rulesInput]);
+  }, [persist, rulesInput, applyBeforeSending]);
 
   const rules = useMemo(() => parseRules(rulesInput), [rulesInput]);
 
-  useEffect(() => {
-    onRulesChange?.(rules);
-  }, [rules, onRulesChange]);
   const validRules = rules.filter((r) => r.regex);
   const invalidRules = rules.filter((r) => !r.regex);
+
+  useEffect(() => {
+    onApplyStateChange?.(
+      applyBeforeSending && validRules.length > 0,
+      rules,
+    );
+  }, [applyBeforeSending, rules, validRules.length, onApplyStateChange]);
 
   const matches = useMemo(() => {
     if (!tested) return [];
@@ -265,6 +300,31 @@ export function CustomRedactionPanel({ text, redactionDisabled, onRulesChange }:
             </label>
           </div>
 
+          {validRules.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 text-[11px] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={applyBeforeSending}
+                  onChange={(e) => setApplyBeforeSending(e.target.checked)}
+                  className="rounded border-border accent-primary w-3.5 h-3.5"
+                  data-testid="custom-redaction-apply-toggle"
+                />
+                <span className={applyBeforeSending ? "text-primary font-medium" : "text-muted-foreground"}>
+                  Apply patterns before sending
+                </span>
+              </label>
+              {applyBeforeSending && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1.5 py-0 h-4 normal-case border-primary/40 text-primary"
+                >
+                  Active
+                </Badge>
+              )}
+            </div>
+          )}
+
           <div className="text-[11px] text-muted-foreground">
             <Link
               to="/redaction-examples"
@@ -312,15 +372,26 @@ export function CustomRedactionPanel({ text, redactionDisabled, onRulesChange }:
           <div className="rounded-lg bg-yellow-500/5 border border-yellow-500/20 px-3 py-2 text-[11px] text-muted-foreground leading-relaxed flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0 mt-0.5" />
             <span>
-              Custom patterns run <strong>client-side only</strong> for
-              previewing matches. They are never sent to the server. If you also
-              disable built-in PII redaction above, your report text will be
-              submitted unredacted — these custom rules{" "}
-              <strong>will not</strong> sanitize it for you.
-              {redactionDisabled && (
+              Custom patterns run <strong>client-side only</strong> and are
+              never sent to the server.
+              {applyBeforeSending ? (
+                <span className="block mt-1">
+                  <strong className="text-primary">Apply mode is on</strong> —
+                  matches will be replaced with <code className="text-[10px] bg-muted/30 px-1 rounded">[REDACTED]</code> in
+                  the request body. Your textarea text stays unchanged.
+                </span>
+              ) : (
+                <span className="block mt-1">
+                  Enable "Apply patterns before sending" to replace matches
+                  with a redaction token in the request body before it leaves
+                  your browser.
+                </span>
+              )}
+              {redactionDisabled && !applyBeforeSending && (
                 <span className="block mt-1 text-orange-300">
-                  PII redaction is currently <strong>disabled</strong>. Redact
-                  matches manually before submitting.
+                  PII redaction is currently <strong>disabled</strong> and
+                  custom apply mode is off. Redact matches manually before
+                  submitting.
                 </span>
               )}
             </span>

@@ -90,7 +90,7 @@ import {
   type EngineWeights,
 } from "@/lib/settings";
 import { AnalysisStepper } from "@/components/analysis-stepper";
-import { CustomRedactionPanel, findMatches, type ParsedRule } from "@/components/custom-redaction-panel";
+import { CustomRedactionPanel, findMatches, applyRedaction, type ParsedRule } from "@/components/custom-redaction-panel";
 import { HighlightTextarea } from "@/components/highlight-textarea";
 import { ConfidenceGauge } from "@/components/confidence-gauge";
 import { QualityPreviewSidebar } from "@/components/quality-preview-sidebar";
@@ -659,6 +659,16 @@ export default function Check() {
   const handleSubmitRef = useRef<() => void>(() => {});
   const [result, setResult] = useState<CheckResultData | null>(null);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
+  const [customRedactionActive, setCustomRedactionActive] = useState(false);
+  const customRedactionRulesRef = useRef<ParsedRule[]>([]);
+  const [customRedactionAppliedCount, setCustomRedactionAppliedCount] = useState<number | null>(null);
+  const handleCustomRedactionStateChange = useCallback(
+    (apply: boolean, rules: ParsedRule[]) => {
+      setCustomRedactionActive(apply);
+      customRedactionRulesRef.current = rules;
+    },
+    [],
+  );
   // Task #611 — *accepted exception* to the task's "jump to crash
   // trace" wording. The Results page wires marker bullets to a sibling
   // DiagnosticsPanel that scrolls/flashes the matching AVRI row; that
@@ -838,6 +848,7 @@ export default function Check() {
   });
 
   const handleSubmit = () => {
+    setCustomRedactionAppliedCount(null);
     if (inputMode === "file") {
       if (!file) {
         toast({
@@ -850,6 +861,25 @@ export default function Check() {
       const error = validateFile(file);
       if (error) {
         setFileError(error);
+        return;
+      }
+      if (customRedactionActive) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const fileText = reader.result as string;
+          const { redacted, count } = applyRedaction(fileText, customRedactionRulesRef.current);
+          setCustomRedactionAppliedCount(count);
+          const blob = new Blob([redacted], { type: file.type || "text/plain" });
+          const redactedFile = new File([blob], file.name, { type: file.type });
+          checkMutation.mutate({
+            data: {
+              file: redactedFile,
+              skipLlm: skipLlm ? "true" : "false",
+              skipRedaction: skipRedaction ? "true" : "false",
+            },
+          });
+        };
+        reader.readAsText(file);
         return;
       }
       checkMutation.mutate({
@@ -879,6 +909,32 @@ export default function Check() {
         });
         return;
       }
+      if (customRedactionActive) {
+        (async () => {
+          try {
+            const resp = await fetch(trimmedUrl);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const urlText = await resp.text();
+            const { redacted, count } = applyRedaction(urlText, customRedactionRulesRef.current);
+            setCustomRedactionAppliedCount(count);
+            checkMutation.mutate({
+              data: {
+                rawText: redacted,
+                skipLlm: skipLlm ? "true" : "false",
+                skipRedaction: skipRedaction ? "true" : "false",
+              },
+            });
+          } catch {
+            toast({
+              title: "Could not fetch link for redaction",
+              description:
+                "The URL could not be fetched client-side (likely blocked by CORS). Copy the report text and use Paste mode with custom redaction enabled.",
+              variant: "destructive",
+            });
+          }
+        })();
+        return;
+      }
       checkMutation.mutate({
         data: {
           reportUrl: trimmedUrl,
@@ -896,9 +952,15 @@ export default function Check() {
         });
         return;
       }
+      let textToSend = trimmed;
+      if (customRedactionActive) {
+        const { redacted, count } = applyRedaction(trimmed, customRedactionRulesRef.current);
+        textToSend = redacted;
+        setCustomRedactionAppliedCount(count);
+      }
       checkMutation.mutate({
         data: {
-          rawText: trimmed,
+          rawText: textToSend,
           skipLlm: skipLlm ? "true" : "false",
           skipRedaction: skipRedaction ? "true" : "false",
         },
@@ -1235,7 +1297,7 @@ export default function Check() {
             <CustomRedactionPanel
               text={inputMode === "text" ? rawText : ""}
               redactionDisabled={skipRedaction}
-              onRulesChange={handleRedactionRulesChange}
+              onApplyStateChange={handleCustomRedactionStateChange}
             />
           </div>
         </CardContent>
@@ -1279,7 +1341,7 @@ export default function Check() {
             </Badge>
           </h2>
 
-          {(result.llmUsed === false || result.redactionApplied === false) && (
+          {(result.llmUsed === false || result.redactionApplied === false || (customRedactionAppliedCount != null && customRedactionAppliedCount > 0)) && (
             <div className="flex flex-col sm:flex-row gap-2">
               {result.llmUsed === false && (
                 <div className="flex-1 rounded-lg bg-violet-500/10 border border-violet-500/30 px-3 py-2 flex items-center gap-2">
@@ -1296,6 +1358,19 @@ export default function Check() {
                   <p className="text-xs text-orange-300">
                     <strong>PII redaction was disabled</strong> — report text
                     was not sanitized.
+                  </p>
+                </div>
+              )}
+              {customRedactionAppliedCount != null && customRedactionAppliedCount > 0 && (
+                <div
+                  className="flex-1 rounded-lg bg-primary/10 border border-primary/30 px-3 py-2 flex items-center gap-2"
+                  data-testid="custom-redaction-applied-indicator"
+                >
+                  <ShieldCheck className="w-4 h-4 text-primary flex-shrink-0" />
+                  <p className="text-xs text-primary">
+                    <strong>Custom redaction applied</strong> — {customRedactionAppliedCount}{" "}
+                    {customRedactionAppliedCount === 1 ? "match" : "matches"} replaced
+                    with [REDACTED] before sending.
                   </p>
                 </div>
               )}
