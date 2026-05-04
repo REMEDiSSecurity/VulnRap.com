@@ -17,6 +17,8 @@ import {
   adjustScore,
   adjustTier,
   SENSITIVITY_PRESETS,
+  getAbPresets,
+  saveAbPresets,
   type SensitivityPreset,
   type BreakdownData,
   type HumanIndicatorData,
@@ -131,8 +133,17 @@ export function AbPresetComparison({
   thresholdHigh: number;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [presetA, setPresetA] = useState<SensitivityPreset>("lenient");
-  const [presetB, setPresetB] = useState<SensitivityPreset>("strict");
+  const [presetA, setPresetA] = useState<SensitivityPreset>(() => getAbPresets().presetA);
+  const [presetB, setPresetB] = useState<SensitivityPreset>(() => getAbPresets().presetB);
+
+  const updatePresetA = (p: SensitivityPreset) => {
+    setPresetA(p);
+    saveAbPresets(p, presetB);
+  };
+  const updatePresetB = (p: SensitivityPreset) => {
+    setPresetB(p);
+    saveAbPresets(presetA, p);
+  };
 
   const outcomeA = computeOutcome(
     presetA,
@@ -192,7 +203,7 @@ export function AbPresetComparison({
                 id="ab-preset-a"
                 value={presetA}
                 onChange={(e) =>
-                  setPresetA(e.target.value as SensitivityPreset)
+                  updatePresetA(e.target.value as SensitivityPreset)
                 }
                 className="w-full rounded-md border border-border/40 bg-background/50 px-2 py-1.5 text-sm font-mono"
                 data-testid="select-preset-a"
@@ -215,7 +226,7 @@ export function AbPresetComparison({
                 id="ab-preset-b"
                 value={presetB}
                 onChange={(e) =>
-                  setPresetB(e.target.value as SensitivityPreset)
+                  updatePresetB(e.target.value as SensitivityPreset)
                 }
                 className="w-full rounded-md border border-border/40 bg-background/50 px-2 py-1.5 text-sm font-mono"
                 data-testid="select-preset-b"

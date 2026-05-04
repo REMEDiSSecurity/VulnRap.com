@@ -159,6 +159,27 @@ export function resetSettings(): void {
   } catch {}
 }
 
+const AB_PRESETS_KEY = "vulnrap_ab_presets";
+
+export function getAbPresets(): { presetA: SensitivityPreset; presetB: SensitivityPreset } {
+  try {
+    const stored = JSON.parse(localStorage.getItem(AB_PRESETS_KEY) || "{}");
+    const valid: SensitivityPreset[] = ["lenient", "balanced", "strict"];
+    return {
+      presetA: valid.includes(stored.presetA) ? stored.presetA : "lenient",
+      presetB: valid.includes(stored.presetB) ? stored.presetB : "strict",
+    };
+  } catch {
+    return { presetA: "lenient", presetB: "strict" };
+  }
+}
+
+export function saveAbPresets(presetA: SensitivityPreset, presetB: SensitivityPreset): void {
+  try {
+    localStorage.setItem(AB_PRESETS_KEY, JSON.stringify({ presetA, presetB }));
+  } catch {}
+}
+
 export function getSlopTierCustom(
   score: number,
   low: number,
