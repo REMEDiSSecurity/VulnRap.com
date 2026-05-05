@@ -24,7 +24,10 @@
 //     tables both suites share. Suite-specific tables (privacy's
 //     `userFeedback`, diagnostics' `analysisTraces`) are passed in inline.
 
-export interface FakeRow extends Record<string, unknown> {}
+export interface FakeRow extends Record<string, unknown> {
+  /** Assigned by seedReport; undefined for non-report rows (e.g. stats). */
+  id?: number;
+}
 
 export type Cond =
   | { __op: "eq"; col: unknown; val: unknown }
@@ -69,6 +72,7 @@ export const drizzleOrmOverrides = {
 // need extra fields (`vulnrapEngineResults`, an AVRI block, etc.) override
 // them at call time.
 export const BASE_REPORT: FakeRow = {
+  id: 0,
   deleteToken: "tok",
   contentHash: "hash",
   simhash: "0",

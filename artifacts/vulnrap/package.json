@@ -16,8 +16,6 @@
     "test:watch": "vitest",
     "test:unit": "vitest run",
     "test:e2e": "playwright test --config playwright.config.ts",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
     "i18n:check": "node scripts/i18n-check.mjs"
   },
   "devDependencies": {

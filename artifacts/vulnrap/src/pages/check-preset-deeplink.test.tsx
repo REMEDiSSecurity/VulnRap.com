@@ -48,8 +48,8 @@ vi.mock("@/lib/settings", async () => {
   );
   return {
     ...actual,
-    getSettings: (...args: unknown[]) => mockGetSettings(...args),
-    saveSettings: (...args: unknown[]) => mockSaveSettings(...args),
+    getSettings: (...args: Parameters<typeof mockGetSettings>) => mockGetSettings(...args),
+    saveSettings: (...args: Parameters<typeof mockSaveSettings>) => mockSaveSettings(...args),
   };
 });
 

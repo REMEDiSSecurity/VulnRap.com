@@ -169,7 +169,7 @@ describe("runAvriComposite override wiring (Task #745)", () => {
       // haircut magnitude is `-e2.detail.absencePenalty`, so the
       // persisted value must be ≤ -18 for the branch to fire.
       const signals = extractSignals(FLAT_SLOP_THREE_PHRASES);
-      const cls = classifyReport(FLAT_SLOP_THREE_PHRASES);
+      const cls = classifyReport(FLAT_SLOP_THREE_PHRASES, undefined);
       const e2 = runEngine2Avri(signals, FLAT_SLOP_THREE_PHRASES, cls.family);
       expect(e2.detail.absencePenalty).toBeLessThanOrEqual(-18);
 
@@ -186,7 +186,7 @@ describe("runAvriComposite override wiring (Task #745)", () => {
       expect(familyOf(FLAT_SLOP_TWO_PHRASES)).toBe("FLAT");
 
       const signals = extractSignals(FLAT_SLOP_TWO_PHRASES);
-      const cls = classifyReport(FLAT_SLOP_TWO_PHRASES);
+      const cls = classifyReport(FLAT_SLOP_TWO_PHRASES, undefined);
       const e2 = runEngine2Avri(signals, FLAT_SLOP_TWO_PHRASES, cls.family);
       expect(e2.detail.absencePenalty).toBeGreaterThan(-18);
 

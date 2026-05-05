@@ -83,7 +83,7 @@ vi.mock("@workspace/db", async () => {
           return seededRows.map((r) => {
             const out: Record<string, unknown> = {};
             for (const k of keys) {
-              out[k] = (r as Record<string, unknown>)[k];
+              out[k] = (r as unknown as Record<string, unknown>)[k];
             }
             return out;
           });

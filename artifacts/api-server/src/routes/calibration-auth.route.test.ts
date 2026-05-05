@@ -9,7 +9,7 @@ import path from "node:path";
 import os from "node:os";
 import { promises as fs } from "node:fs";
 import express from "express";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { AddressInfo } from "node:net";
 
 const TOKEN = "s3cret-reviewer-token";

@@ -265,12 +265,12 @@ describe("validateAllowedOriginsEnv", () => {
       // talking to its own backend.
       for (const v of [
         { kind: "unset" } as const,
-        { kind: "valid", origins: ["https://app.example.com"] } as const,
+        { kind: "valid", origins: ["https://app.example.com"] } satisfies AllowedOriginsEnvValidationResult,
         {
           kind: "invalid",
           origins: [],
           invalidEntries: [{ value: "bad", reason: "bad" }],
-        } as const,
+        } satisfies AllowedOriginsEnvValidationResult,
       ]) {
         expect(decide(v, undefined)).toEqual({ err: null, allow: true });
       }

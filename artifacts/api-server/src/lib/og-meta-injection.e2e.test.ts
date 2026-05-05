@@ -129,7 +129,7 @@ describe("OG meta tag server-side injection — end-to-end validation", () => {
       slopTier: "Likely Slop",
       showInFeed: true,
     });
-    const meta = await buildOgMetaForReport(report.id, fakeReq);
+    const meta = await buildOgMetaForReport(report.id!, fakeReq);
     expect(meta).toBeTruthy();
     expect(meta!.ogImage).toBe(
       `https://vulnrap.com/api/og/result/${report.id}.png`,
@@ -142,7 +142,7 @@ describe("OG meta tag server-side injection — end-to-end validation", () => {
 
   it("buildOgMetaForReport returns null for hidden reports", async () => {
     const report = seedReport({ showInFeed: false, slopScore: 99 });
-    const meta = await buildOgMetaForReport(report.id, fakeReq);
+    const meta = await buildOgMetaForReport(report.id!, fakeReq);
     expect(meta).toBeNull();
   });
 
@@ -157,7 +157,7 @@ describe("OG meta tag server-side injection — end-to-end validation", () => {
       slopTier: "Likely Slop",
       showInFeed: true,
     });
-    const meta = await buildOgMetaForReport(report.id, fakeReq);
+    const meta = await buildOgMetaForReport(report.id!, fakeReq);
     expect(meta).toBeTruthy();
 
     const rewritten = injectOgMeta(indexHtml, meta!);
@@ -178,7 +178,7 @@ describe("OG meta tag server-side injection — end-to-end validation", () => {
       slopTier: "Suspicious",
       showInFeed: true,
     });
-    const meta = await buildOgMetaForReport(report.id, fakeReq);
+    const meta = await buildOgMetaForReport(report.id!, fakeReq);
     const rewritten = injectOgMeta(indexHtml, meta!);
 
     const match = rewritten.match(
@@ -193,7 +193,7 @@ describe("OG meta tag server-side injection — end-to-end validation", () => {
 
   it("og:image:type is rewritten from image/jpeg to image/png", async () => {
     const report = seedReport({ showInFeed: true, slopScore: 50 });
-    const meta = await buildOgMetaForReport(report.id, fakeReq);
+    const meta = await buildOgMetaForReport(report.id!, fakeReq);
     const rewritten = injectOgMeta(indexHtml, meta!);
 
     expect(rewritten).toContain(
@@ -210,7 +210,7 @@ describe("OG meta tag server-side injection — end-to-end validation", () => {
       slopTier: "Questionable",
       showInFeed: true,
     });
-    const meta = await buildOgMetaForReport(report.id, fakeReq);
+    const meta = await buildOgMetaForReport(report.id!, fakeReq);
     const rewritten = injectOgMeta(indexHtml, meta!);
 
     const match = rewritten.match(
@@ -224,7 +224,7 @@ describe("OG meta tag server-side injection — end-to-end validation", () => {
 
   it("og:url is the canonical results page URL", async () => {
     const report = seedReport({ showInFeed: true, slopScore: 10 });
-    const meta = await buildOgMetaForReport(report.id, fakeReq);
+    const meta = await buildOgMetaForReport(report.id!, fakeReq);
     const rewritten = injectOgMeta(indexHtml, meta!);
 
     const match = rewritten.match(
@@ -236,7 +236,7 @@ describe("OG meta tag server-side injection — end-to-end validation", () => {
 
   it("twitter:card remains summary_large_image", async () => {
     const report = seedReport({ showInFeed: true, slopScore: 10 });
-    const meta = await buildOgMetaForReport(report.id, fakeReq);
+    const meta = await buildOgMetaForReport(report.id!, fakeReq);
     const rewritten = injectOgMeta(indexHtml, meta!);
 
     expect(rewritten).toContain(
@@ -257,7 +257,7 @@ describe("OG meta tag server-side injection — end-to-end validation", () => {
         },
       ],
     });
-    const meta = await buildOgMetaForReport(report.id, fakeReq);
+    const meta = await buildOgMetaForReport(report.id!, fakeReq);
     expect(meta).toBeTruthy();
 
     const imgRes = await fetch(
@@ -282,7 +282,7 @@ describe("OG meta tag server-side injection — end-to-end validation", () => {
 
   it("og:image dimensions match the OG card endpoint output (1200×630)", async () => {
     const report = seedReport({ showInFeed: true, slopScore: 50 });
-    const meta = await buildOgMetaForReport(report.id, fakeReq);
+    const meta = await buildOgMetaForReport(report.id!, fakeReq);
     const rewritten = injectOgMeta(indexHtml, meta!);
 
     const widthMatch = rewritten.match(
