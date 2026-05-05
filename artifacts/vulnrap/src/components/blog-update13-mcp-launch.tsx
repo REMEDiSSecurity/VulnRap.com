@@ -5,7 +5,7 @@ import { Separator } from "@/components/ui/separator";
 // Task #1032 — looping demo asset embedded above "What shipped". The
 // asset is a self-contained animated SVG (no GIF encoder dependency,
 // no external playback) showing the agent calling each of the three
-// MCP tools — scoreReport, findSimilar, redact — and the result the
+// MCP tools — score_report, find_similar, redact — and the result the
 // agent surfaces back to the user. ~24s loop, scales cleanly on
 // retina, plays without user interaction in every modern browser.
 import mcpDemoSrc from "@/assets/blog-mcp-demo.svg";
@@ -69,13 +69,13 @@ export function BlogUpdate13McpLaunch() {
         <figure className="mt-2 mb-4">
           <img
             src={mcpDemoSrc}
-            alt="Animated demo: an MCP-aware agent calls scoreReport, findSimilar, and redact on a vulnerability report and surfaces each tool's response inline."
+            alt="Animated demo: an MCP-aware agent calls score_report, find_similar, and redact on a vulnerability report and surfaces each tool's response inline."
             loading="lazy"
             decoding="async"
             className="w-full rounded-md border border-border/50 bg-black/40"
           />
           <figcaption className="text-xs text-muted-foreground/80 mt-2 text-center">
-            The agent calls <code>scoreReport</code>, <code>findSimilar</code>,
+            The agent calls <code>score_report</code>, <code>find_similar</code>,
             and <code>redact</code> end-to-end — no copy-paste, no shell-out.
           </figcaption>
         </figure>
@@ -92,8 +92,8 @@ export function BlogUpdate13McpLaunch() {
 
         <P>
           The server exposes the three tools that matter for triage:{" "}
-          <code>scoreReport</code> (full multi-axis validity scoring with
-          per-engine breakdown), <code>findSimilar</code> (MinHash + SimHash +
+          <code>score_report</code> (full multi-axis validity scoring with
+          per-engine breakdown), <code>find_similar</code> (MinHash + SimHash +
           section-level hash lookup against the public corpus), and{" "}
           <code>redact</code> (run only the auto-redaction pass and return the
           cleaned text). Every call goes through the same redaction pipeline as
@@ -138,13 +138,13 @@ export function BlogUpdate13McpLaunch() {
               "Score this report and tell me which engine is the weakest
               signal."
             </Bold>{" "}
-            Paste the report. The agent calls <code>scoreReport</code>, reads
+            Paste the report. The agent calls <code>score_report</code>, reads
             back the composite and the four-axis breakdown, and points at the
             axis pulling the score down.
           </li>
           <li>
             <Bold>"Is this a duplicate of anything in the corpus?"</Bold> The
-            agent calls <code>findSimilar</code>, ranks matches by Jaccard and
+            agent calls <code>find_similar</code>, ranks matches by Jaccard and
             section-hash overlap, and surfaces the top three with similarity
             percentages.
           </li>
@@ -156,7 +156,7 @@ export function BlogUpdate13McpLaunch() {
           </li>
           <li>
             <Bold>"Triage these 12 reports and rank them by validity."</Bold>{" "}
-            Multi-call workflow. The agent loops <code>scoreReport</code> across
+            Multi-call workflow. The agent loops <code>score_report</code> across
             the batch and sorts the table for you.
           </li>
         </ul>

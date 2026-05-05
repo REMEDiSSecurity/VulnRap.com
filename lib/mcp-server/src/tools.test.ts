@@ -53,7 +53,7 @@ afterEach(() => {
 });
 
 describe("tool registry", () => {
-  it("exposes the nine documented tools", () => {
+  it("exposes the eleven documented tools", () => {
     const names = TOOLS.map((t) => t.name).sort();
     expect(names).toEqual(
       [
@@ -65,6 +65,8 @@ describe("tool registry", () => {
         "get_drift_summary",
         "query_signal_metrics",
         "get_cohort_baseline",
+        "find_similar",
+        "redact",
         "test_yourself",
       ].sort(),
     );

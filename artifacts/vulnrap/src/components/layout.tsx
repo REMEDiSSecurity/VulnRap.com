@@ -46,6 +46,7 @@ import { getCalibrationToken } from "@workspace/api-client-react";
 import logoSrc from "@/assets/logo.png";
 import { LaserEffects } from "@/components/laser-effects";
 import { CursorBugs } from "@/components/cursor-bugs";
+import { ScrollProgress } from "@/components/scroll-progress";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { CURRENT_VERSION, RELEASE_DATE } from "@/pages/changelog";
 import { resetAllTours } from "@/components/onboarding-tour";
@@ -515,6 +516,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="cyber-grid" aria-hidden="true" />
       <LaserEffects />
       <CursorBugs />
+      <ScrollProgress />
       <header className="nav-glass sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           <Link

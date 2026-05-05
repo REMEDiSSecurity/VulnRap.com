@@ -267,13 +267,13 @@ export default function ConnectPage() {
         <CardContent>
           <div className="grid sm:grid-cols-3 gap-4">
             <div className="space-y-1">
-              <code className="text-sm text-primary font-semibold">scoreReport</code>
+              <code className="text-sm text-primary font-semibold">score_report</code>
               <p className="text-xs text-muted-foreground">
                 Full multi-axis validity scoring with per-engine breakdown.
               </p>
             </div>
             <div className="space-y-1">
-              <code className="text-sm text-primary font-semibold">findSimilar</code>
+              <code className="text-sm text-primary font-semibold">find_similar</code>
               <p className="text-xs text-muted-foreground">
                 Similarity lookup using MinHash, SimHash, and section-level hashes.
               </p>

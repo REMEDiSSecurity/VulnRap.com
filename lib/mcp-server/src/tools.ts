@@ -318,6 +318,91 @@ export async function testYourself(
 }
 
 // ---------------------------------------------------------------------------
+// find_similar
+// ---------------------------------------------------------------------------
+// Wraps POST /api/reports/check with LLM disabled so the call is cheap and
+// fast. Returns the full check payload, but the similarity section
+// (similarityMatches) is the primary signal agents should surface. Kept as a
+// distinct tool from score_report so an agent can call "find duplicates" as a
+// single, self-describing step without also having to reason about the full
+// scoring breakdown.
+
+export const FindSimilarInput = z
+  .object({
+    text: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("The vulnerability report text to match against the corpus."),
+    reportUrl: z
+      .string()
+      .url()
+      .optional()
+      .describe(
+        "Public HTTPS URL pointing at a plain-text report. Mutually exclusive with `text`.",
+      ),
+  })
+  .refine((v) => Boolean(v.text) || Boolean(v.reportUrl), {
+    message: "Provide either `text` or `reportUrl`.",
+  });
+
+export type FindSimilarInputType = z.infer<typeof FindSimilarInput>;
+
+export async function findSimilar(
+  input: FindSimilarInputType,
+): Promise<unknown> {
+  return apiRequest("/api/reports/check", {
+    method: "POST",
+    form: {
+      rawText: input.text,
+      reportUrl: input.reportUrl,
+      skipLlm: "true",
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// redact
+// ---------------------------------------------------------------------------
+// Wraps POST /api/reports/check with LLM disabled. The server's redaction
+// pass always runs before any LLM stage, so setting skipLlm=true gives us a
+// cheap, synchronous redaction without touching an external model. The
+// `redactedText` field in the response is the primary output; the full
+// scoring payload is also present for context.
+
+export const RedactInput = z
+  .object({
+    text: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("The vulnerability report text to auto-redact."),
+    reportUrl: z
+      .string()
+      .url()
+      .optional()
+      .describe(
+        "Public HTTPS URL pointing at a plain-text report. Mutually exclusive with `text`.",
+      ),
+  })
+  .refine((v) => Boolean(v.text) || Boolean(v.reportUrl), {
+    message: "Provide either `text` or `reportUrl`.",
+  });
+
+export type RedactInputType = z.infer<typeof RedactInput>;
+
+export async function redact(input: RedactInputType): Promise<unknown> {
+  return apiRequest("/api/reports/check", {
+    method: "POST",
+    form: {
+      rawText: input.text,
+      reportUrl: input.reportUrl,
+      skipLlm: "true",
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Tool registry
 // ---------------------------------------------------------------------------
 
@@ -383,6 +468,20 @@ export const TOOLS: ReadonlyArray<ToolDefinition<any>> = [
       "Get the 7-day VulnRap composite-score histogram + median for a cohort. Optionally filter by AVRI CWE family or pass a `score` to also receive its percentile rank.",
     inputSchema: GetCohortBaselineInput,
     handler: getCohortBaseline,
+  },
+  {
+    name: "find_similar",
+    description:
+      "Find reports in the VulnRap corpus that are structurally or semantically similar to the given report using MinHash, SimHash, and section-level hashes. Useful for duplicate detection before triage. Returns the full check payload; the `similarityMatches` field is the primary output.",
+    inputSchema: FindSimilarInput,
+    handler: findSimilar,
+  },
+  {
+    name: "redact",
+    description:
+      "Auto-redact PII (emails, IPs, API keys, internal hostnames, company names) from vulnerability report text. Runs only the server-side redaction pass — no LLM stage, no storage. Returns the full check payload; the `redactedText` field is the primary output.",
+    inputSchema: RedactInput,
+    handler: redact,
   },
   {
     name: "test_yourself",
