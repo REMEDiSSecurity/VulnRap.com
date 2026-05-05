@@ -2,6 +2,13 @@ import { Calendar } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+// Task #1032 — looping demo asset embedded above "What shipped". The
+// asset is a self-contained animated SVG (no GIF encoder dependency,
+// no external playback) showing the agent calling each of the three
+// MCP tools — scoreReport, findSimilar, redact — and the result the
+// agent surfaces back to the user. ~24s loop, scales cleanly on
+// retina, plays without user interaction in every modern browser.
+import mcpDemoSrc from "@/assets/blog-mcp-demo.svg";
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -59,6 +66,20 @@ export function BlogUpdate13McpLaunch() {
       <Separator className="bg-border/50" />
 
       <div className="prose-invert space-y-2 text-sm leading-relaxed text-muted-foreground">
+        <figure className="mt-2 mb-4">
+          <img
+            src={mcpDemoSrc}
+            alt="Animated demo: an MCP-aware agent calls scoreReport, findSimilar, and redact on a vulnerability report and surfaces each tool's response inline."
+            loading="lazy"
+            decoding="async"
+            className="w-full rounded-md border border-border/50 bg-black/40"
+          />
+          <figcaption className="text-xs text-muted-foreground/80 mt-2 text-center">
+            The agent calls <code>scoreReport</code>, <code>findSimilar</code>,
+            and <code>redact</code> end-to-end — no copy-paste, no shell-out.
+          </figcaption>
+        </figure>
+
         <SectionHeading>What shipped</SectionHeading>
 
         <P>

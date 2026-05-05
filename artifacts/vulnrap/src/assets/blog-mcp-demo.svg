@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" width="720" height="420" role="img" aria-label="Animated demo of an agent calling the VulnRap MCP tools scoreReport, findSimilar, and redact">
+  <title>VulnRap MCP — agent triage demo</title>
+  <desc>Looping 24-second demo: an MCP-aware agent reads a vulnerability report, then calls scoreReport, findSimilar, and redact in sequence, surfacing each tool's response inline.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0f14"/>
+      <stop offset="1" stop-color="#04070a"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#10b981"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+    <style><![CDATA[
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .sans { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .muted { fill: #6b7280; }
+      .fg    { fill: #e5e7eb; }
+      .em    { fill: #34d399; }
+      .acc   { fill: #60a5fa; }
+      .warn  { fill: #fbbf24; }
+      .err   { fill: #f87171; }
+      .panel { fill: #0f1620; stroke: #1f2a37; stroke-width: 1; }
+      .chip  { fill: #064e3b; stroke: #10b981; stroke-width: 1; }
+    ]]></style>
+  </defs>
+
+  <!-- background + chrome -->
+  <rect width="720" height="420" fill="url(#bg)"/>
+  <rect x="0.5" y="0.5" width="719" height="419" fill="none" stroke="#1f2937" rx="6"/>
+  <g class="sans" font-size="11">
+    <circle cx="16" cy="16" r="4" fill="#ef4444"/>
+    <circle cx="30" cy="16" r="4" fill="#f59e0b"/>
+    <circle cx="44" cy="16" r="4" fill="#10b981"/>
+    <text x="64" y="20" class="muted">Claude Desktop  ·  vulnrap MCP server</text>
+    <rect x="610" y="8" width="100" height="16" rx="8" class="chip"/>
+    <text x="660" y="20" class="em" text-anchor="middle" font-size="10">● connected</text>
+  </g>
+  <line x1="0" y1="32" x2="720" y2="32" stroke="#1f2937"/>
+
+  <!-- ============================================================
+       SCENE 1 — scoreReport  (0 → 8s)
+       ============================================================ -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;1;1;1;0;0;0" keyTimes="0;0.02;0.30;0.32;0.34;0.95;1" dur="24s" repeatCount="indefinite"/>
+
+    <g class="mono" font-size="11">
+      <text x="20" y="56" class="muted">&gt; user</text>
+      <text x="20" y="74" class="fg">Score this report and tell me which engine is the weakest signal.</text>
+      <text x="20" y="92" class="muted">[paste] heap-overflow report, libpng 1.6.39, ASAN trace, CWE-122…</text>
+
+      <text x="20" y="124" class="muted">&gt; agent</text>
+      <text x="20" y="142" class="acc">→ tools/call <tspan class="em">scoreReport</tspan>(text=&lt;1.4kb&gt;, redact=true)</text>
+
+      <!-- spinner dots while "thinking" -->
+      <g>
+        <text x="20" y="160" class="muted">  scoring</text>
+        <circle cx="76" cy="156" r="2" class="muted">
+          <animate attributeName="opacity" values="0.2;1;0.2" dur="0.9s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="84" cy="156" r="2" class="muted">
+          <animate attributeName="opacity" values="0.2;1;0.2" dur="0.9s" begin="0.3s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="92" cy="156" r="2" class="muted">
+          <animate attributeName="opacity" values="0.2;1;0.2" dur="0.9s" begin="0.6s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+    </g>
+
+    <!-- result panel reveals after 2s -->
+    <g opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.083;0.125;1" dur="24s" repeatCount="indefinite"/>
+      <rect x="20" y="180" width="680" height="216" rx="6" class="panel"/>
+      <g class="mono" font-size="11">
+        <text x="36" y="202" class="muted">composite</text>
+        <text x="36" y="222" class="fg" font-size="22" font-weight="700">82 / 100</text>
+        <text x="120" y="222" class="em" font-size="11">LIKELY VALID</text>
+
+        <text x="36" y="252" class="muted">per-engine breakdown</text>
+
+        <!-- bars -->
+        <g transform="translate(36,260)">
+          <text x="0" y="14" class="fg">linguistic</text>
+          <rect x="110" y="4" width="500" height="10" rx="3" fill="#1f2937"/>
+          <rect x="110" y="4" width="450" height="10" rx="3" fill="url(#bar)"/>
+          <text x="620" y="14" class="fg" text-anchor="end">90</text>
+
+          <text x="0" y="34" class="fg">factual</text>
+          <rect x="110" y="24" width="500" height="10" rx="3" fill="#1f2937"/>
+          <rect x="110" y="24" width="425" height="10" rx="3" fill="url(#bar)"/>
+          <text x="620" y="34" class="fg" text-anchor="end">85</text>
+
+          <text x="0" y="54" class="fg">template</text>
+          <rect x="110" y="44" width="500" height="10" rx="3" fill="#1f2937"/>
+          <rect x="110" y="44" width="380" height="10" rx="3" fill="url(#bar)"/>
+          <text x="620" y="54" class="fg" text-anchor="end">76</text>
+
+          <text x="0" y="74" class="warn">llm</text>
+          <rect x="110" y="64" width="500" height="10" rx="3" fill="#1f2937"/>
+          <rect x="110" y="64" width="270" height="10" rx="3" fill="#fbbf24"/>
+          <text x="620" y="74" class="warn" text-anchor="end">54  ← weakest</text>
+        </g>
+
+        <text x="36" y="372" class="muted">→ <tspan class="fg">llm</tspan> is your weakest signal — substance score 54 dragged the composite down.</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ============================================================
+       SCENE 2 — findSimilar  (8 → 16s)
+       ============================================================ -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;1;1;0;0" keyTimes="0;0.32;0.34;0.36;0.62;0.65;0.67;1" dur="24s" repeatCount="indefinite"/>
+
+    <g class="mono" font-size="11">
+      <text x="20" y="56" class="muted">&gt; user</text>
+      <text x="20" y="74" class="fg">Is this a duplicate of anything in the corpus?</text>
+
+      <text x="20" y="106" class="muted">&gt; agent</text>
+      <text x="20" y="124" class="acc">→ tools/call <tspan class="em">findSimilar</tspan>(text=&lt;1.4kb&gt;, k=3)</text>
+      <text x="20" y="142" class="muted">  hashing  simhash ✓  minhash ✓  section-hash ✓</text>
+    </g>
+
+    <!-- result panel -->
+    <g opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.083;0.125;1" dur="24s" repeatCount="indefinite"/>
+      <rect x="20" y="160" width="680" height="236" rx="6" class="panel"/>
+      <g class="mono" font-size="11">
+        <text x="36" y="182" class="muted">top matches in public corpus (n=18,402)</text>
+
+        <g transform="translate(36,200)">
+          <!-- match 1 -->
+          <rect x="0" y="0" width="648" height="56" rx="4" fill="#0b1117" stroke="#1f2937"/>
+          <text x="14" y="20" class="fg">report-2025-08-14-libpng-png_read_row-overflow.md</text>
+          <text x="14" y="38" class="muted">CWE-122  ·  3 sections matched  ·  jaccard 0.81</text>
+          <rect x="500" y="14" width="130" height="14" rx="7" fill="#064e3b" stroke="#10b981"/>
+          <text x="565" y="25" class="em" text-anchor="middle">81% similarity</text>
+
+          <!-- match 2 -->
+          <rect x="0" y="68" width="648" height="56" rx="4" fill="#0b1117" stroke="#1f2937"/>
+          <text x="14" y="88" class="fg">report-2025-09-02-libpng-IHDR-rowbytes-overflow.md</text>
+          <text x="14" y="106" class="muted">CWE-190  ·  2 sections matched  ·  jaccard 0.64</text>
+          <rect x="500" y="82" width="130" height="14" rx="7" fill="#0b3a2c" stroke="#10b981"/>
+          <text x="565" y="93" class="em" text-anchor="middle">64% similarity</text>
+
+          <!-- match 3 -->
+          <rect x="0" y="136" width="648" height="56" rx="4" fill="#0b1117" stroke="#1f2937"/>
+          <text x="14" y="156" class="fg">report-2024-11-29-png-fuzzer-asan-heap-bof.md</text>
+          <text x="14" y="174" class="muted">CWE-122  ·  1 section matched  ·  jaccard 0.42</text>
+          <rect x="500" y="150" width="130" height="14" rx="7" fill="#1f2937" stroke="#374151"/>
+          <text x="565" y="161" class="muted" text-anchor="middle">42% similarity</text>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <!-- ============================================================
+       SCENE 3 — redact  (16 → 24s)
+       ============================================================ -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;1;1;0" keyTimes="0;0.65;0.67;0.69;0.95;0.98;1" dur="24s" repeatCount="indefinite"/>
+
+    <g class="mono" font-size="11">
+      <text x="20" y="56" class="muted">&gt; user</text>
+      <text x="20" y="74" class="fg">Redact this before I paste it into the ticket.</text>
+
+      <text x="20" y="106" class="muted">&gt; agent</text>
+      <text x="20" y="124" class="acc">→ tools/call <tspan class="em">redact</tspan>(text=&lt;1.4kb&gt;)</text>
+    </g>
+
+    <!-- before / after side-by-side -->
+    <g opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.083;0.125;1" dur="24s" repeatCount="indefinite"/>
+
+      <!-- BEFORE -->
+      <rect x="20" y="148" width="332" height="248" rx="6" class="panel"/>
+      <text x="36" y="170" class="mono muted" font-size="11">before</text>
+      <g class="mono" font-size="10.5">
+        <text x="36" y="192" class="fg">Reporter: <tspan class="err">alice@acme-corp.com</tspan></text>
+        <text x="36" y="210" class="fg">Tested on host <tspan class="err">10.42.7.18:8443</tspan></text>
+        <text x="36" y="228" class="fg">Bearer <tspan class="err">eyJhbGciOiJIUzI1NiJ9.eyJzdWIi…</tspan></text>
+        <text x="36" y="246" class="fg">api_key=<tspan class="err">sk_live_4eC39HqLyjWDarjt</tspan></text>
+        <text x="36" y="264" class="fg">Found by <tspan class="err">Acme Corp</tspan> red team</text>
+        <text x="36" y="282" class="fg">Repro on <tspan class="err">dev01.internal.acme.lan</tspan></text>
+        <text x="36" y="300" class="fg">User: <tspan class="err">alice.smith</tspan></text>
+        <text x="36" y="318" class="fg">CWE-122 heap buffer overflow</text>
+        <text x="36" y="336" class="fg">in png_read_row() at libpng 1.6.39</text>
+        <text x="36" y="354" class="fg">ASAN trace attached, see line 1421</text>
+        <text x="36" y="372" class="muted">…</text>
+      </g>
+
+      <!-- arrow -->
+      <g transform="translate(366,272)">
+        <line x1="0" y1="0" x2="22" y2="0" stroke="#34d399" stroke-width="2"/>
+        <polyline points="14,-6 22,0 14,6" fill="none" stroke="#34d399" stroke-width="2"/>
+      </g>
+
+      <!-- AFTER -->
+      <rect x="404" y="148" width="296" height="248" rx="6" class="panel" stroke="#10b981"/>
+      <text x="420" y="170" class="mono em" font-size="11">after  ·  8 redactions</text>
+      <g class="mono" font-size="10.5">
+        <text x="420" y="192" class="fg">Reporter: <tspan class="em">[REDACTED_EMAIL]</tspan></text>
+        <text x="420" y="210" class="fg">Tested on host <tspan class="em">[REDACTED_IP]</tspan></text>
+        <text x="420" y="228" class="fg">Bearer <tspan class="em">[REDACTED_TOKEN]</tspan></text>
+        <text x="420" y="246" class="fg">api_key=<tspan class="em">[REDACTED_API_KEY]</tspan></text>
+        <text x="420" y="264" class="fg">Found by <tspan class="em">[REDACTED_COMPANY]</tspan></text>
+        <text x="420" y="282" class="fg"><tspan class="em">[REDACTED_HOSTNAME]</tspan></text>
+        <text x="420" y="300" class="fg">User: <tspan class="em">[REDACTED_USERNAME]</tspan></text>
+        <text x="420" y="318" class="fg">CWE-122 heap buffer overflow</text>
+        <text x="420" y="336" class="fg">in png_read_row() at libpng 1.6.39</text>
+        <text x="420" y="354" class="fg">ASAN trace attached, see line 1421</text>
+        <text x="420" y="372" class="muted">…  technical content preserved</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- progress dots at the bottom showing the loop position -->
+  <g transform="translate(330,406)">
+    <circle cx="0"  cy="0" r="3" fill="#1f2937">
+      <animate attributeName="fill" values="#34d399;#34d399;#1f2937;#1f2937;#1f2937;#1f2937;#34d399" keyTimes="0;0.32;0.34;0.65;0.67;0.99;1" dur="24s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="14" cy="0" r="3" fill="#1f2937">
+      <animate attributeName="fill" values="#1f2937;#1f2937;#34d399;#34d399;#1f2937;#1f2937" keyTimes="0;0.32;0.34;0.65;0.67;1" dur="24s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="28" cy="0" r="3" fill="#1f2937">
+      <animate attributeName="fill" values="#1f2937;#1f2937;#1f2937;#1f2937;#34d399;#34d399;#1f2937" keyTimes="0;0.32;0.34;0.65;0.67;0.99;1" dur="24s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>
