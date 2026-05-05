@@ -144,3 +144,40 @@ export function scanForPromptInjection(text: string): PromptInjectionVerdict {
 
   return { detected, labels, matches };
 }
+
+/**
+ * Task #975 — Neutralize prompt-injection spans before passing the report
+ * text to the LLM substance scorer. Each `match` returned by
+ * `scanForPromptInjection` is a literal substring of the input text
+ * (capped at 120 chars by the scanner). We replace every occurrence of
+ * each matched literal with `[REDACTED-INJECTION]` so the scorer sees a
+ * neutralized stub instead of the coercive phrasing. The heuristic /
+ * engine pipeline still operates on the unredacted text so content-quality
+ * scoring is unchanged.
+ *
+ * Returned shape: `{ text, redactedSpanCount }`. When no spans were
+ * matched the original text is returned verbatim and the count is 0.
+ */
+export const PROMPT_INJECTION_PLACEHOLDER = "[REDACTED-INJECTION]";
+
+export function redactPromptInjection(
+  text: string,
+  matches: readonly string[],
+): { text: string; redactedSpanCount: number } {
+  if (!matches.length) return { text, redactedSpanCount: 0 };
+  // De-duplicate to avoid double-counting when the scanner returns the
+  // same literal under multiple labels, and sort by length descending so
+  // a longer literal that contains a shorter one is replaced first
+  // (prevents the placeholder from leaking into the longer match).
+  const unique = Array.from(new Set(matches.filter((m) => m.length > 0))).sort(
+    (a, b) => b.length - a.length,
+  );
+  let out = text;
+  let count = 0;
+  for (const literal of unique) {
+    const before = out;
+    out = out.split(literal).join(PROMPT_INJECTION_PLACEHOLDER);
+    if (out !== before) count += 1;
+  }
+  return { text: out, redactedSpanCount: count };
+}

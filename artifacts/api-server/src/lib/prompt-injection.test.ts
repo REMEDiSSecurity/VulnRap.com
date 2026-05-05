@@ -31,6 +31,11 @@ import {
   COST_GUARD_CONFIDENCE,
   type LlmGateReason,
 } from "./llm-slop.js";
+import {
+  scanForPromptInjection,
+  redactPromptInjection,
+  PROMPT_INJECTION_PLACEHOLDER,
+} from "./prompt-injection.js";
 
 type FixtureKind = "legit_with_injection" | "pure_injection";
 
@@ -370,8 +375,70 @@ describe("prompt-injection fixtures (Task #642)", () => {
           `${fixture.name} evidence should include prompt_injection_attempted entry`,
         ).toBe(true);
       });
+
+      // Task #975 — the LLM scorer must never see the original injection
+      // phrasing. We replay the exact pipeline step from
+      // performAnalysis() — scan, then redact — and assert (a) at least
+      // one span was redacted, (b) the placeholder is present in the LLM
+      // input, and (c) every literal returned by the scanner has been
+      // stripped from the LLM input. The unredacted text remains
+      // available to the heuristic / engine pipeline (verified by the
+      // existing fixture-1 engine assertion above, which still operates
+      // on `fixture.text`).
+      it("(4) LLM input is stripped of the injection phrasing", () => {
+        const verdict = scanForPromptInjection(fixture.text);
+        expect(verdict.detected, `${fixture.name} scanner must detect`).toBe(
+          true,
+        );
+        const { text: llmInput, redactedSpanCount } = redactPromptInjection(
+          fixture.text,
+          verdict.matches,
+        );
+        expect(redactedSpanCount).toBeGreaterThan(0);
+        expect(llmInput).toContain(PROMPT_INJECTION_PLACEHOLDER);
+        for (const literal of verdict.matches) {
+          expect(
+            llmInput.includes(literal),
+            `${fixture.name} LLM input still contains injection literal: ${literal}`,
+          ).toBe(false);
+        }
+      });
     });
   }
+
+  // Task #975 — defensive properties of the redactor on its own.
+  describe("redactPromptInjection", () => {
+    it("is a no-op when no spans match", () => {
+      const r = redactPromptInjection("clean text", []);
+      expect(r.text).toBe("clean text");
+      expect(r.redactedSpanCount).toBe(0);
+    });
+
+    it("replaces every occurrence of each literal", () => {
+      const r = redactPromptInjection(
+        "a INJ b INJ c INJ",
+        ["INJ"],
+      );
+      expect(r.text).toBe(
+        `a ${PROMPT_INJECTION_PLACEHOLDER} b ${PROMPT_INJECTION_PLACEHOLDER} c ${PROMPT_INJECTION_PLACEHOLDER}`,
+      );
+      expect(r.redactedSpanCount).toBe(1);
+    });
+
+    it("handles overlapping literals by replacing the longer one first", () => {
+      // The shorter literal is a substring of the longer one. Naively
+      // replacing the shorter first would leak the placeholder into the
+      // longer match (it would no longer be found). Length-desc order
+      // prevents that.
+      const r = redactPromptInjection("aa BIG INSTRUCTION bb", [
+        "INSTRUCTION",
+        "BIG INSTRUCTION",
+      ]);
+      expect(r.text).toBe(`aa ${PROMPT_INJECTION_PLACEHOLDER} bb`);
+      // Only one literal actually matched after the longer was replaced.
+      expect(r.redactedSpanCount).toBe(1);
+    });
+  });
 
   it("clean technical reports do NOT trigger the injection signal (no false positive)", () => {
     const linguistic = analyzeLinguistic(LEGIT_LIBPNG_REPORT);
