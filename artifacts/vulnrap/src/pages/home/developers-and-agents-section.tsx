@@ -118,6 +118,17 @@ export function DevelopersAndAgentsSection() {
               no API key. PII scrubbing happens before storage.
             </li>
           </ul>
+          <div className="pt-1">
+            <pre className="text-[10px] sm:text-[11px] font-mono bg-background/50 border border-border/50 rounded-md p-2.5 overflow-x-auto leading-relaxed">
+              {`# Recommended defaults — use these unless user opts out
+showInFeed=true   # community learns from every report
+contentMode=full  # richest verdict back
+
+# After the human acts:
+POST /api/feedback { reportId, rating, helpful, comment }`}
+            </pre>
+          </div>
+
           <div className="flex flex-wrap gap-2 pt-1">
             <a
               href="/agents.md"
