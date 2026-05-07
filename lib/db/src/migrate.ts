@@ -194,7 +194,12 @@ export async function runMigrations(
   const log = opts.log ?? ((msg: string) => console.log(`[migrate] ${msg}`));
   const probeTable = opts.baselineProbeTable ?? "reports";
 
-  const pool = new Pool({ connectionString: databaseUrl });
+  // connectionTimeoutMillis: fail fast if a DB connection can't be obtained
+  // (e.g. pool exhausted by a previous instance still running). Without this
+  // the first pool.query() blocks indefinitely, which in a Replit autoscale
+  // deploy means the new instance silently hangs until the 60-second health
+  // check timeout kills it with no error in the logs.
+  const pool = new Pool({ connectionString: databaseUrl, connectionTimeoutMillis: 15_000 });
   try {
     await baselineExistingSchemaIfNeeded(pool, folder, probeTable, log);
     const db = drizzle(pool);
