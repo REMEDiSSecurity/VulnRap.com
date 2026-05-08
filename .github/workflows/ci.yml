@@ -57,7 +57,7 @@ jobs:
           cache: pnpm
 
       - name: Cache TypeScript build outputs
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           # Composite project references emit `.tsbuildinfo` + `dist/` for every
           # `lib/<name>`. Caching them lets `tsc --build` stay incremental in CI
@@ -155,7 +155,7 @@ jobs:
           echo "version=$v" >>"$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
@@ -166,7 +166,7 @@ jobs:
         run: pnpm --filter @workspace/vulnrap exec playwright install --with-deps chromium
 
       - name: Cache build-if-stale outputs
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           # Matches the `BUILD_IF_STALE_CACHE_DIR` default in
           # scripts/build-if-stale.mjs. Restoring it lets the e2e job reuse
