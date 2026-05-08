@@ -183,30 +183,14 @@ const NAV: NavEntry[] = [
     ],
   },
   {
-    label: "Docs",
-    icon: <BookOpen className="w-3.5 h-3.5" />,
+    label: "Integrate",
+    icon: <Plug className="w-3.5 h-3.5" />,
     matchPrefixes: [
-      "/developers",
       "/quickstart",
       "/connect",
+      "/developers",
       "/architecture",
-      "/blog",
-      "/changelog",
-      "/community",
-      "/engines",
-      "/presets",
-      "/whitepaper",
-      "/how-it-works",
-      "/compare-detectors",
-      "/playground",
-      "/gallery",
-      "/cwe",
-      "/signals",
       "/badges",
-      "/roadmap",
-      "/status",
-      "/incidents",
-      "/glossary",
     ],
     align: "right",
     items: [
@@ -220,34 +204,13 @@ const NAV: NavEntry[] = [
         to: "/connect",
         label: "Connect Your Agent",
         icon: <Plug className="w-4 h-4" />,
-        description: "One-click MCP install snippets for Claude, Cursor, Zed, Continue, and Windsurf.",
-      },
-      {
-        to: "/how-it-works",
-        label: "How It Works",
-        icon: <Compass className="w-4 h-4" />,
-        description:
-          "Interactive walkthrough of the scoring pipeline, step by step.",
-      },
-      {
-        to: "/cwe",
-        label: "CWE Reference",
-        icon: <ShieldAlert className="w-4 h-4" />,
-        description:
-          "Every CWE family the engine recognizes — fingerprints, MITRE links, and per-family corpus stats.",
-      },
-      {
-        to: "/signals",
-        label: "Signal Reference",
-        icon: <Radar className="w-4 h-4" />,
-        description:
-          "Every detector that can fire on a report — what it looks for, citations, and hit-rate metrics.",
+        description: "One-click MCP install for Claude, Cursor, Zed, Continue, and Windsurf.",
       },
       {
         to: "/developers",
-        label: "API",
+        label: "API Reference",
         icon: <Code className="w-4 h-4" />,
-        description: "REST endpoints, schemas, and examples.",
+        description: "REST endpoints, schemas, Swagger UI, and code examples.",
       },
       {
         to: "/architecture",
@@ -256,118 +219,82 @@ const NAV: NavEntry[] = [
         description: "Pipeline diagram and request flow for integrators.",
       },
       {
+        to: "/badges",
+        label: "Embed Badges",
+        icon: <BadgeCheck className="w-4 h-4" />,
+        description: "Score badge SVGs for READMEs, advisories, and triage tickets.",
+      },
+    ],
+  },
+  {
+    label: "Learn",
+    icon: <BookOpen className="w-3.5 h-3.5" />,
+    matchPrefixes: [
+      "/how-it-works",
+      "/engines",
+      "/cwe",
+      "/signals",
+      "/whitepaper",
+      "/compare-detectors",
+      "/playground",
+      "/gallery",
+      "/glossary",
+    ],
+    align: "right",
+    items: [
+      {
+        to: "/how-it-works",
+        label: "How It Works",
+        icon: <Compass className="w-4 h-4" />,
+        description: "Interactive walkthrough of the scoring pipeline, step by step.",
+      },
+      {
         to: "/engines",
-        label: "Engines Overview",
+        label: "Engines",
         icon: <Layers className="w-4 h-4" />,
-        description:
-          "Index of every scoring engine — weights, blind spots, false-positive patterns, and worked examples.",
+        description: "All three engines — weights, signals, blind spots, and worked examples.",
       },
       {
-        to: "/engines/substance",
-        label: "Substance Engine",
-        icon: <FlaskConical className="w-4 h-4" />,
-        description: "Engine 2 deep-dive: technical substance density.",
+        to: "/cwe",
+        label: "CWE Reference",
+        icon: <ShieldAlert className="w-4 h-4" />,
+        description: "Every CWE family the engine recognizes, with MITRE links and per-family stats.",
       },
       {
-        to: "/engines/cwe-coherence",
-        label: "CWE Coherence Engine",
-        icon: <Network className="w-4 h-4" />,
-        description:
-          "Engine 3 deep-dive: catches reports whose body describes a different CWE than the one claimed.",
-      },
-      {
-        to: "/engines/avri",
-        label: "AVRI Engine",
-        icon: <Layers className="w-4 h-4" />,
-        description:
-          "Family-aware rubric: 9 weakness families, gold signals, absence penalties.",
-      },
-      {
-        to: "/presets",
-        label: "Presets",
-        icon: <Library className="w-4 h-4" />,
-        description:
-          "Curated sensitivity + per-engine weight profiles for common triage workflows.",
+        to: "/signals",
+        label: "Signal Reference",
+        icon: <Radar className="w-4 h-4" />,
+        description: "Every detector that can fire — what it looks for and hit-rate metrics.",
       },
       {
         to: "/whitepaper",
         label: "Whitepaper",
         icon: <ScrollText className="w-4 h-4" />,
-        description:
-          "Long-form, citation-style methodology document — print-friendly.",
+        description: "Long-form methodology document — engine architecture, calibration, limitations.",
       },
       {
         to: "/compare-detectors",
         label: "Compare Detectors",
         icon: <Scale className="w-4 h-4" />,
-        description:
-          "Capability matrix vs. generic LLM detectors, plagiarism checkers, and manual triage.",
+        description: "Capability matrix vs. generic LLM detectors and manual triage.",
       },
       {
         to: "/playground",
         label: "Scoring Playground",
         icon: <Sliders className="w-4 h-4" />,
-        description:
-          "Toggle signals and per-engine weights on a sample report and watch the score recalculate live.",
+        description: "Tweak engine weights on a sample report and watch the score recalculate live.",
       },
       {
         to: "/gallery",
         label: "Sample Gallery",
         icon: <Images className="w-4 h-4" />,
-        description:
-          "12 pre-scored example reports — obvious slop, subtle slop, borderline, clean.",
-      },
-      {
-        to: "/badges",
-        label: "Embed Badges",
-        icon: <BadgeCheck className="w-4 h-4" />,
-        description:
-          "Five badge styles + copy-paste markdown for embedding scores in READMEs and advisories.",
-      },
-      {
-        to: "/blog",
-        label: "Blog",
-        icon: <FileText className="w-4 h-4" />,
-        description: "Field tests, methodology, and post-mortems.",
-      },
-      {
-        to: "/changelog",
-        label: "Changelog",
-        icon: <BookOpen className="w-4 h-4" />,
-        description: "Per-release notes and version history.",
-      },
-      {
-        to: "/roadmap",
-        label: "Roadmap",
-        icon: <MapIcon className="w-4 h-4" />,
-        description:
-          "Now / Next / Later — what's being built and what's queued.",
-      },
-      {
-        to: "/incidents",
-        label: "Incidents",
-        icon: <Siren className="w-4 h-4" />,
-        description:
-          "Public postmortems for engine outages, scoring regressions, and calibration mistakes.",
+        description: "12 pre-scored examples — obvious slop, subtle slop, borderline, clean.",
       },
       {
         to: "/glossary",
         label: "Glossary",
         icon: <BookA className="w-4 h-4" />,
-        description:
-          "Working vocabulary for the engine, signals, and report-quality concepts.",
-      },
-      {
-        to: "/community",
-        label: "Community",
-        icon: <Users className="w-4 h-4" />,
-        description: "GitHub, mailing list, and how to contribute.",
-      },
-      {
-        to: "/status",
-        label: "Status",
-        icon: <HeartPulse className="w-4 h-4" />,
-        description: "Live API uptime, scoring latency, and per-engine health.",
+        description: "Working vocabulary for the engine, signals, and report-quality concepts.",
       },
     ],
   },
@@ -781,15 +708,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               >
                 {t("nav.changelog")}
               </Link>
-              <a
-                href="https://github.com/REMEDiSSecurity/VulnRap.Com/tree/main/artifacts/api-server/docs/retrospectives"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
-                title="Rolling 24-hour engineering recap"
-              >
-                Latest 24h recap →
-              </a>
               <Link
                 to="/roadmap"
                 className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
