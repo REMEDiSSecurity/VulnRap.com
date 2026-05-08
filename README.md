@@ -212,15 +212,84 @@ overlap on any stable endpoint), and the release process.
 
 ## Pages
 
-| Route          | Purpose                                                                                  |
-| -------------- | ---------------------------------------------------------------------------------------- |
-| `/`            | Submit a report for analysis                                                             |
-| `/results/:id` | Full analysis results with slop score, similarity, redaction summary, verification badge |
-| `/check`       | Receiver flow — analyze an incoming report without storing anything                      |
-| `/verify/:id`  | Public verification page for sharing with vulnerability programs                         |
-| `/stats`       | Platform statistics dashboard                                                            |
-| `/developers`  | API documentation and integration guide                                                  |
-| `/privacy`     | Privacy policy explaining what is stored and how                                         |
+### Core analysis
+
+| Route | Purpose |
+| ----- | ------- |
+| `/` | Submit a report for analysis |
+| `/results/:id` | Full analysis results — score, signals, triage recommendation, similarity matches, verification badge |
+| `/check` | Receiver flow — analyze an incoming report without storing anything |
+| `/verify/:id` | Public verification page for sharing with vulnerability programs |
+| `/batch` | Submit multiple reports at once |
+| `/history` | View your past submissions |
+| `/compare` | Side-by-side comparison against generic LLM detectors |
+| `/compare-detectors` | Per-signal output comparison across all detectors |
+
+### Stats & transparency
+
+| Route | Purpose |
+| ----- | ------- |
+| `/stats` | Platform statistics dashboard |
+| `/corpus-stats` | Scoring corpus breakdown by tier, top-10 signals, CWE families, volume over time |
+| `/transparency` | Live calibration drift widget — T1 vs T3 mean-score spread over the last 12 weeks |
+| `/signals` | All scored signals with descriptions and accuracy stats |
+| `/signals/:id` | Individual signal deep-dive |
+
+### Documentation & education
+
+| Route | Purpose |
+| ----- | ------- |
+| `/developers` | API documentation, Swagger UI, integration guide |
+| `/developers/integrations/:slug` | Integration recipes — HackerOne, Bugcrowd, GitHub Action, Slack bot, Discord bot |
+| `/quickstart` | One-page quickstart for new integrators |
+| `/how-it-works` | Interactive pipeline explainer — paste a report and watch each engine light up |
+| `/whitepaper` | Methodology whitepaper (engine architecture, calibration, drift monitoring, validation results) |
+| `/glossary` | Vulnerability report terminology |
+| `/docs/good-report` | What a strong, high-scoring report looks like |
+| `/engines` | Engine overview |
+| `/engines/ai-authorship` | Engine 1 deep-dive: linguistic / AI authorship signals |
+| `/engines/substance` | Engine 2 deep-dive: technical substance and AVRI rubrics |
+| `/engines/cwe-coherence` | Engine 3 deep-dive: CWE coherence and family contradiction |
+| `/engines/avri` | AVRI family rubric reference — all 9 families with gold signals and absence penalties |
+| `/architecture` | System architecture diagram |
+| `/cwe` | Every CWE family the engine recognizes, with description, MITRE link, and per-CWE accuracy |
+| `/playground` | Scoring playground — tweak engine weights and see how scores shift |
+| `/test-yourself` | BYO fixture battery — run your own labeled corpus through the engine |
+| `/redaction-examples` | What auto-redaction removes and how |
+
+### Connect & integrate
+
+| Route | Purpose |
+| ----- | ------- |
+| `/connect` | MCP server setup — one-click config snippet for Claude Desktop, Cursor, and agent stacks |
+| `/badges` | Embeddable score badge gallery — flat / plastic / social / square variants with copy-paste markdown |
+
+### Community & discovery
+
+| Route | Purpose |
+| ----- | ------- |
+| `/blog` | Engineering blog |
+| `/blog/:slug` | Individual blog post |
+| `/insights` | The Slopdemic — AI-generated slop in security vulnerability disclosures |
+| `/changelog` | Full version history |
+| `/roadmap` | Now / Next / Later |
+| `/gallery` | Pre-scored sample reports (Obvious Slop → Clean) — explore without submitting your own data |
+| `/showcase` | How teams use VulnRap |
+| `/community` | GitHub repo, contributor paths, fixture contributions |
+| `/press` | Press kit — logos, fact sheet, exec bios, past coverage |
+| `/pricing` | Pricing |
+| `/use-cases` | PSIRT, bounty programs, VDP |
+| `/status` | Platform uptime and status |
+| `/incidents` | Incident history |
+
+### Legal & accessibility
+
+| Route | Purpose |
+| ----- | ------- |
+| `/privacy` | Privacy policy — what is stored and how |
+| `/terms` | Terms of service |
+| `/security` | Security disclosure policy |
+| `/accessibility` | Accessibility statement (WCAG 2.1 AA) |
 
 ## Local vs Hosted
 
