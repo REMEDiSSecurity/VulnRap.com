@@ -28,6 +28,16 @@ interface BlogIndexEntry {
 
 const posts: BlogIndexEntry[] = [
   {
+    slug: "update14-deploy-fix",
+    title:
+      "60 Seconds of Silence: What the Production Startup Hang Taught Us",
+    date: "2026-05-08",
+    summary:
+      "Update #14 — Every deploy was hanging silently for 60 seconds before being killed with nothing in the logs. The root cause, what the production DB confirmed, and the two-line fix.",
+    badge: "Update #14",
+    badgeClass: "border-yellow-500/30 text-yellow-300",
+  },
+  {
     slug: "update13-mcp-launch",
     title: "VulnRap Now Speaks MCP: Triage From Inside Your Agent",
     date: "2026-05-15",

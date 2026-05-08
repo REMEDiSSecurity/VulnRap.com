@@ -11,6 +11,17 @@ const blogComponents: Record<
     description: string;
   }
 > = {
+  "update14-deploy-fix": {
+    component: lazy(() =>
+      import("@/components/blog-update14-deploy-fix").then((m) => ({
+        default: m.BlogUpdate14DeployFix,
+      })),
+    ),
+    title:
+      "60 Seconds of Silence: What the Production Startup Hang Taught Us",
+    description:
+      "Update #14 — Every deploy was hanging silently for 60 seconds before being killed with nothing in the logs. The root cause, what the production DB confirmed, and the fix.",
+  },
   "update13-mcp-launch": {
     component: lazy(() =>
       import("@/components/blog-update13-mcp-launch").then((m) => ({

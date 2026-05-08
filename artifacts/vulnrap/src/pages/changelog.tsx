@@ -26,10 +26,34 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
-export const CURRENT_VERSION = "3.12.0";
-export const RELEASE_DATE = "2026-05-03";
+export const CURRENT_VERSION = "3.13.0";
+export const RELEASE_DATE = "2026-05-08";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.13.0",
+    date: "2026-05-08",
+    label: "Ops & Docs — Deploy Reliability + Agent UX",
+    labelColor: "border-yellow-500 text-yellow-300",
+    sections: [
+      {
+        icon: <Wrench className="w-4 h-4 text-yellow-300" />,
+        title: "Deployment reliability",
+        type: "fix",
+        items: [
+          "Fixed production deployments hanging silently for 60 seconds before being killed by the autoscale watchdog — the migration pool had no connectionTimeoutMillis, so when the old instance still held all DB connections the new instance queued its first query forever with nothing in the logs. Root-caused by querying the production DB directly: drizzle.__drizzle_migrations existed but had zero rows, confirming the server had never successfully completed startup. Fixed by (a) setting RUN_STARTUP_MIGRATIONS=0 in production (Replit's Publish flow owns schema; the startup migrator was redundant and harmful in autoscale) and (b) adding connectionTimeoutMillis: 15_000 to the migration pool so any future failure surfaces a real error within 15 s instead of a 60-second silent hang.",
+        ],
+      },
+      {
+        icon: <Code2 className="w-4 h-4 text-cyan-300" />,
+        title: "Agent integration docs",
+        type: "feature",
+        items: [
+          "Added a recommended-defaults code block to the 'For AI agents specifically' card on the home page — mirrors the curl example on the 'Three calls' side and gives agents a single-glance reference for showInFeed=true, contentMode=full, and the POST /api/feedback feedback loop.",
+        ],
+      },
+    ],
+  },
   {
     version: "3.12.0",
     date: "2026-05-03",
