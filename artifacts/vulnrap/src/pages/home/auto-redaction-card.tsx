@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { ShieldCheck, ChevronDown, AlertTriangle } from "lucide-react";
+import {
+  ShieldCheck,
+  ChevronDown,
+  AlertTriangle,
+  ArrowRight,
+} from "lucide-react";
+import { Link } from "react-router-dom";
 import { redactionCategories } from "./data";
 import { MethodologySuggestionFooter } from "./methodology-suggestion-footer";
 
@@ -79,20 +85,31 @@ export function AutoRedactionCard() {
             ))}
           </div>
 
-          <p className="text-[11px] text-muted-foreground leading-relaxed border-t border-border/50 pt-3">
-            All patterns are applied in order. Company names are detected by
-            suffix (Inc, Corp, LLC, Ltd, etc.). Usernames are caught in
-            key-value pairs (
-            <code className="text-[10px] bg-muted/50 px-1 rounded">
-              username: jdoe
-            </code>
-            ) and attribution lines (
-            <code className="text-[10px] bg-muted/50 px-1 rounded">
-              reported by: Jane
-            </code>
-            ). Redaction happens server-side before any text is stored or
-            compared.
-          </p>
+          <div className="border-t border-border/50 pt-3">
+            <p className="text-[11px] font-semibold text-muted-foreground mb-2">
+              Want the full methodology?
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Link
+                to="/privacy"
+                className="flex items-center justify-between gap-2 rounded-md bg-muted/20 hover:bg-muted/40 px-3 py-2 transition-colors group"
+              >
+                <span className="text-[11px] text-foreground">
+                  Privacy & data handling
+                </span>
+                <ArrowRight className="w-3 h-3 text-muted-foreground group-hover:text-green-400 transition-colors" />
+              </Link>
+              <Link
+                to="/how-it-works"
+                className="flex items-center justify-between gap-2 rounded-md bg-muted/20 hover:bg-muted/40 px-3 py-2 transition-colors group"
+              >
+                <span className="text-[11px] text-foreground">
+                  Pipeline walkthrough
+                </span>
+                <ArrowRight className="w-3 h-3 text-muted-foreground group-hover:text-green-400 transition-colors" />
+              </Link>
+            </div>
+          </div>
           <MethodologySuggestionFooter topic="Auto-Redaction" />
         </div>
       )}
