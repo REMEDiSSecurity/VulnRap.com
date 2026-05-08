@@ -764,6 +764,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 Agents Manual
               </a>
               <Link
+                to="/insights"
+                className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
+              >
+                Insights
+              </Link>
+              <Link
                 to="/blog"
                 className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"
               >
