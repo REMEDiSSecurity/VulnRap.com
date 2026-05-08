@@ -47,7 +47,7 @@
     "esbuild": "0.27.3",
     "tsx": "catalog:",
     "typescript": "~5.9.2",
-    "vitest": "^4.1.4",
+    "vitest": "^4.1.5",
     "zod": "catalog:"
   }
 }
