@@ -40,7 +40,7 @@ const posts: BlogIndexEntry[] = [
   {
     slug: "update13-mcp-launch",
     title: "VulnRap Now Speaks MCP: Triage From Inside Your Agent",
-    date: "2026-05-15",
+    date: "2026-05-05",
     summary:
       "Update #13 — VulnRap exposes its scoring, similarity, and diagnostics tooling over the Model Context Protocol so agents like Claude Desktop can triage reports without leaving the chat.",
     badge: "Update #13",
@@ -49,7 +49,7 @@ const posts: BlogIndexEntry[] = [
   {
     slug: "engine-deep-dives",
     title: "Under the Hood: Introducing the VulnRap Engine Deep-Dive Series",
-    date: "2026-05-10",
+    date: "2026-05-03",
     summary:
       "Update #11 — A guided tour through each scoring engine: what it measures, how it votes, and where the boundaries are.",
     badge: "Update #11",
@@ -58,7 +58,7 @@ const posts: BlogIndexEntry[] = [
   {
     slug: "byo-fixtures",
     title: "Bring Your Own Fixtures: Validating VulnRap Against Your Corpus",
-    date: "2026-05-08",
+    date: "2026-05-03",
     summary:
       "Update #10 — Run VulnRap's scoring pipeline against your own labelled reports and compare precision/recall on your data.",
     badge: "Update #10",
@@ -67,7 +67,7 @@ const posts: BlogIndexEntry[] = [
   {
     slug: "show-our-work",
     title: "Showing Our Work: Per-Signal Precision/Recall in the UI",
-    date: "2026-05-06",
+    date: "2026-05-03",
     summary:
       "Update #9 — Every signal now surfaces its own precision and recall numbers so you can see exactly which detectors pull their weight.",
     badge: "Update #9",
@@ -86,7 +86,7 @@ const posts: BlogIndexEntry[] = [
     slug: "substance-gate-sprint12",
     title:
       "Closing the Slop Gap: Engine 3 Now Cross-Checks Engine 2 Before It Votes",
-    date: "2026-04-25",
+    date: "2026-04-23",
     summary:
       "Sprint 12 — The substance LLM now refuses to outvote the heuristic on evidence-free reports.",
     badge: "Sprint 12",
@@ -96,7 +96,7 @@ const posts: BlogIndexEntry[] = [
     slug: "avri-sprint11",
     title:
       "AVRI: One Rubric Wasn't Enough — Why v3.7.0 Scores Memory Bugs and XSS Slop on Different Yardsticks",
-    date: "2026-04-18",
+    date: "2026-04-22",
     summary:
       "Sprint 11 — The Adversarial Vulnerability Report Index splits scoring by family so a memory-corruption report and an XSS report no longer share the same gold-signal yardstick.",
     badge: "Sprint 11",
@@ -106,7 +106,7 @@ const posts: BlogIndexEntry[] = [
     slug: "field-test-v350",
     title:
       "v3.5.0 Field Test: Three Engines, Seven Reports, and a Ceiling We Didn't Expect",
-    date: "2026-04-11",
+    date: "2026-04-20",
     summary:
       "Field test of v3.5.0 across seven real-world reports surfaced a scoring ceiling we did not predict. What the three engines agreed on, where they disagreed, and what the next sprint changes.",
     badge: "Field Test",
@@ -115,7 +115,7 @@ const posts: BlogIndexEntry[] = [
   {
     slug: "zero-detection",
     title: "460K Vulnerability Reports, 56 Sources, and a 0% Detection Rate",
-    date: "2026-04-04",
+    date: "2026-04-19",
     summary:
       "The week we built the most diverse vulnerability report dataset we could find, ran our scoring system against it, and watched it score AI slop and real CVEs identically.",
     badge: "Deep Dive",
@@ -124,7 +124,7 @@ const posts: BlogIndexEntry[] = [
   {
     slug: "the-data-is-there",
     title: "The Data Is There, the Score Isn't Listening",
-    date: "2026-03-28",
+    date: "2026-04-16",
     summary:
       "Sprint 8 results: the pipeline finally works, substance detection is live, and the scoring formula mathematically cannot use it.",
     badge: "Sprint 8",
@@ -134,7 +134,7 @@ const posts: BlogIndexEntry[] = [
     slug: "grading-ai-with-ai",
     title:
       "Grading AI with AI: What We Learned When Our Detection Model Met the Real World",
-    date: "2026-03-21",
+    date: "2026-04-15",
     summary:
       "Six development sprints, a 20% real-world detection rate, and the fundamental rethinking that led us from style detection to substance verification.",
     badge: "Deep Dive",
@@ -144,7 +144,7 @@ const posts: BlogIndexEntry[] = [
     slug: "building-vulnrap",
     title:
       "Building VulnRap: How We're Making Vulnerability Report Validation Actually Work for PSIRT Teams",
-    date: "2026-03-14",
+    date: "2026-04-13",
     summary:
       "A detailed walkthrough of four development sprints, what we built, what we learned, what works, and what's coming next.",
     badge: "Deep Dive",
@@ -153,7 +153,7 @@ const posts: BlogIndexEntry[] = [
   {
     slug: "first-post",
     title: "We Built the Tool We Wished Existed",
-    date: "2026-03-07",
+    date: "2026-04-10",
     summary:
       "Why we created VulnRap, how it helps with triage, and why you should feel comfortable using it.",
     badge: "Launch",
