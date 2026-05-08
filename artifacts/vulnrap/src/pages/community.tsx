@@ -418,22 +418,6 @@ export default function Community() {
             cta="Open repo"
             status="live"
           />
-          <ChannelCard
-            icon={<MessageCircle className="w-5 h-5" />}
-            title="Discord"
-            description="Real-time chat for triagers, contributors, and PSIRT folks comparing notes. #code-of-conduct is pinned in the welcome channel — read it before posting."
-            href="https://discord.gg/vulnrap"
-            cta="Join Discord"
-            status="live"
-          />
-          <ChannelCard
-            icon={<MessageCircle className="w-5 h-5" />}
-            title="Slack"
-            description="Mirror of the Discord for orgs that live in Slack. Same content, different surface — pick whichever your team already uses."
-            href="https://join.slack.com/t/vulnrap/shared_invite/zt-community"
-            cta="Join Slack"
-            status="live"
-          />
         </div>
         <NewsletterForm />
       </section>
