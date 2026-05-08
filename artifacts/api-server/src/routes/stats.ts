@@ -28,9 +28,10 @@ const router: IRouter = Router();
 // browser cache from a populated env doesn't pin an empty response.
 async function getReportsLastModified(): Promise<Date | null> {
   const [row] = await db
-    .select({ lastModified: sql<Date | null>`max(${reportsTable.createdAt})` })
+    .select({ lastModified: sql<string | null>`max(${reportsTable.createdAt})` })
     .from(reportsTable);
-  return row?.lastModified ?? null;
+  const raw = row?.lastModified ?? null;
+  return raw ? new Date(raw) : null;
 }
 
 router.get("/stats", async (req, res): Promise<void> => {
