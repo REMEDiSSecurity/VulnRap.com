@@ -159,7 +159,7 @@ const posts: BlogIndexEntry[] = [
     badge: "Launch",
     badgeClass: "border-primary/30 text-primary",
   },
-];
+].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
 function formatDate(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00Z`);
