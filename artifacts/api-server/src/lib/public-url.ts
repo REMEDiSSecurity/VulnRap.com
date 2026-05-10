@@ -63,6 +63,14 @@ export function buildPublicUrl(options: BuildPublicUrlOptions = {}): string {
     base = overrideTrimmed;
   } else if (envTrimmed.length > 0) {
     base = envTrimmed;
+  } else if ((process.env.NODE_ENV ?? "").trim().toLowerCase() === "production") {
+    // Task #1310 — In production we never trust the request's Host header
+    // because it is attacker-controlled (cf. host-header poisoning →
+    // forged links in security.txt, OG cards, sitemap, password-reset
+    // emails, etc.). PUBLIC_URL is enforced by validateProductionConfig
+    // at startup; this branch is just defence in depth in case some
+    // future code path reaches buildPublicUrl before that check has run.
+    base = DEFAULT_PUBLIC_URL;
   } else {
     const host = req?.get("host");
     base = host ? `${req!.protocol}://${host}` : DEFAULT_PUBLIC_URL;

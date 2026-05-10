@@ -61,6 +61,12 @@ overrides:
   "@tailwindcss/oxide>@tailwindcss/oxide-win32-arm64-msvc": "-"
   "@tailwindcss/oxide>@tailwindcss/oxide-win32-x64-msvc": "-"
   brace-expansion: 2.0.3
+  # Task #1310 — Pull express-rate-limit's transitive ip-address up to a
+  # patched release (GHSA-v2v4-37r5-5v8g, XSS in Address6 HTML-emitting
+  # methods, fixed in >=10.1.1). express-rate-limit doesn't itself call
+  # the affected methods, but the lockfile shouldn't carry a known-bad
+  # version when a fix is available.
+  ip-address: ^10.1.1
   # ESLint v10's @eslint/config-array depends on minimatch@10, which in turn
   # imports the named `expand` export from brace-expansion. That export only
   # exists from brace-expansion v4+, so the project-wide pin to 2.0.3 above

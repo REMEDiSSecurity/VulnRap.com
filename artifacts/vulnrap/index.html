@@ -97,34 +97,25 @@
       }
     </script>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Task #1310 — The previous Google Fonts <link rel="stylesheet">
+         loaded a UA-variant CSS body for which a stable Subresource
+         Integrity hash cannot be computed (the response changes per
+         user-agent). Rather than ship the SPA with an external script-
+         class resource that can't be SRI-pinned, we drop the external
+         link entirely and fall back to the system font stack already
+         configured in src/index.css (`system-ui, sans-serif` / etc.).
+         Follow-up #1311 will re-introduce the brand fonts as
+         self-hosted assets so they ship from /assets/ with subresource
+         integrity intact. -->
   </head>
   <body>
     <div id="root"></div>
-    <script>
-      // Bootstrap theme class before render to prevent FOUC.
-      (function () {
-        try {
-          var t = localStorage.getItem("vulnrap:theme") || "system";
-          var resolved =
-            t === "light" || t === "dark"
-              ? t
-              : window.matchMedia &&
-                  window.matchMedia("(prefers-color-scheme: light)").matches
-                ? "light"
-                : "dark";
-          document.documentElement.classList.add(resolved);
-          document.documentElement.style.colorScheme = resolved;
-        } catch (e) {
-          document.documentElement.classList.add("dark");
-        }
-      })();
-    </script>
+    <!-- Task #1310 — Bootstrap theme class loaded as a same-origin
+         classic script so the production CSP can drop 'unsafe-inline'
+         from script-src. The script blocks parsing (no async/defer) so
+         the no-flash behaviour is preserved. Source lives in
+         artifacts/vulnrap/public/bootstrap-theme.js. -->
+    <script src="/bootstrap-theme.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

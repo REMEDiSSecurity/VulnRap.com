@@ -22,6 +22,11 @@ import {
   hashSecret,
   rememberWebhookSecret,
 } from "../lib/webhook-delivery";
+import {
+  checkPrivateHost,
+  resolveAllAddresses,
+  type ResolveFn,
+} from "../lib/private-host-guard";
 
 const SUPPORTED_EVENTS = new Set<string>([REPORT_SCORED_EVENT]);
 const MAX_URL_LEN = 1000;
@@ -39,6 +44,22 @@ function isValidUrl(raw: unknown): raw is string {
   } catch {
     return false;
   }
+}
+
+// Task #1310 — SSRF guard. Rejects loopback, RFC1918, link-local,
+// CGNAT, multicast, broadcast, and known cloud-metadata endpoints both
+// when the URL contains a literal IP and (via DNS resolution) when a
+// public hostname resolves to a private address. Tests inject a stub
+// resolver via `__setWebhookHostGuardDepsForTests` so the suite never
+// touches the real DNS; production calls node:dns/promises.
+let resolveFnOverride: ResolveFn | null = null;
+export function __setWebhookHostGuardDepsForTests(
+  deps: { resolve?: ResolveFn } | null,
+): void {
+  resolveFnOverride = deps?.resolve ?? null;
+}
+function getResolveFn(): ResolveFn {
+  return resolveFnOverride ?? resolveAllAddresses;
 }
 
 function serializeWebhook(row: Webhook): {
@@ -70,6 +91,15 @@ router.post("/webhooks", requireCalibrationAuth, async (req, res) => {
       .json({ error: "url must be an http(s) URL up to 1000 characters." });
     return;
   }
+
+  const guard = await checkPrivateHost(url, { resolve: getResolveFn() });
+  if (!guard.ok) {
+    res.status(400).json({
+      error: `url targets a blocked network: ${guard.reason ?? "private/internal address"}.`,
+    });
+    return;
+  }
+
   const eventTypesRaw = Array.isArray(body.eventTypes)
     ? body.eventTypes
     : [REPORT_SCORED_EVENT];

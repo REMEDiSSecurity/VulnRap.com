@@ -197,7 +197,18 @@ let baseUrl: string;
 
 beforeAll(async () => {
   process.env.CALIBRATION_TOKEN = TOKEN;
-  const webhooksRouter = (await import("./webhooks")).default;
+  const webhooksModule = await import("./webhooks");
+  const webhooksRouter = webhooksModule.default;
+  // Stub DNS so the SSRF guard never touches the real resolver during
+  // tests. Public-looking hostnames return a public IP; explicit
+  // private-looking hostnames return a private one. Tests that need a
+  // different shape can override this for their case.
+  webhooksModule.__setWebhookHostGuardDepsForTests({
+    resolve: async (host: string) => {
+      if (/(^|\.)private-target\.example$/.test(host)) return ["10.0.0.1"];
+      return ["93.184.216.34"];
+    },
+  });
   const app = express();
   app.use(express.json());
   app.use("/api", webhooksRouter);
@@ -208,6 +219,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  const webhooksModule = await import("./webhooks");
+  webhooksModule.__setWebhookHostGuardDepsForTests(null);
   await new Promise<void>((resolve) => server.close(() => resolve()));
   delete process.env.CALIBRATION_TOKEN;
 });
@@ -295,6 +308,39 @@ describe("POST /api/webhooks", () => {
     );
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/Unsupported event type/);
+  });
+
+  it("rejects a url targeting a literal loopback IP (SSRF guard)", async () => {
+    const res = await request<{ error: string }>(
+      "POST",
+      "/api/webhooks",
+      { url: "http://127.0.0.1:9000/in" },
+      { "x-calibration-token": TOKEN },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/blocked network/);
+  });
+
+  it("rejects a url targeting the cloud metadata IP (SSRF guard)", async () => {
+    const res = await request<{ error: string }>(
+      "POST",
+      "/api/webhooks",
+      { url: "http://169.254.169.254/latest/meta-data/" },
+      { "x-calibration-token": TOKEN },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/blocked network/);
+  });
+
+  it("rejects a public-looking hostname whose DNS resolves to RFC1918 (SSRF guard)", async () => {
+    const res = await request<{ error: string }>(
+      "POST",
+      "/api/webhooks",
+      { url: "https://hook.private-target.example/in" },
+      { "x-calibration-token": TOKEN },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/blocked network/);
   });
 
   it("registers a webhook, returns the secret once, and stores only its hash", async () => {
@@ -434,6 +480,8 @@ describe("dispatchReportScoredEvent", () => {
     });
     delivery.__setWebhookDeliveryDepsForTests({
       fetch: fakeFetch as unknown as typeof fetch,
+      resolve: async () => ["93.184.216.34"],
+      skipIpPinning: true,
     });
 
     await delivery.dispatchReportScoredEvent({
@@ -490,6 +538,8 @@ describe("dispatchReportScoredEvent", () => {
     delivery.__setWebhookDeliveryDepsForTests({
       fetch: fakeFetch as unknown as typeof fetch,
       setTimeout: fakeSetTimeout,
+      resolve: async () => ["93.184.216.34"],
+      skipIpPinning: true,
     });
 
     await delivery.dispatchReportScoredEvent({
@@ -525,6 +575,8 @@ describe("dispatchReportScoredEvent", () => {
     const fakeFetch = vi.fn(async () => new Response("", { status: 200 }));
     delivery.__setWebhookDeliveryDepsForTests({
       fetch: fakeFetch as unknown as typeof fetch,
+      resolve: async () => ["93.184.216.34"],
+      skipIpPinning: true,
     });
 
     await delivery.dispatchReportScoredEvent({
@@ -540,6 +592,127 @@ describe("dispatchReportScoredEvent", () => {
     expect(fakeFetch).not.toHaveBeenCalled();
     expect(webhookRows[0].lastDeliveredAt).toBeNull();
     expect(webhookRows[0].failureCount).toBe(0);
+
+    delivery.__setWebhookDeliveryDepsForTests(null);
+  });
+
+  it("does not pin a re-resolved private IP when the resolver returns public-then-private (DNS rebinding TOCTOU)", async () => {
+    // Hostile DNS scenario: the first resolver call (validation)
+    // returns a public IP, the second call (would-be pin lookup)
+    // returns a private IP. The implementation must use the
+    // ALREADY-VALIDATED address from the first call and never invoke
+    // the resolver a second time per attempt — otherwise the pinned
+    // dispatcher would target 10.0.0.5.
+    const delivery = await import("../lib/webhook-delivery");
+    const secret = "secret-toctou";
+    webhookRows.push({
+      id: 31,
+      url: "https://hook-toctou.example/in",
+      secretHash: delivery.hashSecret(secret),
+      eventTypes: ["report.scored"],
+      createdAt: new Date(),
+      lastDeliveredAt: null,
+      failureCount: 0,
+    });
+    delivery.rememberWebhookSecret(31, secret);
+
+    const resolverCalls: string[][] = [];
+    let nthCall = 0;
+    const flippingResolve = async (host: string): Promise<string[]> => {
+      nthCall += 1;
+      // First call (validation) → public IP, accepted by guard.
+      // Any subsequent call → private IP. If the implementation
+      // re-resolves to grab a pin, this will surface in resolverCalls
+      // with length > 1 per delivery attempt.
+      const out =
+        nthCall === 1 ? ["93.184.216.34"] : ["10.0.0.5"];
+      resolverCalls.push([host, ...out]);
+      return out;
+    };
+
+    const seenInitDispatchers: unknown[] = [];
+    const fakeFetch = vi.fn(async (_url: string, init: RequestInit) => {
+      seenInitDispatchers.push(
+        (init as unknown as Record<string, unknown>).dispatcher,
+      );
+      return new Response("", { status: 200 });
+    });
+    delivery.__setWebhookDeliveryDepsForTests({
+      fetch: fakeFetch as unknown as typeof fetch,
+      resolve: flippingResolve,
+      // Leave skipIpPinning OFF so the production code path (build the
+      // dispatcher from the already-validated address) is exercised.
+      skipIpPinning: false,
+    });
+
+    await delivery.dispatchReportScoredEvent({
+      event: "report.scored",
+      reportId: 99,
+      slopScore: 10,
+      slopTier: "human",
+      compositeScore: null,
+      label: null,
+      createdAt: "2026-05-03T00:00:00.000Z",
+    });
+
+    // Exactly ONE resolver call should have happened (the validation
+    // lookup). If the code re-resolved to pick the pin IP, we'd see
+    // two — which is the rebinding bug.
+    expect(resolverCalls).toHaveLength(1);
+    expect(resolverCalls[0]).toEqual([
+      "hook-toctou.example",
+      "93.184.216.34",
+    ]);
+    // Delivery must have happened (the public IP was validated). The
+    // dispatcher is built from the validated public IP — but in the
+    // test runtime the dynamic `import("undici")` may resolve a
+    // mock-friendly stub or fail silently, so we don't assert on the
+    // dispatcher object itself; the resolverCalls invariant above is
+    // the load-bearing one for this test (no second DNS lookup means
+    // a hostile resolver cannot redirect the connect).
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    void seenInitDispatchers;
+
+    delivery.__setWebhookDeliveryDepsForTests(null);
+  });
+
+  it("aborts delivery and increments failureCount when DNS now resolves to a private IP (DNS rebinding)", async () => {
+    const delivery = await import("../lib/webhook-delivery");
+    const secret = "secret-rebind";
+    webhookRows.push({
+      id: 21,
+      url: "https://hook-rebind.example/in",
+      secretHash: delivery.hashSecret(secret),
+      eventTypes: ["report.scored"],
+      createdAt: new Date(),
+      lastDeliveredAt: null,
+      failureCount: 0,
+    });
+    delivery.rememberWebhookSecret(21, secret);
+
+    // The destination's DNS now points at an RFC1918 IP — exactly the
+    // DNS-rebinding case the delivery-time check defends against. The
+    // fetch must never be invoked, the failureCount must increment.
+    const fakeFetch = vi.fn(async () => new Response("", { status: 200 }));
+    delivery.__setWebhookDeliveryDepsForTests({
+      fetch: fakeFetch as unknown as typeof fetch,
+      resolve: async () => ["10.0.0.5"],
+      skipIpPinning: true,
+    });
+
+    await delivery.dispatchReportScoredEvent({
+      event: "report.scored",
+      reportId: 7,
+      slopScore: 10,
+      slopTier: "human",
+      compositeScore: null,
+      label: null,
+      createdAt: "2026-05-03T00:00:00.000Z",
+    });
+
+    expect(fakeFetch).not.toHaveBeenCalled();
+    expect(webhookRows[0].lastDeliveredAt).toBeNull();
+    expect(webhookRows[0].failureCount).toBe(1);
 
     delivery.__setWebhookDeliveryDepsForTests(null);
   });

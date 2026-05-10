@@ -18,10 +18,21 @@ function isEnabled(): boolean {
 
 function isAuthorized(req: Request): boolean {
   const token = process.env.METRICS_TOKEN;
-  if (!token || token.trim() === "") return true;
+  const trimmed = token?.trim() ?? "";
+  if (trimmed.length === 0) {
+    // Task #1310 — Fail closed in production. METRICS_TOKEN is enforced
+    // at startup by validateProductionConfig; this is defence-in-depth
+    // so a future regression that loosens the startup check still
+    // can't expose the scrape endpoint to the public Internet (it would
+    // leak per-route latency / volume telemetry useful for recon).
+    if ((process.env.NODE_ENV ?? "").trim().toLowerCase() === "production") {
+      return false;
+    }
+    return true;
+  }
   const auth = req.header("authorization");
   if (!auth) return false;
-  const expected = `Bearer ${token.trim()}`;
+  const expected = `Bearer ${trimmed}`;
   return auth === expected;
 }
 

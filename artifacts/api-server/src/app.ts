@@ -21,12 +21,10 @@ import sitemapRouter from "./routes/sitemap";
 import changelogFeedRouter from "./routes/changelog-feed";
 import incidentsFeedRouter from "./routes/incidents-feed";
 import { logger } from "./lib/logger";
-import { buildPublicUrl, validatePublicUrlEnv } from "./lib/public-url";
+import { buildPublicUrl } from "./lib/public-url";
 import { createSpaFallback } from "./lib/spa-fallback";
-import {
-  buildCorsOriginCallback,
-  validateAllowedOriginsEnv,
-} from "./lib/allowed-origins";
+import { buildCorsOriginCallback } from "./lib/allowed-origins";
+import { validateProductionConfig } from "./lib/prod-config";
 import { requestIdMiddleware } from "./middlewares/request-id";
 import { httpMetricsMiddleware } from "./middlewares/http-metrics";
 
@@ -38,8 +36,19 @@ import { httpMetricsMiddleware } from "./middlewares/http-metrics";
 // injects, so the candidate paths below still resolve identically.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-validatePublicUrlEnv({ logger });
-const allowedOriginsValidation = validateAllowedOriginsEnv({ logger });
+// Task #1310 — Fail-closed startup validation. In production this throws
+// when ALLOWED_ORIGINS / PUBLIC_URL / CALIBRATION_TOKEN /
+// NEWSLETTER_CHALLENGE_HMAC_KEY / VISITOR_HMAC_KEY / METRICS_TOKEN are
+// missing or malformed, so a misconfigured deploy refuses to boot
+// instead of accepting traffic with permissive defaults. In dev /
+// test it just logs the same warnings/errors as before and returns
+// the structured validation results.
+const { allowedOrigins: allowedOriginsValidation } = validateProductionConfig({
+  logger,
+});
+
+const IS_PRODUCTION =
+  (process.env.NODE_ENV ?? "").trim().toLowerCase() === "production";
 
 const app: Express = express();
 
@@ -50,15 +59,40 @@ app.set("trust proxy", 1);
 
 app.use(compression());
 
+// Task #1310 — Tighten the production CSP:
+//   - script-src drops 'unsafe-inline' (the FOUC bootstrap was moved to
+//     /bootstrap-theme.js in artifacts/vulnrap/public/; main.tsx is a
+//     module script served from the hashed assets/ directory). The one
+//     remaining inline <script> is the SEO JSON-LD block in
+//     artifacts/vulnrap/index.html — per CSP spec, even
+//     application/ld+json blocks are subject to script-src, so we pin
+//     it via its sha256 hash. If you change the JSON-LD body, recompute
+//     the hash with: `openssl dgst -sha256 -binary < block.txt | base64`
+//     and replace JSONLD_HASH below.
+//   - dev keeps 'unsafe-inline' so Vite's HMR runtime injection and any
+//     ad-hoc inline test snippets keep working without ceremony.
+// style-src keeps 'unsafe-inline' because results.tsx / whitepaper.tsx
+// inject print-only <style> blocks via dangerouslySetInnerHTML; those
+// are CSS not JS and can't be exploited the same way.
+const JSONLD_HASH = "'sha256-14JJra+0uojRHYxF8D+tkTEPT0+OSHPYHN+lCc3bjEw='";
 const defaultHelmet = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      scriptSrc: IS_PRODUCTION
+        ? ["'self'", JSONLD_HASH]
+        : ["'self'", "'unsafe-inline'"],
+      // Task #1310 — Google Fonts removed from the SPA; CSP no longer
+      // allow-lists fonts.googleapis.com / fonts.gstatic.com. Add them
+      // back here only if a future change re-introduces those origins
+      // (and ideally only with SRI on the stylesheet).
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      fontSrc: ["'self'"],
       imgSrc: ["'self'", "data:"],
       connectSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'self'"],
     },
   },
 });
@@ -138,9 +172,16 @@ app.use(
   }),
 );
 
+// Task #1310 — Lowered the global per-IP ceiling on /api/reports from
+// 5000 to 600 / 15 min. The narrower analysisLimiter (30 / 15 min)
+// still gates the expensive POST endpoints; this outer cap is a
+// safety net against drive-by enumeration of GET /api/reports/:id and
+// burst floods that the inner limiter can't absorb. A single legitimate
+// reviewer browsing report history rarely needs more than ~10 reqs/min,
+// so 40/min still leaves several multiples of headroom.
 const submitLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5000,
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
@@ -189,7 +230,27 @@ if (!swaggerDocument) {
   );
 }
 
-if (swaggerDocument) {
+// Task #1310 — Gate Swagger UI in production. The interactive docs
+// endpoint loads Swagger's bundle which requires 'unsafe-inline' /
+// 'unsafe-eval' in script-src (see swaggerHelmet above). In production
+// we only mount it when DOCS_TOKEN is set, and the request must carry
+// the matching `Authorization: Bearer <token>` header. The static
+// openapi.yaml is still served unconditionally so machine clients
+// (codegen, Postman) can fetch the spec.
+const docsToken = (process.env.DOCS_TOKEN ?? "").trim();
+const docsEnabledInProd = !IS_PRODUCTION || docsToken.length > 0;
+
+if (swaggerDocument && docsEnabledInProd) {
+  if (IS_PRODUCTION) {
+    app.use("/api/docs", (req, res, next) => {
+      const auth = req.header("authorization");
+      if (auth !== `Bearer ${docsToken}`) {
+        res.status(401).type("text/plain").send("Unauthorized");
+        return;
+      }
+      next();
+    });
+  }
   app.use(
     "/api/docs",
     swaggerUi.serve,
@@ -197,6 +258,10 @@ if (swaggerDocument) {
       customCss: ".swagger-ui .topbar { display: none }",
       customSiteTitle: "VulnRap API Documentation",
     }),
+  );
+} else if (swaggerDocument && IS_PRODUCTION) {
+  logger.info(
+    "DOCS_TOKEN is not set; /api/docs is disabled in production. Set DOCS_TOKEN to a long random string to enable Swagger UI.",
   );
 }
 

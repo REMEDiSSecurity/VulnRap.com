@@ -121,3 +121,154 @@ release notes and in the acknowledgments section of the
 
 VulnRap does not currently offer monetary rewards for security reports. This
 policy covers the disclosure channel only.
+
+---
+
+## Operator: production deployment checklist
+
+The API server refuses to boot in production (`NODE_ENV=production`) until
+every value below is set. This is enforced by
+[`validateProductionConfig`](artifacts/api-server/src/lib/prod-config.ts) at
+startup so a misconfigured deploy can never accept traffic with permissive
+defaults.
+
+| Variable                        | Why it matters                                                                                                                                                                                            |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUBLIC_URL`                    | Canonical https origin of the deployment. Used by `security.txt`, OG cards, sitemap, Atom feeds, newsletter / verification emails. In production, **the request `Host` header is never trusted as a fallback** — that would let an attacker poison every link by spoofing it. |
+| `ALLOWED_ORIGINS`               | Comma-separated list of permitted browser origins for CORS. If unset, the API would allow every cross-origin caller. Malformed entries are dropped; if every entry is malformed the API refuses to boot rather than silently re-opening to all origins. |
+| `CALIBRATION_TOKEN`             | Bearer token gating every reviewer-only mutation endpoint (calibration, audit log, webhooks, test fixtures, …). Without it those endpoints 401 unconditionally.                                          |
+| `NEWSLETTER_CHALLENGE_HMAC_KEY` | HMAC key used to sign newsletter proof-of-work challenges. Without a stable key the keys rotate on every process restart and multi-pod deploys reject legitimate signups intermittently.                  |
+| `VISITOR_HMAC_KEY`              | HMAC key used to hash visitor IPs for the per-IP daily caps on phrase suggestions and showcase nominations. Without a stable key the per-IP counts drift on every restart.                                |
+| `METRICS_TOKEN`                 | Bearer token gating the `/api/metrics` Prometheus scrape endpoint. Without it the endpoint would be open to the public Internet and would leak per-route latency / volume telemetry useful for recon.    |
+| `DOCS_TOKEN` _(optional)_       | When set, gates `/api/docs` (interactive Swagger UI) behind a bearer token. When unset in production, `/api/docs` is disabled entirely. The static `openapi.yaml` remains available for machine clients. |
+| `SECURITY_TXT_EXPIRY_DAYS` _(optional)_ | Rollover window for the `Expires:` line in `/.well-known/security.txt`. Defaults to 90 days; clamped to (0, 365].                                                                                  |
+
+### Pre-deploy verification
+
+1. `pnpm --filter @workspace/api-server run build` — must succeed.
+2. `pnpm --filter @workspace/api-server run test` — must pass (covers the
+   prod-config validator, the CORS allow-list parser, the public-URL parser,
+   the SSRF guard, and the audit-log redactor).
+3. Run `node --enable-source-maps artifacts/api-server/dist/index.mjs` with
+   only `NODE_ENV=production` set — the process should exit immediately with
+   a multi-line error listing every missing required variable. If it boots
+   silently, the fail-closed check has regressed.
+4. After setting all required values, hit `https://<host>/.well-known/security.txt`,
+   `https://<host>/api/metrics` (with and without the bearer), and
+   `https://<host>/api/docs` (with and without `DOCS_TOKEN`) and confirm the
+   expected status codes (200, 401-without-bearer, 401-without-bearer
+   respectively).
+
+### Webhook destinations
+
+Reviewer-registered webhook URLs are validated by an SSRF guard
+([`lib/private-host-guard.ts`](artifacts/api-server/src/lib/private-host-guard.ts))
+that rejects loopback, RFC1918, link-local, CGNAT, multicast, broadcast, and
+known cloud-metadata endpoints both at the URL parsing stage (literal IPs)
+and after DNS resolution (so a public hostname that resolves to a private
+address is also caught). New blocked ranges should be added to that file
+along with a unit test in `private-host-guard.test.ts`.
+
+The same guard runs a second time **at delivery time** in
+[`lib/webhook-delivery.ts`](artifacts/api-server/src/lib/webhook-delivery.ts):
+on every attempt the destination is re-resolved, every returned address is
+re-validated, and `checkPrivateHost` returns the validated address set so
+the delivery code can pin one of those exact addresses for the outbound
+connect — **the resolver is never called a second time per attempt**, so a
+hostile DNS server cannot return a public IP on the validation lookup and
+a private IP on the pin lookup. The actual `fetch` is issued through an
+undici `Agent` whose `connect.lookup` callback returns the pre-validated
+IP, which closes the TOCTOU window between the resolver check and the TCP
+connect (DNS rebinding). In production, if the pinned dispatcher cannot be
+built (undici import failure, etc.) the delivery is **aborted** rather
+than falling back to an unpinned `fetch` — IP pinning is part of the
+production security model, not best-effort.
+
+### Dependency hygiene
+
+`pnpm audit --prod` from the workspace root must report zero advisories
+before a deploy goes out. Transitive vulnerabilities are pinned to a
+patched release via the `overrides` block in
+[`pnpm-workspace.yaml`](pnpm-workspace.yaml). The current overrides include
+`ip-address: ^10.1.1` (GHSA-v2v4-37r5-5v8g, pulled in transitively via
+`express-rate-limit`). When a new advisory appears, prefer adding an
+override over pinning a single workspace package so every consumer in the
+monorepo picks up the fix together.
+
+`pdf-parse-new` is pinned to the exact version `2.0.0` in
+[`artifacts/api-server/package.json`](artifacts/api-server/package.json).
+The upstream `2.1.0` release ships a broken package (its `index.js` requires
+a `lib/markdown-render-page.js` file that is missing from the published
+tarball, causing the API server to fail to boot). The pin is intentional —
+do not bump it until upstream republishes a working `2.1.x` release. A
+longer-term follow-up to migrate to `pdfjs-dist` for a broader maintainer
+base is tracked outside this file.
+
+### Audit-log redaction
+
+The reviewer audit log redacts both secret-shaped **field names** (`token`,
+`secret`, `password`, `apiKey`, `auth*`, `cred*`, `cookie`) and secret-shaped
+**values** (OpenAI / Anthropic `sk-…`, GitHub `ghp_…`, AWS `AKIA…`, Google
+`AIza…`, Slack `xox?-…`, JWTs, and inline PEM private-key blocks). When
+adding a new secret format anywhere in the codebase, also add it to
+`SECRET_VALUE_PATTERNS` in
+[`middlewares/audit-log-middleware.ts`](artifacts/api-server/src/middlewares/audit-log-middleware.ts)
+so it can never end up in plaintext on disk.
+
+---
+
+## Threat model summary
+
+This is the short version of what the codebase defends against and what it
+explicitly does not. It is not a substitute for the disclosure policy above.
+
+### Trust boundaries
+
+- **Public Internet ↔ API server.** Untrusted. All input is validated; the
+  CORS allow-list is enforced from `ALLOWED_ORIGINS`; rate limits cap
+  abusive callers; a global helmet CSP locks down script / style / connect
+  sources.
+- **Reviewer ↔ calibration / audit / webhook endpoints.** Bearer-token
+  gated by `CALIBRATION_TOKEN`. Wrong-token attempts are throttled per-IP.
+  Every mutation is appended to the audit log with the redacted request
+  payload, the actor, the IP, and the response status.
+- **API server ↔ Postgres.** Trusted. Connection string is provided by the
+  hosting environment; pooled writes go through Drizzle's parameterised
+  query builder. No raw SQL is constructed from user input.
+- **API server ↔ reviewer-supplied webhook destinations.** Untrusted.
+  Outbound POSTs are filtered by the SSRF guard above; payloads are signed
+  with HMAC-SHA-256 derived from a secret returned to the reviewer exactly
+  once at registration time (only the SHA-256 hash is persisted).
+
+### Defenses
+
+- **Auto-redaction engine.** Strips PII / credentials from inbound report
+  bodies before they are scored, hashed, persisted, or surfaced anywhere in
+  the API output.
+- **Audit-log redaction.** Belt-and-braces — even if the upstream redactor
+  misses something, the reviewer audit log applies a second pass for
+  high-confidence secret prefixes.
+- **CSP.** In production, `script-src` is `'self'` only (no
+  `'unsafe-inline'`); `style-src` retains `'unsafe-inline'` for the print-
+  only stylesheets injected by the report results / whitepaper pages;
+  `frame-ancestors`, `base-uri`, and `object-src` are all locked down.
+- **Host-header poisoning.** `buildPublicUrl` never falls back to the
+  request `Host` header in production; combined with the
+  fail-closed `PUBLIC_URL` check this means every canonical link emitted
+  by the server resolves to the operator-configured origin.
+- **SSRF.** Reviewer-supplied URLs (currently webhook subscriptions) are
+  filtered at the URL parsing stage and again after DNS resolution before
+  any outbound request is made.
+- **Rate limits.** Layered: per-route caps on the expensive analysis
+  endpoints, a wider per-IP ceiling on the `/api/reports/*` namespace, and
+  per-route caps on the public submission forms (newsletter, phrase
+  suggestions, showcase nominations).
+
+### Out of scope
+
+- DoS resilience beyond the limits listed above. The deployment is sized
+  for the public service tier, not for survival under sustained attack.
+- Vulnerabilities in third-party services (Replit, Postgres host, fonts
+  CDN) without a demonstrated exploit path inside VulnRap.
+- Secrets stored outside the API server's environment (CI secrets, contributor
+  laptops, etc.). Those are out of band.

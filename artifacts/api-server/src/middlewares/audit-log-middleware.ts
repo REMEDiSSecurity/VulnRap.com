@@ -20,17 +20,50 @@ import type { Request, Response, NextFunction } from "express";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const SECRET_KEY_RE = /(token|secret|password|api[_-]?key|auth|cred|cookie)/i;
+// Task #1310 — Value-pattern redaction. Catches secrets that leak
+// inside fields with innocent names (e.g. `notes`, `description`,
+// `payload`) where the key-name regex above doesn't match. Each
+// pattern targets a high-confidence prefix / shape so we don't
+// accidentally redact ordinary report text.
+const SECRET_VALUE_PATTERNS: Array<{ name: string; re: RegExp }> = [
+  // OpenAI / Anthropic / generic provider prefix.
+  { name: "openai-key", re: /\bsk-[A-Za-z0-9_-]{20,}\b/g },
+  // GitHub fine-grained / PAT / OAuth tokens.
+  { name: "github-token", re: /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g },
+  // AWS access key id.
+  { name: "aws-access-key-id", re: /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g },
+  // Slack tokens (xoxa/b/o/p/r/s).
+  { name: "slack-token", re: /\bxox[abopsr]-[A-Za-z0-9-]{10,}\b/g },
+  // Google API key prefix.
+  { name: "google-api-key", re: /\bAIza[0-9A-Za-z_-]{35}\b/g },
+  // JWT (three base64url segments separated by dots, leading "eyJ").
+  { name: "jwt", re: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g },
+  // PEM private key block.
+  {
+    name: "private-key-block",
+    re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g,
+  },
+];
 const MAX_STRING_LEN = 4096;
 const MAX_DEPTH = 8;
 const MAX_ARRAY_LEN = 200;
+
+function redactStringValue(value: string): string {
+  let out = value;
+  for (const { re } of SECRET_VALUE_PATTERNS) {
+    out = out.replace(re, "[REDACTED:secret]");
+  }
+  return out;
+}
 
 function redactPayload(value: unknown, depth = 0): unknown {
   if (depth > MAX_DEPTH) return "[truncated:depth]";
   if (value === null || value === undefined) return value;
   if (typeof value === "string") {
-    return value.length > MAX_STRING_LEN
-      ? `${value.slice(0, MAX_STRING_LEN)}…[truncated]`
-      : value;
+    const redacted = redactStringValue(value);
+    return redacted.length > MAX_STRING_LEN
+      ? `${redacted.slice(0, MAX_STRING_LEN)}…[truncated]`
+      : redacted;
   }
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (Array.isArray(value)) {
@@ -243,4 +276,4 @@ export function lookupRevertHint(
 
 // Test seam — exposes the redactor for unit tests that want to assert
 // secret keys are blanked without standing up an Express app.
-export const __TESTING__ = { redactPayload };
+export const __TESTING__ = { redactPayload, redactStringValue };
