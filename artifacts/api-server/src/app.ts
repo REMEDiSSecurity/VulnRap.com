@@ -121,6 +121,22 @@ app.use((req, res, next) => {
   return defaultHelmet(req, res, next);
 });
 
+const NOINDEX_HOSTS = new Set([
+  "vulnrap.replit.app",
+  "www.vulnrap.replit.app",
+]);
+
+app.use((req, res, next) => {
+  const host = (req.hostname || "").toLowerCase();
+  if (NOINDEX_HOSTS.has(host)) {
+    res.setHeader(
+      "X-Robots-Tag",
+      "noindex, nofollow, noarchive, nositelinkssearchbox",
+    );
+  }
+  next();
+});
+
 // Task #724 — Resolve / generate request ID before pino-http so every log
 // line includes it via genReqId, and echo it as a response header.
 app.use(requestIdMiddleware);
