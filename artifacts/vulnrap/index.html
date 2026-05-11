@@ -97,16 +97,12 @@
       }
     </script>
 
-    <!-- Task #1310 — The previous Google Fonts <link rel="stylesheet">
-         loaded a UA-variant CSS body for which a stable Subresource
-         Integrity hash cannot be computed (the response changes per
-         user-agent). Rather than ship the SPA with an external script-
-         class resource that can't be SRI-pinned, we drop the external
-         link entirely and fall back to the system font stack already
-         configured in src/index.css (`system-ui, sans-serif` / etc.).
-         Follow-up #1311 will re-introduce the brand fonts as
-         self-hosted assets so they ship from /assets/ with subresource
-         integrity intact. -->
+    <!-- Task #1311 — The brand fonts (Inter, JetBrains Mono,
+         Space Grotesk) are now self-hosted from /fonts/ via
+         @font-face declarations in src/index.css. There is no
+         <link rel="preconnect"> / <link rel="stylesheet"> to
+         fonts.googleapis.com / fonts.gstatic.com on this page, and
+         the production CSP's `font-src` is locked to 'self'. -->
   </head>
   <body>
     <div id="root"></div>

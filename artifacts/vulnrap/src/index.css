@@ -3,6 +3,51 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Task #1311 — Self-hosted brand fonts. The previous build pulled
+   Inter / JetBrains Mono / Space Grotesk from fonts.googleapis.com,
+   which served a UA-variant CSS body for which a stable Subresource
+   Integrity hash cannot be computed. Bundling the woff2 files
+   ourselves removes that third-party dependency entirely, lets the
+   production CSP keep `font-src 'self'` (no fonts.gstatic.com), and
+   lets the page render the brand fonts even when Google Fonts is
+   blocked or slow.
+
+   Each family ships as a single variable woff2 (latin subset only —
+   the SPA UI is English-only) under /fonts/, so the per-weight
+   `@font-face` rules below all reference the same file and select the
+   weight via the variation axis. `font-display: swap` keeps the FOUT
+   behaviour the Google Fonts <link> previously provided. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/inter-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url("/fonts/space-grotesk-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));

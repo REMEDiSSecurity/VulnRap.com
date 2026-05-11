@@ -1232,6 +1232,18 @@ export const GetReportResponse = zod.object({
   fileName: zod.string().nullish(),
   fileSize: zod.number(),
   createdAt: zod.coerce.date(),
+  promptInjectionDetected: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether a prompt-injection attempt was detected in the submitted report text. False when no injection patterns matched.",
+    ),
+  promptInjectionLabels: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      'Injection pattern labels that fired (e.g. \"ignore_previous_instructions\", \"role_flip_act_as\"). Empty when promptInjectionDetected is false.',
+    ),
 });
 
 /**

@@ -138,4 +138,8 @@ export interface ReportAnalysis {
   fileName?: string | null;
   fileSize: number;
   createdAt: Date;
+  /** Whether a prompt-injection attempt was detected in the submitted report text. False when no injection patterns matched. */
+  promptInjectionDetected?: boolean;
+  /** Injection pattern labels that fired (e.g. "ignore_previous_instructions", "role_flip_act_as"). Empty when promptInjectionDetected is false. */
+  promptInjectionLabels?: string[];
 }

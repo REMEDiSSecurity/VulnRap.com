@@ -268,7 +268,9 @@ explicitly does not. It is not a substitute for the disclosure policy above.
 
 - DoS resilience beyond the limits listed above. The deployment is sized
   for the public service tier, not for survival under sustained attack.
-- Vulnerabilities in third-party services (Replit, Postgres host, fonts
-  CDN) without a demonstrated exploit path inside VulnRap.
+- Vulnerabilities in third-party services (Replit, Postgres host) without a
+  demonstrated exploit path inside VulnRap. The brand fonts are self-hosted
+  from `/fonts/` (see Task #1311), so fonts.googleapis.com / fonts.gstatic.com
+  are no longer part of the production trust boundary.
 - Secrets stored outside the API server's environment (CI secrets, contributor
   laptops, etc.). Those are out of band.

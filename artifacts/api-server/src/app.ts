@@ -82,10 +82,12 @@ const defaultHelmet = helmet({
       scriptSrc: IS_PRODUCTION
         ? ["'self'", JSONLD_HASH]
         : ["'self'", "'unsafe-inline'"],
-      // Task #1310 — Google Fonts removed from the SPA; CSP no longer
-      // allow-lists fonts.googleapis.com / fonts.gstatic.com. Add them
-      // back here only if a future change re-introduces those origins
-      // (and ideally only with SRI on the stylesheet).
+      // Task #1311 — Brand fonts ship from /fonts/ as self-hosted
+      // woff2 files (see @font-face block in artifacts/vulnrap/src/
+      // index.css), so font-src is locked to 'self'. Do not add
+      // fonts.googleapis.com / fonts.gstatic.com back here unless a
+      // future change re-introduces a third-party font CDN — and
+      // ideally only with SRI on the stylesheet.
       styleSrc: ["'self'", "'unsafe-inline'"],
       fontSrc: ["'self'"],
       imgSrc: ["'self'", "data:"],
