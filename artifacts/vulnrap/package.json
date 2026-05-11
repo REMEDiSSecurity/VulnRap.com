@@ -68,7 +68,7 @@
     "@radix-ui/react-dialog": "^1.1.15",
     "html2pdf.js": "^0.14.0",
     "qrcode-generator": "^2.0.4",
-    "react-router-dom": "^7.14.0",
+    "react-router-dom": "^7.15.0",
     "recharts": "^2.15.4"
   }
 }
