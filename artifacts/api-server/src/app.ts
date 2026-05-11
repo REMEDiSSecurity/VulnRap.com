@@ -105,7 +105,7 @@ const swaggerHelmet = helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      fontSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https://validator.swagger.io"],
       connectSrc: ["'self'"],
       frameAncestors: ["'self'"],
