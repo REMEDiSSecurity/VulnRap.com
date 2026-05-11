@@ -1,16 +1,11 @@
-import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
   Users,
   Github,
   MessageCircle,
-  Mail,
   Code,
   FileText,
   Sparkles,
-  Send,
-  CheckCircle2,
-  AlertCircle,
   Heart,
   ArrowRight,
   BookOpen,
@@ -20,20 +15,13 @@ import {
   GitBranch,
 } from "lucide-react";
 import {
-  useSubscribeNewsletter,
-  getNewsletterChallenge,
-  ApiError,
-} from "@workspace/api-client-react";
-import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
 
 const GITHUB_URL = "https://github.com/REMEDiSSecurity/VulnRap.Com";
 
@@ -155,191 +143,6 @@ function ContributionCard({
   );
 }
 
-async function solveNewsletterChallenge(
-  prefix: string,
-  nonce: string,
-  difficulty: number,
-): Promise<string> {
-  const required = "0".repeat(difficulty);
-  const encoder = new TextEncoder();
-  // Difficulty 4 hex zeros ≈ 65k tries on average; cheap on the main thread
-  // but we yield to the event loop every 1k iterations so very unlucky
-  // searches don't freeze the tab.
-  for (let i = 0; i < 5_000_000; i++) {
-    const solution = i.toString(16);
-    const buf = encoder.encode(prefix + nonce + solution);
-    const hashBuf = await crypto.subtle.digest("SHA-256", buf);
-    const hashArr = new Uint8Array(hashBuf);
-    let hex = "";
-    for (let j = 0; j < hashArr.length; j++) {
-      hex += hashArr[j].toString(16).padStart(2, "0");
-    }
-    if (hex.startsWith(required)) return solution;
-    if ((i & 0x3ff) === 0x3ff) {
-      await new Promise((r) => setTimeout(r, 0));
-    }
-  }
-  throw new Error("Could not solve challenge in time. Please try again.");
-}
-
-function NewsletterForm() {
-  const { toast } = useToast();
-  const [email, setEmail] = useState("");
-  const [solving, setSolving] = useState(false);
-  const [submitted, setSubmitted] = useState<{
-    alreadySubscribed: boolean;
-    pendingConfirmation: boolean;
-  } | null>(null);
-  const subscribe = useSubscribeNewsletter();
-  const busy = subscribe.isPending || solving;
-
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const trimmed = email.trim();
-    if (!trimmed) {
-      toast({
-        title: "Email required",
-        description: "Please enter your email address.",
-        variant: "destructive",
-      });
-      return;
-    }
-    try {
-      setSolving(true);
-      const challenge = await getNewsletterChallenge();
-      const challengeSolution = await solveNewsletterChallenge(
-        challenge.prefix,
-        challenge.nonce,
-        challenge.difficulty,
-      );
-      setSolving(false);
-      const res = await subscribe.mutateAsync({
-        data: {
-          email: trimmed,
-          challengeId: challenge.challengeId,
-          challengeSolution,
-        },
-      });
-      setSubmitted({
-        alreadySubscribed: res.alreadySubscribed,
-        pendingConfirmation: res.pendingConfirmation,
-      });
-      toast({
-        title: res.alreadySubscribed
-          ? "Already subscribed"
-          : res.pendingConfirmation
-            ? "Check your inbox"
-            : "Subscribed",
-        description: res.message,
-      });
-      if (!res.alreadySubscribed) setEmail("");
-    } catch (err) {
-      setSolving(false);
-      const message =
-        err instanceof ApiError
-          ? err.data && typeof err.data === "object" && "error" in err.data
-            ? String((err.data as { error: unknown }).error)
-            : err.message
-          : err instanceof Error
-            ? err.message
-            : "Subscription failed.";
-      toast({
-        title: "Subscription failed",
-        description: message,
-        variant: "destructive",
-      });
-    }
-  }
-
-  return (
-    <Card className="glass-card border-primary/30">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-primary">
-          <Mail className="w-5 h-5" />
-          Mailing list
-        </CardTitle>
-        <CardDescription className="text-xs leading-relaxed">
-          Low-volume updates: major releases, new detection signals, calibration
-          audits, and the occasional field-test write-up. No tracking, no
-          third-party newsletter platform — just an HMAC of your address on file
-          so we don't double-send. We'll send a short welcome email with a
-          one-click unsubscribe link; deployments with double opt-in enabled
-          will ask you to confirm first.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <form onSubmit={onSubmit} className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="email"
-            inputMode="email"
-            autoComplete="email"
-            required
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={busy}
-            className="flex-1 min-w-0 rounded-md bg-background/60 border border-border/70 px-3 py-2 text-sm font-mono placeholder:text-muted-foreground/50 focus:border-primary/60 focus:outline-none focus:ring-1 focus:ring-primary/40 transition-colors disabled:opacity-50"
-            data-testid="input-newsletter-email"
-          />
-          <Button
-            type="submit"
-            disabled={busy}
-            className="shrink-0"
-            data-testid="button-newsletter-subscribe"
-          >
-            {busy ? (
-              <>
-                <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                {solving ? "Verifying…" : "Subscribing…"}
-              </>
-            ) : (
-              <>
-                <Send className="w-3.5 h-3.5 mr-2" />
-                Subscribe
-              </>
-            )}
-          </Button>
-        </form>
-        {submitted && (
-          <div
-            className={
-              "flex items-start gap-2 rounded-md border px-3 py-2 text-xs " +
-              (submitted.alreadySubscribed
-                ? "border-amber-500/30 bg-amber-500/5 text-amber-200"
-                : "border-emerald-500/30 bg-emerald-500/5 text-emerald-200")
-            }
-            data-testid="text-newsletter-result"
-          >
-            {submitted.alreadySubscribed ? (
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            ) : (
-              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-            )}
-            <span className="leading-relaxed">
-              {submitted.alreadySubscribed
-                ? "That address is already on the list. Thanks for sticking with us."
-                : submitted.pendingConfirmation
-                  ? "Almost there — check your inbox for a confirmation link."
-                  : "You're on the list. We'll send a quick welcome email with a one-click unsubscribe link shortly."}
-            </span>
-          </div>
-        )}
-        <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
-          We store an HMAC-SHA256 of your address (keyed with our daily-rotation
-          visitor secret) so we can detect duplicate signups without keeping the
-          raw email in the database. See the{" "}
-          <Link
-            to="/privacy"
-            className="text-primary/80 hover:text-primary underline-offset-2 hover:underline"
-          >
-            privacy page
-          </Link>{" "}
-          for details.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function Community() {
   return (
@@ -419,7 +222,6 @@ export default function Community() {
             status="live"
           />
         </div>
-        <NewsletterForm />
       </section>
 
       {/* Contribution paths */}

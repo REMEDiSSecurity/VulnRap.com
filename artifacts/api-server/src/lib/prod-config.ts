@@ -34,7 +34,6 @@ export interface ProdConfigResult {
 
 const REQUIRED_TOKEN_VARS = [
   "CALIBRATION_TOKEN",
-  "NEWSLETTER_CHALLENGE_HMAC_KEY",
   "VISITOR_HMAC_KEY",
   "METRICS_TOKEN",
 ] as const;
@@ -118,8 +117,6 @@ function describeRequirement(name: RequiredProdSecret): string {
   switch (name) {
     case "CALIBRATION_TOKEN":
       return "Required so reviewer-only mutation endpoints can authenticate; without it every calibration mutation 401s.";
-    case "NEWSLETTER_CHALLENGE_HMAC_KEY":
-      return "Required so newsletter PoW challenges minted on one process verify on another. Without it the key rotates on every process restart and multi-pod deploys reject legitimate signups.";
     case "VISITOR_HMAC_KEY":
       return "Required so visitor / phrase-suggestion / showcase-nomination per-IP HMACs are stable across processes. Without it counts drift on every restart.";
     case "METRICS_TOKEN":

@@ -134,10 +134,9 @@ defaults.
 
 | Variable                        | Why it matters                                                                                                                                                                                            |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PUBLIC_URL`                    | Canonical https origin of the deployment. Used by `security.txt`, OG cards, sitemap, Atom feeds, newsletter / verification emails. In production, **the request `Host` header is never trusted as a fallback** — that would let an attacker poison every link by spoofing it. |
+| `PUBLIC_URL`                    | Canonical https origin of the deployment. Used by `security.txt`, OG cards, sitemap, and Atom feeds. In production, **the request `Host` header is never trusted as a fallback** — that would let an attacker poison every link by spoofing it. |
 | `ALLOWED_ORIGINS`               | Comma-separated list of permitted browser origins for CORS. If unset, the API would allow every cross-origin caller. Malformed entries are dropped; if every entry is malformed the API refuses to boot rather than silently re-opening to all origins. |
 | `CALIBRATION_TOKEN`             | Bearer token gating every reviewer-only mutation endpoint (calibration, audit log, webhooks, test fixtures, …). Without it those endpoints 401 unconditionally.                                          |
-| `NEWSLETTER_CHALLENGE_HMAC_KEY` | HMAC key used to sign newsletter proof-of-work challenges. Without a stable key the keys rotate on every process restart and multi-pod deploys reject legitimate signups intermittently.                  |
 | `VISITOR_HMAC_KEY`              | HMAC key used to hash visitor IPs for the per-IP daily caps on phrase suggestions and showcase nominations. Without a stable key the per-IP counts drift on every restart.                                |
 | `METRICS_TOKEN`                 | Bearer token gating the `/api/metrics` Prometheus scrape endpoint. Without it the endpoint would be open to the public Internet and would leak per-route latency / volume telemetry useful for recon.    |
 | `DOCS_TOKEN` _(optional)_       | When set, gates `/api/docs` (interactive Swagger UI) behind a bearer token. When unset in production, `/api/docs` is disabled entirely. The static `openapi.yaml` remains available for machine clients. |
@@ -261,8 +260,8 @@ explicitly does not. It is not a substitute for the disclosure policy above.
   any outbound request is made.
 - **Rate limits.** Layered: per-route caps on the expensive analysis
   endpoints, a wider per-IP ceiling on the `/api/reports/*` namespace, and
-  per-route caps on the public submission forms (newsletter, phrase
-  suggestions, showcase nominations).
+  per-route caps on the public submission forms (phrase suggestions,
+  showcase nominations).
 
 ### Out of scope
 

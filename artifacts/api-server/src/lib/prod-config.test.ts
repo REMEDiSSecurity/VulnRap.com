@@ -13,7 +13,6 @@ const FULL_PROD_ENV: NodeJS.ProcessEnv = {
   PUBLIC_URL: "https://vulnrap.com",
   ALLOWED_ORIGINS: "https://vulnrap.com",
   CALIBRATION_TOKEN: "cal-token",
-  NEWSLETTER_CHALLENGE_HMAC_KEY: "newsletter-key",
   VISITOR_HMAC_KEY: "visitor-key",
   METRICS_TOKEN: "metrics-token",
 };
@@ -70,14 +69,6 @@ describe("validateProductionConfig", () => {
     expect(() => validateProductionConfig({ env })).toThrow(/METRICS_TOKEN/);
   });
 
-  it("throws in production when NEWSLETTER_CHALLENGE_HMAC_KEY is missing", () => {
-    const env = { ...FULL_PROD_ENV };
-    delete env.NEWSLETTER_CHALLENGE_HMAC_KEY;
-    expect(() => validateProductionConfig({ env })).toThrow(
-      /NEWSLETTER_CHALLENGE_HMAC_KEY/,
-    );
-  });
-
   it("throws in production when VISITOR_HMAC_KEY is missing", () => {
     const env = { ...FULL_PROD_ENV };
     delete env.VISITOR_HMAC_KEY;
@@ -104,7 +95,6 @@ describe("validateProductionConfig", () => {
     expect(msg).toContain("PUBLIC_URL");
     expect(msg).toContain("ALLOWED_ORIGINS");
     expect(msg).toContain("CALIBRATION_TOKEN");
-    expect(msg).toContain("NEWSLETTER_CHALLENGE_HMAC_KEY");
     expect(msg).toContain("VISITOR_HMAC_KEY");
     expect(msg).toContain("METRICS_TOKEN");
   });

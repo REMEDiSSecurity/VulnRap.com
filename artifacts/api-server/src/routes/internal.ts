@@ -4,18 +4,10 @@
 // reviewer-only "Shadow drift" tab on `/feedback-analytics`. New
 // reviewer-only internal surfaces should be added here so the gate
 // (requireCalibrationAuthStrict) is applied uniformly.
-//
-// Task #1113 — Added /internal/newsletter-delivery to surface welcome
-// email delivery failures (welcomeSentAt NULL + overdue) so silent
-// webhook misconfigurations are visible without reading logs.
 import { Router, type IRouter } from "express";
-import { and, desc, eq, gte, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import {
-  newsletterSubscriptionsTable,
-  reportShadowScoresTable,
-  reportsTable,
-} from "@workspace/db";
+import { reportShadowScoresTable, reportsTable } from "@workspace/db";
 import { requireCalibrationAuthStrict } from "../middlewares/require-calibration-auth";
 import { isShadowScoringEnabled } from "../lib/scoring-shadow";
 import { logger } from "../lib/logger";
@@ -133,97 +125,6 @@ router.get(
     } catch (err) {
       logger.error({ err }, "[internal] /internal/shadow-drift failed");
       res.status(500).json({ error: "Failed to compute shadow drift report." });
-    }
-  },
-);
-
-// Task #1113 — Newsletter welcome email delivery health.
-//
-// Subscribers are bucketed into three states:
-//   * sent      — welcomeSentAt IS NOT NULL (delivery confirmed).
-//   * pending   — welcomeSentAt IS NULL AND createdAt >= NOW()-5min
-//                 (the fire-and-forget dispatch may still be in flight).
-//   * overdue   — welcomeSentAt IS NULL AND createdAt < NOW()-5min
-//                 (5-minute grace period has elapsed; delivery failed or
-//                 the webhook was never configured).
-//
-// The endpoint also returns up to 20 most-recent rows with a recorded
-// error so reviewers can diagnose webhook misconfiguration without
-// tailing logs.
-//
-// Retry path: subscribers re-submitting their email via POST
-// /api/newsletter/subscribe will automatically trigger a re-send when
-// welcomeSentAt is still NULL. No plaintext email addresses are stored
-// so a server-side batch resend is not possible without operator
-// intervention (fix the webhook, then re-collect addresses).
-
-const DELIVERY_PENDING_GRACE_MS = 5 * 60 * 1000; // 5 minutes
-
-router.get(
-  "/internal/newsletter-delivery",
-  requireCalibrationAuthStrict,
-  async (_req, res) => {
-    try {
-      const overdueThreshold = new Date(
-        Date.now() - DELIVERY_PENDING_GRACE_MS,
-      );
-
-      const [counts] = await db
-        .select({
-          total: sql<number>`count(*)::int`,
-          sent: sql<number>`count(*) filter (where ${newsletterSubscriptionsTable.welcomeSentAt} is not null)::int`,
-          overdue: sql<number>`count(*) filter (where ${newsletterSubscriptionsTable.welcomeSentAt} is null and ${newsletterSubscriptionsTable.createdAt} < ${overdueThreshold})::int`,
-          pending: sql<number>`count(*) filter (where ${newsletterSubscriptionsTable.welcomeSentAt} is null and ${newsletterSubscriptionsTable.createdAt} >= ${overdueThreshold})::int`,
-        })
-        .from(newsletterSubscriptionsTable);
-
-      // Most-recent rows with a recorded delivery error, for operator
-      // diagnostics. We surface the createdAt and the error only — no
-      // HMAC or any other subscriber field that could be correlated.
-      const recentErrors = await db
-        .select({
-          id: newsletterSubscriptionsTable.id,
-          createdAt: newsletterSubscriptionsTable.createdAt,
-          welcomeLastError: newsletterSubscriptionsTable.welcomeLastError,
-        })
-        .from(newsletterSubscriptionsTable)
-        .where(isNotNull(newsletterSubscriptionsTable.welcomeLastError))
-        .orderBy(desc(newsletterSubscriptionsTable.createdAt))
-        .limit(20);
-
-      res.json({
-        generatedAt: new Date().toISOString(),
-        pendingGraceMs: DELIVERY_PENDING_GRACE_MS,
-        counts: {
-          total: counts?.total ?? 0,
-          sent: counts?.sent ?? 0,
-          overdue: counts?.overdue ?? 0,
-          pending: counts?.pending ?? 0,
-        },
-        // Non-zero `overdue` is the actionable signal: it means the
-        // webhook is misconfigured or returning errors for at least one
-        // subscriber. Check recentErrors for the specific message.
-        healthy: (counts?.overdue ?? 0) === 0,
-        recentErrors: recentErrors.map((r) => ({
-          id: r.id,
-          createdAt:
-            r.createdAt instanceof Date
-              ? r.createdAt.toISOString()
-              : new Date(r.createdAt as unknown as string).toISOString(),
-          error: r.welcomeLastError ?? null,
-        })),
-        retryNote:
-          "Subscribers can trigger a re-send by re-submitting the subscribe form. " +
-          "The server will re-mint a fresh token and retry delivery when welcomeSentAt is still NULL.",
-      });
-    } catch (err) {
-      logger.error(
-        { err },
-        "[internal] /internal/newsletter-delivery failed",
-      );
-      res
-        .status(500)
-        .json({ error: "Failed to compute newsletter delivery report." });
     }
   },
 );

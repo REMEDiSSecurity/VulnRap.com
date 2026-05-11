@@ -38,11 +38,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Task #1310 — Fail-closed startup validation. In production this throws
 // when ALLOWED_ORIGINS / PUBLIC_URL / CALIBRATION_TOKEN /
-// NEWSLETTER_CHALLENGE_HMAC_KEY / VISITOR_HMAC_KEY / METRICS_TOKEN are
-// missing or malformed, so a misconfigured deploy refuses to boot
-// instead of accepting traffic with permissive defaults. In dev /
-// test it just logs the same warnings/errors as before and returns
-// the structured validation results.
+// VISITOR_HMAC_KEY / METRICS_TOKEN are missing or malformed, so a
+// misconfigured deploy refuses to boot instead of accepting traffic
+// with permissive defaults. In dev / test it just logs the same
+// warnings/errors as before and returns the structured validation
+// results.
 const { allowedOrigins: allowedOriginsValidation } = validateProductionConfig({
   logger,
 });
