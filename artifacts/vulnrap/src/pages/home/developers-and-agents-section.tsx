@@ -24,30 +24,30 @@ export function DevelopersAndAgentsSection() {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full p-4 sm:p-6 flex items-center justify-between text-left cursor-pointer group/card rounded-xl ring-1 ring-transparent hover:ring-primary/30 focus-visible:ring-primary/50 focus-visible:outline-none transition-all duration-200"
+        className="w-full p-3 sm:p-4 flex items-start justify-between gap-3 text-left cursor-pointer group/card rounded-xl ring-1 ring-transparent hover:ring-primary/30 focus-visible:ring-primary/50 focus-visible:outline-none transition-all duration-200"
         aria-expanded={expanded}
       >
-        <div className="space-y-1">
-          <span className="eyebrow-label">
-            Section 06 · Developers &amp; Agents
-          </span>
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <Code className="w-5 h-5 text-primary" />
-            Public API &amp; AI Agent Manual
-          </h2>
-          <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl pt-1">
-            Free, no-account REST API for security tools, triage bots, and AI
-            coding agents. Tap to see the three-call integration and the
-            dedicated agents.md manual.
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <Code className="w-4 h-4 text-primary" />
+              Public API &amp; AI agent manual
+            </h2>
+            <span className="eyebrow-label">
+              Section 06 · Developers &amp; Agents
+            </span>
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-snug mt-1">
+            Free, no-account REST API for security tools, triage bots, and AI agents.
           </p>
         </div>
         <ChevronDown
-          className={`w-5 h-5 text-primary/60 group-hover/card:text-primary transition-all duration-200 flex-shrink-0 ${expanded ? "rotate-180 text-primary" : ""}`}
+          className={`w-4 h-4 mt-0.5 text-primary/60 group-hover/card:text-primary transition-all duration-200 flex-shrink-0 ${expanded ? "rotate-180 text-primary" : ""}`}
         />
       </button>
 
       {expanded && (
-        <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 space-y-3">
               <h3 className="text-sm font-bold text-primary flex items-center gap-2">

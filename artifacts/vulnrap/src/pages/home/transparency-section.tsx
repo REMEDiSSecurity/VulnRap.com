@@ -17,23 +17,23 @@ export function TransparencySection() {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full p-4 sm:p-6 flex items-center justify-between text-left cursor-pointer group/card rounded-xl ring-1 ring-transparent hover:ring-cyan-400/30 focus-visible:ring-cyan-400/50 focus-visible:outline-none transition-all duration-200"
+        className="w-full p-3 sm:p-4 flex items-center justify-between gap-3 text-left cursor-pointer group/card rounded-xl ring-1 ring-transparent hover:ring-cyan-400/30 focus-visible:ring-cyan-400/50 focus-visible:outline-none transition-all duration-200"
         aria-expanded={expanded}
       >
-        <div className="space-y-1">
-          <span className="eyebrow-label">Section 05 · Privacy</span>
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <Lock className="w-5 h-5 text-primary" />
-            Transparency: Where Your Data Goes
+        <div className="flex items-center justify-between gap-2 flex-wrap min-w-0 flex-1">
+          <h2 className="text-sm font-semibold flex items-center gap-2">
+            <Lock className="w-4 h-4 text-primary" />
+            Where your data goes
           </h2>
+          <span className="eyebrow-label">Section 05 · Privacy</span>
         </div>
         <ChevronDown
-          className={`w-5 h-5 text-cyan-400/60 group-hover/card:text-cyan-400 transition-all duration-200 flex-shrink-0 ${expanded ? "rotate-180 text-cyan-400" : ""}`}
+          className={`w-4 h-4 text-cyan-400/60 group-hover/card:text-cyan-400 transition-all duration-200 flex-shrink-0 ${expanded ? "rotate-180 text-cyan-400" : ""}`}
         />
       </button>
 
       {expanded && (
-        <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-xl bg-cyan-500/5 border border-cyan-500/20 p-4 space-y-3">
               <h3 className="text-sm font-bold text-cyan-400 flex items-center gap-2">

@@ -120,29 +120,31 @@ function CollapsibleSection({
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="w-full p-4 sm:p-6 flex items-start justify-between gap-3 text-left cursor-pointer group/collapsible ring-1 ring-transparent hover:ring-primary/30 focus-visible:ring-primary/50 focus-visible:outline-none transition-all duration-200"
+        className="w-full p-3 sm:p-4 flex items-start justify-between gap-3 text-left cursor-pointer group/collapsible ring-1 ring-transparent hover:ring-primary/30 focus-visible:ring-primary/50 focus-visible:outline-none transition-all duration-200"
       >
-        <div className="space-y-1 min-w-0">
-          <span className="eyebrow-label">{eyebrow}</span>
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            {icon}
-            {title}
-          </h2>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              {icon}
+              {title}
+            </h2>
+            <span className="eyebrow-label">{eyebrow}</span>
+          </div>
           {subtitle && (
-            <p className="text-xs text-muted-foreground leading-relaxed pt-1">
+            <p className="text-[11px] text-muted-foreground leading-snug mt-1">
               {subtitle}
             </p>
           )}
         </div>
         <ChevronDown
           className={cn(
-            "w-5 h-5 mt-1 text-primary/60 group-hover/collapsible:text-primary transition-all duration-200 flex-shrink-0",
+            "w-4 h-4 mt-0.5 text-primary/60 group-hover/collapsible:text-primary transition-all duration-200 flex-shrink-0",
             open && "rotate-180 text-primary",
           )}
         />
       </button>
       {open && (
-        <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4 sm:space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
           {children}
         </div>
       )}
@@ -1153,19 +1155,18 @@ export default function Home() {
         className="my-4"
       />
 
-      <div id="section-engines" className="space-y-3 sm:space-y-4 scroll-mt-20">
-        <div className="space-y-1">
-          <span className="eyebrow-label">Section 02 · How we score it</span>
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <Zap className="w-5 h-5 text-primary" />
+      <div id="section-engines" className="space-y-2 scroll-mt-20">
+        <div className="flex items-center justify-between gap-2 flex-wrap px-1">
+          <h2 className="text-sm font-semibold flex items-center gap-2">
+            <Zap className="w-4 h-4 text-primary" />
             Three engines, one verdict
           </h2>
-          <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl pt-0.5">
-            Tap any card to see exactly what we redact, how we detect duplicate
-            sections, and how the validity score is composed.
-          </p>
+          <span className="eyebrow-label">Section 02 · How we score it</span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <p className="text-[11px] text-muted-foreground leading-snug max-w-3xl px-1">
+          Tap any card to see what we redact, how duplicates are detected, and how the score is composed.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
           <AutoRedactionCard />
           <SectionHashingCard />
           <SlopDetectionCard />
