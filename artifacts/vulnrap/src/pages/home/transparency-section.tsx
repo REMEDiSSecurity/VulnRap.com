@@ -13,7 +13,7 @@ export function TransparencySection() {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="glass-card rounded-xl overflow-hidden">
+    <div id="section-privacy" className="glass-card rounded-xl overflow-hidden scroll-mt-20">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -21,7 +21,7 @@ export function TransparencySection() {
         aria-expanded={expanded}
       >
         <div className="space-y-1">
-          <span className="eyebrow-label">Section 04 · Privacy</span>
+          <span className="eyebrow-label">Section 05 · Privacy</span>
           <h2 className="text-lg font-bold flex items-center gap-2">
             <Lock className="w-5 h-5 text-primary" />
             Transparency: Where Your Data Goes

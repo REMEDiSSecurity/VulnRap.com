@@ -16,7 +16,7 @@
   "footer.sendFeedback": "Send us feedback",
   "footer.restartTour": "Restart tour",
   "home.heading": "Vuln Report Rap Sheet",
-  "home.tagline": "Assess the likelihood that an incoming vulnerability report describes a real, reproducible issue. Cross-check claims against live sources, detect duplicate submissions, and surface what deserves analyst time. Built for PSIRT teams, triage analysts, and anyone buried in an inbox full of incoming reports.",
+  "home.tagline": "Assess the likelihood that an incoming vulnerability report describes a real, reproducible issue. Cross-check claims against live sources, detect duplicate submissions, and surface what deserves analyst time. Built by PSIRTlings for PSIRTlings\u2122.",
   "home.submitReport": "Submit Report",
   "home.submitReportDescription": "Upload a file, paste text, or link to a report (Max 5MB)",
   "home.analyzeReport": "Analyze Report",

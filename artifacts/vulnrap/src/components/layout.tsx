@@ -738,6 +738,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
               >
                 {t("nav.status")}
               </Link>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <h4 className="text-[10px] font-mono font-bold tracking-[0.16em] uppercase text-primary/55">
+                Community
+              </h4>
               <Link
                 to="/showcase"
                 className="text-muted-foreground/80 hover:text-primary transition-colors w-fit"

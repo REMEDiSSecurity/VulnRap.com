@@ -1,4 +1,11 @@
-import { lazy, Suspense, useState, useRef, useEffect } from "react";
+import {
+  lazy,
+  Suspense,
+  useState,
+  useRef,
+  useEffect,
+  type ReactNode,
+} from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   UploadCloud,
@@ -21,6 +28,7 @@ import {
   TrendingUp,
   TrendingDown,
   ExternalLink,
+  ChevronDown,
 } from "lucide-react";
 import {
   useSubmitReport,
@@ -52,6 +60,7 @@ import logoSrc from "@/assets/logo.png";
 import {
   OnboardingTour,
   hasSeenOnboardingTour,
+  SAMPLE_TEXT as ONBOARDING_SAMPLE_TEXT,
 } from "@/components/onboarding-tour";
 import { t } from "@/lib/i18n";
 import {
@@ -78,6 +87,69 @@ const DevelopersAndAgentsSection = lazy(
 );
 const RecentReportsFeed = lazy(() => import("./recent-reports-feed"));
 
+interface CollapsibleSectionProps {
+  id: string;
+  testId?: string;
+  eyebrow: string;
+  title: ReactNode;
+  icon: ReactNode;
+  subtitle?: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}
+
+function CollapsibleSection({
+  id,
+  testId,
+  eyebrow,
+  title,
+  icon,
+  subtitle,
+  defaultOpen = false,
+  children,
+}: CollapsibleSectionProps) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div
+      id={id}
+      data-testid={testId}
+      className="glass-card rounded-xl overflow-hidden scroll-mt-20"
+      data-scroll-fade
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="w-full p-4 sm:p-6 flex items-start justify-between gap-3 text-left cursor-pointer group/collapsible ring-1 ring-transparent hover:ring-primary/30 focus-visible:ring-primary/50 focus-visible:outline-none transition-all duration-200"
+      >
+        <div className="space-y-1 min-w-0">
+          <span className="eyebrow-label">{eyebrow}</span>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            {icon}
+            {title}
+          </h2>
+          {subtitle && (
+            <p className="text-xs text-muted-foreground leading-relaxed pt-1">
+              {subtitle}
+            </p>
+          )}
+        </div>
+        <ChevronDown
+          className={cn(
+            "w-5 h-5 mt-1 text-primary/60 group-hover/collapsible:text-primary transition-all duration-200 flex-shrink-0",
+            open && "rotate-180 text-primary",
+          )}
+        />
+      </button>
+      {open && (
+        <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4 sm:space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LazySectionFallback() {
   // Reserve roughly the same vertical space as a real section so that the
   // page doesn't jump as each lazy chunk resolves.
@@ -103,6 +175,7 @@ export default function Home() {
     SubmitReportBodyContentMode.full,
   );
   const [showInFeed, setShowInFeed] = useState(true);
+  const [optionsExpanded, setOptionsExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [stage, setStage] = useState<UploadStage>("idle");
@@ -367,6 +440,15 @@ export default function Home() {
         });
         return;
       }
+      if (trimmed === ONBOARDING_SAMPLE_TEXT.trim()) {
+        toast({
+          title: "That's the demo sample",
+          description:
+            "We block submission of the onboarding example so demo text never lands in our database. Replace it with your own report and try again.",
+          variant: "destructive",
+        });
+        return;
+      }
       if (new Blob([trimmed]).size > MAX_TEXT_LENGTH) {
         toast({
           title: "Text too large",
@@ -467,6 +549,7 @@ export default function Home() {
   return (
     <div className="max-w-4xl mx-auto space-y-8 sm:space-y-10">
       <CrawlingBugs />
+      <VideoSection />
       <DriftFlagsBanner />
       {!mirrorBannerDismissed && (
         <div className="relative mt-2 sm:mt-4 mx-auto max-w-3xl rounded-lg border border-primary/20 bg-primary/5 backdrop-blur-sm px-3 sm:px-4 py-3 flex items-start gap-2.5 sm:gap-3 text-sm">
@@ -516,6 +599,102 @@ export default function Home() {
           {t("home.tagline")}
         </p>
         <TrustBadges />
+      </div>
+
+      <div
+        id="section-workflow"
+        className="glass-card rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5 scroll-mt-20"
+        data-scroll-fade
+      >
+        <div className="space-y-1">
+          <span className="eyebrow-label">Section 01 · Workflow</span>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Zap className="w-5 h-5 text-primary" />
+            How It Works
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
+            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-cyan flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
+              <UploadCloud className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
+              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
+                01
+              </div>
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-cyan-400/80">
+                  STEP 01
+                </span>
+                <h3 className="font-medium text-sm">Submit</h3>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Upload a file, paste text, or link a URL. We begin processing
+                immediately.
+              </p>
+            </div>
+          </div>
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
+            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-green flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
+              <ShieldOff className="w-5 h-5 text-green-400" />
+            </div>
+            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
+              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
+                02
+              </div>
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-green-400/80">
+                  STEP 02
+                </span>
+                <h3 className="font-medium text-sm">Auto-Redact</h3>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                PII, secrets, and company names are scrubbed automatically
+                before anything is stored.
+              </p>
+            </div>
+          </div>
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
+            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-violet flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
+              <BrainCircuit className="w-5 h-5 text-violet-400" />
+            </div>
+            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
+              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
+                03
+              </div>
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-violet-400/80">
+                  STEP 03
+                </span>
+                <h3 className="font-medium text-sm">Analyze</h3>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Claims are verified against live sources, sections are compared
+                for duplicates, and the report is scored for validity.
+              </p>
+            </div>
+          </div>
+          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
+            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-amber flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
+              <CheckCircle className="w-5 h-5 text-amber-400" />
+            </div>
+            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
+              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
+                04
+              </div>
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-amber-400/80">
+                  STEP 04
+                </span>
+                <h3 className="font-medium text-sm">Results</h3>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Get a validity score, similarity matches, verification results,
+                triage recommendation, and redaction summary.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <ReportSubmitCooldownBanner state={reportSubmitCooldown} />
@@ -753,6 +932,38 @@ export default function Home() {
             </div>
           )}
 
+          <div className="border border-border/40 rounded-lg overflow-hidden bg-background/30">
+            <button
+              type="button"
+              onClick={() => setOptionsExpanded(!optionsExpanded)}
+              aria-expanded={optionsExpanded}
+              className="w-full flex items-center justify-between gap-3 p-3 sm:p-4 text-left hover:bg-muted/20 transition-colors group/options"
+              data-testid="toggle-submit-options"
+            >
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <Shield className="w-4 h-4 text-primary shrink-0" />
+                <span className="text-sm font-medium">
+                  Sharing &amp; analysis options
+                </span>
+                <span className="hidden sm:inline text-[11px] text-muted-foreground/80 truncate">
+                  ·{" "}
+                  {mode === "full"
+                    ? showInFeed
+                      ? "shared with community + listed in feed"
+                      : "shared with community"
+                    : "private (similarity only)"}
+                  {(skipLlm || skipRedaction) && " · custom"}
+                </span>
+              </div>
+              <ChevronDown
+                className={cn(
+                  "w-4 h-4 text-muted-foreground transition-transform shrink-0",
+                  optionsExpanded && "rotate-180 text-primary",
+                )}
+              />
+            </button>
+            {optionsExpanded && (
+              <div className="px-3 sm:px-4 pb-4 pt-1 space-y-6 animate-in fade-in slide-in-from-top-1 duration-150">
           <div className="space-y-4">
             <h3 className="font-medium flex items-center gap-2">
               <Shield className="w-4 h-4 text-primary" />
@@ -920,6 +1131,9 @@ export default function Home() {
               </div>
             )}
           </div>
+              </div>
+            )}
+          </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-3 px-4 sm:px-6">
           <Button
@@ -955,148 +1169,43 @@ export default function Home() {
         className="my-4"
       />
 
-      <VideoSection />
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-        <AutoRedactionCard />
-        <SectionHashingCard />
-        <SlopDetectionCard />
-      </div>
-
-      <div
-        className="glass-card rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5"
-        data-scroll-fade
-      >
+      <div id="section-engines" className="space-y-3 sm:space-y-4 scroll-mt-20">
         <div className="space-y-1">
-          <span className="eyebrow-label">Section 01 · Workflow</span>
+          <span className="eyebrow-label">Section 02 · How we score it</span>
           <h2 className="text-lg font-bold flex items-center gap-2">
             <Zap className="w-5 h-5 text-primary" />
-            How It Works
+            Three engines, one verdict
           </h2>
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl pt-0.5">
+            Tap any card to see exactly what we redact, how we detect duplicate
+            sections, and how the validity score is composed.
+          </p>
         </div>
-        {/*
-          Each step now leads with a colored icon badge using the same
-          icon-glow vocabulary as the feature cards above (Auto-Redaction,
-          Section Hashing, Slop Detection) so the visuals feel native to the
-          page. On desktop (sm+) the icon sits at the top of a vertical card
-          alongside the big gradient step number; on mobile it acts as the
-          left-hand visual anchor of a horizontal row, with the step label
-          inline with the title on the right.
-        */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          {/* Step 01 — Submit */}
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
-            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-cyan flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
-              <UploadCloud className="w-5 h-5 text-cyan-400" />
-            </div>
-            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
-                01
-              </div>
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-cyan-400/80">
-                  STEP 01
-                </span>
-                <h3 className="font-medium text-sm">Submit</h3>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Upload a file, paste text, or link a URL. We begin processing
-                immediately.
-              </p>
-            </div>
-          </div>
-
-          {/* Step 02 — Auto-Redact */}
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
-            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-green flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
-              <ShieldOff className="w-5 h-5 text-green-400" />
-            </div>
-            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
-                02
-              </div>
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-green-400/80">
-                  STEP 02
-                </span>
-                <h3 className="font-medium text-sm">Auto-Redact</h3>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                PII, secrets, and company names are scrubbed automatically
-                before anything is stored.
-              </p>
-            </div>
-          </div>
-
-          {/* Step 03 — Analyze */}
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
-            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-violet flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
-              <BrainCircuit className="w-5 h-5 text-violet-400" />
-            </div>
-            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
-                03
-              </div>
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-violet-400/80">
-                  STEP 03
-                </span>
-                <h3 className="font-medium text-sm">Analyze</h3>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Claims are verified against live sources, sections are compared
-                for duplicates, and the report is scored for validity.
-              </p>
-            </div>
-          </div>
-
-          {/* Step 04 — Results */}
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
-            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-amber flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-amber-400" />
-            </div>
-            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
-                04
-              </div>
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-amber-400/80">
-                  STEP 04
-                </span>
-                <h3 className="font-medium text-sm">Results</h3>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Get a validity score, similarity matches, verification results,
-                triage recommendation, and redaction summary.
-              </p>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <AutoRedactionCard />
+          <SectionHashingCard />
+          <SlopDetectionCard />
         </div>
       </div>
 
-      <div
-        className="glass-card rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5"
-        data-testid="section-methodology"
-        data-scroll-fade
-      >
-        <div className="space-y-1">
-          <span className="eyebrow-label">Section 02 · Methodology</span>
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <BrainCircuit className="w-5 h-5 text-primary" />
-            What happens around the engines
-          </h2>
-          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+
+      <CollapsibleSection
+        id="section-methodology"
+        testId="section-methodology"
+        eyebrow="Section 03 · Methodology"
+        title="What happens around the engines"
+        icon={<BrainCircuit className="w-5 h-5 text-primary" />}
+        subtitle={
+          <>
             The three engines and their sub-weights live in the{" "}
             <span className="text-foreground font-semibold">
               Validity Scoring
             </span>{" "}
-            card up top. This section covers everything <em>around</em> them:
-            the live sources we go check, the pieces of evidence that
-            disproportionately move the score, and how we landed on these
-            weights in the first place.
-          </p>
-        </div>
-
+            card up top. Tap to expand: live verification sources, evidence
+            multipliers, and how we landed on these weights.
+          </>
+        }
+      >
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground/90 flex items-center gap-2">
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-md icon-glow-green flex-shrink-0">
@@ -1242,20 +1351,15 @@ export default function Home() {
             faking detail still won't slip past the engines.)
           </p>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div
-        className="glass-card rounded-xl p-4 sm:p-6 space-y-4"
-        data-testid="section-methodology-origin"
-        data-scroll-fade
+      <CollapsibleSection
+        id="section-methodology-origin"
+        testId="section-methodology-origin"
+        eyebrow="Section 04 · Origin Story"
+        title="How we landed on this methodology — and how to make it better"
+        icon={<Search className="w-5 h-5 text-primary" />}
       >
-        <div className="space-y-1">
-          <span className="eyebrow-label">Section 03 · Origin Story</span>
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <Search className="w-5 h-5 text-primary" />
-            How we landed on this methodology — and how to make it better
-          </h2>
-        </div>
         <div className="space-y-3 text-xs sm:text-sm text-muted-foreground leading-relaxed">
           <div className="pull-quote space-y-3">
             <p>
@@ -1319,7 +1423,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
       <Suspense fallback={<LazySectionFallback />}>
         <TransparencySection />

@@ -26,10 +26,40 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
-export const CURRENT_VERSION = "3.13.0";
-export const RELEASE_DATE = "2026-05-08";
+export const CURRENT_VERSION = "3.14.0";
+export const RELEASE_DATE = "2026-05-12";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.14.0",
+    date: "2026-05-12",
+    label: "Home — Restructure & Demo-Submit Guard",
+    labelColor: "border-cyan-500 text-cyan-300",
+    sections: [
+      {
+        icon: <Layout className="w-4 h-4 text-cyan-300" />,
+        title: "Home page restructure",
+        type: "feature",
+        items: [
+          "Reorganized the home page around a clearer 7-section flow: intro video at the top, hero, How-It-Works workflow, Submit form, How-We-Score-It engines, Methodology, Origin Story, Privacy, Developers & Agents, and Live Activity.",
+          "Collapsed the long-form Methodology, Origin Story, and Developers & Agents sections behind tap-to-expand headers so first-time visitors land on the submit form faster while everything stays one click away.",
+          "Tucked the Sharing & analysis options (community vs. private, skip-AI, disable-redaction) into a single collapsed control inside the Submit card with a one-line summary of the active defaults — most users now just click Analyze without scrolling past three settings panels.",
+          "Added stable scroll-target anchors (#section-workflow, #section-engines, #section-methodology, #section-methodology-origin, #section-privacy, #section-developers) so the visitor counter, footer links, and external articles can deep-link to any section.",
+          "Trimmed the Recent Activity feed on the home page from 10 to 6 rows to keep the page weight down — the full list is one click away on /reports.",
+          "Split the footer Resources column into two narrower groups (Resources + Community) so the 12-link list is easier to scan on desktop.",
+          "Updated the tagline to 'Built by PSIRTlings for PSIRTlings\u2122' so the home page reads in the voice of the people it's for.",
+        ],
+      },
+      {
+        icon: <Shield className="w-4 h-4 text-green-400" />,
+        title: "Demo-submit guard",
+        type: "fix",
+        items: [
+          "The onboarding tour pre-fills the textarea with a sample XSS report so step 1 has something to spotlight. We now block submission of that exact sample text with a clear toast — demo content can never accidentally land in the public feed or compete for triage attention.",
+        ],
+      },
+    ],
+  },
   {
     version: "3.13.0",
     date: "2026-05-08",

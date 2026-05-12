@@ -11,10 +11,10 @@ import { getSlopColor, getSlopProgressColor, timeAgo } from "./utils";
 
 export function RecentReportsFeed() {
   const { data, isLoading } = useGetReportFeed(
-    { limit: 10 },
+    { limit: 6 },
     {
       query: {
-        queryKey: getGetReportFeedQueryKey({ limit: 10 }),
+        queryKey: getGetReportFeedQueryKey({ limit: 6 }),
         staleTime: 15_000,
         refetchOnMount: "always",
         refetchOnWindowFocus: true,
@@ -28,7 +28,7 @@ export function RecentReportsFeed() {
     return (
       <div className="glass-card rounded-xl p-6 space-y-4" data-scroll-fade>
         <div className="space-y-1">
-          <span className="eyebrow-label">Section 06 · Live Activity</span>
+          <span className="eyebrow-label">Section 07 · Live Activity</span>
           <h2 className="text-lg font-bold flex items-center gap-2">
             <Clock className="w-5 h-5 text-primary" />
             Recent Reports
@@ -65,7 +65,7 @@ export function RecentReportsFeed() {
     return (
       <div className="glass-card rounded-xl p-6 space-y-4" data-scroll-fade>
         <div className="space-y-1">
-          <span className="eyebrow-label">Section 06 · Live Activity</span>
+          <span className="eyebrow-label">Section 07 · Live Activity</span>
           <h2 className="text-lg font-bold flex items-center gap-2">
             <Clock className="w-5 h-5 text-primary" />
             Recent Reports
@@ -85,7 +85,7 @@ export function RecentReportsFeed() {
     >
       <div className="flex items-start sm:items-center justify-between gap-3">
         <div className="space-y-1">
-          <span className="eyebrow-label">Section 06 · Live Activity</span>
+          <span className="eyebrow-label">Section 07 · Live Activity</span>
           <h2 className="text-base sm:text-lg font-bold flex items-center gap-2">
             <Clock className="w-4 sm:w-5 h-4 sm:h-5 text-primary" />
             Recent Reports

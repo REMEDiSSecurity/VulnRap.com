@@ -34,7 +34,7 @@ export function resetAllTours() {
     );
   } catch {}
 }
-const SAMPLE_TEXT = `Title: Reflected XSS in /search query parameter
+export const SAMPLE_TEXT = `Title: Reflected XSS in /search query parameter
 
 Affected: example-app v2.4.1 (commit 9af30c1, file src/routes/search.ts:42)
 CWE: CWE-79 (Cross-site Scripting)
