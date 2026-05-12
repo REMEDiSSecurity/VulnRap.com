@@ -603,94 +603,78 @@ export default function Home() {
 
       <div
         id="section-workflow"
-        className="glass-card rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5 scroll-mt-20"
+        className="glass-card rounded-xl p-3 sm:p-4 space-y-3 scroll-mt-20"
         data-scroll-fade
       >
-        <div className="space-y-1">
-          <span className="eyebrow-label">Section 01 · Workflow</span>
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <Zap className="w-5 h-5 text-primary" />
-            How It Works
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h2 className="text-sm font-semibold flex items-center gap-2">
+            <Zap className="w-4 h-4 text-primary" />
+            How it works
           </h2>
+          <span className="eyebrow-label">Section 01 · Workflow</span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
-            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-cyan flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
-              <UploadCloud className="w-5 h-5 text-cyan-400" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
+          <div className="flex items-center gap-2.5 p-2.5 rounded-lg glass-card feature-card">
+            <div className="p-1.5 rounded-md icon-glow-cyan flex-shrink-0 flex items-center justify-center">
+              <UploadCloud className="w-4 h-4 text-cyan-400" />
             </div>
-            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
-                01
-              </div>
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-cyan-400/80">
-                  STEP 01
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[10px] font-mono font-bold text-cyan-400/80">
+                  01
                 </span>
-                <h3 className="font-medium text-sm">Submit</h3>
+                <h3 className="font-medium text-xs sm:text-sm truncate">Submit</h3>
               </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Upload a file, paste text, or link a URL. We begin processing
-                immediately.
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Paste, upload, or link a report.
               </p>
             </div>
           </div>
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
-            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-green flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
-              <ShieldOff className="w-5 h-5 text-green-400" />
+          <div className="flex items-center gap-2.5 p-2.5 rounded-lg glass-card feature-card">
+            <div className="p-1.5 rounded-md icon-glow-green flex-shrink-0 flex items-center justify-center">
+              <ShieldOff className="w-4 h-4 text-green-400" />
             </div>
-            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
-                02
-              </div>
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-green-400/80">
-                  STEP 02
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[10px] font-mono font-bold text-green-400/80">
+                  02
                 </span>
-                <h3 className="font-medium text-sm">Auto-Redact</h3>
+                <h3 className="font-medium text-xs sm:text-sm truncate">Redact</h3>
               </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                PII, secrets, and company names are scrubbed automatically
-                before anything is stored.
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                PII and secrets scrubbed before storage.
               </p>
             </div>
           </div>
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
-            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-violet flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
-              <BrainCircuit className="w-5 h-5 text-violet-400" />
+          <div className="flex items-center gap-2.5 p-2.5 rounded-lg glass-card feature-card">
+            <div className="p-1.5 rounded-md icon-glow-violet flex-shrink-0 flex items-center justify-center">
+              <BrainCircuit className="w-4 h-4 text-violet-400" />
             </div>
-            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
-                03
-              </div>
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-violet-400/80">
-                  STEP 03
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[10px] font-mono font-bold text-violet-400/80">
+                  03
                 </span>
-                <h3 className="font-medium text-sm">Analyze</h3>
+                <h3 className="font-medium text-xs sm:text-sm truncate">Analyze</h3>
               </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Claims are verified against live sources, sections are compared
-                for duplicates, and the report is scored for validity.
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Verify claims, check for duplicates, score validity.
               </p>
             </div>
           </div>
-          <div className="flex sm:block items-start gap-3 sm:gap-0 sm:space-y-3 p-4 rounded-xl glass-card feature-card relative">
-            <div className="p-2 sm:p-2.5 rounded-lg icon-glow-amber flex-shrink-0 w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-amber-400" />
+          <div className="flex items-center gap-2.5 p-2.5 rounded-lg glass-card feature-card">
+            <div className="p-1.5 rounded-md icon-glow-amber flex-shrink-0 flex items-center justify-center">
+              <CheckCircle className="w-4 h-4 text-amber-400" />
             </div>
-            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
-              <div className="hidden sm:block text-3xl font-bold step-number leading-none">
-                04
-              </div>
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="sm:hidden text-[10px] font-mono font-bold tracking-wider text-amber-400/80">
-                  STEP 04
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[10px] font-mono font-bold text-amber-400/80">
+                  04
                 </span>
-                <h3 className="font-medium text-sm">Results</h3>
+                <h3 className="font-medium text-xs sm:text-sm truncate">Results</h3>
               </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Get a validity score, similarity matches, verification results,
-                triage recommendation, and redaction summary.
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Score, matches, and triage in seconds.
               </p>
             </div>
           </div>
