@@ -695,12 +695,235 @@ export default function Home() {
           <CardDescription>{t("home.submitReportDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 sm:space-y-8">
-          <div className="rounded-lg bg-yellow-500/5 border border-yellow-500/20 px-3 sm:px-4 py-2.5 sm:py-3 text-xs text-muted-foreground leading-relaxed">
-            <strong className="text-yellow-500">Heads up:</strong> We try to
-            auto-redact PII, secrets, credentials, and company names before
-            storing or comparing your report. If your report contains sensitive
-            details, pre-sanitize those sections yourself before uploading.
+          <div className="rounded-lg bg-yellow-500/5 border border-yellow-500/20 px-3 sm:px-4 py-2.5 sm:py-3 text-xs text-muted-foreground leading-relaxed space-y-1.5">
+            <p>
+              <strong className="text-yellow-500">Heads up:</strong> We try to
+              auto-redact PII, secrets, credentials, and company names before
+              storing or comparing your report. If your report contains
+              sensitive details, pre-sanitize those sections yourself before
+              uploading.
+            </p>
+            <p>
+              <strong className="text-yellow-500">Work in progress:</strong>{" "}
+              VulnRap is actively under development and the scoring methodology
+              is still being calibrated — treat verdicts as a triage aid, not a
+              final answer. If you have any concerns about sending a report
+              here, the entire app is open-source —{" "}
+              <a
+                href="https://github.com/REMEDiSSecurity/VulnRap.Com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline underline-offset-2 hover:text-primary/80"
+              >
+                clone it from GitHub
+              </a>{" "}
+              and run it entirely locally.
+            </p>
           </div>
+
+          <div className="border border-border/40 rounded-lg overflow-hidden bg-background/30">
+            <button
+              type="button"
+              onClick={() => setOptionsExpanded(!optionsExpanded)}
+              aria-expanded={optionsExpanded}
+              className="w-full flex items-center justify-between gap-3 p-3 sm:p-4 text-left hover:bg-muted/20 transition-colors group/options"
+              data-testid="toggle-submit-options"
+            >
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <Shield className="w-4 h-4 text-primary shrink-0" />
+                <span className="text-sm font-medium">
+                  Sharing &amp; analysis options
+                </span>
+                <span className="hidden sm:inline text-[11px] text-muted-foreground/80 truncate">
+                  ·{" "}
+                  {mode === "full"
+                    ? showInFeed
+                      ? "shared with community + listed in feed"
+                      : "shared with community"
+                    : "private (similarity only)"}
+                  {(skipLlm || skipRedaction) && " · custom"}
+                </span>
+              </div>
+              <ChevronDown
+                className={cn(
+                  "w-4 h-4 text-muted-foreground transition-transform shrink-0",
+                  optionsExpanded && "rotate-180 text-primary",
+                )}
+              />
+            </button>
+            {optionsExpanded && (
+              <div className="px-3 sm:px-4 pb-4 pt-1 space-y-6 animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="space-y-4">
+            <h3 className="font-medium flex items-center gap-2">
+              <Shield className="w-4 h-4 text-primary" />
+              How should we handle your report?
+            </h3>
+            <RadioGroup
+              value={mode}
+              onValueChange={(v) => {
+                setMode(v as SubmitReportBodyContentMode);
+                if (v === "similarity_only") setShowInFeed(false);
+              }}
+              className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            >
+              <div
+                className={cn(
+                  "border rounded-lg p-4 cursor-pointer hover:border-primary/50 transition-colors",
+                  mode === "full"
+                    ? "border-primary bg-primary/5"
+                    : "border-border",
+                )}
+                onClick={() => setMode(SubmitReportBodyContentMode.full)}
+              >
+                <div className="flex items-start gap-3">
+                  <RadioGroupItem
+                    value={SubmitReportBodyContentMode.full}
+                    id="full"
+                    className="mt-1"
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="full" className="font-bold cursor-pointer">
+                      Share with the community
+                    </Label>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      We understand that the only way this works is with trust —
+                      and data in the form of reports that can be compared. Your
+                      report (with PII and secrets auto-removed) is saved and
+                      helps the entire community detect duplicates and AI slop.
+                      If you'd be willing to gift us some training data —
+                      rejected AI slop, or examples of what you look for in a
+                      valid report — the community as a whole benefits. Please{" "}
+                      <a
+                        href="mailto:remedisllc@gmail.com"
+                        className="text-primary hover:underline"
+                      >
+                        reach out
+                      </a>{" "}
+                      if you can!
+                    </p>
+                  </div>
+                </div>
+                {mode === "full" && (
+                  <label className="flex items-center gap-2 mt-3 ml-7 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={showInFeed}
+                      onChange={(e) => setShowInFeed(e.target.checked)}
+                      className="rounded border-border accent-primary w-4 h-4"
+                    />
+                    <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+                      Show in the recent reports feed on this site
+                    </span>
+                  </label>
+                )}
+              </div>
+              <div
+                className={cn(
+                  "border rounded-lg p-4 cursor-pointer hover:border-primary/50 transition-colors",
+                  mode === "similarity_only"
+                    ? "border-primary bg-primary/5"
+                    : "border-border",
+                )}
+                onClick={() => {
+                  setMode(SubmitReportBodyContentMode.similarity_only);
+                  setShowInFeed(false);
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <RadioGroupItem
+                    value={SubmitReportBodyContentMode.similarity_only}
+                    id="similarity_only"
+                    className="mt-1"
+                  />
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="similarity_only"
+                      className="font-bold cursor-pointer"
+                    >
+                      Keep it private
+                    </Label>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      We only store a mathematical fingerprint of your report --
+                      no text is saved at all. Use this for sensitive zero-days
+                      you want to keep confidential.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </RadioGroup>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="font-medium flex items-center gap-2 text-sm">
+              <Zap className="w-4 h-4 text-primary" />
+              Analysis Options
+              <Explainer text="Control what happens during analysis. By default, both AI analysis and PII redaction are enabled." />
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label
+                className={`flex items-start gap-3 p-3 rounded-lg border border-border transition-colors ${skipRedaction ? "opacity-60 cursor-not-allowed" : "hover:border-primary/30 cursor-pointer"} group`}
+              >
+                <input
+                  type="checkbox"
+                  checked={skipLlm}
+                  onChange={(e) => setSkipLlm(e.target.checked)}
+                  disabled={skipRedaction}
+                  className="rounded border-border accent-primary w-4 h-4 mt-0.5"
+                  data-testid="toggle-skip-llm"
+                />
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
+                    <BrainCircuit className="w-3.5 h-3.5" />
+                    Skip AI analysis
+                  </span>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    {skipRedaction
+                      ? "Locked on — AI analysis is disabled when PII redaction is off."
+                      : "Disable LLM calls — analysis uses only local heuristic and statistical scoring. No report data is sent to any external AI provider."}
+                  </p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-border hover:border-primary/30 transition-colors cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={skipRedaction}
+                  onChange={(e) => {
+                    setSkipRedaction(e.target.checked);
+                    if (e.target.checked) setSkipLlm(true);
+                  }}
+                  className="rounded border-border accent-primary w-4 h-4 mt-0.5"
+                  data-testid="toggle-skip-redaction"
+                />
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
+                    <ShieldOff className="w-3.5 h-3.5" />
+                    Disable PII redaction
+                  </span>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Skip PII auto-redaction. Report text will not be sanitized
+                    for personally identifiable information. AI analysis is
+                    automatically disabled when redaction is off to prevent
+                    unredacted data from reaching external services.
+                  </p>
+                </div>
+              </label>
+            </div>
+            {skipRedaction && (
+              <div className="rounded-lg bg-orange-500/10 border border-orange-500/30 px-3 py-2 flex items-start gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                <AlertTriangle className="w-3.5 h-3.5 text-orange-500 mt-0.5 flex-shrink-0" />
+                <p className="text-[11px] text-orange-300 leading-relaxed">
+                  <strong>Warning:</strong> Only use for known slop submissions
+                  or local deployments. PII, secrets, and company names in your
+                  report will <strong>not</strong> be removed before storage or
+                  comparison.
+                </p>
+              </div>
+            )}
+          </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex rounded-xl overflow-hidden glass-card">
             <button
               type="button"
@@ -917,209 +1140,6 @@ export default function Home() {
               </div>
             </div>
           )}
-
-          <div className="border border-border/40 rounded-lg overflow-hidden bg-background/30">
-            <button
-              type="button"
-              onClick={() => setOptionsExpanded(!optionsExpanded)}
-              aria-expanded={optionsExpanded}
-              className="w-full flex items-center justify-between gap-3 p-3 sm:p-4 text-left hover:bg-muted/20 transition-colors group/options"
-              data-testid="toggle-submit-options"
-            >
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <Shield className="w-4 h-4 text-primary shrink-0" />
-                <span className="text-sm font-medium">
-                  Sharing &amp; analysis options
-                </span>
-                <span className="hidden sm:inline text-[11px] text-muted-foreground/80 truncate">
-                  ·{" "}
-                  {mode === "full"
-                    ? showInFeed
-                      ? "shared with community + listed in feed"
-                      : "shared with community"
-                    : "private (similarity only)"}
-                  {(skipLlm || skipRedaction) && " · custom"}
-                </span>
-              </div>
-              <ChevronDown
-                className={cn(
-                  "w-4 h-4 text-muted-foreground transition-transform shrink-0",
-                  optionsExpanded && "rotate-180 text-primary",
-                )}
-              />
-            </button>
-            {optionsExpanded && (
-              <div className="px-3 sm:px-4 pb-4 pt-1 space-y-6 animate-in fade-in slide-in-from-top-1 duration-150">
-          <div className="space-y-4">
-            <h3 className="font-medium flex items-center gap-2">
-              <Shield className="w-4 h-4 text-primary" />
-              How should we handle your report?
-            </h3>
-            <RadioGroup
-              value={mode}
-              onValueChange={(v) => {
-                setMode(v as SubmitReportBodyContentMode);
-                if (v === "similarity_only") setShowInFeed(false);
-              }}
-              className="grid grid-cols-1 md:grid-cols-2 gap-4"
-            >
-              <div
-                className={cn(
-                  "border rounded-lg p-4 cursor-pointer hover:border-primary/50 transition-colors",
-                  mode === "full"
-                    ? "border-primary bg-primary/5"
-                    : "border-border",
-                )}
-                onClick={() => setMode(SubmitReportBodyContentMode.full)}
-              >
-                <div className="flex items-start gap-3">
-                  <RadioGroupItem
-                    value={SubmitReportBodyContentMode.full}
-                    id="full"
-                    className="mt-1"
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="full" className="font-bold cursor-pointer">
-                      Share with the community
-                    </Label>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      We understand that the only way this works is with trust —
-                      and data in the form of reports that can be compared. Your
-                      report (with PII and secrets auto-removed) is saved and
-                      helps the entire community detect duplicates and AI slop.
-                      If you'd be willing to gift us some training data —
-                      rejected AI slop, or examples of what you look for in a
-                      valid report — the community as a whole benefits. Please{" "}
-                      <a
-                        href="mailto:remedisllc@gmail.com"
-                        className="text-primary hover:underline"
-                      >
-                        reach out
-                      </a>{" "}
-                      if you can!
-                    </p>
-                  </div>
-                </div>
-                {mode === "full" && (
-                  <label className="flex items-center gap-2 mt-3 ml-7 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={showInFeed}
-                      onChange={(e) => setShowInFeed(e.target.checked)}
-                      className="rounded border-border accent-primary w-4 h-4"
-                    />
-                    <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-                      Show in the recent reports feed on this site
-                    </span>
-                  </label>
-                )}
-              </div>
-              <div
-                className={cn(
-                  "border rounded-lg p-4 cursor-pointer hover:border-primary/50 transition-colors",
-                  mode === "similarity_only"
-                    ? "border-primary bg-primary/5"
-                    : "border-border",
-                )}
-                onClick={() => {
-                  setMode(SubmitReportBodyContentMode.similarity_only);
-                  setShowInFeed(false);
-                }}
-              >
-                <div className="flex items-start gap-3">
-                  <RadioGroupItem
-                    value={SubmitReportBodyContentMode.similarity_only}
-                    id="similarity_only"
-                    className="mt-1"
-                  />
-                  <div className="space-y-1">
-                    <Label
-                      htmlFor="similarity_only"
-                      className="font-bold cursor-pointer"
-                    >
-                      Keep it private
-                    </Label>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      We only store a mathematical fingerprint of your report --
-                      no text is saved at all. Use this for sensitive zero-days
-                      you want to keep confidential.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </RadioGroup>
-          </div>
-
-          <div className="space-y-3">
-            <h3 className="font-medium flex items-center gap-2 text-sm">
-              <Zap className="w-4 h-4 text-primary" />
-              Analysis Options
-              <Explainer text="Control what happens during analysis. By default, both AI analysis and PII redaction are enabled." />
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label
-                className={`flex items-start gap-3 p-3 rounded-lg border border-border transition-colors ${skipRedaction ? "opacity-60 cursor-not-allowed" : "hover:border-primary/30 cursor-pointer"} group`}
-              >
-                <input
-                  type="checkbox"
-                  checked={skipLlm}
-                  onChange={(e) => setSkipLlm(e.target.checked)}
-                  disabled={skipRedaction}
-                  className="rounded border-border accent-primary w-4 h-4 mt-0.5"
-                  data-testid="toggle-skip-llm"
-                />
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
-                    <BrainCircuit className="w-3.5 h-3.5" />
-                    Skip AI analysis
-                  </span>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    {skipRedaction
-                      ? "Locked on — AI analysis is disabled when PII redaction is off."
-                      : "Disable LLM calls — analysis uses only local heuristic and statistical scoring. No report data is sent to any external AI provider."}
-                  </p>
-                </div>
-              </label>
-              <label className="flex items-start gap-3 p-3 rounded-lg border border-border hover:border-primary/30 transition-colors cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={skipRedaction}
-                  onChange={(e) => {
-                    setSkipRedaction(e.target.checked);
-                    if (e.target.checked) setSkipLlm(true);
-                  }}
-                  className="rounded border-border accent-primary w-4 h-4 mt-0.5"
-                  data-testid="toggle-skip-redaction"
-                />
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors flex items-center gap-1.5">
-                    <ShieldOff className="w-3.5 h-3.5" />
-                    Disable PII redaction
-                  </span>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Skip PII auto-redaction. Report text will not be sanitized
-                    for personally identifiable information. AI analysis is
-                    automatically disabled when redaction is off to prevent
-                    unredacted data from reaching external services.
-                  </p>
-                </div>
-              </label>
-            </div>
-            {skipRedaction && (
-              <div className="rounded-lg bg-orange-500/10 border border-orange-500/30 px-3 py-2 flex items-start gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                <AlertTriangle className="w-3.5 h-3.5 text-orange-500 mt-0.5 flex-shrink-0" />
-                <p className="text-[11px] text-orange-300 leading-relaxed">
-                  <strong>Warning:</strong> Only use for known slop submissions
-                  or local deployments. PII, secrets, and company names in your
-                  report will <strong>not</strong> be removed before storage or
-                  comparison.
-                </p>
-              </div>
-            )}
-          </div>
-              </div>
-            )}
-          </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-3 px-4 sm:px-6">
           <Button
