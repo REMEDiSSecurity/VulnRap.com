@@ -72,46 +72,57 @@ export function TrustBadges() {
   return (
     <TooltipProvider delayDuration={150}>
       <div
-        className="trust-badges-strip pt-1"
+        className="trust-badges-strip"
         data-testid="trust-badges"
         aria-label="Trust and credibility badges"
       >
-        <div className="flex gap-2 sm:gap-3 overflow-x-auto sm:overflow-visible sm:flex-wrap sm:justify-center px-2 sm:px-0 -mx-2 sm:mx-0 pb-2 sm:pb-0 snap-x snap-mandatory sm:snap-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0 [&>*]:basis-[calc((100%-1rem)/3)] sm:[&>*]:basis-auto">
-          {BADGES.map(({ label, tooltip, to, external, Icon }) => {
+        <div className="inline-flex items-center gap-0 rounded-full glass-card border border-border/40 px-1 py-0.5 mx-auto">
+          {BADGES.map(({ label, tooltip, to, external, Icon }, i) => {
             const inner = (
-              <span className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1.5 rounded-full glass-card border border-border/40 text-[11px] sm:text-xs font-medium text-muted-foreground/80 grayscale hover:grayscale-0 hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all snap-start overflow-hidden">
-                <Icon className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{label}</span>
+              <span
+                aria-label={label}
+                className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full text-muted-foreground/70 grayscale hover:grayscale-0 hover:text-primary hover:bg-primary/10 transition-all"
+              >
+                <Icon className="w-3.5 h-3.5" />
               </span>
             );
             return (
-              <Tooltip key={label}>
-                <TooltipTrigger asChild>
-                  {external ? (
-                    <a
-                      href={to}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      data-testid={`trust-badge-${label.toLowerCase().replace(/\s+/g, "-")}`}
-                    >
-                      {inner}
-                    </a>
-                  ) : (
-                    <Link
-                      to={to}
-                      data-testid={`trust-badge-${label.toLowerCase().replace(/\s+/g, "-")}`}
-                    >
-                      {inner}
-                    </Link>
-                  )}
-                </TooltipTrigger>
-                <TooltipContent
-                  side="bottom"
-                  className="max-w-[240px] text-center"
-                >
-                  {tooltip}
-                </TooltipContent>
-              </Tooltip>
+              <div key={label} className="flex items-center">
+                {i > 0 && (
+                  <span
+                    aria-hidden
+                    className="w-px h-3 bg-border/50 mx-0.5"
+                  />
+                )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {external ? (
+                      <a
+                        href={to}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid={`trust-badge-${label.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        {inner}
+                      </a>
+                    ) : (
+                      <Link
+                        to={to}
+                        data-testid={`trust-badge-${label.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        {inner}
+                      </Link>
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="bottom"
+                    className="max-w-[240px] text-center"
+                  >
+                    <div className="font-semibold text-[11px] mb-0.5">{label}</div>
+                    <div className="text-[11px] text-muted-foreground">{tooltip}</div>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
             );
           })}
         </div>

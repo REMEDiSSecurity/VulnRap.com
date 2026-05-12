@@ -549,7 +549,7 @@ export default function Home() {
   }, [mirrorBannerDismissed]);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 sm:space-y-10">
+    <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
       <CrawlingBugs />
       <VideoSection />
       <DriftFlagsBanner />
@@ -578,7 +578,7 @@ export default function Home() {
         </div>
       )}
 
-      <div className="space-y-4 sm:space-y-6 text-center pt-4 sm:pt-6">
+      <div className="space-y-2 sm:space-y-3 text-center pt-1 sm:pt-2">
         <div className="relative flex justify-center">
           <div className="relative">
             <LogoBeams />
@@ -587,17 +587,17 @@ export default function Home() {
               ref={logoRef}
               src={logoSrc}
               alt="VulnRap"
-              className="relative z-10 w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-xl logo-glow gradient-border"
+              className="relative z-10 w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-xl logo-glow gradient-border"
             />
           </div>
         </div>
         <h1
-          className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-primary uppercase glow-text"
+          className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-primary uppercase glow-text"
           data-testid="text-heading"
         >
           {t("home.heading")}
         </h1>
-        <p className="text-sm sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed px-2">
+        <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl mx-auto leading-snug px-2">
           {t("home.tagline")}
         </p>
         <TrustBadges />
