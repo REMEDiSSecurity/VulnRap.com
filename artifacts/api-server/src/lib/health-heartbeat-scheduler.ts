@@ -144,13 +144,19 @@ export async function pruneSyntheticHeartbeats(
   retentionDays: number = autoRetentionDays(),
 ): Promise<{ deleted: number }> {
   const { db, analysisTracesTable } = await import("@workspace/db");
-  const { and, lt, sql } = await import("drizzle-orm");
+  const { and, lt, isNull, sql } = await import("drizzle-orm");
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  // Three guards in AND, defense-in-depth: a synthetic heartbeat row
+  // must satisfy ALL of (created_at < cutoff), (report_id IS NULL),
+  // AND (notes contains "synthetic_heartbeat"). Even if a future bug
+  // accidentally adds the heartbeat note to an organic trace, that
+  // row still has a report_id and is safe from this DELETE.
   const rows = await db
     .delete(analysisTracesTable)
     .where(
       and(
         lt(analysisTracesTable.createdAt, cutoff),
+        isNull(analysisTracesTable.reportId),
         sql`${analysisTracesTable.trace}->'notes' @> '["synthetic_heartbeat"]'::jsonb`,
       ),
     )

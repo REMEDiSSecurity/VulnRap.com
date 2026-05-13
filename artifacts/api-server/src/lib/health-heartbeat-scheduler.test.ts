@@ -69,6 +69,7 @@ vi.mock("@workspace/db", () => {
 vi.mock("drizzle-orm", () => ({
   and: (...parts: unknown[]) => ({ __and: parts }),
   lt: (col: unknown, val: unknown) => ({ __lt: { col, val } }),
+  isNull: (col: unknown) => ({ __isNull: col }),
   sql: (strings: TemplateStringsArray, ..._args: unknown[]) => ({
     __sql: strings.join("?"),
   }),
@@ -174,17 +175,43 @@ describe("runHeartbeatTick", () => {
 });
 
 describe("pruneSyntheticHeartbeats", () => {
-  it("issues a DELETE filtered to the synthetic_heartbeat note and reports the row count", async () => {
+  it("issues a DELETE filtered by ALL THREE guards (cutoff + null reportId + synthetic note) and reports the row count", async () => {
     deleteReturnRows = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const before = Date.now();
     const result = await pruneSyntheticHeartbeats(30);
     expect(result.deleted).toBe(3);
     expect(deleteCalls).toBe(1);
-    // The WHERE clause must combine a created_at < cutoff bound with
-    // the synthetic_heartbeat note filter — we never want to delete
-    // organic traces, even old ones, from this code path.
+
+    // The WHERE clause must combine three guards in AND. Defense in
+    // depth: even if any one guard accidentally matches an organic
+    // row, the other two still protect it.
     const where = lastDeleteWhere as { __and?: unknown[] };
     expect(Array.isArray(where.__and)).toBe(true);
-    const sqlPart = where.__and!.find(
+    const parts = where.__and!;
+
+    // 1) created_at < (now - 30d)
+    const ltPart = parts.find(
+      (p): p is { __lt: { col: unknown; val: Date } } =>
+        typeof p === "object" && p !== null && "__lt" in p,
+    );
+    expect(ltPart).toBeDefined();
+    const cutoffMs = ltPart!.__lt.val.getTime();
+    const expectedCutoffMs = before - 30 * 24 * 60 * 60 * 1000;
+    // Allow a small window for the Date.now() call inside the prune
+    // happening just after `before`.
+    expect(cutoffMs).toBeGreaterThanOrEqual(expectedCutoffMs - 1000);
+    expect(cutoffMs).toBeLessThanOrEqual(expectedCutoffMs + 1000);
+
+    // 2) report_id IS NULL — guarantees this DELETE can never touch
+    // a row tied to an actual user report.
+    const isNullPart = parts.find(
+      (p): p is { __isNull: unknown } =>
+        typeof p === "object" && p !== null && "__isNull" in p,
+    );
+    expect(isNullPart).toBeDefined();
+
+    // 3) trace->'notes' @> '["synthetic_heartbeat"]'::jsonb
+    const sqlPart = parts.find(
       (p): p is { __sql: string } =>
         typeof p === "object" && p !== null && "__sql" in p,
     );
