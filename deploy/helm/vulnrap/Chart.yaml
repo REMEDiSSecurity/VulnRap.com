@@ -7,7 +7,7 @@ appVersion: "0.1.0"
 kubeVersion: ">=1.24.0-0"
 home: https://vulnrap.com
 sources:
-  - https://github.com/vulnrap/vulnrap
+  - https://github.com/REMEDiSSecurity/VulnRap.Com
 keywords:
   - vulnrap
   - vulnerability

@@ -7,7 +7,7 @@ A Helm chart for deploying the [VulnRap](https://vulnrap.com) API server to Kube
 ## TL;DR
 
 ```bash
-git clone https://github.com/vulnrap/vulnrap.git
+git clone https://github.com/REMEDiSSecurity/VulnRap.Com.git
 cd vulnrap
 
 helm install vulnrap ./deploy/helm/vulnrap \
