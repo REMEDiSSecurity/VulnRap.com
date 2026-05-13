@@ -223,6 +223,91 @@ describe("GET /public/status", () => {
     expect(r.body.overallStatus).toBe("down");
   });
 
+  it("treats avri_composite as healthy evidence for linguistic/substance/cwe (AVRI-mode regression)", async () => {
+    const now = Date.now();
+    const recent = new Date(now - 5 * 60_000);
+    selectQueue.push([
+      {
+        createdAt: recent,
+        totalDurationMs: 600,
+        trace: {
+          stages: [
+            { stage: "extract_signals", durationMs: 5 },
+            { stage: "perplexity", durationMs: 10 },
+            { stage: "avri_composite", durationMs: 50 },
+          ],
+        },
+      },
+    ]);
+    const r = await request<StatusResponse>("/public/status");
+    expect(r.status).toBe(200);
+    expect(r.body.overallStatus).toBe("operational");
+    for (const eng of r.body.engines) {
+      expect(eng.status).toBe("operational");
+      expect(eng.recentSampleCount).toBe(1);
+    }
+  });
+
+  it("counts a trace once per engine even when multiple matching stages are present", async () => {
+    const now = Date.now();
+    const recent = new Date(now - 5 * 60_000);
+    selectQueue.push([
+      {
+        createdAt: recent,
+        totalDurationMs: 600,
+        trace: {
+          stages: [
+            { stage: "engine1_ai_authorship", durationMs: 10 },
+            { stage: "engine2_substance", durationMs: 10 },
+            { stage: "engine3_cwe_coherence", durationMs: 10 },
+            { stage: "avri_composite", durationMs: 50 },
+            { stage: "perplexity", durationMs: 10 },
+          ],
+        },
+      },
+    ]);
+    const r = await request<StatusResponse>("/public/status");
+    const linguistic = r.body.engines.find((e) => e.id === "linguistic")!;
+    const substance = r.body.engines.find((e) => e.id === "substance")!;
+    const cwe = r.body.engines.find((e) => e.id === "cwe")!;
+    expect(linguistic.recentSampleCount).toBe(1);
+    expect(substance.recentSampleCount).toBe(1);
+    expect(cwe.recentSampleCount).toBe(1);
+  });
+
+  it("attributes ongoing incidents to all sub-engines when only avri_composite traces exist (AVRI-mode regression)", async () => {
+    const now = Date.now();
+    const old = new Date(now - 25 * 60 * 60_000); // 25h ago — well past 1h gap threshold
+    selectQueue.push([
+      {
+        createdAt: old,
+        totalDurationMs: 600,
+        trace: {
+          stages: [
+            { stage: "perplexity", durationMs: 10 },
+            { stage: "avri_composite", durationMs: 50 },
+          ],
+        },
+      },
+    ]);
+    interface IncidentsResponse {
+      incidents: Array<{
+        affectedEngines: Array<{ id: string; label: string }>;
+        severity: "degraded" | "outage";
+      }>;
+    }
+    const r = await request<IncidentsResponse>("/public/status/incidents");
+    expect(r.status).toBe(200);
+    expect(r.body.incidents.length).toBeGreaterThan(0);
+    const affectedIds = new Set(
+      r.body.incidents[0].affectedEngines.map((e) => e.id),
+    );
+    for (const id of ["linguistic", "substance", "cwe", "avri", "llm_gate"]) {
+      expect(affectedIds.has(id)).toBe(true);
+    }
+    expect(r.body.incidents[0].severity).toBe("outage");
+  });
+
   it("sets a 60s public Cache-Control header", async () => {
     selectQueue.push([]);
     const r = await request<StatusResponse>("/public/status");

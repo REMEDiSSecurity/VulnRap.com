@@ -222,10 +222,17 @@ router.get("/public/status/incidents", async (_req, res): Promise<void> => {
     .from(analysisTracesTable)
     .where(gte(analysisTracesTable.createdAt, since));
 
-  const stageToEngine = new Map<string, { id: string; label: string }>();
+  // Many-to-many: a single stage (e.g. `avri_composite`) may map to
+  // multiple engines (linguistic / substance / cwe / avri all run inside
+  // it). A one-to-one map would silently drop all but the last engine
+  // for a shared stage, causing incidents to under-attribute affected
+  // engines.
+  const stageToEngineIds = new Map<string, string[]>();
   for (const def of ENGINE_DEFINITIONS) {
     for (const stage of def.stages) {
-      stageToEngine.set(stage, { id: def.id, label: def.label });
+      const list = stageToEngineIds.get(stage) ?? [];
+      if (!list.includes(def.id)) list.push(def.id);
+      stageToEngineIds.set(stage, list);
     }
   }
 
@@ -241,10 +248,12 @@ router.get("/public/status/incidents", async (_req, res): Promise<void> => {
     const seenEngines = new Set<string>();
     for (const stage of trace.stages) {
       if (!stage || typeof stage.stage !== "string") continue;
-      const eng = stageToEngine.get(stage.stage);
-      if (eng && !seenEngines.has(eng.id)) {
-        seenEngines.add(eng.id);
-        tracesByEngine.get(eng.id)!.push(ts);
+      const engineIds = stageToEngineIds.get(stage.stage);
+      if (!engineIds) continue;
+      for (const engineId of engineIds) {
+        if (seenEngines.has(engineId)) continue;
+        seenEngines.add(engineId);
+        tracesByEngine.get(engineId)!.push(ts);
       }
     }
   }
