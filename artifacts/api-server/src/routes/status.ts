@@ -79,6 +79,7 @@ router.get("/public/status", async (_req, res): Promise<void> => {
       createdAt: analysisTracesTable.createdAt,
       totalDurationMs: analysisTracesTable.totalDurationMs,
       trace: analysisTracesTable.trace,
+      reportId: analysisTracesTable.reportId,
     })
     .from(analysisTracesTable)
     .where(gte(analysisTracesTable.createdAt, uptimeSince));
@@ -93,9 +94,12 @@ router.get("/public/status", async (_req, res): Promise<void> => {
     ((daysWithTraffic / UPTIME_WINDOW_DAYS) * 100).toFixed(2),
   );
 
-  // Latency: 24h pipeline p50/p95.
+  // Latency: 24h pipeline p50/p95. ORGANIC TRAFFIC ONLY — synthetic
+  // heartbeat rows (report_id IS NULL) are excluded so our own
+  // self-tests don't skew the latency we publish to users.
   const latencyDurations: number[] = [];
   for (const row of rows) {
+    if (row.reportId === null) continue;
     if (
       row.createdAt.getTime() >= latencySince.getTime() &&
       typeof row.totalDurationMs === "number" &&

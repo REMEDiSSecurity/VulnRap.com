@@ -6,7 +6,7 @@ export function VideoSection() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="max-w-2xl mx-auto w-full">
+    <div className="w-full">
       <button
         type="button"
         onClick={() => setOpen(!open)}

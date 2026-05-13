@@ -172,8 +172,8 @@ describe("GET /public/status", () => {
       "perplexity",
     ].map((stage) => ({ stage, durationMs: 12 }));
     selectQueue.push([
-      { createdAt: recent, totalDurationMs: 800, trace: { stages } },
-      { createdAt: recent, totalDurationMs: 1200, trace: { stages } },
+      { createdAt: recent, totalDurationMs: 800, trace: { stages }, reportId: "rpt-a" },
+      { createdAt: recent, totalDurationMs: 1200, trace: { stages }, reportId: "rpt-b" },
     ]);
     const r = await request<StatusResponse>("/public/status");
     expect(r.status).toBe(200);
@@ -188,6 +188,41 @@ describe("GET /public/status", () => {
       expect(eng.recentSampleCount).toBe(2);
       expect(eng.lastSeenAt).not.toBeNull();
     }
+  });
+
+  it("excludes synthetic heartbeat rows (reportId IS NULL) from latency, but still counts them for engine liveness and uptime", async () => {
+    // Models the exact scenario the user cares about: zero organic
+    // traffic in the last 24h, only synthetic heartbeats. Engines
+    // must still show operational and uptime stays high, but the
+    // published p50/p95 must NOT be derived from heartbeat ticks.
+    const now = Date.now();
+    const recent = new Date(now - 5 * 60_000);
+    const stages = [
+      "engine1_ai_authorship",
+      "engine2_substance",
+      "engine3_cwe_coherence",
+      "avri_composite",
+      "perplexity",
+    ].map((stage) => ({ stage, durationMs: 12 }));
+    selectQueue.push([
+      // Two synthetic heartbeat ticks (reportId === null).
+      { createdAt: recent, totalDurationMs: 20, trace: { stages }, reportId: null },
+      { createdAt: recent, totalDurationMs: 22, trace: { stages }, reportId: null },
+      // One organic submission with very different latency.
+      { createdAt: recent, totalDurationMs: 9999, trace: { stages }, reportId: "rpt-real" },
+    ]);
+    const r = await request<StatusResponse>("/public/status");
+    expect(r.status).toBe(200);
+    // Engines stay operational because heartbeats DO count for liveness.
+    for (const eng of r.body.engines) {
+      expect(eng.status).toBe("operational");
+      expect(eng.lastSeenAt).not.toBeNull();
+    }
+    expect(r.body.uptime.daysWithTraffic).toBe(1);
+    // Latency counts ONLY the one organic row — heartbeats excluded.
+    expect(r.body.latency.sampleCount).toBe(1);
+    expect(r.body.latency.p50Ms).toBeCloseTo(9999, 0);
+    expect(r.body.latency.p95Ms).toBeCloseTo(9999, 0);
   });
 
   it("marks an engine down when its stage hasn't been seen in 6h, and overall status follows", async () => {

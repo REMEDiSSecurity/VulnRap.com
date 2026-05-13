@@ -544,7 +544,7 @@ export default function Home() {
 
   useEffect(() => {
     if (mirrorBannerDismissed) return;
-    const timer = setTimeout(dismissMirrorBanner, 5000);
+    const timer = setTimeout(dismissMirrorBanner, 3500);
     return () => clearTimeout(timer);
   }, [mirrorBannerDismissed]);
 
@@ -554,27 +554,29 @@ export default function Home() {
       <VideoSection />
       <DriftFlagsBanner />
       {!mirrorBannerDismissed && (
-        <div className="relative mt-2 sm:mt-4 mx-auto max-w-3xl rounded-lg border border-primary/20 bg-primary/5 backdrop-blur-sm px-3 sm:px-4 py-3 flex items-start gap-2.5 sm:gap-3 text-sm">
-          <Info className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-          <div className="flex-1 text-muted-foreground leading-relaxed text-xs sm:text-sm">
-            <span className="text-primary font-semibold">CyMeme.com</span> is
-            the official alternate mirror for{" "}
-            <a
-              href="https://vulnrap.com"
-              className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors font-medium"
-            >
-              VulnRap.com
-            </a>
-            . Many enterprise networks block newly registered domains — if you
-            can't reach VulnRap.com directly, you're in the right place.
-          </div>
-          <button
-            onClick={dismissMirrorBanner}
-            className="shrink-0 text-muted-foreground/60 hover:text-primary transition-colors p-0.5 rounded"
-            aria-label="Dismiss notice"
+        <div className="flex justify-center">
+          <div
+            className="relative inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 backdrop-blur-sm pl-3 pr-2 py-1 text-[11px] leading-none"
+            role="status"
           >
-            <X className="w-4 h-4" />
-          </button>
+            <Info className="w-3 h-3 text-primary shrink-0" />
+            <span className="text-muted-foreground">
+              Alt mirror:{" "}
+              <a
+                href="https://cymeme.com"
+                className="text-primary hover:underline font-medium"
+              >
+                cymeme.com
+              </a>
+            </span>
+            <button
+              onClick={dismissMirrorBanner}
+              className="shrink-0 text-muted-foreground/60 hover:text-primary transition-colors p-0.5 rounded"
+              aria-label="Dismiss notice"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
         </div>
       )}
 

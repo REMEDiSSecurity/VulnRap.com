@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { sql, gte } from "drizzle-orm";
+import { sql, gte, and, isNotNull } from "drizzle-orm";
 import { db, analysisTracesTable, type PipelineTrace } from "@workspace/db";
 import { GetLatencySnapshotResponse, GetLatencyHistoryResponse } from "@workspace/api-zod";
 
@@ -53,13 +53,22 @@ function summarize(values: number[]) {
 router.get("/public/latency-snapshot", async (_req, res): Promise<void> => {
   const since = new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000);
 
+  // ORGANIC TRAFFIC ONLY — synthetic heartbeat rows (report_id IS
+  // NULL) are excluded so we never publish latency derived from our
+  // own self-tests. Heartbeats are still used by the status route
+  // for "is the pipeline alive" liveness, just not for latency.
   const rows = await db
     .select({
       totalDurationMs: analysisTracesTable.totalDurationMs,
       trace: analysisTracesTable.trace,
     })
     .from(analysisTracesTable)
-    .where(gte(analysisTracesTable.createdAt, since));
+    .where(
+      and(
+        gte(analysisTracesTable.createdAt, since),
+        isNotNull(analysisTracesTable.reportId),
+      ),
+    );
 
   const pipelineDurations: number[] = [];
   const perEngine = new Map<string, number[]>();
@@ -132,6 +141,7 @@ router.get("/public/latency-history", async (req, res): Promise<void> => {
   const days = Math.max(1, Math.min(daysParam, MAX_HISTORY_DAYS));
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
+  // ORGANIC TRAFFIC ONLY — see comment in /public/latency-snapshot.
   const rows = await db
     .select({
       totalDurationMs: analysisTracesTable.totalDurationMs,
@@ -139,7 +149,12 @@ router.get("/public/latency-history", async (req, res): Promise<void> => {
       createdAt: analysisTracesTable.createdAt,
     })
     .from(analysisTracesTable)
-    .where(gte(analysisTracesTable.createdAt, since));
+    .where(
+      and(
+        gte(analysisTracesTable.createdAt, since),
+        isNotNull(analysisTracesTable.reportId),
+      ),
+    );
 
   const buckets = new Map<
     string,
