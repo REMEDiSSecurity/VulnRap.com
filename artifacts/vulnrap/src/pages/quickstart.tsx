@@ -151,14 +151,19 @@ const STEPS: Step[] = [
     kind: "submit",
     title: "Submit a report (persisted)",
     blurb:
-      "Same pipeline as /check, but the report is stored and assigned an id. The response includes a deleteToken — keep it if you might want to remove the record later.",
+      "Same pipeline as /check, but the report is stored and assigned an id. The response includes a deleteToken — keep it if you might want to remove the record later. Pass showInFeed=true so the report is publicly readable by id (without it the row is stored as private and direct GETs by id return 404).",
     curl: () => `curl -X POST https://vulnrap.com/api/reports \\
   -F "file=@my-report.txt" \\
-  -F "contentMode=full"`,
+  -F "contentMode=full" \\
+  -F "showInFeed=true"`,
     request: async (_ctx) => {
       const fd = new FormData();
       fd.append("rawText", SAMPLE_REPORT);
       fd.append("contentMode", "full");
+      // Required for step 4 (GET /api/reports/:id) to resolve — the
+      // server treats showInFeed=false as private and 404s direct
+      // lookups by id. Step 5 cleans the row up afterwards.
+      fd.append("showInFeed", "true");
       const res = await fetch("/api/reports", { method: "POST", body: fd });
       const body = await safeJson(res);
       return { status: res.status, ok: res.ok, body };
