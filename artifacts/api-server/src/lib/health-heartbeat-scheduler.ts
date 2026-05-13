@@ -29,6 +29,8 @@ import { analyzeWithEnginesTraced } from "./engines";
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 const DEFAULT_RETRY_INTERVAL_MS = 60 * 1000;
 const DEFAULT_INITIAL_DELAY_MS = 10 * 1000;
+const DEFAULT_RETENTION_DAYS = 30;
+const DEFAULT_PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export const HEARTBEAT_NOTE = "synthetic_heartbeat";
 
@@ -104,6 +106,58 @@ function autoInitialDelayMs(): number {
   );
 }
 
+function autoRetentionDays(): number {
+  return parseIntegerEnv(
+    process.env.HEALTH_HEARTBEAT_RETENTION_DAYS,
+    DEFAULT_RETENTION_DAYS,
+  );
+}
+
+function autoPruneIntervalMs(): number {
+  return parseIntegerEnv(
+    process.env.HEALTH_HEARTBEAT_PRUNE_INTERVAL_MS,
+    DEFAULT_PRUNE_INTERVAL_MS,
+  );
+}
+
+/**
+ * Per-process timestamp of the last successful prune. Synthetic
+ * heartbeats accumulate at ~288 rows/day per replica, so without
+ * pruning the table would grow ~100MB/year/replica. A daily prune
+ * (default 24h cadence) keeps storage flat at the configured
+ * retention window (default 30 days).
+ *
+ * Tracked in module state instead of a separate DB table because the
+ * DELETE itself is idempotent — at worst, two replicas race and one
+ * does a no-op. No leadership election needed.
+ */
+let lastPruneAtMs: number | null = null;
+
+/**
+ * Delete synthetic-heartbeat rows older than `retentionDays`. Returns
+ * the number of rows removed. Filters on the `synthetic_heartbeat`
+ * note so we never touch rows from organic report submissions, even
+ * if a future code change starts inserting traces with `report_id =
+ * NULL` for some other reason.
+ */
+export async function pruneSyntheticHeartbeats(
+  retentionDays: number = autoRetentionDays(),
+): Promise<{ deleted: number }> {
+  const { db, analysisTracesTable } = await import("@workspace/db");
+  const { and, lt, sql } = await import("drizzle-orm");
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .delete(analysisTracesTable)
+    .where(
+      and(
+        lt(analysisTracesTable.createdAt, cutoff),
+        sql`${analysisTracesTable.trace}->'notes' @> '["synthetic_heartbeat"]'::jsonb`,
+      ),
+    )
+    .returning({ id: analysisTracesTable.id });
+  return { deleted: rows.length };
+}
+
 export interface HeartbeatTickResult {
   ok: boolean;
   /** False when the scheduler is disabled (no DB write happened). */
@@ -112,6 +166,8 @@ export interface HeartbeatTickResult {
   durationMs?: number;
   /** Correlation id of the persisted trace, when ranTick succeeded. */
   correlationId?: string;
+  /** Rows deleted by the daily prune, when this tick was due to prune. */
+  pruned?: number;
 }
 
 /**
@@ -144,11 +200,37 @@ export async function runHeartbeatTick(): Promise<HeartbeatTickResult> {
       totalDurationMs: taggedTrace.totalDurationMs,
       trace: taggedTrace,
     });
+
+    // Piggyback the daily prune on the heartbeat tick so we avoid a
+    // second timer. Best-effort: a failure here doesn't fail the
+    // tick itself — the next eligible tick will retry the prune.
+    let pruned: number | undefined;
+    const pruneIntervalMs = autoPruneIntervalMs();
+    if (lastPruneAtMs === null || Date.now() - lastPruneAtMs >= pruneIntervalMs) {
+      try {
+        const result = await pruneSyntheticHeartbeats();
+        pruned = result.deleted;
+        lastPruneAtMs = Date.now();
+        if (result.deleted > 0) {
+          logger.info(
+            { deleted: result.deleted, retentionDays: autoRetentionDays() },
+            "[health-heartbeat] pruned old synthetic traces",
+          );
+        }
+      } catch (pruneErr) {
+        logger.warn(
+          { err: pruneErr },
+          "[health-heartbeat] prune failed (non-fatal); will retry next eligible tick",
+        );
+      }
+    }
+
     return {
       ok: true,
       ranTick: true,
       durationMs: taggedTrace.totalDurationMs,
       correlationId: taggedTrace.correlationId,
+      pruned,
     };
   } catch (err) {
     logger.warn(
@@ -307,13 +389,20 @@ export const __testing = {
   resetSchedulerStatus: () => {
     schedulerStatus = { ...INITIAL_STATUS };
   },
+  resetLastPruneAt: () => {
+    lastPruneAtMs = null;
+  },
   isDisabled,
   autoIntervalMs,
   autoRetryIntervalMs,
   autoInitialDelayMs,
+  autoRetentionDays,
+  autoPruneIntervalMs,
   HEARTBEAT_REPORT_TEXT,
   HEARTBEAT_CLAIMED_CWES,
   DEFAULT_INTERVAL_MS,
   DEFAULT_RETRY_INTERVAL_MS,
   DEFAULT_INITIAL_DELAY_MS,
+  DEFAULT_RETENTION_DAYS,
+  DEFAULT_PRUNE_INTERVAL_MS,
 };

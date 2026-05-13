@@ -24,12 +24,21 @@ vi.mock("./engines", () => ({
     analyzeMock(text, opts),
 }));
 
-// Capture every row inserted into analysis_traces. The scheduler
-// dynamically imports @workspace/db so this mock must be in place
-// before the first tick resolves the import.
+// Capture every row inserted into analysis_traces, plus the args of
+// each DELETE call so prune tests can pin the WHERE-clause shape. The
+// scheduler dynamically imports @workspace/db / drizzle-orm so these
+// mocks must be in place before the first tick resolves the imports.
 const insertedRows: Array<Record<string, unknown>> = [];
+let deleteCalls = 0;
+let deleteReturnRows: Array<{ id: number }> = [];
+let lastDeleteWhere: unknown = null;
 vi.mock("@workspace/db", () => {
-  const analysisTracesTable = { __table: "analysis_traces" } as const;
+  const analysisTracesTable = {
+    __table: "analysis_traces",
+    createdAt: { __col: "created_at" },
+    trace: { __col: "trace" },
+    id: { __col: "id" },
+  } as const;
   return {
     analysisTracesTable,
     db: {
@@ -41,14 +50,35 @@ vi.mock("@workspace/db", () => {
           },
         };
       },
+      delete: (table: unknown) => {
+        expect(table).toBe(analysisTracesTable);
+        deleteCalls += 1;
+        return {
+          where: (clause: unknown) => {
+            lastDeleteWhere = clause;
+            return {
+              returning: async () => deleteReturnRows,
+            };
+          },
+        };
+      },
     },
   };
 });
+
+vi.mock("drizzle-orm", () => ({
+  and: (...parts: unknown[]) => ({ __and: parts }),
+  lt: (col: unknown, val: unknown) => ({ __lt: { col, val } }),
+  sql: (strings: TemplateStringsArray, ..._args: unknown[]) => ({
+    __sql: strings.join("?"),
+  }),
+}));
 
 import {
   runHeartbeatTick,
   startHealthHeartbeatScheduler,
   getHealthHeartbeatSchedulerStatus,
+  pruneSyntheticHeartbeats,
   HEARTBEAT_NOTE,
   __testing,
 } from "./health-heartbeat-scheduler";
@@ -77,9 +107,15 @@ function makeFakeTraceResult(overrides: { correlationId?: string } = {}) {
 beforeEach(() => {
   vi.useFakeTimers();
   insertedRows.length = 0;
+  deleteCalls = 0;
+  deleteReturnRows = [];
+  lastDeleteWhere = null;
   analyzeMock.mockReset();
   __testing.resetSchedulerStatus();
+  __testing.resetLastPruneAt();
   delete process.env.HEALTH_HEARTBEAT_DISABLED;
+  delete process.env.HEALTH_HEARTBEAT_RETENTION_DAYS;
+  delete process.env.HEALTH_HEARTBEAT_PRUNE_INTERVAL_MS;
 });
 
 afterEach(() => {
@@ -134,6 +170,88 @@ describe("runHeartbeatTick", () => {
     const result = await runHeartbeatTick();
     expect(result.ok).toBe(false);
     expect(insertedRows).toHaveLength(0);
+  });
+});
+
+describe("pruneSyntheticHeartbeats", () => {
+  it("issues a DELETE filtered to the synthetic_heartbeat note and reports the row count", async () => {
+    deleteReturnRows = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const result = await pruneSyntheticHeartbeats(30);
+    expect(result.deleted).toBe(3);
+    expect(deleteCalls).toBe(1);
+    // The WHERE clause must combine a created_at < cutoff bound with
+    // the synthetic_heartbeat note filter — we never want to delete
+    // organic traces, even old ones, from this code path.
+    const where = lastDeleteWhere as { __and?: unknown[] };
+    expect(Array.isArray(where.__and)).toBe(true);
+    const sqlPart = where.__and!.find(
+      (p): p is { __sql: string } =>
+        typeof p === "object" && p !== null && "__sql" in p,
+    );
+    expect(sqlPart?.__sql).toContain("synthetic_heartbeat");
+  });
+});
+
+describe("daily prune piggybacked on the heartbeat tick", () => {
+  it("runs the prune on the first successful tick after start", async () => {
+    analyzeMock.mockReturnValueOnce(makeFakeTraceResult());
+    deleteReturnRows = [{ id: 99 }];
+    const result = await runHeartbeatTick();
+    expect(result.ok).toBe(true);
+    expect(result.pruned).toBe(1);
+    expect(deleteCalls).toBe(1);
+  });
+
+  it("skips the prune on subsequent ticks until the prune interval elapses", async () => {
+    process.env.HEALTH_HEARTBEAT_PRUNE_INTERVAL_MS = String(60 * 60 * 1000); // 1h
+    analyzeMock
+      .mockReturnValueOnce(makeFakeTraceResult({ correlationId: "hb-A" }))
+      .mockReturnValueOnce(makeFakeTraceResult({ correlationId: "hb-B" }))
+      .mockReturnValueOnce(makeFakeTraceResult({ correlationId: "hb-C" }));
+    deleteReturnRows = [];
+
+    const first = await runHeartbeatTick();
+    expect(first.pruned).toBe(0); // ran prune, deleted 0 rows
+    expect(deleteCalls).toBe(1);
+
+    const second = await runHeartbeatTick();
+    expect(second.pruned).toBeUndefined(); // skipped prune
+    expect(deleteCalls).toBe(1);
+
+    // Advance past the prune interval — next tick should prune again.
+    vi.setSystemTime(new Date(Date.now() + 61 * 60 * 1000));
+    const third = await runHeartbeatTick();
+    expect(third.pruned).toBe(0);
+    expect(deleteCalls).toBe(2);
+  });
+
+  it("treats a prune failure as non-fatal so the tick still reports ok", async () => {
+    analyzeMock.mockReturnValueOnce(makeFakeTraceResult());
+    // Force the delete chain to throw inside .returning().
+    deleteReturnRows = [];
+    const origDelete = (
+      await import("@workspace/db")
+    ).db as unknown as { delete: unknown };
+    const realDelete = origDelete.delete;
+    origDelete.delete = (table: unknown) => {
+      deleteCalls += 1;
+      void table;
+      return {
+        where: () => ({
+          returning: async () => {
+            throw new Error("simulated db failure");
+          },
+        }),
+      };
+    };
+    try {
+      const result = await runHeartbeatTick();
+      expect(result.ok).toBe(true); // tick stays green
+      expect(result.pruned).toBeUndefined();
+      expect(insertedRows).toHaveLength(1); // insert still happened
+    } finally {
+      origDelete.delete = realDelete;
+    }
   });
 });
 
