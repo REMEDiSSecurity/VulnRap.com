@@ -488,7 +488,7 @@ with Client() as c:
     print(f"slop={res.slop_score}/{res.slop_tier} confidence={res.confidence:.2f}")`}
             />
             <a
-              href="https://github.com/vulnrap/vulnrap/blob/main/sdks/python/vulnrap/README.md"
+              href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/sdks/python/vulnrap/README.md"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
@@ -511,7 +511,7 @@ with Client() as c:
                 Go
               </Badge>
               <code className="text-primary font-mono text-xs">
-                github.com/vulnrap/vulnrap/sdks/go/vulnrap
+                github.com/REMEDiSSecurity/VulnRap.Com/sdks/go/vulnrap
               </code>
             </CardTitle>
             <CardDescription className="mt-1">
@@ -546,13 +546,13 @@ with Client() as c:
           <CardContent className="space-y-2">
             <CopyBlock
               language="go"
-              code={`go get github.com/vulnrap/vulnrap/sdks/go/vulnrap
+              code={`go get github.com/REMEDiSSecurity/VulnRap.Com/sdks/go/vulnrap
 
 import (
     "context"
     "log"
 
-    "github.com/vulnrap/vulnrap/sdks/go/vulnrap"
+    "github.com/REMEDiSSecurity/VulnRap.Com/sdks/go/vulnrap"
 )
 
 func main() {
@@ -565,7 +565,7 @@ func main() {
 }`}
             />
             <a
-              href="https://github.com/vulnrap/vulnrap/blob/main/sdks/go/vulnrap/README.md"
+              href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/sdks/go/vulnrap/README.md"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
@@ -637,7 +637,7 @@ func main() {
                 data-testid="link-postman-readme"
               >
                 <a
-                  href="https://github.com/vulnrap/vulnrap/blob/main/sdks/postman/README.md"
+                  href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/sdks/postman/README.md"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -731,7 +731,7 @@ func main() {
               </p>
             </div>
             <a
-              href="https://github.com/vulnrap/vulnrap/blob/main/sdks/bookmarklet/README.md"
+              href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/sdks/bookmarklet/README.md"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
@@ -785,7 +785,7 @@ func main() {
                 GitHub Action
               </Badge>
               <code className="text-primary font-mono text-xs">
-                vulnrap/vulnrap/sdks/github-action
+                REMEDiSSecurity/VulnRap.Com/sdks/github-action
               </code>
             </CardTitle>
             <CardDescription className="mt-1">
@@ -857,7 +857,7 @@ jobs:
       - name: Score with VulnRap
         id: vulnrap
         if: steps.pick.outputs.file != ''
-        uses: vulnrap/vulnrap/sdks/github-action@main
+        uses: REMEDiSSecurity/VulnRap.Com/sdks/github-action@main
         with:
           report-file: \${{ steps.pick.outputs.file }}
           fail-threshold: 80   # block the PR if it scores 80+
@@ -879,7 +879,7 @@ jobs:
             });`}
             />
             <a
-              href="https://github.com/vulnrap/vulnrap/blob/main/sdks/github-action/README.md"
+              href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/sdks/github-action/README.md"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
@@ -972,7 +972,7 @@ jobs:
             <CopyBlock
               language="yaml"
               code={`include:
-  - remote: "https://raw.githubusercontent.com/vulnrap/vulnrap/main/sdks/gitlab-component/template.yml"
+  - remote: "https://raw.githubusercontent.com/REMEDiSSecurity/VulnRap.Com/main/sdks/gitlab-component/template.yml"
 
 stages:
   - test
@@ -995,7 +995,7 @@ report-results:
       fi`}
             />
             <a
-              href="https://github.com/vulnrap/vulnrap/blob/main/sdks/gitlab-component/README.md"
+              href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/sdks/gitlab-component/README.md"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
@@ -1060,7 +1060,7 @@ report-results:
                 Read the HackerOne recipe
               </Link>
               <a
-                href="https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/hackerone.md"
+                href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/artifacts/api-server/docs/integrations/hackerone.md"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
@@ -1112,7 +1112,7 @@ report-results:
                 Read the Bugcrowd recipe
               </Link>
               <a
-                href="https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/bugcrowd.md"
+                href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/artifacts/api-server/docs/integrations/bugcrowd.md"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
@@ -1164,7 +1164,7 @@ report-results:
                 Read the Intigriti recipe
               </Link>
               <a
-                href="https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/intigriti.md"
+                href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/artifacts/api-server/docs/integrations/intigriti.md"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
@@ -1211,7 +1211,7 @@ report-results:
           </CardHeader>
           <CardContent>
             <a
-              href="https://github.com/vulnrap/vulnrap/blob/main/docker-compose.yml"
+              href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/docker-compose.yml"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
@@ -1254,7 +1254,7 @@ report-results:
           <CardContent className="space-y-2">
             <CopyBlock
               language="bash"
-              code={`git clone https://github.com/vulnrap/vulnrap.git
+              code={`git clone https://github.com/REMEDiSSecurity/VulnRap.Com.git
 cd vulnrap
 
 helm install vulnrap ./deploy/helm/vulnrap \\
@@ -1263,7 +1263,7 @@ helm install vulnrap ./deploy/helm/vulnrap \\
   --set-string secrets.data.OPENAI_API_KEY="sk-..."`}
             />
             <a
-              href="https://github.com/vulnrap/vulnrap/blob/main/deploy/helm/vulnrap/README.md"
+              href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/deploy/helm/vulnrap/README.md"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"

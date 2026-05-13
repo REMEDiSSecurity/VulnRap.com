@@ -20,7 +20,7 @@ const RECIPES: Record<string, RecipeMeta> = {
     platform: "HackerOne",
     source: hackeroneSource,
     githubPath:
-      "https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/hackerone.md",
+      "https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/artifacts/api-server/docs/integrations/hackerone.md",
   },
   bugcrowd: {
     slug: "bugcrowd",
@@ -28,7 +28,7 @@ const RECIPES: Record<string, RecipeMeta> = {
     platform: "Bugcrowd",
     source: bugcrowdSource,
     githubPath:
-      "https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/bugcrowd.md",
+      "https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/artifacts/api-server/docs/integrations/bugcrowd.md",
   },
   intigriti: {
     slug: "intigriti",
@@ -36,7 +36,7 @@ const RECIPES: Record<string, RecipeMeta> = {
     platform: "Intigriti",
     source: intigritiSource,
     githubPath:
-      "https://github.com/vulnrap/vulnrap/blob/main/artifacts/api-server/docs/integrations/intigriti.md",
+      "https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/artifacts/api-server/docs/integrations/intigriti.md",
   },
 };
 
