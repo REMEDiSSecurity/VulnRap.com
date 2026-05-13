@@ -139,7 +139,7 @@ function EngineRowSvg({
         y={y + 12}
         fontSize={12.5}
         fontWeight={600}
-        fill="#e2e8f0"
+        fill="hsl(var(--foreground))"
         fontFamily="ui-sans-serif, system-ui"
       >
         {row.title}
@@ -176,7 +176,7 @@ function EngineRowSvg({
             y={y + 12}
             textAnchor="end"
             fontSize={9.5}
-            fill="#64748b"
+            fill="hsl(var(--muted-foreground))"
             fontFamily="ui-monospace, SFMono-Regular"
           >
             /100
@@ -200,7 +200,7 @@ function EngineRowSvg({
             y={y + 12}
             textAnchor="end"
             fontSize={9.5}
-            fill="#64748b"
+            fill="hsl(var(--muted-foreground))"
             fontFamily="ui-monospace, SFMono-Regular"
           >
             /100
@@ -259,7 +259,7 @@ function EngineRowSvg({
         x={x + 14}
         y={barY + barH + 14}
         fontSize={10}
-        fill="#64748b"
+        fill="hsl(var(--muted-foreground))"
         fontFamily="ui-monospace, SFMono-Regular"
       >
         {contribText}
@@ -387,7 +387,7 @@ function WorkedExampleSvg({
         x={innerX}
         y={subheadY}
         fontSize={11.5}
-        fill="#94a3b8"
+        fill="hsl(var(--muted-foreground))"
         fontFamily="ui-sans-serif, system-ui"
       >
         {ex.caseSubhead}
@@ -400,7 +400,7 @@ function WorkedExampleSvg({
           x={innerX}
           y={whatY + i * 14}
           fontSize={10.5}
-          fill="#64748b"
+          fill="hsl(var(--muted-foreground))"
           fontStyle="italic"
           fontFamily="ui-sans-serif, system-ui"
         >
@@ -414,7 +414,7 @@ function WorkedExampleSvg({
         y1={dividerY1}
         x2={innerX + innerW}
         y2={dividerY1}
-        stroke="rgba(148,163,184,0.18)"
+        stroke="hsl(var(--border))"
       />
 
       {/* Engine rows */}
@@ -434,7 +434,7 @@ function WorkedExampleSvg({
         y1={dividerY2}
         x2={innerX + innerW}
         y2={dividerY2}
-        stroke="rgba(148,163,184,0.18)"
+        stroke="hsl(var(--border))"
       />
 
       {/* Sum line */}
@@ -442,7 +442,7 @@ function WorkedExampleSvg({
         x={innerX}
         y={sumY}
         fontSize={10.5}
-        fill="#94a3b8"
+        fill="hsl(var(--muted-foreground))"
         fontFamily="ui-monospace, SFMono-Regular"
       >
         {sumText}
@@ -454,7 +454,7 @@ function WorkedExampleSvg({
         y={compY - 12}
         fontSize={9}
         fontWeight={700}
-        fill="#64748b"
+        fill="hsl(var(--muted-foreground))"
         fontFamily="ui-sans-serif, system-ui"
         letterSpacing={1.5}
       >
@@ -500,7 +500,7 @@ function WorkedExampleSvg({
         y={compY + 28}
         textAnchor="end"
         fontSize={10}
-        fill="#64748b"
+        fill="hsl(var(--muted-foreground))"
         fontFamily="ui-sans-serif, system-ui"
       >
         {ex.triageSummary}
@@ -535,7 +535,7 @@ function LegendChips({
           y={y + 14}
           fontSize={11}
           fontWeight={700}
-          fill="#94a3b8"
+          fill="hsl(var(--muted-foreground))"
           fontFamily="ui-sans-serif, system-ui"
           letterSpacing={1.2}
         >
@@ -573,7 +573,7 @@ function LegendChips({
                 y={y + 14}
                 textAnchor="end"
                 fontSize={10}
-                fill="#94a3b8"
+                fill="hsl(var(--muted-foreground))"
                 fontFamily="ui-monospace, SFMono-Regular"
               >
                 {e.weight}%
@@ -593,7 +593,7 @@ function LegendChips({
         y={y + 12}
         fontSize={10.5}
         fontWeight={700}
-        fill="#94a3b8"
+        fill="hsl(var(--muted-foreground))"
         fontFamily="ui-sans-serif, system-ui"
         letterSpacing={1.2}
       >
@@ -631,7 +631,7 @@ function LegendChips({
               y={y + 36}
               textAnchor="end"
               fontSize={10}
-              fill="#94a3b8"
+              fill="hsl(var(--muted-foreground))"
               fontFamily="ui-monospace, SFMono-Regular"
             >
               {e.weight}%
@@ -670,15 +670,7 @@ export function ScoringPipelineDiagram() {
   const narrowVBH = narrowFooterY + 28;
 
   return (
-    <div
-      className="relative rounded-xl border border-cyan-500/15 p-3 sm:p-5 overflow-hidden"
-      style={{
-        background:
-          "linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.35) 100%)",
-        boxShadow:
-          "0 0 0 1px rgba(0,255,255,0.04) inset, 0 8px 32px rgba(0,0,0,0.35)",
-      }}
-    >
+    <div className="scoring-diagram-frame relative rounded-xl p-3 sm:p-5 overflow-hidden">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-[0.18]"
@@ -731,10 +723,10 @@ export function ScoringPipelineDiagram() {
           y={wideCardY + wideCardH + 30}
           textAnchor="middle"
           fontSize={11.5}
-          fill="#94a3b8"
+          fill="hsl(var(--muted-foreground))"
           fontFamily="ui-sans-serif, system-ui"
         >
-          <tspan fontWeight={700} fill="#e2e8f0">
+          <tspan fontWeight={700} fill="hsl(var(--foreground))">
             Same CWE-89 cited.
           </tspan>
           {"  "}What separates these reports is{" "}
@@ -773,10 +765,10 @@ export function ScoringPipelineDiagram() {
           y={narrowFooterY + 14}
           textAnchor="middle"
           fontSize={11}
-          fill="#94a3b8"
+          fill="hsl(var(--muted-foreground))"
           fontFamily="ui-sans-serif, system-ui"
         >
-          <tspan fontWeight={700} fill="#e2e8f0">
+          <tspan fontWeight={700} fill="hsl(var(--foreground))">
             Same CWE-89 cited.
           </tspan>
           {"  "}What separates them is{" "}

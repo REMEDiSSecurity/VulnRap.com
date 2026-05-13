@@ -254,14 +254,18 @@
   --chart-4: 35 95% 45%;
   --chart-5: 140 70% 35%;
 
-  --chart-grid: rgba(0, 0, 0, 0.06);
-  --chart-tick: rgba(30, 41, 59, 0.5);
-  --svg-dot-stroke: rgba(255, 255, 255, 0.85);
-  --svg-label-color: rgba(30, 41, 59, 0.7);
-  --svg-grid-color: rgba(30, 41, 59, 0.1);
-  --svg-axis-color: rgba(30, 41, 59, 0.15);
-  --gauge-track: rgba(0, 0, 0, 0.08);
-  --gauge-sub-label: rgba(30, 41, 59, 0.5);
+  /* Light-mode chart/SVG tokens — bumped from very-faint defaults so
+     grid lines, axis ticks, and sub-labels actually read on white.
+     Each value targeted to clear WCAG AA non-text contrast (3:1) on
+     a near-white background. */
+  --chart-grid: rgba(15, 23, 42, 0.12);
+  --chart-tick: rgba(30, 41, 59, 0.72);
+  --svg-dot-stroke: rgba(255, 255, 255, 0.95);
+  --svg-label-color: rgba(30, 41, 59, 0.85);
+  --svg-grid-color: rgba(30, 41, 59, 0.22);
+  --svg-axis-color: rgba(30, 41, 59, 0.38);
+  --gauge-track: rgba(15, 23, 42, 0.14);
+  --gauge-sub-label: rgba(30, 41, 59, 0.72);
   --overlay-backdrop: rgba(0, 0, 0, 0.4);
   --radar-frame-bg: linear-gradient(135deg, rgba(241,245,249,0.9) 0%, rgba(248,250,252,0.75) 100%);
   --radar-frame-shadow: 0 0 0 1px rgba(0,80,120,0.06) inset, 0 4px 16px rgba(15,23,42,0.06);
@@ -303,6 +307,33 @@ html.light {
     0 6px 20px rgba(15, 23, 42, 0.08),
     0 0 16px rgba(0, 200, 220, 0.06);
 }
+/* Scoring-pipeline diagram frame — dark slate gradient in dark mode,
+   inverted to a near-white card in light mode so the SVG text and
+   bars (now driven by --foreground / --muted-foreground tokens) sit
+   on a high-contrast surface in both themes. */
+.scoring-diagram-frame {
+  background: linear-gradient(
+    135deg,
+    rgba(15, 23, 42, 0.65) 0%,
+    rgba(15, 23, 42, 0.35) 100%
+  );
+  border: 1px solid rgba(0, 200, 220, 0.15);
+  box-shadow:
+    0 0 0 1px rgba(0, 255, 255, 0.04) inset,
+    0 8px 32px rgba(0, 0, 0, 0.35);
+}
+.light .scoring-diagram-frame {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(241, 245, 249, 0.85) 100%
+  );
+  border: 1px solid rgba(0, 80, 120, 0.18);
+  box-shadow:
+    0 0 0 1px rgba(0, 80, 120, 0.05) inset,
+    0 8px 32px rgba(15, 23, 42, 0.08);
+}
+
 .light .glass-card-accent {
   background: linear-gradient(
     135deg,

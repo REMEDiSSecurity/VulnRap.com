@@ -220,7 +220,7 @@ export function CohortBaselineRibbon({
           {platform.bins.map((bin, i) => (
             <div
               key={`${bin.min}-${bin.max}`}
-              className="flex-1 bg-cyan-400/40 rounded-sm"
+              className="flex-1 bg-cyan-500/55 dark:bg-cyan-400/40 rounded-sm"
               style={{
                 height: `${heights[i] ?? 0}%`,
                 minHeight: heights[i] ? 1 : 0,

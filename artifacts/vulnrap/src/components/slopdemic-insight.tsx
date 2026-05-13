@@ -34,7 +34,7 @@ export function SlopdemicInsight() {
       className="fixed bottom-4 left-4 z-40 w-[calc(100vw-2rem)] max-w-sm"
       style={{ fontFamily: "Inter, system-ui, sans-serif" }}
     >
-      <div className="rounded-xl border border-white/10 bg-[#0f1623]/95 shadow-2xl shadow-black/60 backdrop-blur-md overflow-hidden">
+      <div className="rounded-xl border border-border bg-card/95 shadow-2xl shadow-black/40 dark:shadow-black/60 backdrop-blur-md overflow-hidden">
         {/* Header row */}
         <div className="flex items-start gap-3 px-4 pt-3.5 pb-3">
           <div className="shrink-0 mt-0.5">
