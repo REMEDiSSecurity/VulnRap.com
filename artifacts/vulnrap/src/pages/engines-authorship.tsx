@@ -337,7 +337,7 @@ export default function EnginesAuthorship() {
           </div>
           <p>
             The same inversion applies in the{" "}
-            <Link to="/results/1" className="text-primary hover:underline">
+            <Link to="/showcase" className="text-primary hover:underline">
               per-engine radar
             </Link>{" "}
             — the "Engine 1" axis plots{" "}

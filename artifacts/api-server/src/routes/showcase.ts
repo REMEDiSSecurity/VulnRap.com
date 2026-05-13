@@ -6,9 +6,16 @@
 // `presets.ts` (Task #631): try cwd-relative first, then fall back
 // to monorepo-relative so tests run from the repo root also resolve.
 // Curated only for v1 — there is no admin/write endpoint.
+// Live-DB filter: same pattern as gallery.ts — the JSON pins each
+// card to a specific `reportId`, so any environment whose seed has
+// drifted out of sync renders broken click-throughs. We filter the
+// returned entries to only those whose reportId actually resolves
+// in the reports table on every request.
 import { existsSync, readFileSync } from "fs";
 import path from "path";
 import { Router, type IRouter } from "express";
+import { inArray } from "drizzle-orm";
+import { db, reportsTable } from "@workspace/db";
 import { ListShowcaseResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -44,12 +51,28 @@ function loadShowcase() {
 
 const SHOWCASE_LIBRARY = loadShowcase();
 
-router.get("/showcase", (_req, res) => {
-  // 1h cache + short stale-while-revalidate. The file is curator-edited
-  // and rarely changes; the `version` field lets clients bust their
-  // own caches when needed.
-  res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=600");
-  res.json(SHOWCASE_LIBRARY);
+router.get("/showcase", async (_req, res, next) => {
+  try {
+    const candidateIds = Array.from(
+      new Set(SHOWCASE_LIBRARY.entries.map((e) => e.reportId)),
+    );
+    let resolvable = new Set<number>();
+    if (candidateIds.length > 0) {
+      const rows = await db
+        .select({ id: reportsTable.id })
+        .from(reportsTable)
+        .where(inArray(reportsTable.id, candidateIds));
+      resolvable = new Set(rows.map((r) => r.id));
+    }
+    const entries = SHOWCASE_LIBRARY.entries.filter((e) =>
+      resolvable.has(e.reportId),
+    );
+    // 60s cache with SWR — see gallery.ts for the rationale.
+    res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+    res.json({ version: SHOWCASE_LIBRARY.version, entries });
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

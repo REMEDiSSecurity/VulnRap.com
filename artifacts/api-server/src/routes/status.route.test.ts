@@ -19,6 +19,10 @@ interface FakeTraceRow {
   createdAt: Date;
   totalDurationMs: number;
   trace: { stages: Array<{ stage: string; durationMs: number }> } | null;
+  // Optional in the fake — added so tests can simulate synthetic
+  // heartbeat rows (reportId === null) and organic submissions
+  // (reportId === string id) for the latency-exclusion regression.
+  reportId?: string | null;
 }
 
 const selectQueue: FakeTraceRow[][] = [];
