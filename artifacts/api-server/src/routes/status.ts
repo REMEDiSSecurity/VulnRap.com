@@ -24,6 +24,12 @@ const RECENT_DEGRADED_MS = 6 * 60 * 60 * 1000; // 6h
 // pipeline stage names emitted by `analyzeWithEnginesTraced`. The "LLM
 // gate" subsystem maps to the perplexity stage — the only LLM-derived
 // scoring layer in the current pipeline.
+//
+// In AVRI mode (production default), Engines 1/2/3 run *inside*
+// `runAvriComposite` and are not emitted as separate trace stages. We
+// therefore treat `avri_composite` as evidence of health for those
+// sub-engines too — otherwise they always appear "Down" even though
+// they are executing on every report.
 const ENGINE_DEFINITIONS: ReadonlyArray<{
   id: string;
   label: string;
@@ -32,13 +38,17 @@ const ENGINE_DEFINITIONS: ReadonlyArray<{
   {
     id: "linguistic",
     label: "Linguistic Engine",
-    stages: ["engine1_ai_authorship"],
+    stages: ["engine1_ai_authorship", "avri_composite"],
   },
-  { id: "substance", label: "Substance Engine", stages: ["engine2_substance"] },
+  {
+    id: "substance",
+    label: "Substance Engine",
+    stages: ["engine2_substance", "avri_composite"],
+  },
   {
     id: "cwe",
     label: "CWE Coherence Engine",
-    stages: ["engine3_cwe_coherence"],
+    stages: ["engine3_cwe_coherence", "avri_composite"],
   },
   { id: "avri", label: "AVRI Engine", stages: ["avri_composite"] },
   { id: "llm_gate", label: "LLM Gate", stages: ["perplexity"] },
@@ -98,36 +108,41 @@ router.get("/public/status", async (_req, res): Promise<void> => {
   const p50Ms = Number(percentile(latencyDurations, 50).toFixed(1));
   const p95Ms = Number(percentile(latencyDurations, 95).toFixed(1));
 
-  // Per-engine: when did we last see each known stage, and how many of
-  // those occurrences happened in the last hour?
-  const lastSeenByStage = new Map<string, number>();
-  const recentCountByStage = new Map<string, number>();
+  // Per-engine: when did we last see ANY of the engine's stages, and
+  // how many distinct traces in the last hour covered the engine? We
+  // count per-trace (not per-stage) so an engine that maps to multiple
+  // candidate stages — e.g. `engine1_ai_authorship` OR `avri_composite`
+  // for Linguistic — isn't double-counted when both appear in the same
+  // trace.
+  const lastSeenByEngine = new Map<string, number>();
+  const recentCountByEngine = new Map<string, number>();
   for (const row of rows) {
     const trace = row.trace as PipelineTrace | null;
     if (!trace || !Array.isArray(trace.stages)) continue;
     const ts = row.createdAt.getTime();
     const isRecent = now - ts <= RECENT_HEALTHY_MS;
+    const stageSet = new Set<string>();
     for (const stage of trace.stages) {
       if (!stage || typeof stage.stage !== "string") continue;
-      const prev = lastSeenByStage.get(stage.stage) ?? 0;
-      if (ts > prev) lastSeenByStage.set(stage.stage, ts);
+      stageSet.add(stage.stage);
+    }
+    for (const def of ENGINE_DEFINITIONS) {
+      const matches = def.stages.some((s) => stageSet.has(s));
+      if (!matches) continue;
+      const prev = lastSeenByEngine.get(def.id) ?? 0;
+      if (ts > prev) lastSeenByEngine.set(def.id, ts);
       if (isRecent) {
-        recentCountByStage.set(
-          stage.stage,
-          (recentCountByStage.get(stage.stage) ?? 0) + 1,
+        recentCountByEngine.set(
+          def.id,
+          (recentCountByEngine.get(def.id) ?? 0) + 1,
         );
       }
     }
   }
 
   const engines = ENGINE_DEFINITIONS.map((def) => {
-    let lastSeen = 0;
-    let recentCount = 0;
-    for (const stageName of def.stages) {
-      const seen = lastSeenByStage.get(stageName) ?? 0;
-      if (seen > lastSeen) lastSeen = seen;
-      recentCount += recentCountByStage.get(stageName) ?? 0;
-    }
+    const lastSeen = lastSeenByEngine.get(def.id) ?? 0;
+    const recentCount = recentCountByEngine.get(def.id) ?? 0;
     let status: "operational" | "degraded" | "down" | "unknown";
     if (lastSeen === 0) {
       status = "unknown";
