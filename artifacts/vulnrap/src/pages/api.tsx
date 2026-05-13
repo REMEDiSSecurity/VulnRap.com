@@ -1176,6 +1176,52 @@ report-results:
             </div>
           </CardContent>
         </Card>
+
+        <Card className="glass-card rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Plug className="w-4 h-4 text-primary" />
+              Slack
+            </CardTitle>
+            <CardDescription className="text-xs leading-relaxed">
+              Three postures in one recipe — outbound Block Kit cards via
+              an{" "}
+              <code className="font-mono text-xs text-foreground">
+                Incoming Webhook
+              </code>
+              , an on-demand{" "}
+              <code className="font-mono text-xs text-foreground">
+                /vulnrap
+              </code>{" "}
+              slash command, and threaded replies on tracker-feed messages
+              via the Events API. Slack app setup (scopes, signing secret,
+              bot token), Slack-style request signature verification, and a
+              shared Block Kit renderer that all three postures reuse.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4 flex-wrap">
+              <Link
+                to="/developers/integrations/slack"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                data-testid="link-slack-recipe"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Read the Slack recipe
+              </Link>
+              <a
+                href="https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/artifacts/api-server/docs/integrations/slack.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                data-testid="link-slack-recipe-github"
+              >
+                View on GitHub
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="space-y-4">

@@ -4,6 +4,7 @@ import { MarkdownRecipe } from "@/components/markdown-recipe";
 import hackeroneSource from "../../../api-server/docs/integrations/hackerone.md?raw";
 import bugcrowdSource from "../../../api-server/docs/integrations/bugcrowd.md?raw";
 import intigritiSource from "../../../api-server/docs/integrations/intigriti.md?raw";
+import slackSource from "../../../api-server/docs/integrations/slack.md?raw";
 
 type RecipeMeta = {
   slug: string;
@@ -37,6 +38,14 @@ const RECIPES: Record<string, RecipeMeta> = {
     source: intigritiSource,
     githubPath:
       "https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/artifacts/api-server/docs/integrations/intigriti.md",
+  },
+  slack: {
+    slug: "slack",
+    title: "Slack integration recipe",
+    platform: "Slack",
+    source: slackSource,
+    githubPath:
+      "https://github.com/REMEDiSSecurity/VulnRap.Com/blob/main/artifacts/api-server/docs/integrations/slack.md",
   },
 };
 
