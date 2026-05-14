@@ -3,16 +3,161 @@
 > Wire VulnRap into Slack so triagers see incoming reports scored,
 > ranked, and ready to action without leaving the channel.
 >
-> This recipe covers the three most common postures — pick whichever
-> matches how your team already works:
+> Three paths in this doc — pick the lightest one that covers your
+> use case, skip the rest:
 >
-> 1. **Outbound** — push a Block Kit card into a triage channel every
->    time a new report lands in your queue.
-> 2. **On-demand** — `/vulnrap <text-or-report-id>` slash command for
->    re-scoring on the fly during triage.
-> 3. **Threaded** — when a report is opened in your tracker
->    (HackerOne, Bugcrowd, Jira…), post the analysis as a reply in the
->    matching Slack thread.
+> - **Quick start A — Paste an app manifest** (~2 minutes, ~0 lines
+>   of code, covers the outbound-card use case). The shortest path
+>   from "I want triage cards in a channel" to a working webhook.
+> - **Quick start B — Workflow Builder, no app at all** (no code,
+>   no server, no scopes — for teams on the Slack Pro plan or above
+>   that already use Workflow Builder).
+> - **Engineering path — three full postures** (outbound webhook,
+>   `/vulnrap` slash command, Events API thread replies). Pick this
+>   when you outgrow the quick starts and want signature verification,
+>   per-thread context, and a shared Block Kit renderer.
+
+## Quick start A — Paste an app manifest
+
+The fastest way to get a working **outbound webhook** without
+clicking through five Slack config screens. Slack apps can be
+created from a single manifest paste — scopes, command, events, and
+incoming-webhook switch are all set up in one shot.
+
+1. Open <https://api.slack.com/apps> → **Create New App** → **From
+   an app manifest** → pick your workspace.
+2. Paste the YAML below into the editor. Replace the two placeholder
+   URLs (`request_url` lines) with whatever HTTPS endpoint your
+   handler will listen on. If you only want the outbound webhook,
+   delete the `slash_commands:` and `event_subscriptions:` sections
+   before pasting — the manifest still works.
+3. Click **Create**. Slack provisions the app with all scopes,
+   commands, and event subscriptions in one go.
+4. Click **Install to Workspace** → choose the channel you want
+   triage cards posted into.
+5. Copy the **Webhook URL** that appears under **Incoming Webhooks**.
+   Set it as `SLACK_WEBHOOK_URL` on whatever box is going to call
+   the recipe (your tracker handler, a cron, a Lambda — anywhere
+   that runs `curl`).
+
+```yaml
+display_information:
+  name: VulnRap Triage
+  description: Score incoming vulnerability reports through VulnRap before triage.
+  long_description: |
+    Posts the VulnRap composite score, recommended triage action,
+    per-engine breakdown, and similarity matches into a triage
+    channel. Optional /vulnrap slash command lets triagers re-score
+    a snippet on demand.
+  background_color: "#0a0e1a"
+features:
+  bot_user:
+    display_name: VulnRap
+    always_online: true
+  slash_commands:
+    - command: /vulnrap
+      url: https://triage.example.com/slack/commands
+      description: Score a report through VulnRap
+      usage_hint: "<paste report text>  |  <vulnrap report id>"
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - chat:write.public
+      - commands
+      - incoming-webhook
+      - reactions:write
+settings:
+  event_subscriptions:
+    request_url: https://triage.example.com/slack/events
+    bot_events:
+      - message.channels
+      - message.groups
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+```
+
+That's it for outbound. A one-liner now posts triage cards into the
+channel:
+
+```bash
+curl -fsS -X POST "$SLACK_WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d "$(curl -fsS -X POST https://vulnrap.com/api/reports/check \
+          -F "rawText=$(cat report.md)" \
+        | jq -c '{
+            text: ("VulnRap analysis — composite " + (.vulnrap.compositeScore|tostring) +
+                   "/100, recommended " + .recommendation.action),
+          }')"
+```
+
+For richer Block Kit cards, copy the `build_blocks()` renderer from
+the **Engineering path** below and pipe its output into the same
+webhook. Everything past this point is optional.
+
+## Quick start B — Slack Workflow Builder (no code, no app)
+
+If your workspace is on **Slack Pro** or higher and you don't want
+to run any code at all, Workflow Builder can call the VulnRap API
+natively and post the result with built-in steps. No bot, no
+scopes, no token to rotate.
+
+1. Slack desktop → **Tools → Workflow Builder → New Workflow**.
+2. Pick a trigger:
+   - **Webhook** trigger if you want your tracker to fire it
+     (HackerOne / Bugcrowd / Jira can all POST to the URL Slack
+     will give you).
+   - **From a link in Slack** trigger if you want triagers to kick
+     off a one-off scoring by posting a link into a channel.
+3. Add step → **Send a web request** with these settings:
+   - URL: `https://vulnrap.com/api/reports/check`
+   - Method: `POST`
+   - Body: form-encoded `rawText=` followed by the variable from
+     your trigger (the report body).
+   - Save the response — Workflow Builder lets you reference fields
+     like `vulnrap.compositeScore` and `recommendation.action`
+     directly in later steps.
+4. Add step → **Send a message**, target the triage channel, paste
+   a template like:
+
+   ```
+   :mag: *VulnRap analysis*
+   Composite: {{Step 1 — vulnrap.compositeScore}}/100
+   Recommended: `{{Step 1 — recommendation.action}}`
+   Reason: {{Step 1 — recommendation.reason}}
+   ```
+
+5. **Publish**. The workflow now runs every time the trigger fires.
+
+Tradeoffs vs. the manifest path: no signature verification (the
+webhook URL is the secret — keep it private), no slash command, no
+threaded replies. If your tracker can POST a report body to a URL
+and you just want triage cards in a channel, this is the shortest
+path on the planet. Move to the engineering path below when you
+need the slash command or per-thread context.
+
+## On the roadmap — one-click "Add to Slack" relay
+
+The shortest possible install would be a single button on
+vulnrap.com that handles Slack OAuth, stores a per-tenant bot
+token, and gives you back a unique notify URL. We have a design
+write-up but have **not** shipped it yet — the security and
+operational tradeoffs (multi-tenant token storage, scope-creep
+risk, token-leak blast radius) need to be settled first.
+
+If that path matters to you, read
+[`slack-hosted-relay-design.md`](./slack-hosted-relay-design.md)
+in this directory and open an issue with your requirements — real
+demand is what will pull it forward.
+
+---
+
+# Engineering path
+
+The rest of this doc is the full three-posture recipe — pick this
+when the quick starts are not enough.
 
 ## Audience
 
