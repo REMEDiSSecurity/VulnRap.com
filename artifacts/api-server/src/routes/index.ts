@@ -24,6 +24,7 @@ import roadmapRouter from "./roadmap";
 import statusRouter from "./status";
 import testYourselfRouter from "./test-yourself";
 import preferencesRouter from "./preferences";
+import slackRelayRouter from "./slack-relay";
 
 const router: IRouter = Router();
 
@@ -50,6 +51,11 @@ router.use(roadmapRouter);
 router.use(statusRouter);
 router.use(testYourselfRouter);
 router.use(preferencesRouter);
+// Hosted Slack relay — UNDOCUMENTED, alpha-gated. Returns 503 with
+// `{ error: "slack_relay_disabled" }` when SLACK_CLIENT_ID /
+// SLACK_CLIENT_SECRET / SLACK_RELAY_MASTER_KEY are not all set, so
+// it is safe to mount unconditionally. See routes/slack-relay.ts.
+router.use(slackRelayRouter);
 router.use(publicRouter);
 // v3.6.0 §7: Dev-only test endpoint at GET /api/test/run. The handler itself
 // returns 404 in production, so it is safe to mount unconditionally here.

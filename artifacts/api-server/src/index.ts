@@ -31,6 +31,9 @@ const { startHoldoutDriftScheduler } = await import(
 const { startHealthHeartbeatScheduler } = await import(
   "./lib/health-heartbeat-scheduler"
 );
+const { startReportsPruneScheduler } = await import(
+  "./lib/reports-prune-scheduler"
+);
 const { startPgPoolCollector, stopPgPoolCollector } = await import(
   "./lib/metrics"
 );
@@ -68,6 +71,11 @@ const server = app.listen(port, (err) => {
   const stabilityScheduler = startScoreStabilityScheduler();
   const holdoutDriftScheduler = startHoldoutDriftScheduler();
   const healthHeartbeatScheduler = startHealthHeartbeatScheduler();
+  // Reports lifecycle prune — disabled by default. Set
+  // REPORTS_PRUNE_ENABLED=1 to activate; the scheduler then quarantines
+  // failed reports past their retry budget and deletes abandoned
+  // ones past retention. See lib/reports-prune-scheduler.ts.
+  const reportsPruneScheduler = startReportsPruneScheduler();
   // Task #462 — Graceful shutdown that actually exits.
   //
   // Without an explicit process.exit, the pino-pretty transport's worker
@@ -105,6 +113,7 @@ const server = app.listen(port, (err) => {
     stabilityScheduler.stop();
     holdoutDriftScheduler.stop();
     healthHeartbeatScheduler.stop();
+    reportsPruneScheduler.stop();
     stopPgPoolCollector();
     server.close();
     server.closeAllConnections?.();

@@ -166,6 +166,26 @@ export const reportsTable = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Lifecycle tracking. Default 'ok' so every existing row remains
+    // healthy after the additive migration. Non-'ok' rows are visible
+    // to the retry endpoint and to the prune scheduler — see
+    // artifacts/api-server/src/lib/reports-prune-scheduler.ts. Values:
+    //   'ok'         — scored cleanly, available via GET /api/reports/:id
+    //   'failed'     — scoring threw before persisting full result;
+    //                  the row exists so the user can retry / inspect
+    //   'retry_pending' — set by POST /reports/:id/retry while a
+    //                  re-score is in flight
+    //   'abandoned'  — failed past max retries; pruned after the
+    //                  ABANDONED retention window
+    healthStatus: varchar("health_status", { length: 20 })
+      .notNull()
+      .default("ok"),
+    healthFailureClass: varchar("health_failure_class", { length: 40 }),
+    healthFailureReason: text("health_failure_reason"),
+    healthRetryCount: integer("health_retry_count").notNull().default(0),
+    healthLastRetryAt: timestamp("health_last_retry_at", {
+      withTimezone: true,
+    }),
   },
   (table) => [
     index("idx_reports_content_hash").on(table.contentHash),
@@ -198,6 +218,13 @@ export const reportsTable = pgTable(
     index("idx_reports_vulnrap_composite_null")
       .on(table.createdAt)
       .where(sql`${table.vulnrapCompositeScore} IS NULL`),
+    // Partial index: the health columns are 'ok' / 0 for the vast
+    // majority of rows. The retry queue + prune scheduler scan only
+    // unhealthy rows ordered by created_at, so an index on a tiny
+    // subset is far cheaper than a btree on the whole column.
+    index("idx_reports_health_unhealthy")
+      .on(table.createdAt)
+      .where(sql`${table.healthStatus} <> 'ok'`),
   ],
 );
 

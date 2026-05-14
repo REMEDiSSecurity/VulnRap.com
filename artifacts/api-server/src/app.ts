@@ -11,6 +11,32 @@ import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 import pinoHttp from "pino-http";
+
+/**
+ * Redact secret-bearing path segments before they hit pino's request
+ * serializer. Several routes embed unguessable tokens directly in the
+ * URL path (Slack hosted-relay notify/disconnect/tenant, report
+ * delete-token confirmations, etc.) — those tokens are credential-
+ * equivalent and must never appear in server logs, even though the
+ * client deliberately puts them in the URL for ergonomics.
+ *
+ * Logged shape becomes `/api/slack/notify/[REDACTED]` regardless of
+ * the secret's length or character set.
+ */
+const SENSITIVE_PATH_PATTERNS: RegExp[] = [
+  /^(\/api\/slack\/(?:notify|disconnect|tenant))\/[^/]+/,
+  /^(\/api\/reports\/delete)\/[^/]+/,
+];
+function redactSensitivePathTokens(
+  url: string | undefined,
+): string | undefined {
+  if (!url) return url;
+  for (const re of SENSITIVE_PATH_PATTERNS) {
+    const m = url.match(re);
+    if (m) return `${m[1]}/[REDACTED]${url.slice(m[0].length)}`;
+  }
+  return url;
+}
 import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import YAML from "yamljs";
@@ -153,7 +179,7 @@ app.use(
         return {
           id: req.id,
           method: req.method,
-          url: req.url?.split("?")[0],
+          url: redactSensitivePathTokens(req.url?.split("?")[0]),
         };
       },
       res(res) {
