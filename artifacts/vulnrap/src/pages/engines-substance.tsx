@@ -15,7 +15,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import substancePortrait from "@/assets/engines-substance-portrait.webp";
+import { substancePortraitAsset } from "@/assets/hero-assets";
+import { HeroImage } from "@/components/hero-image";
 
 interface SubComponent {
   key: string;
@@ -213,11 +214,9 @@ export default function EnginesSubstance() {
           </Badge>
         </div>
         <figure className="mt-6 rounded-xl overflow-hidden border border-border/60 bg-[#08090c] max-w-2xl">
-          <img
-            src={substancePortrait}
+          <HeroImage
+            asset={substancePortraitAsset}
             alt="A magnifying glass with an amber-gold rim resting over a dark-paper printout of a dependency scan, the text beneath the glass sharper and warmer than the surrounding page."
-            width={1536}
-            height={1024}
             loading="lazy"
             className="w-full h-auto block"
           />

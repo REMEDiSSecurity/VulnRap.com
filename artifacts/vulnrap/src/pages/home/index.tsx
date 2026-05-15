@@ -76,8 +76,11 @@ import { SectionHashingCard } from "./section-hashing-card";
 import { SlopDetectionCard } from "./slop-detection-card";
 import { VisitorCounter } from "./visitor-counter";
 import { TrustBadges } from "./trust-badges";
-import methodologyConstellation from "@/assets/methodology-verification-constellation.webp";
-import originAnalystWall from "@/assets/origin-analyst-wall.webp";
+import {
+  methodologyConstellationAsset,
+  originAnalystWallAsset,
+} from "@/assets/hero-assets";
+import { HeroImage } from "@/components/hero-image";
 
 // Below-the-fold sections — lazy loaded so they don't bloat the initial
 // home-page JS bundle. The user has to scroll past several full-height
@@ -1216,11 +1219,9 @@ export default function Home() {
         }
       >
         <figure className="mb-6 rounded-xl overflow-hidden border border-border/60 bg-[#08090c]">
-          <img
-            src={methodologyConstellation}
+          <HeroImage
+            asset={methodologyConstellationAsset}
             alt="A floating constellation of small verification badges connected by faint cyan lines — NVD lookups, GitHub commit checks, CWE catalog cross-refs, live URL probes — all converging into a single central report card lit softly from within."
-            width={1792}
-            height={896}
             loading="lazy"
             className="w-full h-auto block"
           />
@@ -1380,11 +1381,9 @@ export default function Home() {
         icon={<Search className="w-5 h-5 text-primary" />}
       >
         <figure className="mb-6 rounded-xl overflow-hidden border border-border/60 bg-[#08090c]">
-          <img
-            src={originAnalystWall}
+          <HeroImage
+            asset={originAnalystWallAsset}
             alt="A wide, dim analyst's wall covered in pinned printouts of vulnerability reports with red, amber, and green tags, connected by colored string — a visual metaphor for how the scoring weights were calibrated against a corpus of real reports."
-            width={1792}
-            height={896}
             loading="lazy"
             className="w-full h-auto block"
           />

@@ -13,7 +13,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import cwePortrait from "@/assets/engines-cwe-portrait.webp";
+import { cwePortraitAsset } from "@/assets/hero-assets";
+import { HeroImage } from "@/components/hero-image";
 
 interface FailureMode {
   title: string;
@@ -90,11 +91,9 @@ export default function EnginesCwe() {
           </Badge>
         </div>
         <figure className="mt-6 rounded-xl overflow-hidden border border-border/60 bg-[#08090c] max-w-2xl">
-          <img
-            src={cwePortrait}
+          <HeroImage
+            asset={cwePortraitAsset}
             alt="Two parallel translucent ribbons of glowing characters — one cyan on the left, one violet on the right — flowing inward and meeting at small bright sparks down the center, suggesting alignment between two vocabularies."
-            width={1280}
-            height={960}
             loading="lazy"
             className="w-full h-auto block"
           />

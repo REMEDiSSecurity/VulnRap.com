@@ -18,7 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import slopdemicHero from "@/assets/insights-slopdemic-hero.webp";
+import { slopdemicHeroAsset } from "@/assets/hero-assets";
+import { HeroImage } from "@/components/hero-image";
 
 function SectionHeading({
   children,
@@ -123,11 +124,9 @@ export default function Insights() {
 
       {/* Editorial hero */}
       <figure className="mt-2 rounded-xl overflow-hidden border border-border/60 bg-[#08090c]">
-        <img
-          src={slopdemicHero}
+        <HeroImage
+          asset={slopdemicHeroAsset}
           alt="A tide of faint, translucent vulnerability reports washing toward the foreground, with a single sharper report standing upright in the center, lit by a warm amber glow."
-          width={1792}
-          height={1024}
           loading="eager"
           fetchPriority="high"
           className="w-full h-auto block"

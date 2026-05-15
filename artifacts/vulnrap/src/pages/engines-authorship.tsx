@@ -14,7 +14,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import linguisticPortrait from "@/assets/engines-linguistic-portrait.webp";
+import { linguisticPortraitAsset } from "@/assets/hero-assets";
+import { HeroImage } from "@/components/hero-image";
 
 interface SubComponent {
   key: string;
@@ -212,11 +213,9 @@ export default function EnginesAuthorship() {
           </Badge>
         </div>
         <figure className="mt-6 rounded-xl overflow-hidden border border-border/60 bg-[#08090c] max-w-2xl">
-          <img
-            src={linguisticPortrait}
+          <HeroImage
+            asset={linguisticPortraitAsset}
             alt="A close-up of a printed paragraph on dark glass with cyan underlines highlighting key phrases, and faint labels to the side reading 'low lexical diversity', 'formulaic structure', 'overuse of discourse markers', 'reduced perplexity'."
-            width={1536}
-            height={1024}
             loading="lazy"
             className="w-full h-auto block"
           />

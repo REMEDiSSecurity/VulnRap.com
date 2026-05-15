@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import threePillarsHero from "@/assets/engines-three-pillars-hero.webp";
+import { threePillarsHeroAsset } from "@/assets/hero-assets";
+import { HeroImage } from "@/components/hero-image";
 
 interface EngineSummary {
   id: string;
@@ -220,11 +221,9 @@ export default function Engines() {
           </Badge>
         </div>
         <figure className="mt-6 rounded-xl overflow-hidden border border-border/60 bg-[#08090c]">
-          <img
-            src={threePillarsHero}
+          <HeroImage
+            asset={threePillarsHeroAsset}
             alt="Three luminous glass pillars side by side — cyan (Linguistic Analysis), violet (Substance Analysis), amber (CWE Coherence) — beams from the top of each converging into a single point of white light above."
-            width={1792}
-            height={1024}
             loading="eager"
             fetchPriority="high"
             className="w-full h-auto block"

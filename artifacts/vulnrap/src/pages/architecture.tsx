@@ -1,6 +1,7 @@
 import { Network, ArrowRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import pipelineHero from "@/assets/pipeline-cross-section-hero.webp";
+import { pipelineHeroAsset } from "@/assets/hero-assets";
+import { HeroImage } from "@/components/hero-image";
 
 interface PipelineNode {
   id: string;
@@ -431,11 +432,9 @@ export default function Architecture() {
           for that stage.
         </p>
         <figure className="mt-6 rounded-xl overflow-hidden border border-border/60 bg-[#08090c]">
-          <img
-            src={pipelineHero}
+          <HeroImage
+            asset={pipelineHeroAsset}
             alt="A side cross-section of a glowing transparent conduit with a document travelling left-to-right through five colored chambers, suggesting a multi-stage refinement pipeline."
-            width={1792}
-            height={768}
             loading="eager"
             fetchPriority="high"
             className="w-full h-auto block"
