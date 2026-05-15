@@ -81,6 +81,10 @@ import {
   type PromptInjectionVerdict,
 } from "../lib/prompt-injection";
 import {
+  runPreFilters,
+  type PreFilterResult,
+} from "../lib/pre-filters";
+import {
   sanitizeText,
   sanitizeForAnalysis,
   sanitizeFileName,
@@ -307,6 +311,22 @@ export interface AuditTelemetry {
     labels: string[];
     matchCount: number;
   };
+  // Task #1327 — REMEDiS L1 pre-filter outcome. Always populated.
+  preFilter: {
+    flags: string[];
+    fires: Array<{
+      rule: string;
+      flag: string;
+      match: string;
+      spanHash: string;
+      severity: number;
+    }>;
+    shouldQuarantine: boolean;
+    escalateTo: string | null;
+    suggestedRealnessCap: number | null;
+    totalSeverity: number;
+    durationMs: number;
+  };
 }
 
 interface AnalysisResult extends FusionResult {
@@ -320,7 +340,43 @@ interface AnalysisResult extends FusionResult {
   vulnrapTrace: PipelineTrace | null;
   auditTelemetry: AuditTelemetry;
   promptInjection: PromptInjectionVerdict;
+  // Task #1327 — explicit canonical quarantine verdict surfaced at top
+  // level (not just inside slopTier / auditTelemetry) so downstream
+  // consumers can distinguish quarantine from AI_SLOP cleanly.
+  quarantined: boolean;
+  quarantineFlags: string[];
+  escalateTo: "ai_security" | "legal_ir_soc" | "psirt_triage" | null;
 }
+
+function buildPreFilterTelemetry(
+  preFilter: PreFilterResult,
+): AuditTelemetry["preFilter"] {
+  return {
+    flags: preFilter.flags,
+    fires: preFilter.fires.map((f) => ({
+      rule: f.rule,
+      flag: f.flag,
+      match: f.match,
+      spanHash: f.spanHash,
+      severity: f.severity,
+    })),
+    shouldQuarantine: preFilter.shouldQuarantine,
+    escalateTo: preFilter.escalateTo,
+    suggestedRealnessCap: preFilter.suggestedRealnessCap,
+    totalSeverity: preFilter.totalSeverity,
+    durationMs: preFilter.durationMs,
+  };
+}
+
+const EMPTY_PRE_FILTER_TELEMETRY: AuditTelemetry["preFilter"] = {
+  flags: [],
+  fires: [],
+  shouldQuarantine: false,
+  escalateTo: null,
+  suggestedRealnessCap: null,
+  totalSeverity: 0,
+  durationMs: 0,
+};
 
 async function runStage<T>(
   name: string,
@@ -346,6 +402,105 @@ async function runStage<T>(
     logger.warn({ err, stage: name }, `Analysis stage ${name} failed`);
     return null;
   }
+}
+
+// Task #1327 — short-circuit AnalysisResult built when L1 quarantine
+// fires. slopTier="Quarantined" plus the explicit `quarantined` field
+// is the canonical verdict; quadrant=AI_SLOP/AUTO_CLOSE is retained
+// for legacy consumers that switch on quadrant.
+function buildQuarantineResult(
+  preFilter: PreFilterResult,
+  diagnostics: AnalysisDiagnostics,
+): AnalysisResult {
+  const realnessCap = preFilter.suggestedRealnessCap ?? 0;
+  const authenticityScore = Math.round(realnessCap * 100);
+  const evidence = preFilter.fires.map((fire) => ({
+    type: `prefilter_${fire.rule}` as const,
+    description: `Pre-filter ${fire.rule} fired: ${fire.flag} (${fire.match})`,
+    weight: 1.0,
+    matched: fire.match,
+    markers: [fire.flag],
+  }));
+  const injectionFires = preFilter.fires.filter(
+    (f) => f.rule === "prompt_injection_canary",
+  );
+  const promptInjection: PromptInjectionVerdict = {
+    detected: injectionFires.length > 0,
+    labels: injectionFires.map((f) => f.flag),
+    matches: injectionFires.map((f) => f.match),
+  };
+  const validityFusion = {
+    finalApplied: 0,
+    heuristic: 0,
+    llmRaw: null,
+    blended: null,
+    conservativeFloorApplied: false,
+    delta: null,
+    disagreementThreshold: 30,
+    higherSide: null,
+    evidenceFreeCapApplied: false,
+  } as const;
+  const auditTelemetry: AuditTelemetry = {
+    llmGating: {
+      shouldCall: false,
+      reason: "skipped_unavailable" as const,
+      heuristicScore: 0,
+      confidenceUsed: 1,
+      compositeScoreUsed: null,
+      costGuard: { low: 0, high: 0, confidence: 0 },
+      userSkipped: false,
+      actuallyFired: false,
+      llmAvailable: false,
+    },
+    validityFusion,
+    promptInjection: {
+      detected: promptInjection.detected,
+      labels: promptInjection.labels,
+      matchCount: promptInjection.labels.length,
+    },
+    preFilter: buildPreFilterTelemetry(preFilter),
+  };
+  return {
+    slopScore: 100,
+    qualityScore: 0,
+    confidence: 1.0,
+    breakdown: {
+      linguistic: 0,
+      factual: 0,
+      template: 0,
+      llm: null,
+      verification: null,
+      quality: 0,
+    },
+    evidence,
+    humanIndicators: [],
+    slopTier: "Quarantined",
+    authenticityScore,
+    validityScore: 0,
+    quadrant: "AI_SLOP",
+    archetype: "AUTO_CLOSE",
+    analysisMode: "heuristic_only",
+    confidenceNote: `Quarantined by L1 pre-filter (${preFilter.flags.join(", ")}). Routed to ${preFilter.escalateTo ?? "psirt_triage"}.`,
+    claims: null,
+    substance: null,
+    validityFusion,
+    feedback: [
+      `Submission quarantined — ${preFilter.flags.length} pre-filter rule(s) fired: ${preFilter.flags.join(", ")}.`,
+      `Routing recommendation: ${preFilter.escalateTo ?? "psirt_triage"}.`,
+    ],
+    llmResult: null,
+    verification: null,
+    triageRecommendation: null,
+    triageAssistant: null,
+    diagnostics,
+    vulnrapComposite: null,
+    vulnrapTrace: null,
+    auditTelemetry,
+    promptInjection,
+    quarantined: true,
+    quarantineFlags: preFilter.flags,
+    escalateTo: preFilter.escalateTo,
+  };
 }
 
 async function performAnalysis(
@@ -400,6 +555,22 @@ async function performAnalysis(
 
   try {
     const userSkippedLlm = opts?.skipLlm === true;
+
+    // Task #1327 — L1 pre-filter runs before scoring. Quarantine on
+    // fire; otherwise the result is still threaded through into the
+    // final auditTelemetry block so reviewers can see the rules ran.
+    const preFilter = await runStage(
+      "pre_filter",
+      () => runPreFilters({ rawText: safeOriginal }),
+      diagnostics,
+    );
+    if (preFilter && preFilter.shouldQuarantine) {
+      diagnostics.totalDurationMs = Date.now() - pipelineStart;
+      return buildQuarantineResult(preFilter, diagnostics);
+    }
+    const preFilterTelemetry = preFilter
+      ? buildPreFilterTelemetry(preFilter)
+      : EMPTY_PRE_FILTER_TELEMETRY;
 
     const heuristic = await runStage(
       "heuristic_analysis",
@@ -668,6 +839,7 @@ async function performAnalysis(
         labels: safeInjection.labels,
         matchCount: safeInjection.labels.length,
       },
+      preFilter: preFilterTelemetry,
     };
 
     // v3.6.0 §4 / Task #442: vulnrapComposite is computed earlier in the
@@ -729,6 +901,9 @@ async function performAnalysis(
       vulnrapTrace,
       auditTelemetry,
       promptInjection: safeInjection,
+      quarantined: false,
+      quarantineFlags: [],
+      escalateTo: null,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -827,8 +1002,12 @@ async function performAnalysis(
           evidenceFreeCapApplied: false,
         },
         promptInjection: { detected: false, labels: [], matchCount: 0 },
+        preFilter: EMPTY_PRE_FILTER_TELEMETRY,
       },
       promptInjection: { detected: false, labels: [], matches: [] },
+      quarantined: false,
+      quarantineFlags: [],
+      escalateTo: null,
     };
   }
 }
@@ -1252,7 +1431,10 @@ router.post("/reports", async (req, res): Promise<void> => {
   const temporalSignals =
     analysisResult.triageRecommendation?.temporalSignals ?? [];
 
-  if (templateMatch) {
+  // Task #1327 — quarantined submissions bypass post-analysis score and
+  // evidence mutation. Template/temporal/triage recompute would otherwise
+  // overwrite the quarantine evidence list and slopScore.
+  if (!analysisResult.quarantined && templateMatch) {
     analysisResult.evidence.push({
       type: "template_reuse",
       description: `Report structure matches ${templateMatch.matchedReportIds.length} previous submission(s) — possible mass-generated template`,
@@ -1264,19 +1446,21 @@ router.post("/reports", async (req, res): Promise<void> => {
     );
   }
 
-  for (const ts of temporalSignals) {
-    analysisResult.evidence.push({
-      type: "temporal_signal",
-      description: `${ts.cveId}: report submitted ${ts.hoursSincePublication.toFixed(1)}h after CVE publication (${ts.signal.replace(/_/g, " ")})`,
-      weight: ts.weight,
-    });
-    analysisResult.slopScore = Math.min(
-      95,
-      analysisResult.slopScore + ts.weight,
-    );
+  if (!analysisResult.quarantined) {
+    for (const ts of temporalSignals) {
+      analysisResult.evidence.push({
+        type: "temporal_signal",
+        description: `${ts.cveId}: report submitted ${ts.hoursSincePublication.toFixed(1)}h after CVE publication (${ts.signal.replace(/_/g, " ")})`,
+        weight: ts.weight,
+      });
+      analysisResult.slopScore = Math.min(
+        95,
+        analysisResult.slopScore + ts.weight,
+      );
+    }
   }
 
-  try {
+  if (!analysisResult.quarantined) try {
     // v3.6.0 §9: Surface verification-source breakdown on Engine 2 so the
     // diagnostics panel can show reviewers WHERE each verified check came
     // from (explicit URL in report vs. search fallback). Mutates the
@@ -1408,11 +1592,21 @@ router.post("/reports", async (req, res): Promise<void> => {
               // existing engines blob (rather than its own column) so we don't
               // need a schema migration for an instrumentation-only pass.
               auditTelemetry: analysisResult.auditTelemetry,
+              // Task #1327 — canonical quarantine verdict fields surfaced at
+              // the top of the blob (not just inside auditTelemetry) so SQL
+              // filters / dashboards can find quarantines without
+              // jsonb_path_exists.
+              quarantined: analysisResult.quarantined,
+              quarantineFlags: analysisResult.quarantineFlags,
+              escalateTo: analysisResult.escalateTo,
             }
           : {
               // No engine composite (feature flag off) but we still want to keep
               // the audit telemetry available to the diagnostics endpoint.
               auditTelemetry: analysisResult.auditTelemetry,
+              quarantined: analysisResult.quarantined,
+              quarantineFlags: analysisResult.quarantineFlags,
+              escalateTo: analysisResult.escalateTo,
             },
         vulnrapOverridesApplied: vulnrapComposite?.overridesApplied ?? null,
         vulnrapCorrelationId: vulnrapTrace?.correlationId ?? null,

@@ -1,0 +1,1392 @@
+{
+  "generatedAt": "2026-05-15T22:56:21.233Z",
+  "nReports": 170,
+  "quarantined": 14,
+  "byRule": {
+    "extortion": 20,
+    "prompt_injection_canary": 4,
+    "government_impersonation": 10,
+    "sales_pitch": 2,
+    "cve_validation": 3,
+    "bec": 5
+  },
+  "byFlag": {
+    "extortion_deadline": 14,
+    "markdown_system_spoof": 1,
+    "jailbreak_mode": 1,
+    "leak_site_threat": 2,
+    "reserved_tld_sender": 6,
+    "ignore_previous_instructions": 2,
+    "no_law_enforcement": 2,
+    "we_have_your_data": 1,
+    "schedule_a_call": 1,
+    "vague_claims_no_details": 1,
+    "hallucinated_cve_format": 2,
+    "future_year_cve": 1,
+    "partnership_fee_demand": 1,
+    "fake_fbi": 1,
+    "fake_cert_cc": 1,
+    "bec_urgency": 1,
+    "coffee_shop_pretext": 1,
+    "iphone_executive_signature": 1,
+    "whitelist_request": 1,
+    "credential_reverify_link": 1,
+    "typosquat_domain": 1,
+    "fake_hackerone": 1
+  },
+  "expectedQuarantineHits": [
+    {
+      "id": "rr-016-prompt-injection-bait",
+      "flags": [
+        "markdown_system_spoof",
+        "jailbreak_mode"
+      ]
+    },
+    {
+      "id": "rr-025-extortion-not-vuln",
+      "flags": [
+        "extortion_deadline",
+        "leak_site_threat"
+      ]
+    },
+    {
+      "id": "rr-058-double-extortion-data-leak",
+      "flags": [
+        "extortion_deadline",
+        "no_law_enforcement",
+        "we_have_your_data"
+      ]
+    },
+    {
+      "id": "rr-100-rag-indirect-injection",
+      "flags": [
+        "ignore_previous_instructions",
+        "extortion_deadline"
+      ]
+    },
+    {
+      "id": "rr-149-cve-impossible-format",
+      "flags": [
+        "hallucinated_cve_format"
+      ]
+    },
+    {
+      "id": "rr-150-cve-future-year",
+      "flags": [
+        "future_year_cve"
+      ]
+    },
+    {
+      "id": "rr-152-cve-letter-in-id",
+      "flags": [
+        "hallucinated_cve_format"
+      ]
+    },
+    {
+      "id": "rr-154-fake-threat-intel-firm",
+      "flags": [
+        "extortion_deadline",
+        "partnership_fee_demand"
+      ]
+    },
+    {
+      "id": "rr-157-fake-cert-cc",
+      "flags": [
+        "reserved_tld_sender",
+        "fake_cert_cc"
+      ]
+    },
+    {
+      "id": "rr-159-bec-ceo-spoof",
+      "flags": [
+        "bec_urgency",
+        "coffee_shop_pretext",
+        "iphone_executive_signature",
+        "whitelist_request",
+        "reserved_tld_sender"
+      ]
+    },
+    {
+      "id": "rr-160-fake-h1-triager",
+      "flags": [
+        "extortion_deadline",
+        "credential_reverify_link",
+        "reserved_tld_sender",
+        "typosquat_domain",
+        "fake_hackerone"
+      ]
+    },
+    {
+      "id": "rr-163-credential-stuffing-claim",
+      "flags": [
+        "extortion_deadline",
+        "no_law_enforcement",
+        "leak_site_threat"
+      ]
+    }
+  ],
+  "expectedQuarantineMisses": [
+    "rr-158"
+  ],
+  "falsePositives": [],
+  "perReport": [
+    {
+      "id": "rr-001-clean-rce-imageproc",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-002-sqli-django-raw",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-003-ssrf-cloud-metadata",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [
+        "extortion_deadline"
+      ],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-004-jackson-deserialization-rce",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-005-jwt-alg-none",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-006-idor-cross-tenant",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-007-hw-side-channel",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-008-csaf-disclosure",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-009-vague-login-bypass",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-010-thin-but-real",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-011-screenshot-only",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-012-llm-hallucinated-cve",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-013-generic-checklist-spam",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-014-fake-rce-broken-poc",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-015-copy-paste-from-blog",
+      "authenticity": "hallucinated_cve",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-016-prompt-injection-bait",
+      "authenticity": "social_eng",
+      "quarantined": true,
+      "flags": [
+        "markdown_system_spoof",
+        "jailbreak_mode"
+      ],
+      "escalateTo": "ai_security"
+    },
+    {
+      "id": "rr-017-duplicate-of-001",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-018-already-patched-cve",
+      "authenticity": "duplicate",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-019-missing-headers",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-020-self-xss-clickjacking",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-021-version-banner-disclosure",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-022-active-exploit-kev",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-023-npm-typosquat-supply-chain",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-024-iot-firmware-hardcoded-creds",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-025-extortion-not-vuln",
+      "authenticity": "social_eng",
+      "quarantined": true,
+      "flags": [
+        "extortion_deadline",
+        "leak_site_threat"
+      ],
+      "escalateTo": "legal_ir_soc"
+    },
+    {
+      "id": "rr-026-xxe-soap-endpoint",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-027-zip-slip-archive",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-028-command-injection-filename",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-029-csrf-state-changing-get",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-030-race-toctou-file-write",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-031-k8s-rbac-escalation",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-032-container-escape-symlink",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-033-android-content-provider",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-034-ios-universal-link-hijack",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-035-electron-nodeintegration",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-036-graphql-introspection-admin",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-037-saml-signature-wrap",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-038-oauth-open-redirect",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-039-cache-host-header-poisoning",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-040-business-logic-coupon",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-041-medical-device-replay",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [
+        "extortion_deadline"
+      ],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-042-automotive-can-bus",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [
+        "reserved_tld_sender"
+      ],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-043-ics-modbus-write-coil",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [
+        "reserved_tld_sender"
+      ],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-044-ml-model-evasion",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-045-prompt-injection-customer-chatbot",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [
+        "ignore_previous_instructions"
+      ],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-046-llm-jailbreak-data-exfil",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-047-crypto-wallet-seed-localstorage",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-048-firmware-trustzone-leak",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-049-broken-link-not-vuln",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-050-terse-but-valid",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-051-non-english-real",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-052-followup-clarification",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-053-medium-quality-ai-slop",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-054-confident-bullshit",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-055-cve-mining-bot",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-056-cve-id-typo",
+      "authenticity": "hallucinated_cve",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-057-translation-of-public-advisory",
+      "authenticity": "hallucinated_cve",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-058-double-extortion-data-leak",
+      "authenticity": "social_eng",
+      "quarantined": true,
+      "flags": [
+        "extortion_deadline",
+        "no_law_enforcement",
+        "we_have_your_data"
+      ],
+      "escalateTo": "legal_ir_soc"
+    },
+    {
+      "id": "rr-059-fake-poc-with-malware",
+      "authenticity": "social_eng",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-060-fake-insider-screenshot",
+      "authenticity": "social_eng",
+      "quarantined": false,
+      "flags": [
+        "extortion_deadline"
+      ],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-061-embargo-leak-accidental",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-062-multi-region-coordination",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-063-gdpr-pii-exposure",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [
+        "extortion_deadline"
+      ],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-064-cookie-scope-issue",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-065-rate-limit-bypass",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-066-captcha-bypass",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-067-algo-complexity-dos",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-068-blind-ssrf-dns",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-069-cors-misconfig",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-070-prototype-pollution",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-071-stored-xss-svg-namespace",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-072-ssti-jinja2",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-073-nosql-mongo-where",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-074-ldap-injection",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-075-xpath-injection",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-076-http-response-splitting",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-077-websocket-csrf",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-078-sse-auth-bypass",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-079-saml-attribute-mapping",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-080-jwt-key-confusion",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-081-oauth-pkce-downgrade",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-082-webhook-signature-timing",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-083-graphql-batching-dos",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-084-csp-bypass-jsonp",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-085-subdomain-takeover",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [
+        "extortion_deadline"
+      ],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-086-aws-iam-trust-policy",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-087-gcp-workload-identity",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-088-azure-managed-identity",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-089-terraform-state-public",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-090-helm-chart-privesc",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-091-github-actions-injection",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-092-image-tag-mutability",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-093-vault-audit-log-tokens",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [
+        "extortion_deadline"
+      ],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-094-rowhammer-ddr5",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-095-voltage-glitch-bootloader",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-096-uart-debug-shell",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-097-spi-flash-readout",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-098-bluetooth-knob-downgrade",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-099-wifi-fragattack-reuse",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-100-rag-indirect-injection",
+      "authenticity": "real",
+      "quarantined": true,
+      "flags": [
+        "ignore_previous_instructions",
+        "extortion_deadline"
+      ],
+      "escalateTo": "ai_security"
+    },
+    {
+      "id": "rr-101-mcp-server-impersonation",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-102-hf-model-malicious-pickle",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-103-agent-tool-confusion",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-104-eval-harness-prompt-leak",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-105-training-data-poisoning",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-106-pdf-prompt-injection",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-107-llm-canary-token-exfil",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-108-padding-oracle",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-109-rsa-bleichenbacher",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-110-ecdsa-nonce-reuse",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-111-weak-prng-jwt",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-112-timing-attack-token-compare",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-113-browser-extension-postmessage",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-114-pwa-service-worker-cache",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-115-electron-asar-tamper",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-116-pdfjs-injection",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-117-mac-helper-tool-priv",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-118-android-deeplink-pii",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-119-ios-keychain-no-acl",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-120-ws-frame-smuggling",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-121-dkim-key-rotation",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-122-spf-permerror-pass",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-123-dmarc-relaxed-bypass",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-124-webauthn-attestation",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-125-french-stored-xss",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-126-japanese-idor",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-127-spanish-csrf",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-128-portuguese-cookie",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-129-internal-employee-bug",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-130-anonymized-researcher",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-131-stacktrace-screenshot",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-132-curl-output-only",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-133-typos-but-real",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-134-cv-attached-no-bug",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-135-pastebin-link",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-136-llm-comma-list-cwes",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-137-llm-academic-paper-style",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-138-llm-bullets-no-poc",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-139-llm-very-formal",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-140-llm-thorough-analysis",
+      "authenticity": "ai_slop",
+      "quarantined": true,
+      "flags": [
+        "schedule_a_call",
+        "vague_claims_no_details"
+      ],
+      "escalateTo": "psirt_triage"
+    },
+    {
+      "id": "rr-141-bot-nmap-output",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-142-bot-burp-screenshots",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-143-zap-baseline",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-144-llm-tldr",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-145-llm-mixed-real-fake",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-146-llm-ieee-format",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-147-bot-shodan-output",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-148-llm-bad-translation",
+      "authenticity": "ai_slop",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-149-cve-impossible-format",
+      "authenticity": "hallucinated_cve",
+      "quarantined": true,
+      "flags": [
+        "hallucinated_cve_format"
+      ],
+      "escalateTo": "psirt_triage"
+    },
+    {
+      "id": "rr-150-cve-future-year",
+      "authenticity": "hallucinated_cve",
+      "quarantined": true,
+      "flags": [
+        "future_year_cve"
+      ],
+      "escalateTo": "psirt_triage"
+    },
+    {
+      "id": "rr-151-real-cve-wrong-product",
+      "authenticity": "hallucinated_cve",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-152-cve-letter-in-id",
+      "authenticity": "hallucinated_cve",
+      "quarantined": true,
+      "flags": [
+        "hallucinated_cve_format"
+      ],
+      "escalateTo": "psirt_triage"
+    },
+    {
+      "id": "rr-153-rejected-cve",
+      "authenticity": "hallucinated_cve",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-154-fake-threat-intel-firm",
+      "authenticity": "social_eng",
+      "quarantined": true,
+      "flags": [
+        "extortion_deadline",
+        "partnership_fee_demand"
+      ],
+      "escalateTo": "legal_ir_soc"
+    },
+    {
+      "id": "rr-155-government-spoof",
+      "authenticity": "social_eng",
+      "quarantined": true,
+      "flags": [
+        "extortion_deadline",
+        "reserved_tld_sender",
+        "fake_fbi"
+      ],
+      "escalateTo": "legal_ir_soc"
+    },
+    {
+      "id": "rr-156-vendor-acquisition-rumor",
+      "authenticity": "social_eng",
+      "quarantined": false,
+      "flags": [
+        "extortion_deadline"
+      ],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-157-fake-cert-cc",
+      "authenticity": "social_eng",
+      "quarantined": true,
+      "flags": [
+        "reserved_tld_sender",
+        "fake_cert_cc"
+      ],
+      "escalateTo": "legal_ir_soc"
+    },
+    {
+      "id": "rr-158-spear-phish-poc-link",
+      "authenticity": "social_eng",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-159-bec-ceo-spoof",
+      "authenticity": "social_eng",
+      "quarantined": true,
+      "flags": [
+        "bec_urgency",
+        "coffee_shop_pretext",
+        "iphone_executive_signature",
+        "whitelist_request",
+        "reserved_tld_sender"
+      ],
+      "escalateTo": "legal_ir_soc"
+    },
+    {
+      "id": "rr-160-fake-h1-triager",
+      "authenticity": "social_eng",
+      "quarantined": true,
+      "flags": [
+        "extortion_deadline",
+        "credential_reverify_link",
+        "reserved_tld_sender",
+        "typosquat_domain",
+        "fake_hackerone"
+      ],
+      "escalateTo": "legal_ir_soc"
+    },
+    {
+      "id": "rr-161-recruitment-pretext",
+      "authenticity": "social_eng",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-162-fake-customer-complaint",
+      "authenticity": "social_eng",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-163-credential-stuffing-claim",
+      "authenticity": "social_eng",
+      "quarantined": true,
+      "flags": [
+        "extortion_deadline",
+        "no_law_enforcement",
+        "leak_site_threat"
+      ],
+      "escalateTo": "legal_ir_soc"
+    },
+    {
+      "id": "rr-164-ofac-jurisdiction",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-165-bug-bounty-triager-misroute",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-166-disclosure-policy-disagreement",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-167-cve-assignment-dispute",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-168-competitor-discovered",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-169-ai-agent-as-reporter",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    },
+    {
+      "id": "rr-170-multi-channel-same-bug",
+      "authenticity": "real",
+      "quarantined": false,
+      "flags": [],
+      "escalateTo": null
+    }
+  ]
+}
