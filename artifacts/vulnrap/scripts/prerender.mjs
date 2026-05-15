@@ -19,6 +19,13 @@ const ROUTES = [
   "/security",
   "/privacy",
   "/terms",
+  // Tier-1 imagery surfaces — these pages call useOgImage() on mount to
+  // swap og:image / twitter:image to their hero. Prerendering captures
+  // the post-mount DOM so social crawlers (which don't run SPA JS) see
+  // the per-page hero in static HTML.
+  "/insights",
+  "/engines",
+  "/how-it-works",
 ];
 
 const NAV_TIMEOUT_MS = 20_000;
