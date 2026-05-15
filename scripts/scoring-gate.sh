@@ -60,6 +60,20 @@ if ! node "$REPO_ROOT/scripts/scoring-gate-replay.mjs"; then
   GATE_FAIL=1
 fi
 
+# Task #1326 — Optional REMEDiS eval harness. Gated off by default so it
+# does not slow every merge while we shake it out. Opt in by exporting
+# REMEDIS_HARNESS=1 (e.g. in a nightly CI job). Baseline + thresholds
+# live in `scripts/remedis-harness.sh` and `eval/remedis-baseline.json`.
+if [[ "${REMEDIS_HARNESS:-0}" == "1" ]]; then
+  echo "[scoring-gate] Step 3 (opt-in): REMEDiS eval harness on 170-report corpus"
+  if ! bash "$REPO_ROOT/scripts/remedis-harness.sh"; then
+    echo "[scoring-gate]   FAIL: REMEDiS harness — one or more thresholds failed (see harness table above)"
+    GATE_FAIL=1
+  fi
+else
+  echo "[scoring-gate] Step 3: REMEDiS harness skipped (set REMEDIS_HARNESS=1 to enable)"
+fi
+
 if [[ "$GATE_FAIL" -ne 0 ]]; then
   echo
   echo "[scoring-gate] ============================================="

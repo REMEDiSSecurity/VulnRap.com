@@ -150,6 +150,7 @@ async function buildAll() {
         path.resolve(artifactDir, "src/backfill-avri-family.ts"),
         path.resolve(artifactDir, "src/backfill-fabricated-evidence.ts"),
         path.resolve(artifactDir, "src/backfill-engine-versions.ts"),
+        path.resolve(artifactDir, "src/remedis-harness.ts"),
       ];
 
   const buildOptions = {
