@@ -26,10 +26,38 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
-export const CURRENT_VERSION = "3.14.0";
-export const RELEASE_DATE = "2026-05-12";
+export const CURRENT_VERSION = "3.15.0";
+export const RELEASE_DATE = "2026-05-15";
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "3.15.0",
+    date: "2026-05-15",
+    label: "Tier-1 Imagery Wave",
+    labelColor: "border-fuchsia-500 text-fuchsia-300",
+    sections: [
+      {
+        icon: <Sparkles className="w-4 h-4 text-fuchsia-300" />,
+        title: "Visual identity",
+        type: "feature",
+        items: [
+          "New insights hero illustration anchors the top of the insights index so the page leads with a picture instead of a wall of post titles.",
+          "Four signal portraits land on the engine deep-dive pages — one each for the linguistic, substance, CWE coherence, and AVRI engines — giving every engine its own at-a-glance visual.",
+          "A three-pillars hero now sits at the top of the engines hub, summarising the scoring approach in a single image before the per-engine cards.",
+          "A pipeline cross-section illustration runs across the how-it-works page, and a verification constellation illustration tops the architecture page, so both technical explainers open with their own custom artwork.",
+          "An analyst-wall illustration accompanies the methodology and origin-story sections on the home page so the long-form reading surfaces feel less text-heavy.",
+        ],
+      },
+      {
+        icon: <Zap className="w-4 h-4 text-fuchsia-300" />,
+        title: "Faster on mobile",
+        type: "improvement",
+        items: [
+          "Every new illustration ships phone-sized variants alongside the desktop versions, so visitors on mobile networks download noticeably smaller images on each of these pages.",
+        ],
+      },
+    ],
+  },
   {
     version: "3.14.0",
     date: "2026-05-12",
