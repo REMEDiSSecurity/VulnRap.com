@@ -119,7 +119,7 @@ export function TrustBadges() {
                     className="max-w-[240px] text-center"
                   >
                     <div className="font-semibold text-[11px] mb-0.5">{label}</div>
-                    <div className="text-[11px] text-muted-foreground">{tooltip}</div>
+                    <div className="text-[11px] text-primary-foreground/80">{tooltip}</div>
                   </TooltipContent>
                 </Tooltip>
               </div>
