@@ -14,6 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import avriPortrait from "@/assets/engines-avri-portrait.webp";
 
 interface FamilySummary {
   id: string;
@@ -141,6 +142,16 @@ export default function EnginesAvri() {
             Drift-monitored
           </Badge>
         </div>
+        <figure className="mt-6 rounded-xl overflow-hidden border border-border/60 bg-[#08090c] max-w-2xl">
+          <img
+            src={avriPortrait}
+            alt="A dark circular radar-style instrument with five labelled markers on concentric rings — 01 Linguistic in cyan, 02 Substance in violet, 03 CWE Coherence in amber, 04 Source Verification in green, 05 Report Integrity in red — and a faint sweep arc from the center."
+            width={1024}
+            height={1024}
+            loading="lazy"
+            className="w-full h-auto block"
+          />
+        </figure>
       </div>
 
       {/* What family-aware scoring means */}

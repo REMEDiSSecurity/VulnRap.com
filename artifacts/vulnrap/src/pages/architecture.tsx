@@ -1,5 +1,6 @@
 import { Network, ArrowRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import pipelineHero from "@/assets/pipeline-cross-section-hero.webp";
 
 interface PipelineNode {
   id: string;
@@ -429,6 +430,20 @@ export default function Architecture() {
           they hook in. Click any node in the diagram to jump to the deep dive
           for that stage.
         </p>
+        <figure className="mt-6 rounded-xl overflow-hidden border border-border/60 bg-[#08090c]">
+          <img
+            src={pipelineHero}
+            alt="A side cross-section of a glowing transparent conduit with a document travelling left-to-right through five colored chambers, suggesting a multi-stage refinement pipeline."
+            width={1792}
+            height={768}
+            loading="eager"
+            fetchPriority="high"
+            className="w-full h-auto block"
+          />
+          <figcaption className="px-4 py-2 text-[11px] text-muted-foreground/70 border-t border-border/40 bg-background/40">
+            Decorative cross-section — the real pipeline stages are named in the diagram below.
+          </figcaption>
+        </figure>
       </div>
 
       <section className="space-y-4">

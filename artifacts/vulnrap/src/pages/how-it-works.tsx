@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCheckReport } from "@workspace/api-client-react";
+import pipelineHero from "@/assets/pipeline-cross-section-hero.webp";
 
 type StepId = "redact" | "linguistic" | "substance" | "cwe" | "avri" | "fusion";
 
@@ -558,6 +559,17 @@ export default function HowItWorks() {
           explain and cheap to audit. Pick a sample below and hit{" "}
           <strong>Play</strong> to watch each step light up.
         </p>
+        <figure className="mt-4 rounded-xl overflow-hidden border border-border/60 bg-[#08090c]">
+          <img
+            src={pipelineHero}
+            alt="A side cross-section of a glowing transparent conduit with a glowing document travelling left-to-right through five colored chambers, suggesting a multi-stage refinement pipeline."
+            width={1792}
+            height={768}
+            loading="eager"
+            fetchPriority="high"
+            className="w-full h-auto block"
+          />
+        </figure>
       </header>
 
       {/* Live example */}

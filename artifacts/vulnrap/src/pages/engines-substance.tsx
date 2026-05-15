@@ -15,6 +15,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import substancePortrait from "@/assets/engines-substance-portrait.webp";
 
 interface SubComponent {
   key: string;
@@ -211,6 +212,19 @@ export default function EnginesSubstance() {
             Verdict ≥ 61 = GREEN
           </Badge>
         </div>
+        <figure className="mt-6 rounded-xl overflow-hidden border border-border/60 bg-[#08090c] max-w-2xl">
+          <img
+            src={substancePortrait}
+            alt="A magnifying glass with an amber-gold rim resting over a dark-paper printout of a dependency scan, the text beneath the glass sharper and warmer than the surrounding page."
+            width={1536}
+            height={1024}
+            loading="lazy"
+            className="w-full h-auto block"
+          />
+          <figcaption className="px-4 py-2 text-[11px] text-muted-foreground/70 border-t border-border/40 bg-background/40">
+            Illustrative — the command shown is decorative, not a real VulnRap CLI.
+          </figcaption>
+        </figure>
       </div>
 
       {/* What it measures */}
