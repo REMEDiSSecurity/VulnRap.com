@@ -1186,7 +1186,7 @@ export default function Home() {
         <div className="flex items-center justify-between gap-2 flex-wrap px-1">
           <h2 className="text-sm font-semibold flex items-center gap-2">
             <Zap className="w-4 h-4 text-primary" />
-            Three engines, one verdict
+            Redact, dedupe, score
           </h2>
           <span className="eyebrow-label">Section 02 · How we score it</span>
         </div>
