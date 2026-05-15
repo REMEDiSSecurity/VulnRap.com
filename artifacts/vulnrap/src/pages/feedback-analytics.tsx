@@ -205,6 +205,7 @@ import {
 } from "@/lib/archetype-history";
 import PhraseSuggestionsQueue from "@/components/phrase-suggestions-queue";
 import ShowcaseNominationsQueue from "@/components/showcase-nominations-queue";
+import { FeedbackV2Tile } from "@/pages/feedback-v2-review";
 
 function StatCard({
   title,
@@ -21492,6 +21493,11 @@ export default function FeedbackAnalytics() {
             feedback entries so far
           </p>
         </div>
+
+        {/* Task #1328 — Small admin tile for the REMEDiS feedback.v2
+            review queue. Self-fetches so the surrounding page doesn't
+            need to know about /api/feedback/v2/stats. */}
+        <FeedbackV2Tile fetchOnMount />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard

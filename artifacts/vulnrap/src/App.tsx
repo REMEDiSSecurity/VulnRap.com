@@ -53,6 +53,9 @@ const Compare = lazyRetry(() => import("@/pages/compare"));
 const CompareDetectors = lazyRetry(() => import("@/pages/compare-detectors"));
 const Batch = lazyRetry(() => import("@/pages/batch"));
 const FeedbackAnalytics = lazyRetry(() => import("@/pages/feedback-analytics"));
+const FeedbackV2Review = lazyRetry(
+  () => import("@/pages/feedback-v2-review"),
+);
 const ReportsExplorer = lazyRetry(() => import("@/pages/reports"));
 const Transparency = lazyRetry(() => import("@/pages/transparency"));
 const Community = lazyRetry(() => import("@/pages/community"));
@@ -136,6 +139,7 @@ function AppRoutes() {
             <Route path="/compare-detectors" element={<CompareDetectors />} />
             <Route path="/batch" element={<Batch />} />
             <Route path="/feedback-analytics" element={<FeedbackAnalytics />} />
+            <Route path="/feedback-v2-review" element={<FeedbackV2Review />} />
             <Route path="/reports" element={<ReportsExplorer />} />
             <Route path="/transparency" element={<Transparency />} />
             <Route path="/community" element={<Community />} />

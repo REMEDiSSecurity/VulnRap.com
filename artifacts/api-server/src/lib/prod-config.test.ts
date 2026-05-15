@@ -15,6 +15,7 @@ const FULL_PROD_ENV: NodeJS.ProcessEnv = {
   CALIBRATION_TOKEN: "cal-token",
   VISITOR_HMAC_KEY: "visitor-key",
   METRICS_TOKEN: "metrics-token",
+  REMEDIS_FEEDBACK_TOKEN: "remedis-token",
 };
 
 describe("validateProductionConfig", () => {
@@ -97,5 +98,14 @@ describe("validateProductionConfig", () => {
     expect(msg).toContain("CALIBRATION_TOKEN");
     expect(msg).toContain("VISITOR_HMAC_KEY");
     expect(msg).toContain("METRICS_TOKEN");
+    expect(msg).toContain("REMEDIS_FEEDBACK_TOKEN");
+  });
+
+  it("throws in production when REMEDIS_FEEDBACK_TOKEN is missing", () => {
+    const env = { ...FULL_PROD_ENV };
+    delete env.REMEDIS_FEEDBACK_TOKEN;
+    expect(() => validateProductionConfig({ env })).toThrow(
+      /REMEDIS_FEEDBACK_TOKEN/,
+    );
   });
 });

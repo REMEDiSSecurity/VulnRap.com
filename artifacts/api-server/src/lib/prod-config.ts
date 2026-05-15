@@ -36,6 +36,7 @@ const REQUIRED_TOKEN_VARS = [
   "CALIBRATION_TOKEN",
   "VISITOR_HMAC_KEY",
   "METRICS_TOKEN",
+  "REMEDIS_FEEDBACK_TOKEN",
 ] as const;
 
 export type RequiredProdSecret = (typeof REQUIRED_TOKEN_VARS)[number];
@@ -121,5 +122,7 @@ function describeRequirement(name: RequiredProdSecret): string {
       return "Required so visitor / phrase-suggestion / showcase-nomination per-IP HMACs are stable across processes. Without it counts drift on every restart.";
     case "METRICS_TOKEN":
       return "Required so the Prometheus scrape endpoint is gated. Without it /api/metrics is open to the public Internet and leaks per-route latency/volume telemetry.";
+    case "REMEDIS_FEEDBACK_TOKEN":
+      return "Required so POST /api/feedback/v2 (the REMEDiS feedback ingest endpoint) is gated. Without it the endpoint fails closed and rejects every request — REMEDiS cannot submit feedback until this is set.";
   }
 }

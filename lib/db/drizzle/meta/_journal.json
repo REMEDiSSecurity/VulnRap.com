@@ -78,6 +78,13 @@
       "when": 1779148800000,
       "tag": "0011_slack_relay_and_report_health",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779235200000,
+      "tag": "0012_remedis_feedback_v2",
+      "breakpoints": true
     }
   ]
 }

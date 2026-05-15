@@ -20,3 +20,5 @@ export * from "./scoring_gate_runs";
 export * from "./showcase_nominations";
 export * from "./user_preferences";
 export * from "./slack_tenants";
+export * from "./corpus_unreviewed";
+export * from "./corpus_labelled";
