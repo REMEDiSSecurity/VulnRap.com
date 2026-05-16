@@ -1,0 +1,7 @@
+{
+  "cves": [
+    "CVE-2025-99999"
+  ],
+  "fetchedAt": "2026-05-16T00:00:00.000Z",
+  "_comment": "Task #1337 — checked-in NVD-rejected fixture for CI. Contains only the rejected CVE ids referenced by the REMEDiS corpus (currently just rr-153's CVE-2025-99999). The pre-filter smoke (artifacts/api-server/src/remedis-prefilter-smoke.ts) loads this when no operator-set NVD_REJECTED_CACHE_PATH is populated, so `rejected_cve` fires on rr-153 in CI without hitting the live NVD API. Production overwrites a real on-disk cache via the nvd-rejected-feed scheduler."
+}
