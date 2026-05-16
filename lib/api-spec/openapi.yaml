@@ -1219,6 +1219,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScoreStabilitySchedulerStatus"
 
+  /feedback/calibration/nvd-rejected-feed/scheduler-status:
+    get:
+      operationId: getNvdRejectedFeedSchedulerStatus
+      tags: [feedback]
+      summary: NVD rejected-CVE feed refresher heartbeat (Task #1338)
+      description: |
+        Operator-visible status of the in-process NVD rejected-CVE feed
+        refresher for the responding replica. Mirrors the AVRI drift /
+        rescore-backfill / score-stability scheduler-status endpoints:
+        timestamps + booleans + small numeric counters only, so the
+        endpoint stays safe to expose unauthenticated alongside the
+        other heartbeat surfaces.
+      responses:
+        "200":
+          description: NVD rejected-feed scheduler status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NvdRejectedFeedSchedulerStatus"
+
   /feedback/calibration/scoring-gate-runs:
     get:
       operationId: getScoringGateRuns
@@ -6649,6 +6669,80 @@ components:
           lastAlertDate,
           lastAlertFlipRate,
           lastAlertDispatched,
+          nextTickAt,
+          ticksCompleted,
+        ]
+
+    NvdRejectedFeedSchedulerStatus:
+      type: object
+      description: |
+        Per-replica heartbeat for the in-process NVD rejected-CVE feed
+        refresher. Mirrors the other scheduler-status shapes (booleans /
+        timestamps / small numeric counters only) so it's safe to expose
+        on an unauthenticated endpoint alongside the other heartbeat
+        surfaces.
+      properties:
+        schedulerStarted:
+          type: boolean
+        schedulerEnabled:
+          type: boolean
+          description: True when NVD_REJECTED_FEED_ENABLED is set; ticks short-circuit when false.
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        intervalMs:
+          type: integer
+          nullable: true
+        retryIntervalMs:
+          type: integer
+          nullable: true
+        lastTickAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastTickOk:
+          type: boolean
+          nullable: true
+        lastTickRanTick:
+          type: boolean
+          nullable: true
+          description: True when the last tick actually fetched the feed; false when it short-circuited because the scheduler is disabled.
+        lastTickCount:
+          type: integer
+          nullable: true
+          description: Number of rejected-CVE IDs primed into the cache on the last successful tick.
+        lastTickDurationMs:
+          type: integer
+          nullable: true
+        loadedFromDisk:
+          type: integer
+          nullable: true
+          description: Number of rejected-CVE IDs primed from the persisted cache at scheduler startup.
+        loadedFetchedAt:
+          type: string
+          nullable: true
+          description: The `fetchedAt` timestamp recorded in the persisted cache file at startup (raw string; the file may pre-date strict ISO formatting).
+        nextTickAt:
+          type: string
+          format: date-time
+          nullable: true
+        ticksCompleted:
+          type: integer
+      required:
+        [
+          schedulerStarted,
+          schedulerEnabled,
+          startedAt,
+          intervalMs,
+          retryIntervalMs,
+          lastTickAt,
+          lastTickOk,
+          lastTickRanTick,
+          lastTickCount,
+          lastTickDurationMs,
+          loadedFromDisk,
+          loadedFetchedAt,
           nextTickAt,
           ticksCompleted,
         ]

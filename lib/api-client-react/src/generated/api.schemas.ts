@@ -2818,6 +2818,36 @@ export interface ScoreStabilitySchedulerStatus {
 }
 
 /**
+ * Per-replica heartbeat for the in-process NVD rejected-CVE feed
+refresher. Mirrors the other scheduler-status shapes (booleans /
+timestamps / small numeric counters only) so it's safe to expose
+on an unauthenticated endpoint alongside the other heartbeat
+surfaces.
+
+ */
+export interface NvdRejectedFeedSchedulerStatus {
+  schedulerStarted: boolean;
+  /** True when NVD_REJECTED_FEED_ENABLED is set; ticks short-circuit when false. */
+  schedulerEnabled: boolean;
+  startedAt: string | null;
+  intervalMs: number | null;
+  retryIntervalMs: number | null;
+  lastTickAt: string | null;
+  lastTickOk: boolean | null;
+  /** True when the last tick actually fetched the feed; false when it short-circuited because the scheduler is disabled. */
+  lastTickRanTick: boolean | null;
+  /** Number of rejected-CVE IDs primed into the cache on the last successful tick. */
+  lastTickCount: number | null;
+  lastTickDurationMs: number | null;
+  /** Number of rejected-CVE IDs primed from the persisted cache at scheduler startup. */
+  loadedFromDisk: number | null;
+  /** The `fetchedAt` timestamp recorded in the persisted cache file at startup (raw string; the file may pre-date strict ISO formatting). */
+  loadedFetchedAt: string | null;
+  nextTickAt: string | null;
+  ticksCompleted: number;
+}
+
+/**
  * A single report's tier/score diff from a scoring-gate replay run.
  */
 export interface ScoringGateRunDiff {

@@ -23,6 +23,8 @@ import {
   getGetAvriDriftNotificationsQueryKey,
   useGetAvriDriftSchedulerStatus,
   getGetAvriDriftSchedulerStatusQueryKey,
+  useGetNvdRejectedFeedSchedulerStatus,
+  getGetNvdRejectedFeedSchedulerStatusQueryKey,
   useGetAvriDriftRearmHistory,
   getGetAvriDriftRearmHistoryQueryKey,
   useGetScoreStabilitySummary,
@@ -43,6 +45,7 @@ import {
   ApiError,
   type AvriDriftNotificationRecord,
   type AvriDriftSchedulerStatus,
+  type NvdRejectedFeedSchedulerStatus,
   type AvriDriftRearmAuditEntry,
   type CalibrationAuthBruteForceAlertEntry,
   useGetCalibrationAuthStatus,
@@ -16217,6 +16220,253 @@ function SchedulerStatusContent({
   );
 }
 
+// Task #1338 — Operator-visible heartbeat for the NVD rejected-CVE feed
+// refresher. Single-replica counterpart to SchedulerStatusPanel (the
+// rejected-feed scheduler exposes one in-memory status struct per
+// process rather than the AVRI drift scheduler's persisted multi-replica
+// snapshot), so we render one row with the same styling vocabulary.
+function NvdRejectedFeedSchedulerPanel() {
+  const queryKey = getGetNvdRejectedFeedSchedulerStatusQueryKey();
+  // Refetch every 30s — the endpoint just reads an in-memory struct.
+  const { data, isLoading, isError } = useGetNvdRejectedFeedSchedulerStatus({
+    query: { queryKey, refetchInterval: 30_000 },
+  });
+
+  // Tick `now` between server fetches so the relative-time labels
+  // ("in 4m" / "5m ago") stay roughly fresh without re-querying.
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const OVERDUE_GRACE_MS = 60_000;
+  const status: NvdRejectedFeedSchedulerStatus | undefined = data ?? undefined;
+  const overdue = status
+    ? isRejectedFeedOverdue(status, now, OVERDUE_GRACE_MS)
+    : false;
+
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+        <Clock className="w-3 h-3" />
+        <span>NVD rejected-feed refresher</span>
+        <span className="text-muted-foreground/40 normal-case font-normal italic">
+          background rejected-CVE cache prime
+          {overdue ? " · overdue" : ""}
+        </span>
+      </div>
+      {isLoading ? (
+        <Skeleton className="h-16 rounded-md" />
+      ) : isError || !status ? (
+        <p className="text-xs text-muted-foreground/70 py-2 flex items-center gap-2">
+          <XCircle className="w-3.5 h-3.5 text-red-400" />
+          Could not load rejected-feed scheduler status.
+        </p>
+      ) : (
+        <NvdRejectedFeedSchedulerRow
+          status={status}
+          now={now}
+          overdue={overdue}
+        />
+      )}
+    </div>
+  );
+}
+
+// Overdue when the scheduler is armed AND its scheduled next tick has
+// elapsed by more than (retryIntervalMs ?? 0) + grace. Mirrors the
+// AVRI drift panel's overdue heuristic.
+function isRejectedFeedOverdue(
+  status: NvdRejectedFeedSchedulerStatus,
+  now: number,
+  graceMs: number,
+): boolean {
+  if (!status.schedulerStarted || status.nextTickAt == null) return false;
+  const nextMs = new Date(status.nextTickAt).getTime();
+  if (!Number.isFinite(nextMs)) return false;
+  const cushion = (status.retryIntervalMs ?? 0) + graceMs;
+  return nextMs + cushion < now;
+}
+
+function NvdRejectedFeedSchedulerRow({
+  status,
+  now,
+  overdue,
+}: {
+  status: NvdRejectedFeedSchedulerStatus;
+  now: number;
+  overdue: boolean;
+}) {
+  let headline: { label: string; color: string; icon: ReactNode };
+  if (overdue) {
+    headline = {
+      label: "Overdue · scheduler may be wedged",
+      color: "text-red-400 bg-red-400/10 border-red-400/30",
+      icon: <AlertTriangle className="w-3 h-3" />,
+    };
+  } else if (!status.schedulerStarted) {
+    headline = {
+      label: "Not started in this process",
+      color: "text-muted-foreground bg-muted/30 border-border/40",
+      icon: <Info className="w-3 h-3" />,
+    };
+  } else if (!status.schedulerEnabled) {
+    headline = {
+      label: "Armed · NVD_REJECTED_FEED_ENABLED not set",
+      color: "text-muted-foreground bg-muted/30 border-border/40",
+      icon: <Info className="w-3 h-3" />,
+    };
+  } else if (status.lastTickOk === false) {
+    headline = {
+      label: "Last tick failed",
+      color: "text-red-400 bg-red-400/10 border-red-400/30",
+      icon: <XCircle className="w-3 h-3" />,
+    };
+  } else if (status.lastTickOk === true) {
+    headline = {
+      label: "Healthy",
+      color: "text-green-400 bg-green-400/10 border-green-400/30",
+      icon: <CheckCircle2 className="w-3 h-3" />,
+    };
+  } else {
+    headline = {
+      label: "Armed · awaiting first tick",
+      color: "text-primary bg-primary/10 border-primary/30",
+      icon: <Activity className="w-3 h-3" />,
+    };
+  }
+
+  const lastAgo = status.lastTickAt
+    ? formatRelativeAgo(status.lastTickAt, now)
+    : null;
+  const nextIn = status.nextTickAt
+    ? formatRelativeUntil(status.nextTickAt, now)
+    : null;
+  const startedAgo = status.startedAt
+    ? formatRelativeAgo(status.startedAt, now)
+    : null;
+
+  let lastDetail: string;
+  if (status.lastTickAt == null) {
+    lastDetail = "—";
+  } else if (status.lastTickOk === false) {
+    lastDetail = "failed";
+  } else if (status.lastTickRanTick === false) {
+    lastDetail = "skipped (feed disabled)";
+  } else {
+    const n = status.lastTickCount ?? 0;
+    const dur =
+      status.lastTickDurationMs != null
+        ? ` in ${formatMsInterval(status.lastTickDurationMs)}`
+        : "";
+    lastDetail = `primed ${n} rejected CVE${n === 1 ? "" : "s"}${dur}`;
+  }
+
+  const cadence =
+    status.intervalMs != null && status.retryIntervalMs != null
+      ? `every ${formatMsInterval(status.intervalMs)} (retry ${formatMsInterval(status.retryIntervalMs)})`
+      : null;
+
+  return (
+    <div className="rounded-md border border-border/40 bg-muted/[0.03] p-3 space-y-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <Badge
+          variant="outline"
+          className={cn("text-[10px] gap-1", headline.color)}
+        >
+          {headline.icon}
+          {headline.label}
+        </Badge>
+        <span className="text-[10px] text-muted-foreground/70 tabular-nums">
+          {status.ticksCompleted} tick{status.ticksCompleted === 1 ? "" : "s"}{" "}
+          completed
+        </span>
+      </div>
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground/70 shrink-0">Last tick:</dt>
+          <dd className="text-foreground/90">
+            {status.lastTickAt ? (
+              <>
+                <span className="tabular-nums" title={status.lastTickAt}>
+                  {lastAgo ?? status.lastTickAt}
+                </span>
+                <span className="text-muted-foreground/60">
+                  {" "}
+                  · {lastDetail}
+                </span>
+              </>
+            ) : (
+              <span className="text-muted-foreground/60">never</span>
+            )}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground/70 shrink-0">Next tick:</dt>
+          <dd className="text-foreground/90">
+            {status.nextTickAt ? (
+              <span className="tabular-nums" title={status.nextTickAt}>
+                {nextIn ?? status.nextTickAt}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/60">
+                {status.schedulerStarted ? "stopped" : "—"}
+              </span>
+            )}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground/70 shrink-0">Started:</dt>
+          <dd className="text-foreground/90">
+            {status.startedAt ? (
+              <span className="tabular-nums" title={status.startedAt}>
+                {startedAgo ?? status.startedAt}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/60">never</span>
+            )}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground/70 shrink-0">Cadence:</dt>
+          <dd className="text-foreground/90">
+            {cadence ?? <span className="text-muted-foreground/60">—</span>}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-muted-foreground/70 shrink-0">Primed at boot:</dt>
+          <dd className="text-foreground/90 tabular-nums">
+            {status.loadedFromDisk != null ? (
+              <>
+                {status.loadedFromDisk} from disk
+                {status.loadedFetchedAt && (
+                  <span
+                    className="text-muted-foreground/60"
+                    title={status.loadedFetchedAt}
+                  >
+                    {" "}
+                    · cached {status.loadedFetchedAt}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-muted-foreground/60">—</span>
+            )}
+          </dd>
+        </div>
+      </dl>
+      {status.schedulerStarted && !status.schedulerEnabled && (
+        <p className="text-[10px] text-muted-foreground/60 italic leading-relaxed">
+          Set <code className="font-mono">NVD_REJECTED_FEED_ENABLED=1</code> on
+          the server to enable the periodic refresh — until then the
+          scheduler is armed but every tick short-circuits.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // Render an interval like "6h" / "45m" / "30s". Used only by
 // SchedulerStatusPanel.
 function formatMsInterval(ms: number): string {
@@ -20697,6 +20947,11 @@ function AvriDriftSection() {
           </div>
 
           <SchedulerStatusPanel />
+
+          {/* Task #1338 — NVD rejected-CVE feed refresher heartbeat, so
+            operators can confirm the refresher is firing and spot stale
+            runs without grepping logs. */}
+          <NvdRejectedFeedSchedulerPanel />
 
           {/* Task #620 — Reviewer-only score-stability chart. Renders the
             nightly tier-flip count per day with direction breakdown

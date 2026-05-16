@@ -89,6 +89,7 @@ import type {
   ListHandwavyPhraseRemovalBatchesParams,
   ListPhraseSuggestionsParams,
   ListShowcaseNominationsParams,
+  NvdRejectedFeedSchedulerStatus,
   PhraseSuggestionList,
   PhraseSuggestionPatchBody,
   PhraseSuggestionPatchResponse,
@@ -3165,6 +3166,96 @@ export function useGetScoreStabilitySchedulerStatus<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetScoreStabilitySchedulerStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Operator-visible status of the in-process NVD rejected-CVE feed
+refresher for the responding replica. Mirrors the AVRI drift /
+rescore-backfill / score-stability scheduler-status endpoints:
+timestamps + booleans + small numeric counters only, so the
+endpoint stays safe to expose unauthenticated alongside the
+other heartbeat surfaces.
+
+ * @summary NVD rejected-CVE feed refresher heartbeat (Task
+ */
+export const getGetNvdRejectedFeedSchedulerStatusUrl = () => {
+  return `/api/feedback/calibration/nvd-rejected-feed/scheduler-status`;
+};
+
+export const getNvdRejectedFeedSchedulerStatus = async (
+  options?: RequestInit,
+): Promise<NvdRejectedFeedSchedulerStatus> => {
+  return customFetch<NvdRejectedFeedSchedulerStatus>(
+    getGetNvdRejectedFeedSchedulerStatusUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetNvdRejectedFeedSchedulerStatusQueryKey = () => {
+  return [
+    `/api/feedback/calibration/nvd-rejected-feed/scheduler-status`,
+  ] as const;
+};
+
+export const getGetNvdRejectedFeedSchedulerStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNvdRejectedFeedSchedulerStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getNvdRejectedFeedSchedulerStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetNvdRejectedFeedSchedulerStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getNvdRejectedFeedSchedulerStatus>>
+  > = ({ signal }) =>
+    getNvdRejectedFeedSchedulerStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNvdRejectedFeedSchedulerStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNvdRejectedFeedSchedulerStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNvdRejectedFeedSchedulerStatus>>
+>;
+export type GetNvdRejectedFeedSchedulerStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary NVD rejected-CVE feed refresher heartbeat (Task
+ */
+
+export function useGetNvdRejectedFeedSchedulerStatus<
+  TData = Awaited<ReturnType<typeof getNvdRejectedFeedSchedulerStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getNvdRejectedFeedSchedulerStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions =
+    getGetNvdRejectedFeedSchedulerStatusQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

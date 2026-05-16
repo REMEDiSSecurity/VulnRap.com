@@ -28,6 +28,7 @@ import {
 import { getRescoreBackfillSchedulerStatus } from "../lib/rescore-backfill-scheduler";
 import { getScoreStabilitySchedulerStatus } from "../lib/score-stability-scheduler";
 import { getHoldoutDriftSchedulerStatus } from "../lib/holdout-drift-scheduler";
+import { getNvdRejectedFeedSchedulerStatus } from "../lib/nvd-rejected-feed-scheduler";
 import {
   computeScoreStabilitySummary,
   DEFAULT_LOOKBACK_DAYS,
@@ -1516,6 +1517,30 @@ router.get(
       res
         .status(500)
         .json({ error: "Failed to read holdout drift scheduler status." });
+    }
+  },
+);
+
+// Task #1338 — Operator-visible heartbeat for the NVD rejected-CVE feed
+// refresher. Mirrors the AVRI drift / rescore-backfill / score-stability
+// / holdout-drift scheduler-status endpoints: timestamps + booleans +
+// small numeric counters only (no error text or env values), so the
+// endpoint stays safe to expose unauthenticated alongside the other
+// heartbeat surfaces.
+router.get(
+  "/feedback/calibration/nvd-rejected-feed/scheduler-status",
+  (_req, res) => {
+    try {
+      const status = getNvdRejectedFeedSchedulerStatus();
+      res.json(status);
+    } catch (err) {
+      _req.log?.error(
+        err,
+        "Failed to read NVD rejected-feed scheduler status",
+      );
+      res.status(500).json({
+        error: "Failed to read NVD rejected-feed scheduler status.",
+      });
     }
   },
 );

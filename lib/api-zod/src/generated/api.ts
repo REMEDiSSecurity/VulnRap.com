@@ -3757,6 +3757,61 @@ export const GetScoreStabilitySchedulerStatusResponse = zod
   );
 
 /**
+ * Operator-visible status of the in-process NVD rejected-CVE feed
+refresher for the responding replica. Mirrors the AVRI drift /
+rescore-backfill / score-stability scheduler-status endpoints:
+timestamps + booleans + small numeric counters only, so the
+endpoint stays safe to expose unauthenticated alongside the
+other heartbeat surfaces.
+
+ * @summary NVD rejected-CVE feed refresher heartbeat (Task
+ */
+export const GetNvdRejectedFeedSchedulerStatusResponse = zod
+  .object({
+    schedulerStarted: zod.boolean(),
+    schedulerEnabled: zod
+      .boolean()
+      .describe(
+        "True when NVD_REJECTED_FEED_ENABLED is set; ticks short-circuit when false.",
+      ),
+    startedAt: zod.coerce.date().nullable(),
+    intervalMs: zod.number().nullable(),
+    retryIntervalMs: zod.number().nullable(),
+    lastTickAt: zod.coerce.date().nullable(),
+    lastTickOk: zod.boolean().nullable(),
+    lastTickRanTick: zod
+      .boolean()
+      .nullable()
+      .describe(
+        "True when the last tick actually fetched the feed; false when it short-circuited because the scheduler is disabled.",
+      ),
+    lastTickCount: zod
+      .number()
+      .nullable()
+      .describe(
+        "Number of rejected-CVE IDs primed into the cache on the last successful tick.",
+      ),
+    lastTickDurationMs: zod.number().nullable(),
+    loadedFromDisk: zod
+      .number()
+      .nullable()
+      .describe(
+        "Number of rejected-CVE IDs primed from the persisted cache at scheduler startup.",
+      ),
+    loadedFetchedAt: zod
+      .string()
+      .nullable()
+      .describe(
+        "The `fetchedAt` timestamp recorded in the persisted cache file at startup (raw string; the file may pre-date strict ISO formatting).",
+      ),
+    nextTickAt: zod.coerce.date().nullable(),
+    ticksCompleted: zod.number(),
+  })
+  .describe(
+    "Per-replica heartbeat for the in-process NVD rejected-CVE feed\nrefresher. Mirrors the other scheduler-status shapes (booleans \/\ntimestamps \/ small numeric counters only) so it's safe to expose\non an unauthenticated endpoint alongside the other heartbeat\nsurfaces.\n",
+  );
+
+/**
  * Returns the last N scoring-gate replay runs, each with its
 timestamp, commit, total reports, flip count, flip rate, and the
 top per-fixture diffs. Backs a sparkline + table on the
