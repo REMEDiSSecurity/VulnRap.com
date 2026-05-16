@@ -34,6 +34,9 @@ const { startHealthHeartbeatScheduler } = await import(
 const { startReportsPruneScheduler } = await import(
   "./lib/reports-prune-scheduler"
 );
+const { startNvdRejectedFeedScheduler } = await import(
+  "./lib/nvd-rejected-feed-scheduler"
+);
 const { startPgPoolCollector, stopPgPoolCollector } = await import(
   "./lib/metrics"
 );
@@ -76,6 +79,11 @@ const server = app.listen(port, (err) => {
   // failed reports past their retry budget and deletes abandoned
   // ones past retention. See lib/reports-prune-scheduler.ts.
   const reportsPruneScheduler = startReportsPruneScheduler();
+  // Task #1335 — keep the NVD-rejected CVE list fresh so the
+  // pre-filter's `rejected_cve` lane fires in production. The
+  // loader runs unconditionally; only the periodic refetch is
+  // gated on NVD_REJECTED_FEED_ENABLED.
+  const nvdRejectedFeedScheduler = startNvdRejectedFeedScheduler();
   // Task #462 — Graceful shutdown that actually exits.
   //
   // Without an explicit process.exit, the pino-pretty transport's worker
@@ -114,6 +122,7 @@ const server = app.listen(port, (err) => {
     holdoutDriftScheduler.stop();
     healthHeartbeatScheduler.stop();
     reportsPruneScheduler.stop();
+    nvdRejectedFeedScheduler.stop();
     stopPgPoolCollector();
     server.close();
     server.closeAllConnections?.();

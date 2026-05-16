@@ -21,6 +21,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { runPreFilters } from "./lib/pre-filters";
+import { loadPersistedNvdRejectedCache } from "./lib/nvd-rejected-feed-scheduler";
 
 const EXPECTED_QUARANTINE_IDS = [
   "rr-016", // prompt-injection bait
@@ -30,6 +31,10 @@ const EXPECTED_QUARANTINE_IDS = [
   "rr-149", // CVE impossible format
   "rr-150", // CVE future year
   "rr-152", // CVE letter in id
+  // Task #1335 — rr-153 fires `rejected_cve` once the NVD-rejected cache
+  // is primed. CI seeds the cache from eval/remedis-corpus/nvd-rejected.fixture.json
+  // (loaded below); production refreshes it via the nvd-rejected-feed scheduler.
+  "rr-153", // CVE rejected by NVD (cache-backed)
   "rr-154", // fake threat-intel firm (partnership fee)
   "rr-157", // fake CERT/CC
   "rr-158", // fake_h1_or_similar BEC
@@ -37,6 +42,14 @@ const EXPECTED_QUARANTINE_IDS = [
   "rr-160", // fake H1 triager re-verify credentials
   "rr-163", // extortion variant
 ];
+
+// Task #1335 — fallback fixture path the smoke uses when no operator-set
+// NVD_REJECTED_CACHE_PATH points at a real cache. Checking in a tiny set
+// of rejected CVE ids (just the ones referenced by the corpus) lets CI
+// prove `rejected_cve` fires without making the smoke hit the live NVD
+// API on every PR.
+const REJECTED_CVE_FIXTURE_PATH =
+  "eval/remedis-corpus/nvd-rejected.fixture.json";
 
 const MUST_NOT_QUARANTINE_IDS = [
   "rr-051", // German real
@@ -105,6 +118,35 @@ async function main(): Promise<void> {
           "eval/remedis-corpus/AllReports/reports",
         );
   const corpus = await loadCorpus(reportsDir);
+
+  // Task #1335 — prime the NVD-rejected cache from disk before running
+  // the smoke so rr-153 lands as a HIT instead of a MISS. The default
+  // loader respects NVD_REJECTED_CACHE_PATH for operator-set paths
+  // (the api-server's scheduler refreshes this in production); when
+  // that's empty we fall back to the checked-in fixture so CI runs
+  // are deterministic.
+  let persisted = await loadPersistedNvdRejectedCache();
+  if (persisted.loaded === 0) {
+    const fixturePath = path.resolve(process.cwd(), REJECTED_CVE_FIXTURE_PATH);
+    persisted = await loadPersistedNvdRejectedCache(fixturePath);
+    if (persisted.loaded > 0) {
+      console.log(
+        `[prefilter-smoke] primed ${persisted.loaded} NVD-rejected CVE(s) ` +
+          `from fixture ${REJECTED_CVE_FIXTURE_PATH}`,
+      );
+    }
+  } else {
+    console.log(
+      `[prefilter-smoke] primed ${persisted.loaded} NVD-rejected CVE(s) ` +
+        `from disk (fetched ${persisted.fetchedAt ?? "unknown"})`,
+    );
+  }
+  if (persisted.loaded === 0) {
+    console.log(
+      "[prefilter-smoke] WARNING: no NVD-rejected cache available; " +
+        "rr-153 will land as a MISS",
+    );
+  }
 
   const byRule: Record<string, number> = {};
   const byFlag: Record<string, number> = {};
