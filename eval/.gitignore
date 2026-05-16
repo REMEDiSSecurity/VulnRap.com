@@ -1,2 +1,5 @@
 remedis-corpus/
+!remedis-corpus/
+remedis-corpus/*
+!remedis-corpus/nvd-rejected.fixture.json
 remedis-results/
