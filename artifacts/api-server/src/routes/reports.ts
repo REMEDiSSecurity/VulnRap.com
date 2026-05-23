@@ -70,7 +70,10 @@ import {
   type ConfigImpactNotice,
 } from "../lib/config-notices";
 import { redactReport } from "../lib/redactor";
-import { requireCalibrationAuthStrict } from "../middlewares/require-calibration-auth";
+import {
+  getCalibrationAuthStatus,
+  requireCalibrationAuthStrict,
+} from "../middlewares/require-calibration-auth";
 import {
   detectAgentFingerprint,
   AGENT_DISPLAY_LABEL,
@@ -3107,16 +3110,37 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  // Task #726 — Conditional GET. The report payload is immutable from the
-  // client's perspective once the row is written (re-scores produce a new
-  // entry), so `Last-Modified: createdAt` is correct. Express's built-in
-  // ETag (weak, content-hashed) still fires on res.json() below; both
-  // validators short-circuit to 304 via res.fresh.
-  res.setHeader("Last-Modified", report.createdAt.toUTCString());
-  res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
-  if (req.fresh) {
-    res.status(304).end();
-    return;
+  // Task #1342 — Pen-test finding #13 (May 23 2026). Cache policy depends on
+  // whether the caller is an authenticated reviewer: the full reviewer
+  // payload is sensitive and must never be storable in a shared cache or
+  // served back to a subsequent unauthenticated request, while the scrubbed
+  // public payload is safe to cache for the same 60s window the home page
+  // already uses. Vary on the calibration token / Authorization header so
+  // intermediary caches keep the two representations on separate keys.
+  // (Auth status is evaluated before cache headers so this single decision
+  // drives both the response body branch below and the headers here.)
+  const auth = getCalibrationAuthStatus(req);
+  res.setHeader("Vary", "X-Calibration-Token, Authorization");
+  if (auth.tokenValid) {
+    // Task #726 conditional-GET was public-cache only; reviewer payload is
+    // never stored, so skip the 304 short-circuit and Last-Modified here.
+    res.setHeader("Cache-Control", "private, no-store");
+  } else {
+    // Task #726 — Conditional GET on the public scrubbed shape. The report
+    // payload is immutable from the client's perspective once the row is
+    // written (re-scores produce a new entry), so `Last-Modified: createdAt`
+    // is correct. Express's built-in ETag (weak, content-hashed) still fires
+    // on res.json() below; both validators short-circuit to 304 via
+    // res.fresh.
+    res.setHeader("Last-Modified", report.createdAt.toUTCString());
+    res.setHeader(
+      "Cache-Control",
+      "public, max-age=60, stale-while-revalidate=300",
+    );
+    if (req.fresh) {
+      res.status(304).end();
+      return;
+    }
   }
 
   let verification: VerificationResult | null = null;
@@ -3341,8 +3365,79 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     })(),
   });
 
-  res.json(response);
+  // Task #1342 — Pen-test finding #13 (May 23 2026). The full 174-field
+  // GetReportResponse exposes reviewer-only signals (triage recommendations,
+  // verification details, breakdown fusion weights, audit telemetry, prompt-
+  // injection labels, vulnrap composite internals) that the pen test scraped
+  // from this anonymous endpoint to map our scoring pipeline. Opportunistic
+  // auth: if the caller presents a valid calibration token we ship the full
+  // shape unchanged; otherwise we scrub the sensitive keys to nulls/empties
+  // BEFORE res.json. The public SPA results page (results.tsx) already
+  // tolerates null/empty values for each scrubbed field (existing
+  // reconstructed-from-backfill reports surface the same null/empty shape),
+  // so the public render degrades gracefully without an SPA refactor. The
+  // reviewer SPA build (VITE_CALIBRATION_TOKEN baked in via customFetch)
+  // still receives the full payload. `auth` was computed up-top so cache
+  // headers and the scrub branch agree on a single token-validity decision.
+  const publicResponse = auth.tokenValid
+    ? response
+    : scrubReportForPublic(response);
+  res.json(publicResponse);
 });
+
+// Public-vs-reviewer schema split for GET /api/reports/:id (Task #1342
+// finding #13). Returns a shallow copy of the parsed GetReportResponse with
+// reviewer-only fields stripped. Keeps the fields the public results page
+// renders (id, slopScore, slopTier, qualityScore, confidence, evidence,
+// feedback, redactedText, redactionSummary, similarityMatches, createdAt,
+// llm{Used,Failed,Enhanced}, vulnrap composite score+label, etc.) and nulls
+// or empties the rest. Exported only for tests in reports.privacy.test.ts.
+export function scrubReportForPublic<T extends Record<string, unknown>>(
+  full: T,
+): T {
+  const slim: Record<string, unknown> = { ...full };
+  slim.triageRecommendation = null;
+  slim.triageAssistant = null;
+  slim.verification = null;
+  slim.llmBreakdown = null;
+  slim.humanIndicators = [];
+  slim.sectionHashes = {};
+  slim.sectionMatches = [];
+  slim.engineVersions = null;
+  slim.promptInjectionDetected = false;
+  slim.promptInjectionLabels = [];
+  // breakdown.fusionWeights is the reviewer-only audit field; the rest of the
+  // breakdown (linguistic/factual/template/llm/verification/quality/...) is
+  // safe to surface — every numeric pillar is already shown on the public
+  // results page.
+  const breakdown = slim.breakdown;
+  if (breakdown && typeof breakdown === "object") {
+    const bdCopy: Record<string, unknown> = {
+      ...(breakdown as Record<string, unknown>),
+    };
+    delete bdCopy.fusionWeights;
+    slim.breakdown = bdCopy;
+  }
+  // vulnrap composite: keep the headline score+label+engineCount+reconstructed
+  // (already on the public home-page card), strip the per-engine breakdown,
+  // composite math, override list, warnings, and rescore audit trail.
+  const vulnrap = slim.vulnrap;
+  if (vulnrap && typeof vulnrap === "object") {
+    const v = vulnrap as Record<string, unknown>;
+    slim.vulnrap = {
+      compositeScore: v.compositeScore,
+      label: v.label,
+      engines: [],
+      compositeBreakdown: undefined,
+      overridesApplied: [],
+      warnings: [],
+      engineCount: v.engineCount ?? 0,
+      reconstructed: v.reconstructed ?? false,
+      rescoreHistory: [],
+    };
+  }
+  return slim as T;
+}
 
 // Sprint 9 v3: Per-report diagnostics endpoint. Returns the persisted pipeline
 // trace (per-stage timings, signals summary, feature flags, overrides). Sits

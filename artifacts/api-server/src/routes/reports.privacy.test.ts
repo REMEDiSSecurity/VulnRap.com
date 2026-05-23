@@ -281,6 +281,226 @@ describe("GET /api/reports/:id — showInFeed enforcement", () => {
   });
 });
 
+// Task #1342 — Pen-test finding #13 (May 23 2026). GET /api/reports/:id is a
+// public endpoint, but the pre-fix handler shipped the full 174-field
+// reviewer payload to any anonymous caller, exposing triage recommendations,
+// verification details, breakdown.fusionWeights, prompt-injection labels,
+// engine versions, llm sub-scores, and the vulnrap composite internals. The
+// fix opportunistically auths the request: with a valid calibration token
+// the full payload is returned (covered by the test above and the rest of
+// this file, which all send AUTH_HEADERS); without a token, sensitive keys
+// are scrubbed to null/empty. These tests lock both halves of the split.
+describe("GET /api/reports/:id — public-vs-reviewer schema split", () => {
+  async function getNoAuth(
+    path: string,
+  ): Promise<{ status: number; body: Record<string, unknown> }> {
+    const r = await fetch(`${baseUrl}${path}`);
+    return {
+      status: r.status,
+      body: (await r.json().catch(() => ({}))) as Record<string, unknown>,
+    };
+  }
+
+  it("scrubs reviewer-only fields when the calibration token is absent", async () => {
+    const r = seedReport({
+      showInFeed: true,
+      contentHash: "hash-public-scrub",
+      slopScore: 73,
+      slopTier: "Likely Slop",
+      humanIndicators: [
+        {
+          type: "human_contractions",
+          weight: 5,
+          description: "uses contractions",
+        },
+      ],
+      sectionHashes: { intro: "deadbeef" },
+      vulnrapCompositeScore: 60,
+      vulnrapCompositeLabel: "NEEDS REVIEW",
+      vulnrapOverridesApplied: ["pi-clamp"],
+      vulnrapEngineResults: {
+        engines: [
+          {
+            engine: "stylometry",
+            score: 60,
+            verdict: "RED",
+            confidence: "MEDIUM",
+          },
+        ],
+        warnings: ["short-text"],
+        compositeBreakdown: {
+          weightedSum: 60,
+          totalWeight: 1,
+          beforeOverride: 60,
+          afterOverride: 60,
+        },
+        engineCount: 1,
+        auditTelemetry: {
+          promptInjection: {
+            detected: true,
+            labels: ["ignore_previous"],
+            matchCount: 1,
+          },
+        },
+      },
+    });
+    const res = await getNoAuth(`/api/reports/${r.id}`);
+    expect(res.status).toBe(200);
+    const body = res.body;
+    // Public-safe fields the SPA results page depends on are preserved.
+    expect(body.id).toBe(r.id);
+    expect(body.slopScore).toBe(73);
+    expect(body.slopTier).toBe("Likely Slop");
+    expect(body.contentHash).toBe("hash-public-scrub");
+    expect(body.redactedText).toBeDefined();
+    // Reviewer-only fields are scrubbed.
+    expect(body.triageRecommendation).toBeNull();
+    expect(body.triageAssistant).toBeNull();
+    expect(body.verification).toBeNull();
+    expect(body.llmBreakdown).toBeNull();
+    expect(body.humanIndicators).toEqual([]);
+    expect(body.sectionHashes).toEqual({});
+    expect(body.sectionMatches).toEqual([]);
+    expect(body.engineVersions).toBeNull();
+    expect(body.promptInjectionDetected).toBe(false);
+    expect(body.promptInjectionLabels).toEqual([]);
+    const bd = body.breakdown as Record<string, unknown>;
+    expect(bd).toBeDefined();
+    expect(bd.fusionWeights).toBeUndefined();
+    // vulnrap composite: headline kept, internals stripped.
+    const v = body.vulnrap as Record<string, unknown>;
+    expect(v).toBeDefined();
+    expect(v.compositeScore).toBe(60);
+    expect(v.label).toBe("NEEDS REVIEW");
+    expect(v.engines).toEqual([]);
+    expect(v.compositeBreakdown).toBeUndefined();
+    expect(v.overridesApplied).toEqual([]);
+    expect(v.warnings).toEqual([]);
+    expect(v.rescoreHistory).toEqual([]);
+  });
+
+  it("returns the full reviewer payload when a valid calibration token is presented", async () => {
+    const r = seedReport({
+      showInFeed: true,
+      contentHash: "hash-public-with-token",
+      slopScore: 80,
+      slopTier: "Likely Slop",
+      humanIndicators: [
+        {
+          type: "human_contractions",
+          weight: 5,
+          description: "uses contractions",
+        },
+      ],
+      sectionHashes: { intro: "cafebabe" },
+      engineVersions: {
+        linguistic: "1.0.0",
+        substance: "1.0.0",
+        cwe: "1.0.0",
+        avri: "1.0.0",
+        fusion: "1.0.0",
+      },
+      vulnrapCompositeScore: 60,
+      vulnrapCompositeLabel: "NEEDS REVIEW",
+      vulnrapOverridesApplied: [],
+      vulnrapEngineResults: {
+        engines: [
+          {
+            engine: "stylometry",
+            score: 60,
+            verdict: "RED",
+            confidence: "MEDIUM",
+          },
+        ],
+        warnings: ["short-text"],
+        engineCount: 1,
+        auditTelemetry: {
+          promptInjection: {
+            detected: true,
+            labels: ["ignore_previous"],
+            matchCount: 1,
+          },
+        },
+      },
+    });
+    const res = await fetch(`${baseUrl}/api/reports/${r.id}`, {
+      headers: AUTH_HEADERS,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    // Reviewer-only fields are preserved on the authenticated path.
+    expect(body.humanIndicators).toEqual([
+      {
+        type: "human_contractions",
+        weight: 5,
+        description: "uses contractions",
+      },
+    ]);
+    expect(body.sectionHashes).toEqual({ intro: "cafebabe" });
+    expect(body.engineVersions).toEqual({
+      linguistic: "1.0.0",
+      substance: "1.0.0",
+      cwe: "1.0.0",
+      avri: "1.0.0",
+      fusion: "1.0.0",
+    });
+    expect(body.promptInjectionDetected).toBe(true);
+    expect(body.promptInjectionLabels).toEqual(["ignore_previous"]);
+    const v = body.vulnrap as Record<string, unknown>;
+    expect(v.engines).toEqual([
+      {
+        engine: "stylometry",
+        score: 60,
+        verdict: "RED",
+        confidence: "MEDIUM",
+      },
+    ]);
+    expect(v.warnings).toEqual(["short-text"]);
+  });
+
+  // Task #1342 — finding #13 cache hardening. Without this split a shared
+  // intermediary cache could store an authenticated reviewer payload under
+  // the public-URL key and replay it to a subsequent unauthenticated
+  // request, defeating the schema scrub. The handler must therefore (a)
+  // send `private, no-store` on the reviewer path and the original
+  // `public, max-age=60, ...` only on the scrubbed public path, and (b)
+  // emit `Vary: X-Calibration-Token, Authorization` on BOTH so caches key
+  // the two representations separately.
+  it("sets non-cacheable headers with Vary on the authenticated reviewer path", async () => {
+    const r = seedReport({
+      showInFeed: true,
+      contentHash: "hash-cache-auth",
+      slopScore: 50,
+      slopTier: "Likely Slop",
+    });
+    const res = await fetch(`${baseUrl}/api/reports/${r.id}`, {
+      headers: AUTH_HEADERS,
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    const vary = res.headers.get("vary") ?? "";
+    expect(vary.toLowerCase()).toContain("x-calibration-token");
+    expect(vary.toLowerCase()).toContain("authorization");
+  });
+
+  it("keeps the public 60s cache + Vary on the scrubbed unauthenticated path", async () => {
+    const r = seedReport({
+      showInFeed: true,
+      contentHash: "hash-cache-public",
+      slopScore: 50,
+      slopTier: "Likely Slop",
+    });
+    const res = await fetch(`${baseUrl}/api/reports/${r.id}`);
+    expect(res.status).toBe(200);
+    const cc = res.headers.get("cache-control") ?? "";
+    expect(cc).toContain("public");
+    expect(cc).toContain("max-age=60");
+    const vary = res.headers.get("vary") ?? "";
+    expect(vary.toLowerCase()).toContain("x-calibration-token");
+    expect(vary.toLowerCase()).toContain("authorization");
+  });
+});
+
 describe("GET /api/reports/:id/verify — showInFeed enforcement", () => {
   it("returns 404 for a hidden report", async () => {
     const r = seedReport({ showInFeed: false });
