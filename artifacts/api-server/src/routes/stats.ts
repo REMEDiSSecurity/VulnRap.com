@@ -286,15 +286,17 @@ router.get("/stats/visitors", async (_req, res): Promise<void> => {
 // /stats and /stats/distribution which remain open. Reviewer-token
 // gated; admin pages already attach the token via customFetch.
 router.get("/stats/trends", requireCalibrationAuthStrict, async (req, res): Promise<void> => {
-  const lastMod = await getReportsLastModified();
-  if (lastMod) {
-    res.setHeader("Last-Modified", lastMod.toUTCString());
-  }
-  res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
-  if (req.fresh) {
-    res.status(304).end();
-    return;
-  }
+  // Task #1342 — Pen-test finding #8 (May 23 2026) cache hardening. The
+  // route is reviewer-only, so the prior `public, max-age=120, swr=300`
+  // policy let an intermediary cache store a token-authenticated 200 and
+  // replay it to a subsequent unauthenticated caller (auth is via a
+  // custom header, not the URL — cache keys do not include it). Switch
+  // to `private, no-store` and add `Vary: X-Calibration-Token,
+  // Authorization` so the response is never shared-cacheable and never
+  // collides across auth states. Drop the conditional-GET 304
+  // short-circuit too: no-store makes it moot.
+  res.setHeader("Vary", "X-Calibration-Token, Authorization");
+  res.set("Cache-Control", "private, no-store");
 
   const daysParam = parseInt(req.query?.days as string) || 90;
   const days = Math.min(Math.max(daysParam, 7), 365);
@@ -366,7 +368,8 @@ router.get("/stats/trends", requireCalibrationAuthStrict, async (req, res): Prom
     feedbackTrend,
   });
 
-  res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
+  // Cache-Control / Vary are set at the top of this handler (see the
+  // Task #1342 cache-hardening comment) — do not override here.
   res.json(response);
 });
 

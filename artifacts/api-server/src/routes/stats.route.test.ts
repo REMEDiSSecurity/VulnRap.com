@@ -396,7 +396,13 @@ describe("POST /stats/visit", () => {
 // ---------------------------------------------------------------------------
 
 const HOMEPAGE_CACHE_CONTROL = "public, max-age=60, stale-while-revalidate=120";
-const TRENDS_CACHE_CONTROL = "public, max-age=120, stale-while-revalidate=300";
+// Task #1342 — Pen-test finding #8 (May 23 2026) cache hardening. The
+// reviewer-only /stats/trends endpoint was changed from public 120s caching
+// to `private, no-store` + `Vary: X-Calibration-Token, Authorization` so
+// shared caches cannot replay a token-authenticated 200 to a later
+// unauthenticated caller.
+const TRENDS_CACHE_CONTROL = "private, no-store";
+const TRENDS_VARY_LOWER = "x-calibration-token, authorization";
 
 describe("GET /stats", () => {
   it("returns aggregate stats with the expected shape and homepage cache header", async () => {
@@ -529,12 +535,13 @@ describe("GET /stats/distribution", () => {
 
 describe("GET /stats/trends", () => {
   it("returns daily report + feedback trends with the trends cache header", async () => {
-    // Handler issues 4 db.select(...) calls in this exact order:
-    //   1) freshnessProbe — MAX(created_at) for Last-Modified (Task #726)
-    //   2) dailyReports   — per-day counts + tier breakdown for reports
-    //   3) dailyFeedback  — per-day count + avg + helpful counts for feedback
-    //   4) totals         — totalReports + totalFeedback
-    selectQueue.push([]);
+    // Handler issues 3 db.select(...) calls in this exact order (the
+    // Task #1342 cache-hardening pass dropped the conditional-GET freshness
+    // probe — the response is now `private, no-store` so Last-Modified /
+    // 304 short-circuits no longer apply):
+    //   1) dailyReports   — per-day counts + tier breakdown for reports
+    //   2) dailyFeedback  — per-day count + avg + helpful counts for feedback
+    //   3) totals         — totalReports + totalFeedback
     selectQueue.push([
       {
         date: "2026-04-28",
@@ -631,9 +638,9 @@ describe("GET /stats/trends", () => {
   });
 
   it("clamps the days query param into [7, 365]", async () => {
-    // Empty rows for all 4 select calls (freshness probe + 3 aggregates)
-    // are fine — we only care about the clamped echo in the response body.
-    selectQueue.push([]);
+    // Empty rows for all 3 select calls (3 aggregates after the Task #1342
+    // freshness-probe removal) are fine — we only care about the clamped
+    // echo in the response body.
     selectQueue.push([]);
     selectQueue.push([]);
     selectQueue.push([{ totalReports: 0, totalFeedback: 0 }]);
@@ -652,6 +659,23 @@ describe("GET /stats/trends", () => {
   it("returns 401 without the reviewer token", async () => {
     const r = await request<{ error: string }>("GET", "/stats/trends?days=7");
     expect(r.status).toBe(401);
+  });
+
+  // Task #1342 — Pen-test finding #8 (May 23 2026) cache hardening. Without
+  // `private, no-store` + `Vary` on auth headers, a shared intermediary
+  // cache could store a token-authenticated 200 against the bare URL and
+  // replay it to a later unauthenticated caller — bypassing the
+  // requireCalibrationAuthStrict gate.
+  it("returns non-cacheable headers with Vary on the authenticated path", async () => {
+    selectQueue.push([]);
+    selectQueue.push([]);
+    selectQueue.push([{ totalReports: 0, totalFeedback: 0 }]);
+    const r = await request("GET", "/stats/trends?days=7", undefined, AUTH);
+    expect(r.status).toBe(200);
+    expect(r.headers["cache-control"]).toBe(TRENDS_CACHE_CONTROL);
+    const vary = r.headers["vary"] ?? "";
+    const varyStr = Array.isArray(vary) ? vary.join(", ") : vary;
+    expect(varyStr.toLowerCase()).toBe(TRENDS_VARY_LOWER);
   });
 });
 
@@ -819,15 +843,15 @@ describe("Task #726 — query budgets", () => {
     expect(selectCallCount).toBeLessThanOrEqual(2);
   });
 
-  it("GET /stats/trends issues at most 4 selects on the 200 path", async () => {
-    // 1× Last-Modified probe + 3× existing aggregates (per-day report
-    // bucket, per-day feedback bucket, totals row).
-    selectQueue.push([]); // freshness probe
+  it("GET /stats/trends issues at most 3 selects on the 200 path", async () => {
+    // 3× aggregates (per-day report bucket, per-day feedback bucket,
+    // totals row). The Last-Modified freshness probe was removed in the
+    // Task #1342 cache-hardening pass — see route comment.
     selectQueue.push([]); // dailyReports
     selectQueue.push([]); // dailyFeedback
     selectQueue.push([{ totalReports: 0, totalFeedback: 0 }]);
     const r = await request("GET", "/stats/trends?days=7", undefined, AUTH);
     expect(r.status).toBe(200);
-    expect(selectCallCount).toBeLessThanOrEqual(4);
+    expect(selectCallCount).toBeLessThanOrEqual(3);
   });
 });
