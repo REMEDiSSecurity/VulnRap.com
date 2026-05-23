@@ -112,18 +112,20 @@ async function postFeedback(): Promise<{
 }
 
 describe("POST /feedback — per-IP flood limiter (pen-test #4)", () => {
-  it("accepts the first 10 submissions from a single IP, then 429s the 11th", async () => {
+  it("accepts the first 3 rapid submissions then 429s the rest (acceptance: 5 rapid → later ones blocked)", async () => {
+    // Task plan acceptance: "Submitting 5 feedbacks back-to-back from
+    // one IP now returns 429 on the later ones." With the burst cap at
+    // 3 / 15 min, the 1st-3rd succeed (201) and the 4th + 5th return
+    // 429 with the limiter's JSON error envelope. This is the exact
+    // pen-test PoC scenario and it must never silently regress.
     const results: number[] = [];
-    for (let i = 0; i < 11; i++) {
+    for (let i = 0; i < 5; i++) {
       const { status } = await postFeedback();
       results.push(status);
     }
-    // First 10 must succeed (201). 11th must be rate-limited (429) with
-    // the JSON error envelope the limiter emits.
-    expect(results.slice(0, 10)).toEqual(
-      Array.from({ length: 10 }, () => 201),
-    );
-    expect(results[10]).toBe(429);
+    expect(results.slice(0, 3)).toEqual([201, 201, 201]);
+    expect(results[3]).toBe(429);
+    expect(results[4]).toBe(429);
 
     const limited = await postFeedback();
     expect(limited.status).toBe(429);

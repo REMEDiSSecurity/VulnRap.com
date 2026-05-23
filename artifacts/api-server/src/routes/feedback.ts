@@ -12,11 +12,29 @@ const router: IRouter = Router();
 // Task #1342 — Pen-test finding #4 (May 23 2026). Per-IP rate limit on
 // public feedback submission. Combined with the bumped PoW difficulty
 // (lib/challenge.ts), this turns the automated-flood exploit into an
-// uneconomic attack. 10 successful posts / hour / IP comfortably covers
-// a human reviewer rage-posting on multiple reports while still
-// returning 429 to the pen-test's burst PoC. The window is short
-// enough that a shared NAT exit point recovers quickly.
-const feedbackSubmitLimiter = rateLimit({
+// uneconomic attack. Two stacked limiters:
+//   (a) burst cap — 3 successful posts / 15 min / IP. This is the
+//       acceptance contract from the task plan: "5 rapid submits from
+//       the same IP returns 429 on the later ones". A human reviewer
+//       typing real feedback on real reports is not bursting through
+//       this; an automated PoC submitting back-to-back trips it on
+//       the 4th request.
+//   (b) hourly cap — 10 successful posts / hour / IP. Catches a slower
+//       drip that spaces requests outside the 15-min burst window but
+//       still piles up reviewer-flagged content faster than a human
+//       can plausibly type.
+// Burst limiter runs first so the 429 fires before any DB work.
+const feedbackBurstLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error:
+      "Too many feedback submissions from this IP. Please try again later.",
+  },
+});
+const feedbackHourlyLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
   standardHeaders: true,
@@ -37,7 +55,7 @@ router.get("/feedback/challenge", (_req, res) => {
   }
 });
 
-router.post("/feedback", feedbackSubmitLimiter, async (req, res) => {
+router.post("/feedback", feedbackBurstLimiter, feedbackHourlyLimiter, async (req, res) => {
   try {
     const {
       challengeId,
