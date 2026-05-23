@@ -29,15 +29,12 @@ const repoRoot = path.resolve(__dirname, "..");
 const specPath = path.join(repoRoot, "lib", "api-spec", "openapi.yaml");
 const outDir = path.join(repoRoot, "sdks", "postman");
 const outPath = path.join(outDir, "vulnrap.postman_collection.json");
-// Mirror to artifacts/vulnrap/public so the /developers download link
-// resolves at the same origin (no GitHub round-trip).
-const publicMirror = path.join(
-  repoRoot,
-  "artifacts",
-  "vulnrap",
-  "public",
-  "vulnrap.postman_collection.json",
-);
+// Task #1342 — Pen-test finding #15 (May 23 2026). The same-origin
+// public mirror at artifacts/vulnrap/public/vulnrap.postman_collection.json
+// was an unnecessary endpoint catalog at a guessable URL. The
+// /developers page now links directly to the canonical sdks/postman/
+// artifact on GitHub; this generator no longer writes a public copy
+// and app.ts 404s the legacy path.
 
 async function main() {
   const spec = await readFile(specPath, "utf8");
@@ -134,13 +131,10 @@ async function main() {
   const json = JSON.stringify(collection, null, 2) + "\n";
   await mkdir(outDir, { recursive: true });
   await writeFile(outPath, json, "utf8");
-  await mkdir(path.dirname(publicMirror), { recursive: true });
-  await writeFile(publicMirror, json, "utf8");
 
   const requestCount = countRequests(collection.item);
   console.log(
-    `[generate-postman] wrote ${path.relative(repoRoot, outPath)} and ` +
-      `${path.relative(repoRoot, publicMirror)} ` +
+    `[generate-postman] wrote ${path.relative(repoRoot, outPath)} ` +
       `(${requestCount} requests, ${collection.item?.length ?? 0} folders)`,
   );
 }

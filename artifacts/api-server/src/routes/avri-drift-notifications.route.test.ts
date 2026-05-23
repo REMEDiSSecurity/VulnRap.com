@@ -464,35 +464,48 @@ describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
     process.env.CALIBRATION_TOKEN = TOKEN;
   });
 
-  it("returns 200 unauthenticated even when CALIBRATION_TOKEN is configured", async () => {
-    // Sanity-check the suite's env so a future refactor that stops
-    // setting the token in `beforeAll` doesn't quietly turn this into
-    // a no-op.
+  // Task #1342 — Pen-test finding #6 (May 23 2026). The endpoint is
+  // reviewer-token gated and the hostname/replicaId values in every
+  // entry are replaced with opaque "replica-A/B/…" labels so the
+  // container fingerprint never leaves the process.
+  it("returns 401 unauthenticated even when CALIBRATION_TOKEN is configured", async () => {
     expect(process.env.CALIBRATION_TOKEN).toBe(TOKEN);
-    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
-    expect(r.status).toBe(200);
-    expect(pickLive(r.body).schedulerStarted).toBe(false);
+    const r = await request<{ error: string }>("GET", SCHEDULER_PATH);
+    expect(r.status).toBe(401);
   });
 
-  it("returns 200 unauthenticated when CALIBRATION_TOKEN is not set", async () => {
-    delete process.env.CALIBRATION_TOKEN;
-    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
-    expect(r.status).toBe(200);
-    expect(pickLive(r.body).schedulerStarted).toBe(false);
-  });
-
-  it("ignores a stray x-calibration-token header (route is un-gated, not opportunistically auth'd)", async () => {
-    const r = await request<SchedulerStatusBody>(
+  it("returns 401 with the wrong token", async () => {
+    const r = await request<{ error: string }>(
       "GET",
       SCHEDULER_PATH,
       undefined,
       { "x-calibration-token": "wrong-token" },
     );
+    expect(r.status).toBe(401);
+  });
+
+  it("returns 200 with the reviewer token and scrubs the hostname/replicaId", async () => {
+    const r = await request<SchedulerStatusBody>(
+      "GET",
+      SCHEDULER_PATH,
+      undefined,
+      AUTH,
+    );
     expect(r.status).toBe(200);
+    const live = pickLive(r.body);
+    expect(live.schedulerStarted).toBe(false);
+    // hostname/replicaId scrubbed to opaque "replica-A" labels.
+    expect(live.replicaId).toMatch(/^replica-[A-Z]+$/);
+    expect(live.hostname).toBe(live.replicaId);
   });
 
   it("returns the 'never started' baseline before the scheduler runs", async () => {
-    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
+    const r = await request<SchedulerStatusBody>(
+      "GET",
+      SCHEDULER_PATH,
+      undefined,
+      AUTH,
+    );
     expect(r.status).toBe(200);
     const live = pickLive(r.body);
     expect(live).toMatchObject({
@@ -525,7 +538,12 @@ describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
       initialDelayMs: 60_000,
       run: async () => ({ ok: true }),
     });
-    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
+    const r = await request<SchedulerStatusBody>(
+      "GET",
+      SCHEDULER_PATH,
+      undefined,
+      AUTH,
+    );
     expect(r.status).toBe(200);
     const live = pickLive(r.body);
     expect(live.schedulerStarted).toBe(true);
@@ -540,7 +558,12 @@ describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
   });
 
   it("matches the OpenAPI shape exactly — no missing keys, no surprise keys", async () => {
-    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
+    const r = await request<SchedulerStatusBody>(
+      "GET",
+      SCHEDULER_PATH,
+      undefined,
+      AUTH,
+    );
     expect(r.status).toBe(200);
     const live = pickLive(r.body);
     for (const key of REQUIRED_KEYS) {
@@ -568,7 +591,12 @@ describe("GET /feedback/calibration/avri-drift/scheduler-status", () => {
       run: async () => ({ ok: true }),
     });
 
-    const r = await request<SchedulerStatusBody>("GET", SCHEDULER_PATH);
+    const r = await request<SchedulerStatusBody>(
+      "GET",
+      SCHEDULER_PATH,
+      undefined,
+      AUTH,
+    );
     expect(r.status).toBe(200);
 
     // The boolean projection is fine to expose — the UI uses it to warn

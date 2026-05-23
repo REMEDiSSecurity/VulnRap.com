@@ -1,6 +1,13 @@
 import { createHash, randomBytes } from "crypto";
 
-const CHALLENGE_DIFFICULTY = 4;
+// Task #1342 — Bumped from 4 → 6 in response to the May 23 2026 pen-test
+// finding #4 (automated feedback flood was practical). 6 leading hex zeros
+// means ≥16M expected SHA-256 ops per challenge; on commodity client
+// hardware that's ~1–3 seconds, which is invisible to a human submitting
+// feedback once but turns the abuse cost into thousands of CPU-seconds
+// per attempt. The per-IP limiter on POST /feedback in app.ts is the
+// secondary throttle.
+const CHALLENGE_DIFFICULTY = 6;
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const CHALLENGE_PREFIX = "vulnrap-pow-";
 

@@ -174,7 +174,22 @@ const app = appModule.default;
 let server: http.Server;
 let baseUrl: string;
 
+// Task #1342 — /reports/:id/diagnostics, /reports/:id/triage-report and
+// /feedback/analytics are now reviewer-token gated. The shared get/getText
+// helpers below attach the token unconditionally so every assertion in
+// this suite (which targets the *response shape* of the surfaces, not
+// the auth gate itself) still reaches the handler. Auth-gate behavior
+// (401 unauthenticated / wrong-token, 200 with the token) is covered by
+// the route-specific test files:
+//   - reports.diagnostics.test.ts — diagnostics gate
+//   - calibration-auth.route.test.ts — feedback-analytics + auth-status gate
+// The triage-report gate is exercised end-to-end via the SPA's customFetch
+// auth-banner test (artifacts/vulnrap/e2e/calibration-token-rejected-banner).
+const TOKEN = "privacy-route-test-token";
+const AUTH_HEADERS = { "x-calibration-token": TOKEN } as const;
+
 beforeAll(async () => {
+  process.env.CALIBRATION_TOKEN = TOKEN;
   server = app.listen(0);
   await new Promise<void>((resolve) => server.on("listening", resolve));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -216,7 +231,7 @@ function seedFeedback(overrides: Partial<FakeRow> = {}): FakeRow {
 }
 
 async function get(path: string): Promise<{ status: number; body: unknown }> {
-  const r = await fetch(`${baseUrl}${path}`);
+  const r = await fetch(`${baseUrl}${path}`, { headers: AUTH_HEADERS });
   return { status: r.status, body: await r.json().catch(() => null) };
 }
 
@@ -351,7 +366,7 @@ describe("GET /api/reports/:id/triage-report — verification mode header", () =
   async function getText(
     path: string,
   ): Promise<{ status: number; body: string }> {
-    const r = await fetch(`${baseUrl}${path}`);
+    const r = await fetch(`${baseUrl}${path}`, { headers: AUTH_HEADERS });
     return { status: r.status, body: await r.text() };
   }
 
@@ -852,7 +867,7 @@ describe("GET /api/reports/:id/triage-report — AVRI Family Rubric section", ()
   async function getText(
     path: string,
   ): Promise<{ status: number; body: string }> {
-    const r = await fetch(`${baseUrl}${path}`);
+    const r = await fetch(`${baseUrl}${path}`, { headers: AUTH_HEADERS });
     return { status: r.status, body: await r.text() };
   }
 
@@ -1516,7 +1531,7 @@ describe("GET /api/reports/:id/triage-report — Strong-Evidence Bonus section",
   async function getText(
     path: string,
   ): Promise<{ status: number; body: string }> {
-    const r = await fetch(`${baseUrl}${path}`);
+    const r = await fetch(`${baseUrl}${path}`, { headers: AUTH_HEADERS });
     return { status: r.status, body: await r.text() };
   }
 
@@ -1672,7 +1687,7 @@ describe("GET /.well-known/security.txt — public URL resolution", () => {
   async function getText(
     path: string,
   ): Promise<{ status: number; body: string }> {
-    const r = await fetch(`${baseUrl}${path}`);
+    const r = await fetch(`${baseUrl}${path}`, { headers: AUTH_HEADERS });
     return { status: r.status, body: await r.text() };
   }
 

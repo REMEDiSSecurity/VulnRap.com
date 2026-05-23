@@ -128,11 +128,17 @@ vi.mock("@workspace/db", async () => {
 let server: http.Server;
 let baseUrl: string;
 
+// Task #1342 — /stats/trends is now reviewer-token gated. Pin a stable
+// token in this suite so the auth middleware accepts the AUTH header.
+const TOKEN = "stats-route-test-token";
+const AUTH = { "x-calibration-token": TOKEN } as const;
+
 beforeAll(async () => {
   // Pin a stable HMAC key so the visit handler's hash derivation is
   // deterministic and doesn't emit the "ephemeral key" warning during the
   // test run.
   process.env.VISITOR_HMAC_KEY = "stats-route-test-hmac-key";
+  process.env.CALIBRATION_TOKEN = TOKEN;
 
   const statsRouter = (await import("./stats")).default;
   const app = express();
@@ -148,6 +154,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   delete process.env.VISITOR_HMAC_KEY;
+  delete process.env.CALIBRATION_TOKEN;
 });
 
 beforeEach(() => {
@@ -166,11 +173,18 @@ function request<T>(
   method: string,
   urlPath: string,
   body?: unknown,
+  extraHeaders?: Record<string, string>,
 ): Promise<HttpResponse<T>> {
   return new Promise((resolve, reject) => {
     const data =
       body == null ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     const url = new URL(`${baseUrl}${urlPath}`);
+    const baseHeaders: Record<string, string> = data
+      ? {
+          "Content-Type": "application/json",
+          "Content-Length": String(data.length),
+        }
+      : {};
     const req = http.request(
       {
         method,
@@ -180,12 +194,7 @@ function request<T>(
         // to clamp `days`). Include search so query params reach the
         // route.
         path: `${url.pathname}${url.search}`,
-        headers: data
-          ? {
-              "Content-Type": "application/json",
-              "Content-Length": String(data.length),
-            }
-          : {},
+        headers: { ...baseHeaders, ...(extraHeaders ?? {}) },
       },
       (res) => {
         const chunks: Buffer[] = [];
@@ -581,7 +590,7 @@ describe("GET /stats/trends", () => {
         avgRating: number;
         agreementRate: number;
       }>;
-    }>("GET", "/stats/trends?days=30");
+    }>("GET", "/stats/trends?days=30", undefined, AUTH);
 
     expect(r.status).toBe(200);
     expect(r.headers["cache-control"]).toBe(TRENDS_CACHE_CONTROL);
@@ -629,9 +638,20 @@ describe("GET /stats/trends", () => {
     selectQueue.push([]);
     selectQueue.push([{ totalReports: 0, totalFeedback: 0 }]);
 
-    const r = await request<{ days: number }>("GET", "/stats/trends?days=999");
+    const r = await request<{ days: number }>(
+      "GET",
+      "/stats/trends?days=999",
+      undefined,
+      AUTH,
+    );
     expect(r.status).toBe(200);
     expect(r.body.days).toBe(365);
+  });
+
+  // Task #1342 — Pen-test finding #8 (May 23 2026). Reviewer-token gate.
+  it("returns 401 without the reviewer token", async () => {
+    const r = await request<{ error: string }>("GET", "/stats/trends?days=7");
+    expect(r.status).toBe(401);
   });
 });
 
@@ -806,7 +826,7 @@ describe("Task #726 — query budgets", () => {
     selectQueue.push([]); // dailyReports
     selectQueue.push([]); // dailyFeedback
     selectQueue.push([{ totalReports: 0, totalFeedback: 0 }]);
-    const r = await request("GET", "/stats/trends?days=7");
+    const r = await request("GET", "/stats/trends?days=7", undefined, AUTH);
     expect(r.status).toBe(200);
     expect(selectCallCount).toBeLessThanOrEqual(4);
   });

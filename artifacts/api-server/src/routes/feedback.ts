@@ -1,11 +1,31 @@
 import { Router, type IRouter } from "express";
+import rateLimit from "express-rate-limit";
 import { db } from "@workspace/db";
 import { userFeedbackTable, reportsTable } from "@workspace/db";
 import { SubmitFeedbackBody } from "@workspace/api-zod";
 import { sql, eq, desc, gte, and, isNotNull } from "drizzle-orm";
 import { generateChallenge, verifyChallenge } from "../lib/challenge";
+import { requireCalibrationAuthStrict } from "../middlewares/require-calibration-auth";
 
 const router: IRouter = Router();
+
+// Task #1342 — Pen-test finding #4 (May 23 2026). Per-IP rate limit on
+// public feedback submission. Combined with the bumped PoW difficulty
+// (lib/challenge.ts), this turns the automated-flood exploit into an
+// uneconomic attack. 10 successful posts / hour / IP comfortably covers
+// a human reviewer rage-posting on multiple reports while still
+// returning 429 to the pen-test's burst PoC. The window is short
+// enough that a shared NAT exit point recovers quickly.
+const feedbackSubmitLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error:
+      "Too many feedback submissions from this IP. Please try again later.",
+  },
+});
 
 router.get("/feedback/challenge", (_req, res) => {
   try {
@@ -17,7 +37,7 @@ router.get("/feedback/challenge", (_req, res) => {
   }
 });
 
-router.post("/feedback", async (req, res) => {
+router.post("/feedback", feedbackSubmitLimiter, async (req, res) => {
   try {
     const {
       challengeId,
@@ -105,7 +125,13 @@ router.post("/feedback", async (req, res) => {
   }
 });
 
-router.get("/feedback/analytics", async (_req, res): Promise<void> => {
+// Task #1342 — Pen-test finding #3 (May 23 2026). The analytics endpoint
+// surfaces reviewer-feedback content (comments, per-report ratings, outlier
+// IDs) that pen-testers used to enumerate triage internals. Gated behind
+// the existing calibration-token strict-read middleware, matching the rest
+// of the reviewer-only surfaces (calibration/score-stability, feedback-v2,
+// brute-force alerts).
+router.get("/feedback/analytics", requireCalibrationAuthStrict, async (_req, res): Promise<void> => {
   try {
     const [summary] = await db
       .select({

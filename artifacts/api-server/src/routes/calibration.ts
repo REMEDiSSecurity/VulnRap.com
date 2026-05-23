@@ -1392,17 +1392,67 @@ router.post(
 //
 // Unauthenticated like `/auth-status`: response is timestamps +
 // booleans only (no error text, webhook URL, or token).
-router.get("/feedback/calibration/avri-drift/scheduler-status", (_req, res) => {
-  try {
-    const status = getDriftSchedulerStatus();
-    res.json(status);
-  } catch (err) {
-    _req.log?.error(err, "Failed to read AVRI drift scheduler status");
-    res
-      .status(500)
-      .json({ error: "Failed to read AVRI drift scheduler status." });
+// Task #1342 — Pen-test finding #6 (May 23 2026). The AVRI drift
+// scheduler-status response previously leaked container `hostname`
+// and raw `replicaId` strings to any unauthenticated caller. We now
+// (a) require the reviewer token to read this endpoint at all, and
+// (b) replace per-replica hostname / id with stable opaque labels
+// (replica-A, replica-B, ...) keyed by sorted replicaId so the UI
+// can still distinguish replicas in the heartbeat table without
+// disclosing the underlying container fingerprint to reviewers who
+// don't strictly need it. Callers that need the raw values can opt
+// in via `?reveal=1` (still token-gated).
+function scrubDriftSchedulerStatus(
+  status: ReturnType<typeof getDriftSchedulerStatus>,
+  reveal: boolean,
+): unknown {
+  if (reveal) return status;
+  // status is an array of per-replica entries; relabel each entry's
+  // replicaId / hostname to a stable opaque "replica-A/B/C…" derived from
+  // sorted-replicaId index so callers can still distinguish replicas in
+  // the heartbeat table without learning the container fingerprint.
+  const cloned = JSON.parse(JSON.stringify(status)) as Array<
+    Record<string, unknown> & { replicaId?: string; hostname?: string }
+  >;
+  const idIndex = cloned
+    .map((e, i) => ({ id: typeof e.replicaId === "string" ? e.replicaId : `__${i}`, i }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const labelByOriginal = new Map<string, string>();
+  idIndex.forEach((entry, rank) => {
+    let n = rank;
+    let label = "";
+    do {
+      label = String.fromCharCode(65 + (n % 26)) + label;
+      n = Math.floor(n / 26) - 1;
+    } while (n >= 0);
+    labelByOriginal.set(entry.id, `replica-${label}`);
+  });
+  for (const entry of cloned) {
+    const original =
+      typeof entry.replicaId === "string" ? entry.replicaId : "";
+    const label = labelByOriginal.get(original) ?? "replica-?";
+    entry.replicaId = label;
+    entry.hostname = label;
   }
-});
+  return cloned;
+}
+
+router.get(
+  "/feedback/calibration/avri-drift/scheduler-status",
+  requireCalibrationAuthStrict,
+  (req, res) => {
+    try {
+      const status = getDriftSchedulerStatus();
+      const reveal = req.query.reveal === "1" || req.query.reveal === "true";
+      res.json(scrubDriftSchedulerStatus(status, reveal));
+    } catch (err) {
+      req.log?.error(err, "Failed to read AVRI drift scheduler status");
+      res
+        .status(500)
+        .json({ error: "Failed to read AVRI drift scheduler status." });
+    }
+  },
+);
 
 // Task #388 — Operator-visible rescore-backfill scheduler heartbeat.
 // Mirrors the AVRI drift scheduler-status endpoint: response is
@@ -1487,14 +1537,19 @@ router.get(
 // timestamps + booleans + small numeric counters only (no error text,
 // row text, or env values), so the endpoint stays safe to expose
 // unauthenticated alongside the other heartbeat surfaces.
+// Task #1342 — Pen-test finding #7 (May 23 2026). Gated behind the
+// reviewer token to match the AVRI drift scheduler-status above; the
+// internal per-tick counters are useful for triage debugging but
+// were enumerated by the pen test to map our scoring pipeline.
 router.get(
   "/feedback/calibration/score-stability/scheduler-status",
-  (_req, res) => {
+  requireCalibrationAuthStrict,
+  (req, res) => {
     try {
       const status = getScoreStabilitySchedulerStatus();
       res.json(status);
     } catch (err) {
-      _req.log?.error(err, "Failed to read score stability scheduler status");
+      req.log?.error(err, "Failed to read score stability scheduler status");
       res
         .status(500)
         .json({ error: "Failed to read score stability scheduler status." });
@@ -1722,30 +1777,43 @@ router.post(
   },
 );
 
-router.get("/feedback/calibration/config", (_req, res) => {
-  try {
-    res.json({
-      current: getCurrentConfig(),
-      history: getConfigHistory(),
-    });
-  } catch (err) {
-    _req.log?.error(err, "Failed to fetch scoring config");
-    res.status(500).json({ error: "Failed to fetch scoring config." });
-  }
-});
+// Task #1342 — Pen-test finding #2 (May 23 2026). The scoring-config
+// + change-history dump leaks the live tunables (priors, thresholds,
+// fabrication boost) that an attacker can use to optimize evasion.
+// Reviewer-token gated; the admin SPA already attaches the token on
+// every fetch via customFetch, so no SPA work is required.
+router.get(
+  "/feedback/calibration/config",
+  requireCalibrationAuthStrict,
+  (req, res) => {
+    try {
+      res.json({
+        current: getCurrentConfig(),
+        history: getConfigHistory(),
+      });
+    } catch (err) {
+      req.log?.error(err, "Failed to fetch scoring config");
+      res.status(500).json({ error: "Failed to fetch scoring config." });
+    }
+  },
+);
 
-// Task #117 — un-gated probe so the dashboard can detect a token
-// misconfiguration BEFORE the reviewer triggers a mutation that 401s. This
-// endpoint deliberately does NOT enforce auth: it tells the caller whether
-// the SERVER requires a token AND whether the token they sent (if any)
-// would be accepted, so the UI can render a "Reviewer token: configured /
-// missing / invalid" indicator instead of letting every add/remove explode
-// into a generic 401 toast. We never echo the configured token back — only
-// boolean signals — so this remains safe to expose without auth.
-router.get("/feedback/calibration/auth-status", (req, res) => {
-  const status = getCalibrationAuthStatus(req);
-  res.json(status);
-});
+// Task #1342 — Pen-test finding #14 (May 23 2026). The auth-status probe
+// was originally un-gated so the dashboard could detect a missing token
+// without 401-ing every mutation. The pen test demonstrated it doubled
+// as an oracle that confirmed "yes, this server requires a token" and
+// "yes, the token you just guessed is wrong" without rate-limiting. We
+// now require the token: an admin with the correct token gets the same
+// boolean payload they used to get; an unauthenticated probe gets 401
+// (same as every other gated read) and the oracle disappears.
+router.get(
+  "/feedback/calibration/auth-status",
+  requireCalibrationAuthStrict,
+  (req, res) => {
+    const status = getCalibrationAuthStatus(req);
+    res.json(status);
+  },
+);
 
 router.post(
   "/feedback/calibration/apply",

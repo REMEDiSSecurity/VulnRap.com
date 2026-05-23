@@ -17,6 +17,7 @@ import {
   GetCorpusStatsResponse,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
+import { requireCalibrationAuthStrict } from "../middlewares/require-calibration-auth";
 
 const router: IRouter = Router();
 
@@ -277,7 +278,14 @@ router.get("/stats/visitors", async (_req, res): Promise<void> => {
   }
 });
 
-router.get("/stats/trends", async (req, res): Promise<void> => {
+// Task #1342 — Pen-test finding #8 (May 23 2026). /stats/trends returns
+// day-by-day submission volume + per-tier breakdowns that the pen test
+// used to fingerprint usage patterns, detect quiet periods to time
+// scraping campaigns, and infer absolute submission counts. The public
+// SPA does not consume this surface; the public dashboard reads
+// /stats and /stats/distribution which remain open. Reviewer-token
+// gated; admin pages already attach the token via customFetch.
+router.get("/stats/trends", requireCalibrationAuthStrict, async (req, res): Promise<void> => {
   const lastMod = await getReportsLastModified();
   if (lastMod) {
     res.setHeader("Last-Modified", lastMod.toUTCString());

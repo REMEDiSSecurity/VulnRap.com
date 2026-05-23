@@ -533,10 +533,22 @@ describe("rescore pass → score-stability endpoint integration", () => {
 });
 
 describe("GET /feedback/calibration/score-stability/scheduler-status", () => {
-  it("returns 200 without auth (unauthenticated heartbeat)", async () => {
+  // Task #1342 — Pen-test finding #7 (May 23 2026). The endpoint is now
+  // reviewer-token gated (the prior un-gated heartbeat leaked internal
+  // tick counters used to fingerprint our scoring pipeline).
+  it("returns 401 without auth", async () => {
+    const res = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/score-stability/scheduler-status",
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 200 with the reviewer token", async () => {
     const res = await request<Record<string, unknown>>(
       "GET",
       "/feedback/calibration/score-stability/scheduler-status",
+      { "x-calibration-token": TOKEN },
     );
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("schedulerStarted");

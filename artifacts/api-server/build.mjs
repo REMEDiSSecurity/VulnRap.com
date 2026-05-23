@@ -115,9 +115,30 @@ async function readBuildInfo() {
   } catch {}
 
   // Allow CI / release script to pass a precomputed sha; otherwise derive
-  // from the working tree. Falls back to "dev" so an installable tarball
-  // outside a git checkout still builds.
+  // from the working tree. Task #1342 (May 23 2026): /api/version was
+  // returning gitSha="dev" in production because the deploy builder runs
+  // outside a git checkout and we previously only consulted
+  // VULNRAP_GIT_SHA. Fall back to the common CI-provided env vars
+  // (Replit / GitHub Actions / Render / Vercel / Netlify) before
+  // giving up and stamping "dev". The first non-empty value wins.
   let gitSha = process.env.VULNRAP_GIT_SHA ?? "";
+  if (!gitSha) {
+    const candidates = [
+      process.env.REPLIT_GIT_COMMIT,
+      process.env.GITHUB_SHA,
+      process.env.GIT_COMMIT,
+      process.env.COMMIT_SHA,
+      process.env.RENDER_GIT_COMMIT,
+      process.env.VERCEL_GIT_COMMIT_SHA,
+      process.env.COMMIT_REF, // Netlify
+    ];
+    for (const c of candidates) {
+      if (typeof c === "string" && c.trim().length > 0) {
+        gitSha = c.trim().slice(0, 12);
+        break;
+      }
+    }
+  }
   if (!gitSha) {
     try {
       const r = spawnSync("git", ["rev-parse", "--short=12", "HEAD"], {

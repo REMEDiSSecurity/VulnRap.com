@@ -70,6 +70,7 @@ import {
   type ConfigImpactNotice,
 } from "../lib/config-notices";
 import { redactReport } from "../lib/redactor";
+import { requireCalibrationAuthStrict } from "../middlewares/require-calibration-auth";
 import {
   detectAgentFingerprint,
   AGENT_DISPLAY_LABEL,
@@ -3081,7 +3082,13 @@ router.get("/reports/:id/verify", async (req, res): Promise<void> => {
 router.get("/reports/:id", async (req, res): Promise<void> => {
   const params = GetReportParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    // Task #1342 — Pen-test finding #10 (May 23 2026). The zod
+    // error.message leaked the expected/received types and the
+    // raw input as a JSON-encoded issue list. Collapse to a
+    // constant generic 400 on public routes; the verbose error
+    // remains visible in server logs via the unhandled-error path
+    // for legitimate debugging.
+    res.status(400).json({ error: "Invalid report id" });
     return;
   }
 
@@ -3340,10 +3347,16 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
 // Sprint 9 v3: Per-report diagnostics endpoint. Returns the persisted pipeline
 // trace (per-stage timings, signals summary, feature flags, overrides). Sits
 // outside the OpenAPI-typed GetReport response so we can iterate freely.
-router.get("/reports/:id/diagnostics", async (req, res): Promise<void> => {
+// Task #1342 — Pen-test finding #1 (May 23 2026). The diagnostics dump
+// (per-stage timings, signals summary, feature flags, overrides) is
+// reviewer-only fidelity that the pen test used to map our pipeline.
+// Token-gated; public results page degrades gracefully (the panel
+// already throws on non-OK status and the wrapping component renders
+// an error placeholder).
+router.get("/reports/:id/diagnostics", requireCalibrationAuthStrict, async (req, res): Promise<void> => {
   const params = GetReportParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Invalid report id" });
     return;
   }
 
@@ -3669,10 +3682,14 @@ router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
   res.json(response);
 });
 
-router.get("/reports/:id/triage-report", async (req, res): Promise<void> => {
+// Task #1342 — Pen-test finding #5 (May 23 2026). The triage-report
+// surface exposed reviewer-only narrative (recommended action, severity
+// rationale, fabricated-evidence excerpts) that the pen test used to
+// derive heuristics. Reviewer-token gated alongside diagnostics.
+router.get("/reports/:id/triage-report", requireCalibrationAuthStrict, async (req, res): Promise<void> => {
   const params = GetReportParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Invalid report id" });
     return;
   }
 

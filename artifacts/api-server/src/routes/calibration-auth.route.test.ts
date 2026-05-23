@@ -340,24 +340,19 @@ describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
     expect(r.status).not.toBe(401);
   });
 
-  // Task #117 — un-gated auth-status probe used by the dashboard to render a
-  // "Reviewer token: configured / missing / invalid" indicator BEFORE the
-  // reviewer triggers a mutation that 401s. The probe must remain reachable
-  // without a token (so the UI can detect the misconfigured case at all),
-  // and must report the same accept/reject decision the auth middleware
-  // would compute for the same headers.
-  it("GET /feedback/calibration/auth-status without a token returns serverRequiresToken=true and mutationsAllowed=false", async () => {
-    const r = await request<{
-      serverRequiresToken: boolean;
-      tokenPresented: boolean;
-      tokenValid: boolean;
-      mutationsAllowed: boolean;
-    }>("GET", "/feedback/calibration/auth-status");
-    expect(r.status).toBe(200);
-    expect(r.body.serverRequiresToken).toBe(true);
-    expect(r.body.tokenPresented).toBe(false);
-    expect(r.body.tokenValid).toBe(false);
-    expect(r.body.mutationsAllowed).toBe(false);
+  // Task #1342 — Pen-test finding #14 (May 23 2026): auth-status used to
+  // be un-gated so the dashboard could detect a missing token before any
+  // mutation 401'd. The pen test demonstrated that side-channel doubled
+  // as an oracle for confirming a configured token without rate-limiting.
+  // The probe is now strict-auth gated; the unauthenticated case 401s
+  // identically to every other reviewer-only read, and the SPA renders
+  // the "Reviewer token: missing" banner on that 401.
+  it("GET /feedback/calibration/auth-status without a token returns 401", async () => {
+    const r = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/auth-status",
+    );
+    expect(r.status).toBe(401);
   });
 
   it("GET /feedback/calibration/auth-status with the correct token reports mutationsAllowed=true", async () => {
@@ -390,20 +385,17 @@ describe("calibration auth gate (CALIBRATION_TOKEN set)", () => {
     expect(r.body.mutationsAllowed).toBe(true);
   });
 
-  it("GET /feedback/calibration/auth-status with the wrong token reports tokenPresented=true but mutationsAllowed=false", async () => {
-    const r = await request<{
-      serverRequiresToken: boolean;
-      tokenPresented: boolean;
-      tokenValid: boolean;
-      mutationsAllowed: boolean;
-    }>("GET", "/feedback/calibration/auth-status", undefined, {
-      "X-Calibration-Token": "not-the-token",
-    });
-    expect(r.status).toBe(200);
-    expect(r.body.serverRequiresToken).toBe(true);
-    expect(r.body.tokenPresented).toBe(true);
-    expect(r.body.tokenValid).toBe(false);
-    expect(r.body.mutationsAllowed).toBe(false);
+  it("GET /feedback/calibration/auth-status with the wrong token returns 401 (no oracle)", async () => {
+    const r = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/auth-status",
+      undefined,
+      { "X-Calibration-Token": "not-the-token" },
+    );
+    // Task #1342 — Identical 401 shape to the no-token case so an
+    // unauthenticated probe can't tell from the response whether their
+    // guess was "right shape but wrong value".
+    expect(r.status).toBe(401);
   });
 
   it("GET /feedback/calibration/auth-status never echoes the configured token", async () => {
@@ -732,36 +724,28 @@ describe("calibration auth-status probe (CALIBRATION_TOKEN unset / open mode)", 
     process.env.CALIBRATION_TOKEN = TOKEN;
   });
 
-  it("GET /feedback/calibration/auth-status reports serverRequiresToken=false / mutationsAllowed=true when the env var is unset", async () => {
-    const r = await request<{
-      serverRequiresToken: boolean;
-      tokenPresented: boolean;
-      tokenValid: boolean;
-      mutationsAllowed: boolean;
-    }>("GET", "/feedback/calibration/auth-status");
-    expect(r.status).toBe(200);
-    expect(r.body.serverRequiresToken).toBe(false);
-    expect(r.body.tokenPresented).toBe(false);
-    expect(r.body.tokenValid).toBe(false);
-    expect(r.body.mutationsAllowed).toBe(true);
+  // Task #1342 — In open mode (CALIBRATION_TOKEN unset), strict-auth
+  // fails closed and returns 401 because the server can't verify any
+  // presented token. That is intentional: production deploys MUST set
+  // CALIBRATION_TOKEN (see lib/prod-config.ts startup validation), so
+  // the only environments where this code path runs are dev / test,
+  // where developers should set the token locally rather than rely on
+  // open-mode reads of the auth-status endpoint.
+  it("GET /feedback/calibration/auth-status returns 401 when CALIBRATION_TOKEN is not configured (fail-closed)", async () => {
+    const r = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/auth-status",
+    );
+    expect(r.status).toBe(401);
   });
 
-  it("GET /feedback/calibration/auth-status with no token configured but a presented token still reports mutationsAllowed=true", async () => {
-    const r = await request<{
-      serverRequiresToken: boolean;
-      tokenPresented: boolean;
-      tokenValid: boolean;
-      mutationsAllowed: boolean;
-    }>("GET", "/feedback/calibration/auth-status", undefined, {
-      "X-Calibration-Token": "anything",
-    });
-    expect(r.status).toBe(200);
-    expect(r.body.serverRequiresToken).toBe(false);
-    expect(r.body.tokenPresented).toBe(true);
-    // tokenValid stays false when there's nothing on the server to compare
-    // against — the UI keys off mutationsAllowed (and serverRequiresToken)
-    // rather than tokenValid for the "open" case.
-    expect(r.body.tokenValid).toBe(false);
-    expect(r.body.mutationsAllowed).toBe(true);
+  it("GET /feedback/calibration/auth-status returns 401 even with a presented token when CALIBRATION_TOKEN is unset", async () => {
+    const r = await request<{ error: string }>(
+      "GET",
+      "/feedback/calibration/auth-status",
+      undefined,
+      { "X-Calibration-Token": "anything" },
+    );
+    expect(r.status).toBe(401);
   });
 });

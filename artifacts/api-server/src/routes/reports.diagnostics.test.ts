@@ -159,7 +159,12 @@ const app = appModule.default;
 let server: http.Server;
 let baseUrl: string;
 
+// Task #1342 — /reports/:id/diagnostics is now reviewer-token gated.
+const TOKEN = "diagnostics-route-test-token";
+const AUTH = { "x-calibration-token": TOKEN } as const;
+
 beforeAll(async () => {
+  process.env.CALIBRATION_TOKEN = TOKEN;
   server = app.listen(0);
   await new Promise<void>((resolve) => server.on("listening", () => resolve()));
   const addr = server.address() as AddressInfo;
@@ -220,8 +225,23 @@ const SAMPLE_REPORT_TEXT =
   "Expected: input should be HTML-escaped before being reflected.\n";
 
 describe("GET /api/reports/:id/diagnostics", () => {
-  it("returns 404 when the report does not exist", async () => {
+  // Task #1342 — Pen-test finding #2 (May 23 2026). The diagnostics
+  // endpoint is now reviewer-token gated; the prior un-gated path
+  // leaked correlation IDs and engine fingerprints to any caller.
+  it("returns 401 without the reviewer token", async () => {
     const res = await fetch(`${baseUrl}/api/reports/9999/diagnostics`);
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 401 with the wrong reviewer token (no oracle)", async () => {
+    const res = await fetch(`${baseUrl}/api/reports/9999/diagnostics`, {
+      headers: { "x-calibration-token": "wrong-token" },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 when the report does not exist", async () => {
+    const res = await fetch(`${baseUrl}/api/reports/9999/diagnostics`, { headers: AUTH });
     expect(res.status).toBe(404);
     const body = (await res.json()) as any;
     expect(body.error).toMatch(/not found/i);
@@ -251,7 +271,7 @@ describe("GET /api/reports/:id/diagnostics", () => {
       },
     });
 
-    const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`);
+    const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.reportId).toBe(report.id);
@@ -287,7 +307,7 @@ describe("GET /api/reports/:id/diagnostics", () => {
       trace: { tag: "newer" },
     });
 
-    const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`);
+    const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.correlationId).toBeNull();
@@ -322,7 +342,7 @@ describe("GET /api/reports/:id/diagnostics", () => {
       },
     });
 
-    const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`);
+    const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     const e2 = body.engines.engines.find(
@@ -359,7 +379,7 @@ describe("GET /api/reports/:id/diagnostics", () => {
       trace: { tag: "matching-older" },
     });
 
-    const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`);
+    const res = await fetch(`${baseUrl}/api/reports/${report.id}/diagnostics`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.correlationId).toBe("match-me");

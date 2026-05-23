@@ -101,7 +101,26 @@ app.use(compression());
 // inject print-only <style> blocks via dangerouslySetInnerHTML; those
 // are CSS not JS and can't be exploited the same way.
 const JSONLD_HASH = "'sha256-14JJra+0uojRHYxF8D+tkTEPT0+OSHPYHN+lCc3bjEw='";
+
+// Task #1342 — Pen-test finding #11 (May 23 2026). On vulnrap.com (served
+// behind Google Frontend), GFE always emits its own Strict-Transport-Security
+// header. helmet's default also emits one, so the response carries two
+// HSTS headers — browsers MUST pick one and modern Chromium picks the
+// shortest, which silently downgraded our intended policy. Single-source
+// the header at the edge (GFE) by disabling helmet's HSTS in production;
+// on dev / self-hosted instances where there's no edge HSTS we keep
+// helmet's default 6-month policy. Override with HSTS_FROM_APP=1 if
+// running self-hosted behind a TLS terminator that does NOT inject HSTS.
+const HSTS_FROM_APP =
+  process.env.HSTS_FROM_APP === "1" ||
+  (process.env.HSTS_FROM_APP ?? "").toLowerCase() === "true";
+const emitHstsFromApp = !IS_PRODUCTION || HSTS_FROM_APP;
+const hstsOption: false | { maxAge: number; includeSubDomains: boolean; preload: boolean } =
+  emitHstsFromApp
+    ? { maxAge: 63072000, includeSubDomains: true, preload: true }
+    : false;
 const defaultHelmet = helmet({
+  strictTransportSecurity: hstsOption,
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
@@ -126,6 +145,7 @@ const defaultHelmet = helmet({
 });
 
 const swaggerHelmet = helmet({
+  strictTransportSecurity: hstsOption,
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
@@ -401,6 +421,18 @@ if (process.env.NODE_ENV === "production") {
     "dist",
     "public",
   );
+  // Task #1342 — Pen-test finding #15 (INFO, May 23 2026). The Postman
+  // collection was previously mirrored into artifacts/vulnrap/public/
+  // as vulnrap.postman_collection.json so the /developers page could
+  // serve it from the same origin. The pen test flagged the public
+  // mirror as a needless attack-surface enumerator (full endpoint
+  // catalog at a guessable path). The canonical artifact now lives at
+  // sdks/postman/vulnrap.postman_collection.json (GitHub) and the
+  // /developers page links there. This guard 404s any stale file that
+  // a future generator run accidentally drops back into public/.
+  app.use("/vulnrap.postman_collection.json", (_req, res) => {
+    res.status(404).type("text/plain").send("Not Found");
+  });
   // Task #726 — Long-cache hashed assets and never-cache the SPA shell.
   // Vite emits hashed filenames under /assets/* (see rollup output config),
   // so they're safe to mark `immutable` for a full year. The HTML shell
