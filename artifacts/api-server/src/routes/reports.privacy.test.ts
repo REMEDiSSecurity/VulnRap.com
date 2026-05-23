@@ -2041,3 +2041,65 @@ describe("GET /.well-known/security.txt — public URL resolution", () => {
     }
   });
 });
+
+// Task #1342 — Pen-test finding #9 (May 23 2026). Public routes that
+// .safeParse() request params or bodies with Zod MUST respond with a
+// generic 400 envelope. Verbose Zod messages (issue arrays, expected /
+// received type hints, field paths) leak the internal schema, which the
+// pen-tester used to enumerate endpoints and craft targeted payloads.
+// Pin the contract here so a future "just surface the real error for
+// nicer DX" refactor cannot silently re-open this disclosure vector.
+describe("public routes — generic 400 envelope on invalid input (pen-test #9)", () => {
+  async function getJson(
+    path: string,
+  ): Promise<{ status: number; body: { error?: unknown } }> {
+    const r = await fetch(`${baseUrl}${path}`);
+    return { status: r.status, body: (await r.json()) as { error?: unknown } };
+  }
+
+  it("GET /api/reports/lookup/:hash → 400 'Invalid report hash' on bad hash", async () => {
+    const r = await getJson("/api/reports/lookup/not-a-real-hash");
+    expect(r.status).toBe(400);
+    expect(r.body).toEqual({ error: "Invalid report hash" });
+  });
+
+  it("GET /api/reports/:id/compare/:matchId → 400 'Invalid report id' on bad id", async () => {
+    const r = await getJson("/api/reports/abc/compare/def");
+    expect(r.status).toBe(400);
+    expect(r.body).toEqual({ error: "Invalid report id" });
+  });
+
+  it("GET /api/reports/:id/verify → 400 'Invalid report id' on bad id", async () => {
+    const r = await getJson("/api/reports/not-a-number/verify");
+    expect(r.status).toBe(400);
+    expect(r.body).toEqual({ error: "Invalid report id" });
+  });
+
+  it("GET /api/reports/:id/score-history → 400 'Invalid report id' on bad id", async () => {
+    const r = await getJson("/api/reports/not-a-number/score-history");
+    expect(r.status).toBe(400);
+    expect(r.body).toEqual({ error: "Invalid report id" });
+  });
+
+  it("DELETE /api/reports/:id → 400 'Invalid report id' on bad id", async () => {
+    const r = await fetch(`${baseUrl}/api/reports/not-a-number`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const body = (await r.json()) as { error?: unknown };
+    expect(r.status).toBe(400);
+    expect(body).toEqual({ error: "Invalid report id" });
+  });
+
+  it("POST /api/reports/check/dry-run-batch → 400 'Invalid request body' on bad body", async () => {
+    const r = await fetch(`${baseUrl}/api/reports/check/dry-run-batch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ not: "the right shape" }),
+    });
+    const body = (await r.json()) as { error?: unknown };
+    expect(r.status).toBe(400);
+    expect(body).toEqual({ error: "Invalid request body" });
+  });
+});

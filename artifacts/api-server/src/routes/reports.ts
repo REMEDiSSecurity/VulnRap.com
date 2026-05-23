@@ -1848,7 +1848,10 @@ router.post(
   async (req, res): Promise<void> => {
     const parsed = CheckReportDryRunBatchBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.message });
+      // Task #1342 — Pen-test finding #9 (May 23 2026). Generic 400 on a
+      // public route; verbose Zod issue arrays leak the internal body
+      // schema (expected/received types, field paths, enum members).
+      res.status(400).json({ error: "Invalid request body" });
       return;
     }
     const { reports } = parsed.data;
@@ -2852,7 +2855,10 @@ router.get("/reports/feed", async (req, res): Promise<void> => {
 router.get("/reports/lookup/:hash", async (req, res): Promise<void> => {
   const params = LookupByHashParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    // Task #1342 — Pen-test finding #9 (May 23 2026). Generic 400 on a
+    // public route; verbose Zod messages leak field shape + expected
+    // types that pen-testers used to enumerate the internal schema.
+    res.status(400).json({ error: "Invalid report hash" });
     return;
   }
 
@@ -2900,7 +2906,9 @@ router.get("/reports/lookup/:hash", async (req, res): Promise<void> => {
 router.get("/reports/:id/compare/:matchId", async (req, res): Promise<void> => {
   const params = CompareReportsParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    // Task #1342 — Pen-test finding #9 (May 23 2026). Generic 400; no
+    // schema leakage on public routes.
+    res.status(400).json({ error: "Invalid report id" });
     return;
   }
 
@@ -3041,7 +3049,9 @@ router.get("/reports/:id/compare/:matchId", async (req, res): Promise<void> => {
 router.get("/reports/:id/verify", async (req, res): Promise<void> => {
   const params = GetVerificationParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    // Task #1342 — Pen-test finding #9 (May 23 2026). Generic 400; no
+    // schema leakage on public routes.
+    res.status(400).json({ error: "Invalid report id" });
     return;
   }
 
@@ -3584,7 +3594,9 @@ router.get("/reports/:id/diagnostics", requireCalibrationAuthStrict, async (req,
 router.get("/reports/:id/score-history", async (req, res): Promise<void> => {
   const params = GetScoreHistoryParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    // Task #1342 — Pen-test finding #9 (May 23 2026). Generic 400; no
+    // schema leakage on public routes.
+    res.status(400).json({ error: "Invalid report id" });
     return;
   }
 
@@ -4363,7 +4375,9 @@ router.get("/reports/:id/triage-report", requireCalibrationAuthStrict, async (re
 router.delete("/reports/:id", async (req, res): Promise<void> => {
   const params = GetReportParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    // Task #1342 — Pen-test finding #9 (May 23 2026). Generic 400; no
+    // schema leakage on public routes.
+    res.status(400).json({ error: "Invalid report id" });
     return;
   }
 
