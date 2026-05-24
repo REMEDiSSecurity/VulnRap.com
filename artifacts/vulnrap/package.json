@@ -53,7 +53,7 @@
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "recharts": "^2.15.4",
+    "recharts": "^3.8.1",
     "rollup-plugin-visualizer": "^6.0.4",
     "sharp": "^0.34.5",
     "tailwind-merge": "catalog:",
@@ -70,6 +70,6 @@
     "html2pdf.js": "^0.14.0",
     "qrcode-generator": "^2.0.4",
     "react-router-dom": "^7.14.0",
-    "recharts": "^2.15.4"
+    "recharts": "^3.8.1"
   }
 }
